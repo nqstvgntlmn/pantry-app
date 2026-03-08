@@ -50,28 +50,29 @@ export default async function handler(req, res) {
   const { household, items } = req.body || {};
   if (!household) return res.status(400).json({ error: "household required" });
   console.log("household:", household);
-  console.log("items type:", typeof items, Array.isArray(items) ? "array" : "not array");
-  console.log("items sample:", JSON.stringify(items && items[0]));
-  console.log("items count:", items ? (Array.isArray(items) ? items.length : "not array") : "null");
-  const itemsArr = Array.isArray(items) ? items : items ? [items] : [];
+  console.log("items raw:", JSON.stringify(items).substring(0, 200));
+  const rawArr = Array.isArray(items) ? items : items ? [items] : [];
+  const itemsArr = rawArr.flatMap(i =>
+    typeof i === "string" && i.includes("\n") ? i.split("\n").map(s => s.trim()).filter(Boolean) : [i]
+  );
+  console.log("items after split:", itemsArr.length, JSON.stringify(itemsArr).substring(0,200));
   try {
     const listPath = `households/${household}/shopping`;
     const snap = await fsGet(listPath);
     const existing = (snap.documents || []).map(fromFsDoc).filter(Boolean);
     console.log("existing items:", existing.length);
     const incomingNames = itemsArr.map(extractName).filter(Boolean);
-    console.log("incoming names:", JSON.stringify(incomingNames));
     const existingNames = existing.map(e => (e.name || "").toLowerCase());
     const toAdd = incomingNames.filter(name => !existingNames.includes(name.toLowerCase()));
     const toRemove = existing.filter(e => e.src === "reminders" && !incomingNames.map(n => n.toLowerCase()).includes((e.name || "").toLowerCase()));
-    console.log("toAdd:", toAdd.length, JSON.stringify(toAdd));
+    console.log("toAdd:", toAdd.length, JSON.stringify(toAdd).substring(0,200));
     console.log("toRemove:", toRemove.length);
     for (const name of toAdd) {
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       await fsSet(`${listPath}/${id}`, { name, checked: false, src: "reminders", addedAt: new Date().toISOString() });
     }
     for (const item of toRemove) await fsDelete(`${listPath}/${item.id}`);
-    return res.status(200).json({ ok: true, added: toAdd.length, removed: toRemove.length, incoming: incomingNames, message: `+${toAdd.length} added, -${toRemove.length} removed` });
+    return res.status(200).json({ ok: true, added: toAdd.length, removed: toRemove.length, message: `+${toAdd.length} added, -${toRemove.length} removed` });
   } catch (err) {
     console.error("handler error:", err);
     return res.status(500).json({ error: err.message });
