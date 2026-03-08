@@ -791,7 +791,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   <div class="minner">
     <div class="mttl" id="mealMttl">Plan a meal</div>
     <input class="minp" id="mealMinp" placeholder="e.g. Chicken stir fry" onkeydown="if(event.key==='Enter')saveMeal()"/>
-    <div class="brow"><button class="btn bs" style="flex:1" onclick="closeMealM()">Cancel</button><button class="btn bp" style="flex:2" onclick="saveMeal()">Save Meal</button></div>
+    <div id="recPicker" style="display:none;margin-top:10px"></div>
+    <div class="brow" style="margin-top:12px"><button class="btn bs" style="flex:1" onclick="closeMealM()">Cancel</button><button class="btn bp" style="flex:2" onclick="saveMeal()">Save Meal</button></div>
     <div style="margin-top:10px"><button class="btn bsm bs bf" onclick="clrMeal()">Clear this day</button></div>
   </div>
 </div>
@@ -837,7 +838,7 @@ function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
 window._appStart=function start(code){hid=code;g("LS").style.display="none";g("APP").style.display="flex";showScreen("home");ss("syncing");
   // Ensure current household is in the saved list
   const arr=getHouseholds();if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
-  loadCfgUI();initHome();
+  loadCfgUI();setTimeout(initHome,0);
   async function poll(){try{ss("syncing");const[ni,nr2,ns]=await Promise.all([dbList(`households/${hid}/inventory`),dbList(`households/${hid}/recipes`),dbList(`households/${hid}/shopping`)]);inv=ni;recs=nr2;shop=ns;ss("synced");renderAll();renderRecs();renderShop();renderSum();}catch(e){console.error("poll error",e);ss("error");}}
   window._poll=poll;poll();setInterval(poll,6000);}
 function g(id){return document.getElementById(id);}
@@ -861,7 +862,8 @@ window.showScreen=function(n){
 };
 window.showOv=n=>g("ov-"+n).classList.add("active");
 window.hideOv=n=>g("ov-"+n).classList.remove("active");
-function initHome(){const h=new Date().getHours(),gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening",u=localStorage.getItem("ks-who")||(cfg.adults||"Bora").split(",")[0].trim();g("grt").innerHTML=`${gr}, <span>${u}</span>`;g("hdt").textContent=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});renderWeek();showScreen("home");}
+function initHome(){const h=new Date().getHours(),gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening",u=localStorage.getItem("ks-who")||(cfg.adults||"Bora").split(",")[0].trim();g("grt").innerHTML=`${gr}, <span>${u}</span>`;g("hdt").textContent=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});renderWeek();}
+window.initHome=initHome;
 function renderAll(){renderHome();renderInv();}
 function renderHome(){renderWeek();renderSum();renderExp();renderTonight();updExport();}
 function tk(){return new Date().toISOString().split("T")[0];}
@@ -906,7 +908,19 @@ function renderSum(){
   g("sgrd").innerHTML=`<div class="sc" onclick="showScreen('inventory')"><div class="sci">🧺</div><div class="scv">${inv.length}</div><div class="scl">Items in stock</div></div><div class="sc${ex>0?" warn":""}" onclick="showScreen('inventory')"><div class="sci">⏱</div><div class="scv">${ex}</div><div class="scl">Expiring soon</div></div><div class="sc" onclick="showScreen('shopping')"><div class="sci">🛒</div><div class="scv">${tb}</div><div class="scl">To buy</div></div><div class="sc" onclick="showScreen('recipes')"><div class="sci">📖</div><div class="scv">${recs.length}</div><div class="scl">Saved recipes</div></div>`;}
 function renderExp(){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const l=g("exslbl"),e=g("expl");if(!ex.length){l.style.display="none";e.innerHTML="";return;}l.style.display="flex";e.innerHTML=ex.map(item=>{const s=xSt(item.expiry);return`<div class="exi${s.c==="expired"?" exp":""}" onclick="openAdj('${item.id}')"><div class="exn">${item.name}</div><div class="exd">${s.l}</div></div>`;}).join("");}
 function updExport(){const t=["fridge","freezer","pantry"].map(loc=>{const its=inv.filter(i=>i.location===loc);return its.length?ll(loc).toUpperCase()+"\n"+its.map(i=>`- ${i.name}${i.brand?` (${i.brand})`:""}: ${i.qty} ${i.unit}`).join("\n"):"";}).filter(Boolean).join("\n\n");g("expbox").textContent=t||"No items yet.";}
-window.openMealM=function(k,lbl){md=k;g("mealMttl").textContent="Meal for "+lbl;g("mealMinp").value=mp[k]||"";g("mealM").classList.add("active");setTimeout(()=>g("mealMinp").focus(),100);};
+window.openMealM=function(k,lbl){
+  md=k;g("mealMttl").textContent="Meal for "+lbl;g("mealMinp").value=mp[k]||"";
+  const rp=g("recPicker");
+  if(recs&&recs.length){
+    const sorted=[...recs].sort((a,b)=>(b.cookCount||0)-(a.cookCount||0));
+    rp.innerHTML='<div style="font-size:.75rem;color:var(--mt);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">From your recipes</div><div style="display:flex;flex-wrap:wrap;gap:6px">'+sorted.map(r=>`<button class="btn bsm bs" style="font-size:.8rem" onclick="pickRec('${r.name.replace(/'/g,"\'")}')">` +r.name+"</button>").join("")+"</div>";
+    rp.style.display="block";
+  } else {
+    rp.style.display="none";
+  }
+  g("mealM").classList.add("active");setTimeout(()=>g("mealMinp").focus(),100);
+};
+window.pickRec=function(name){g("mealMinp").value=name;};
 window.closeMealM=function(){g("mealM").classList.remove("active");};
 window.saveMeal=function(){const v=g("mealMinp").value.trim();if(v)mp[md]=v;else delete mp[md];Js("ks-m",mp);closeMealM();renderWeek();renderSum();renderTonight();};
 window.clrMeal=function(){delete mp[md];Js("ks-m",mp);closeMealM();renderWeek();renderSum();renderTonight();};
