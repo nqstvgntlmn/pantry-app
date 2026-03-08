@@ -821,12 +821,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
 <input type="file" id="ffile" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)"/>
 <div class="notif" id="notif" style="display:none"></div><script type="module">
-import{initializeApp}from"https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import{getFirestore,doc,setDoc,deleteDoc,collection,onSnapshot}from"https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-const FB={apiKey:"AIzaSyAFURz8fEGSTameAW5YvBKWpr2LXv9Ang0",authDomain:"family-pantry-c65d6.firebaseapp.com",projectId:"family-pantry-c65d6",storageBucket:"family-pantry-c65d6.firebasestorage.app",messagingSenderId:"710701847077",appId:"1:710701847077:web:407a8937330ad2ebcfe5cc"};
 const EID="2b6ecac2",EK="8db76605e873aaf2fbdf41256cb24cb4";
-// API key handled by Vercel proxy
-const db=getFirestore(initializeApp(FB));
+// Firestore proxy client — all DB ops routed through /api/db (server-side, bypasses auth rules)
+async function _db(op,path,data){const r=await fetch("/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op,path,data})});return r.json();}
+async function dbList(path){const j=await _db("list",path);return j.docs||[];}
+async function dbSet(path,data){return _db("set",path,data);}
+async function dbDelete(path){return _db("delete",path);}
 let hid=null,inv=[],recs=[],shop=J("ks-s")||[],mp=J("ks-m")||{},
 cfg=J("ks-c")||{name:"The Bora Family",adults:"Bora",kids:"1 toddler (age 3)",nopork:true,noshellfish:false,vegetarian:false,glutenfree:false,other:"",cuisines:"Bangladeshi, Turkish, Mediterranean, American",cookTime:"40-60 min"},
 chat=[],cp=null,selR="fridge",maL="fridge",adjId=null,it="all",rt="all",md=null,cn="",nr=0,eid=null;
@@ -838,15 +838,14 @@ window._appStart=function start(code){hid=code;g("LS").style.display="none";g("A
   // Ensure current household is in the saved list
   const arr=getHouseholds();if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
   loadCfgUI();initHome();
-  onSnapshot(collection(db,"households",hid,"inventory"),sn=>{inv=sn.docs.map(d=>({id:d.id,...d.data()}));ss("synced");renderAll();},_=>ss("error"));
-  onSnapshot(collection(db,"households",hid,"recipes"),sn=>{recs=sn.docs.map(d=>({id:d.id,...d.data()}));renderRecs();renderSum();});
-  onSnapshot(collection(db,"households",hid,"shopping"),sn=>{shop=sn.docs.map(d=>({id:d.id,...d.data()}));renderShop();renderSum();});}
+  async function poll(){try{ss("syncing");const[ni,nr2,ns]=await Promise.all([dbList(`households/${hid}/inventory`),dbList(`households/${hid}/recipes`),dbList(`households/${hid}/shopping`)]);inv=ni;recs=nr2;shop=ns;ss("synced");renderAll();renderRecs();renderShop();renderSum();}catch(e){console.error("poll error",e);ss("error");}}
+  window._poll=poll;poll();setInterval(poll,6000);}
 function g(id){return document.getElementById(id);}
 function ss(s){g("sdot").className="sdot "+s;g("slb").textContent=s==="synced"?"🏠 "+hid:s==="syncing"?"Syncing…":"Sync error";}
-async function svi(item){ss("syncing");try{await setDoc(doc(db,"households",hid,"inventory",item.id),item);ss("synced");}catch{ss("error");}}
-async function dli(id){ss("syncing");try{await deleteDoc(doc(db,"households",hid,"inventory",id));ss("synced");}catch{ss("error");}}
-async function svr(r){try{await setDoc(doc(db,"households",hid,"recipes",r.id),r);}catch(e){console.error(e);}}
-async function dlr(id){try{await deleteDoc(doc(db,"households",hid,"recipes",id));}catch(e){console.error(e);}}
+async function svi(item){ss("syncing");try{inv=[...inv.filter(i=>i.id!==item.id),item];renderAll();renderSum();await dbSet(`households/${hid}/inventory/${item.id}`,item);ss("synced");}catch(e){console.error(e);ss("error");}}
+async function dli(id){ss("syncing");try{inv=inv.filter(i=>i.id!==id);renderAll();renderSum();await dbDelete(`households/${hid}/inventory/${id}`);ss("synced");}catch(e){console.error(e);ss("error");}}
+async function svr(r){try{recs=[...recs.filter(x=>x.id!==r.id),r];renderRecs();renderSum();await dbSet(`households/${hid}/recipes/${r.id}`,r);}catch(e){console.error(e);}}
+async function dlr(id){try{recs=recs.filter(r=>r.id!==id);renderRecs();renderSum();await dbDelete(`households/${hid}/recipes/${id}`);}catch(e){console.error(e);}}
 window.showScreen=function(n){
   // Close any open overlays first
   document.querySelectorAll(".ov.active").forEach(o=>o.classList.remove("active"));
@@ -1025,8 +1024,8 @@ window.qadd=function(){const i=g("shi"),v=i.value.trim();if(!v)return;const item
 window.togShop=function(id){const item=shop.find(i=>i.id===id);if(!item)return;svShopItem({...item,checked:!item.checked});};
 window.clrChk=function(){shop.filter(i=>i.checked).forEach(i=>dlShopItem(i.id));};
 function svShop(){Js("ks-s",shop);}
-async function svShopItem(item){try{await setDoc(doc(db,"households",hid,"shopping",item.id),item);}catch(e){console.error(e);}}
-async function dlShopItem(id){try{await deleteDoc(doc(db,"households",hid,"shopping",id));}catch(e){console.error(e);}}
+async function svShopItem(item){try{shop=[...shop.filter(s=>s.id!==item.id),item];renderShop();renderSum();await dbSet(`households/${hid}/shopping/${item.id}`,item);}catch(e){console.error(e);}}
+async function dlShopItem(id){try{shop=shop.filter(s=>s.id!==id);renderShop();renderSum();await dbDelete(`households/${hid}/shopping/${id}`);}catch(e){console.error(e);}}
 window.buildList=async function(){showNotif("Building list with Claude…");const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");if(!ms){showNotif("No meals planned yet!");return;}const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");try{const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content:`Week meals: ${ms}\nAlready have: ${is}\nList ONLY ingredients still needed. Return ONLY bullet list, each line starting "- ". Concise.`}]})});const data=await r.json(),text=(data.content&&data.content[0]&&data.content[0].text||"");let added=0;text.split("\n").forEach(line=>{const m=line.match(/^[-•*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase())){shop.push({id:Date.now().toString()+Math.random(),name:nm,checked:false});added++;}}});svShop();renderShop();renderSum();showNotif(`Added ${added} items!`);}catch{showNotif("Couldn't build list — check connection");}};
 // renderShop and sH defined below with aisle support
 // kitCtx redefined below with variety nudge
