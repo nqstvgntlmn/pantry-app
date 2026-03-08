@@ -216,6 +216,34 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .sttl{font-family:"Fraunces",serif;font-size:1.8rem;color:var(--ac);font-weight:300;letter-spacing:-.02em}
 .ssub{font-size:.78rem;color:var(--mt);margin-top:2px}
 .shdr{padding:20px 20px 0;flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between}
+/* TAGS */
+.tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.tag{font-size:.66rem;padding:3px 9px;border-radius:20px;background:var(--sf);border:1px solid var(--b2);color:var(--mt);cursor:pointer;transition:all .15s}
+.tag.sel{background:var(--acd);border-color:var(--ac);color:var(--ac)}
+.tag.kid{background:rgba(109,181,109,.12);border-color:var(--gn);color:var(--gn)}
+.tag.quick{background:rgba(56,189,248,.1);border-color:#38bdf8;color:#38bdf8}
+.tag.date{background:rgba(232,130,154,.12);border-color:#e8829a;color:#e8829a}
+.tag.batch{background:rgba(200,150,10,.12);border-color:var(--am);color:var(--am)}
+/* PRICE */
+.price-tag{font-size:.72rem;color:var(--gn);font-weight:600}
+/* INSIGHTS */
+.istat{background:var(--card);border:1px solid var(--b1);border-radius:14px;padding:16px;margin-bottom:10px}
+.istat-ttl{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--mt);margin-bottom:12px}
+.ibar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ibar-lbl{font-size:.8rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibar-track{flex:2;height:6px;background:var(--b1);border-radius:3px;overflow:hidden}
+.ibar-fill{height:100%;background:var(--ac);border-radius:3px;transition:width .6s ease}
+.ibar-val{font-size:.75rem;color:var(--mt);text-align:right;min-width:24px}
+.waste-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--b1)}
+.waste-item:last-child{border-bottom:none}
+/* DEALS */
+.deal-card{background:var(--card);border:1px solid var(--b1);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:flex-start;gap:12px}
+.deal-store{font-size:.66rem;text-transform:uppercase;letter-spacing:.08em;color:var(--mt)}
+.deal-name{font-size:.88rem;font-weight:500;margin:2px 0}
+.deal-price{font-size:1rem;font-family:"Fraunces",serif;color:var(--gn);font-weight:300}
+.deal-orig{font-size:.72rem;color:var(--mt);text-decoration:line-through;margin-left:4px}
+.deal-badge{font-size:.66rem;padding:2px 7px;border-radius:20px;background:var(--gnd);color:var(--gn);border:1px solid var(--gn);white-space:nowrap}
+.deal-match{border-color:var(--gn)}
 </style>
 </head>
 <body>
@@ -269,22 +297,49 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
   <!-- RECIPES -->
   <div class="screen" id="screen-recipes">
-    <div class="shdr"><div><div class="sttl">Recipes</div><div class="ssub" id="rsub">Your saved recipes</div></div><button class="btn bp bsm" onclick="showOv('arec')">+ Add</button></div>
+    <div class="shdr"><div><div class="sttl">Recipes</div><div class="ssub" id="rsub">Your saved recipes</div></div><div style="display:flex;gap:6px"><button class="btn bs bsm" onclick="whatCanIMake()">🔍 Make now</button><button class="btn bp bsm" onclick="showOv('arec')">+ Add</button></div></div>
     <div class="rtabs">
       <div class="rtab active" id="rtab-all" onclick="setRT('all')">All</div>
       <div class="rtab" id="rtab-fav" onclick="setRT('fav')">❤️ Favorites</div>
       <div class="rtab" id="rtab-top" onclick="setRT('top')">⭐ Top Rated</div>
+      <div class="rtab" id="rtab-quick" onclick="setRT('quick')">⚡ Quick</div>
+      <div class="rtab" id="rtab-kid" onclick="setRT('kid')">👶 Kids</div>
     </div>
     <div class="rbody" id="rbody"></div>
   </div>
 
   <!-- SHOPPING -->
   <div class="screen" id="screen-shopping">
-    <div class="shdr"><div><div class="sttl">Shopping</div><div class="ssub">Your grocery list</div></div><button class="btn bsm bs" id="clrchk" onclick="clrChk()" style="display:none">Clear done</button></div>
-    <div class="shbody">
-      <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp" onclick="qadd()">Add</button></div>
-      <button class="btn bsm bs bf" style="margin-bottom:12px" onclick="buildList()">🤖 Build list from meal plan</button>
-      <div id="shlist"></div>
+    <div class="shdr"><div><div class="sttl">Shopping</div><div class="ssub" id="shsub">Your grocery list</div></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn bsm bs" onclick="shareList()">📤 Share</button>
+        <button class="btn bsm bs" id="clrchk" onclick="clrChk()" style="display:none">Clear done</button>
+      </div>
+    </div>
+    <div class="itabs" style="margin-top:10px">
+      <div class="itab active" id="shtab-list" onclick="setSHT('list')">My List</div>
+      <div class="itab" id="shtab-deals" onclick="setSHT('deals')">🏷 Deals</div>
+    </div>
+    <div id="sh-list-body">
+      <div class="shbody">
+        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp" onclick="qadd()">Add</button></div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn bsm bs" style="flex:1" onclick="buildList()">🤖 Build from meal plan</button>
+          <button class="btn bsm bs" id="aislebtn" onclick="togAisle()">≡ By aisle</button>
+        </div>
+        <div id="shlist"></div>
+      </div>
+    </div>
+    <div id="sh-deals-body" style="display:none">
+      <div class="shbody">
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <input class="qainp" id="dealsearch" placeholder="Search deals (e.g. chicken, milk…)" style="flex:1"/>
+          <button class="btn bp" onclick="searchDeals()">Search</button>
+        </div>
+        <button class="btn bs bsm bf" style="margin-bottom:12px" onclick="dealsFromList()">🛒 Find deals for my list</button>
+        <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:8px;display:none"></div>
+        <div id="dealslist"></div>
+      </div>
     </div>
   </div>
 
@@ -303,12 +358,36 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <div class="chia"><textarea class="chta" id="chi" placeholder="Ask anything about your kitchen…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="ar(this)"></textarea><button class="chsb" id="csb" onclick="sendChat()">↑</button></div>
   </div>
 
+  <!-- INSIGHTS SCREEN -->
+  <div class="screen" id="screen-insights">
+    <div class="shdr"><div><div class="sttl">Insights</div><div class="ssub">Your kitchen at a glance</div></div></div>
+    <div style="padding:16px;flex:1;overflow-y:auto">
+      <div class="istat">
+        <div class="istat-ttl">🍽 Most Cooked</div>
+        <div id="ins-cooked"><div class="es" style="padding:20px"><p>Cook some meals to see stats!</p></div></div>
+      </div>
+      <div class="istat">
+        <div class="istat-ttl">🌍 Cuisine Mix</div>
+        <div id="ins-cuisine"><div class="es" style="padding:20px"><p>Plan meals to see cuisine breakdown.</p></div></div>
+      </div>
+      <div class="istat">
+        <div class="istat-ttl">🗑 Waste Log <span class="otag">items that expired</span></div>
+        <div id="ins-waste"><div class="es" style="padding:20px"><p>Nothing wasted yet — great job!</p></div></div>
+      </div>
+      <div class="istat">
+        <div class="istat-ttl">📅 Cooking Streak</div>
+        <div id="ins-streak"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- NAV -->
   <div id="NAV">
     <div class="ni active" id="nav-home" onclick="showScreen('home')"><span class="ico">🏠</span><span>Home</span></div>
     <div class="ni" id="nav-inventory" onclick="showScreen('inventory')"><span class="ico">🧺</span><span>Pantry</span></div>
     <div class="ni" id="nav-recipes" onclick="showScreen('recipes')"><span class="ico">📖</span><span>Recipes</span></div>
-    <div class="ni" id="nav-shopping" onclick="showScreen('shopping')"><span class="ico">🛒</span><span>Shopping</span></div>
+    <div class="ni" id="nav-shopping" onclick="showScreen('shopping')"><span class="ico">🛒</span><span>Shop</span></div>
+    <div class="ni" id="nav-insights" onclick="showScreen('insights')"><span class="ico">📊</span><span>Insights</span></div>
     <div class="ni" id="nav-chat" onclick="showScreen('chat')"><span class="ico">✨</span><span>Claude</span></div>
   </div>
 
@@ -385,6 +464,16 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
       <div class="frow"><label class="flbl">Your rating</label><div class="sinp" id="rstars"><span class="star" onclick="setStar(1,'r')">☆</span><span class="star" onclick="setStar(2,'r')">☆</span><span class="star" onclick="setStar(3,'r')">☆</span><span class="star" onclick="setStar(4,'r')">☆</span><span class="star" onclick="setStar(5,'r')">☆</span></div></div>
       <div class="frow"><label class="flbl">Description / Ingredients <span class="otag">optional</span></label><textarea class="fta" id="rd" placeholder="Key ingredients, method…"></textarea></div>
       <div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><input class="fi" id="rnotes" placeholder="e.g. Add more garlic next time!"/></div>
+      <div class="frow"><label class="flbl">Tags <span class="otag">optional</span></label>
+        <div class="tags" id="rtags">
+          <div class="tag" data-tag="Quick" onclick="togTag(this)">⚡ Quick</div>
+          <div class="tag kid" data-tag="Kid-Friendly" onclick="togTag(this)">👶 Kid-Friendly</div>
+          <div class="tag date" data-tag="Date Night" onclick="togTag(this)">🕯 Date Night</div>
+          <div class="tag batch" data-tag="Batch Cook" onclick="togTag(this)">📦 Batch Cook</div>
+          <div class="tag" data-tag="Healthy" onclick="togTag(this)">🥗 Healthy</div>
+          <div class="tag" data-tag="Under 30 min" onclick="togTag(this)">⏱ Under 30 min</div>
+        </div>
+      </div>
       <div class="frow"><label class="flbl">Source URL <span class="otag">optional</span></label><input class="fi" id="rsourceurl" placeholder="Recipe website URL" style="font-size:.82rem"/></div>
       <div class="brow"><button class="btn bp bf" id="savrecbtn" onclick="saveRec()" disabled>Save Recipe</button></div>
     </div>
@@ -488,10 +577,21 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   <div class="minner">
     <div class="mttl">🍽 Meal Cooked!</div>
     <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:300;margin-bottom:4px" id="cookedNm"></div>
-    <div style="font-size:.8rem;color:var(--mt);margin-bottom:16px;line-height:1.5">Save to your recipe library?</div>
+    <div style="font-size:.8rem;color:var(--mt);margin-bottom:16px;line-height:1.5">Log this meal and optionally save to recipes.</div>
     <div class="frow"><label class="flbl">Rate this meal</label><div class="sinp" id="cstars"><span class="star" onclick="setStar(1,'c')">☆</span><span class="star" onclick="setStar(2,'c')">☆</span><span class="star" onclick="setStar(3,'c')">☆</span><span class="star" onclick="setStar(4,'c')">☆</span><span class="star" onclick="setStar(5,'c')">☆</span></div></div>
     <div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><input class="fi" id="cnotes" placeholder="Family loved it!…"/></div>
-    <div class="brow"><button class="btn bs" style="flex:1" onclick="skipCooked()">Skip</button><button class="btn bp" style="flex:2" onclick="saveCooked()">Save to Recipes</button></div>
+    <div class="srow" style="padding:12px 0"><span class="srlbl" style="font-size:.84rem">🥡 Made leftovers</span><div class="tog" id="tog-leftover" onclick="this.classList.toggle('on')"></div></div>
+    <div class="brow"><button class="btn bs" style="flex:1" onclick="skipCooked()">Just log it</button><button class="btn bp" style="flex:2" onclick="saveCooked()">Save to Recipes</button></div>
+  </div>
+</div>
+
+<!-- SCHEDULE RECIPE MODAL -->
+<div class="modal" id="schedM">
+  <div class="minner">
+    <div class="mttl">📅 Schedule Recipe</div>
+    <div style="font-size:.88rem;color:var(--tx2);margin-bottom:12px" id="schedNm"></div>
+    <div class="wgrd" id="schedWk"></div>
+    <div class="brow"><button class="btn bs bf" onclick="g('schedM').classList.remove('active')">Cancel</button></div>
   </div>
 </div>
 
@@ -541,8 +641,7 @@ window.saveMeal=function(){const v=g("mealMinp").value.trim();if(v)mp[md]=v;else
 window.clrMeal=function(){delete mp[md];Js("ks-m",mp);closeMealM();renderWeek();renderSum();renderTonight();};
 window.toggleExp=function(){const p=g("exppanel");p.style.display=p.style.display==="none"?"block":"none";};
 window.openCooked=function(k){const m=mp[k];if(!m)return;cn=m;nr=0;g("cookedNm").textContent=m;g("cnotes").value="";renderStars("cstars",0);g("cookedM").classList.add("active");};
-window.skipCooked=function(){g("cookedM").classList.remove("active");const td=tk();delete mp[td];Js("ks-m",mp);renderWeek();renderTonight();showNotif("Meal marked as cooked!");};
-window.saveCooked=async function(){const notes=g("cnotes").value.trim();await svr({id:"rec-"+Date.now(),name:cn,rating:nr,favorited:false,notes,description:"",source:"Meal Plan",savedAt:new Date().toLocaleDateString(),cookedAt:new Date().toLocaleDateString()});g("cookedM").classList.remove("active");const td=tk();delete mp[td];Js("ks-m",mp);renderWeek();renderTonight();showNotif("Saved to recipes! ⭐");};
+// skipCooked and saveCooked defined below with cook log support
 window.setStar=function(n,ctx){nr=n;if(ctx==="r")renderStars("rstars",n);else if(ctx==="c")renderStars("cstars",n);else if(ctx==="e"){renderStars("estars",n);}};
 function renderStars(id,n){const el=g(id);if(!el)return;el.querySelectorAll(".star").forEach((s,i)=>{s.textContent=i<n?"★":"☆";s.classList.toggle("on",i<n);});}
 window.setIT=function(t){it=t;document.querySelectorAll(".itab").forEach(x=>x.classList.remove("active"));g("itab-"+t).classList.add("active");renderInv();};
@@ -585,8 +684,7 @@ window.adjQ=async function(d){const item=inv.find(i=>i.id===adjId);if(!item)retu
 window.adjQD=async function(){const item=inv.find(i=>i.id===adjId);if(!item)return;const v=parseInt(g("adjqty").value);if(!isNaN(v)&&v>=0)await svi({...item,qty:v});};
 window.adjE=async function(){const item=inv.find(i=>i.id===adjId);if(!item)return;const v=g("adjexp").value||null;await svi({...item,expiry:v});};
 window.remItem=async function(id){await dli(id);showNotif("Item removed");hideOv("adj");};
-window.setRT=function(t){rt=t;document.querySelectorAll(".rtab").forEach(x=>x.classList.remove("active"));g("rtab-"+t).classList.add("active");renderRecs();};
-function renderRecs(){let f=[...recs];if(rt==="fav")f=f.filter(r=>r.favorited);else if(rt==="top")f=f.filter(r=>r.rating>=4).sort((a,b)=>b.rating-a.rating);else f=f.sort((a,b)=>new Date(b.savedAt||0)-new Date(a.savedAt||0));g("rsub").textContent=f.length+" recipe"+(f.length!==1?"s":"");const c=g("rbody");if(!f.length){c.innerHTML=`<div class="es"><div class="ei">📖</div><p>${rt==="fav"?"No favorites yet!<br/>Heart a recipe.":rt==="top"?"No 4–5 star recipes yet.":"No recipes saved yet.<br/>Mark meals as cooked or tap + Add."}</p></div>`;return;}c.innerHTML=f.map(rH).join("");}
+// setRT and renderRecs defined below with full tag support
 function rH(r){const st=Array.from({length:5},(_,i)=>`<span class="star${i<r.rating?" on":""}">${i<r.rating?"★":"☆"}</span>`).join("");const srcLink=r.sourceUrl?`<a href="${r.sourceUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:.68rem;color:var(--ac);text-decoration:none;border:1px solid rgba(212,168,83,.3);border-radius:20px;padding:2px 8px;background:transparent">🔗 View original</a>`:r.source?`<span class="sbdg">${r.source}</span>`:"";return`<div class="rcd${r.favorited?" fav":""}" onclick="openER('${r.id}')"><div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited?"❤️":"🤍"}</div></div><div class="stars">${st}</div>${r.description?`<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0,100)}${r.description.length>100?"…":""}</div>`:""}${r.notes?`<div class="rnot">${r.notes}</div>`:""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;}
 window.togFav=async function(id){const r=recs.find(r=>r.id===id);if(!r)return;await svr({...r,favorited:!r.favorited});showNotif(r.favorited?"Removed from favorites":"Added to favorites! ❤️");};
 window.valR=function(){g("savrecbtn").disabled=!g("rn").value.trim();};
@@ -612,55 +710,16 @@ window.importFromUrl=async function(){
   }catch(e){st.style.color="var(--rd)";st.textContent="⚠️ Couldn't import — try copying the recipe text manually.";}
   btn.disabled=false;
 };
-window.openER=function(id){const r=recs.find(r=>r.id===id);if(!r)return;eid=id;const rt=r.rating||0;const st=Array.from({length:5},(_,i)=>`<span class="star${i<rt?" on":""}" onclick="setStar(${i+1},'e')">${i<rt?"★":"☆"}</span>`).join("");const srcLink=r.sourceUrl?`<div class="frow"><label class="flbl">Original URL</label><a href="${r.sourceUrl}" target="_blank" style="font-size:.82rem;color:var(--ac);word-break:break-all">${r.sourceUrl}</a></div>`:"";g("erecbody").innerHTML=`
-  <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:16px">
-    <div style="font-size:.78rem;color:var(--mt);margin-bottom:10px;font-weight:500">⚖️ Scale serving size</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn bs bsm" onclick="scaleRec(0.5)">½×</button>
-      <button class="btn bs bsm" onclick="scaleRec(1)">1×</button>
-      <button class="btn bs bsm" onclick="scaleRec(2)">2×</button>
-      <button class="btn bs bsm" onclick="scaleRec(3)">3×</button>
-      <input id="scaleCustom" class="qinp" type="number" min="0.25" max="10" step="0.25" placeholder="×" style="width:58px" oninput="if(this.value)scaleRec(parseFloat(this.value))"/>
-    </div>
-    <div id="scaleStatus" style="font-size:.74rem;color:var(--mt);margin-top:8px;display:none"></div>
-  </div>
-  <div class="frow"><label class="flbl">Name</label><input class="fi" id="ern" value="${r.name}"/></div>
-  <div class="frow"><label class="flbl">Rating</label><div class="sinp" id="estars">${st}</div></div>
-  <div class="frow"><label class="flbl">Description / Ingredients</label><textarea class="fta" id="erd" style="min-height:140px">${r.description||""}</textarea></div>
-  <div class="frow"><label class="flbl">Notes</label><input class="fi" id="erno" value="${r.notes||""}"/></div>
-  ${srcLink}
-  <div style="display:flex;align-items:center;gap:10px;margin:12px 0"><span style="font-size:.88rem">Favorite</span><div class="tog${r.favorited?" on":""}" id="etog" onclick="this.classList.toggle('on')"></div></div>
-  <div class="brow"><button class="btn bd" style="flex:1" onclick="delER()">Delete</button><button class="btn bp" style="flex:2" onclick="updR()">Save</button></div>`;
-showOv("erec");};
-window.updR=async function(){const r=recs.find(r=>r.id===eid);if(!r)return;const rt=[...document.querySelectorAll("#estars .star")].filter(s=>s.classList.contains("on")).length;await svr({...r,name:g("ern").value.trim(),rating:rt,description:g("erd").value.trim(),notes:g("erno").value.trim(),favorited:g("etog").classList.contains("on")});showNotif("Recipe updated!");hideOv("erec");};
+// openER defined below with scheduling + tags
+// updR defined below with tags support
 window.delER=async function(){if(!confirm("Delete this recipe?"))return;await dlr(eid);showNotif("Deleted");hideOv("erec");};
 window.qadd=function(){const i=g("shi"),v=i.value.trim();if(!v)return;shop.push({id:Date.now().toString(),name:v,checked:false});i.value="";svShop();renderShop();};
 window.togShop=function(id){const item=shop.find(i=>i.id===id);if(!item)return;item.checked=!item.checked;svShop();renderShop();};
 window.clrChk=function(){shop=shop.filter(i=>!i.checked);svShop();renderShop();renderSum();};
 function svShop(){Js("ks-s",shop);}
 window.buildList=async function(){showNotif("Building list with Claude…");const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");if(!ms){showNotif("No meals planned yet!");return;}const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");try{const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content:`Week meals: ${ms}\nAlready have: ${is}\nList ONLY ingredients still needed. Return ONLY bullet list, each line starting "- ". Concise.`}]})});const data=await r.json(),text=data.content?.[0]?.text||"";let added=0;text.split("\n").forEach(line=>{const m=line.match(/^[-•*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase())){shop.push({id:Date.now().toString()+Math.random(),name:nm,checked:false});added++;}}});svShop();renderShop();renderSum();showNotif(`Added ${added} items!`);}catch{showNotif("Couldn't build list — check connection");}};
-function renderShop(){const c=g("shlist"),un=shop.filter(i=>!i.checked),ch=shop.filter(i=>i.checked);g("clrchk").style.display=ch.length?"block":"none";if(!shop.length){c.innerHTML=`<div class="es"><div class="ei">🛒</div><p>Your list is empty!<br/>Add items or use "Build from meal plan".</p></div>`;return;}c.innerHTML=(un.length?`<div class="shsec">To buy (${un.length})</div>${un.map(sH).join("")}`:"")+(ch.length?`<div class="shsec">Done</div>${ch.map(sH).join("")}`:"");}
-function sH(item){return`<div class="shit${item.checked?" chk":""}" onclick="togShop('${item.id}')"><div class="shck">${item.checked?"✓":""}</div><div class="shnm">${item.name}</div></div>`;}
-function kitCtx(){const sec=["fridge","freezer","pantry"].map(loc=>{const its=inv.filter(i=>i.location===loc);return its.length?ll(loc).toUpperCase()+": "+its.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", "):"";}).filter(Boolean).join("\n");const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).map(i=>{const s=xSt(i.expiry);return`${i.name} (${s.l})`;}).join(", ");const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");const favs=recs.filter(r=>r.favorited||r.rating>=4).map(r=>`${r.name}${r.rating?` (${r.rating}★)`:""}`).join(", ");const restr=[cfg.nopork?"no pork":null,cfg.noshellfish?"no shellfish":null,cfg.vegetarian?"vegetarian":null,cfg.glutenfree?"gluten-free":null,cfg.other].filter(Boolean).join(", ");return`You are a helpful kitchen assistant.\nINVENTORY:\n${sec||"Empty."}\n${ex?"EXPIRING SOON: "+ex:""}\n${ms?"MEAL PLAN: "+ms:""}\n${favs?"FAVOURITE RECIPES: "+favs:""}\nHOUSEHOLD: ${cfg.name}, Adults: ${cfg.adults}, Kids: ${cfg.kids}, Restrictions: ${restr||"none"}, Cuisines: ${cfg.cuisines}, Cook time: ${cfg.cookTime}.\nBe concise. Use what they have. Format grocery lists as bullet points starting "- ".`;}
-window.sendPill=function(el){g("chi").value=el.textContent;sendChat();};
-window.sendChat=async function(){const inp=g("chi"),msg=inp.value.trim();if(!msg)return;inp.value="";ar(inp);addB("user",msg);chat.push({role:"user",content:msg});g("csb").disabled=true;const tid="t-"+Date.now();addB("asst thinking","Thinking…",tid);scrollC();try{const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,system:kitCtx(),messages:chat})});const data=await r.json(),reply=data.content?.[0]?.text||"Sorry, try again!";g(tid)?.remove();addBSave("asst",fmtR(reply),reply);chat.push({role:"assistant",content:reply});addShopF(reply);}catch{g(tid)?.remove();addB("asst","Something went wrong. Check your connection.");}g("csb").disabled=false;scrollC();};
-function addShopF(text){let inL=false,added=0;text.split("\n").forEach(line=>{const l=line.toLowerCase();if(l.includes("grocery")||l.includes("shopping")||l.includes("need to buy"))inL=true;if(inL){const m=line.match(/^[-•*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase())){shop.push({id:Date.now().toString()+Math.random(),name:nm,checked:false});added++;}}}});if(added>0){svShop();renderSum();}}
-function addB(cls,html,id){const d=document.createElement("div");d.className="cb "+cls;if(id)d.id=id;d.innerHTML=html;g("chmsgs").appendChild(d);}
-function addBSave(cls,html,raw){const d=document.createElement("div");d.className="cb "+cls;d.innerHTML=html;const btn=document.createElement("button");btn.className="csvbtn";btn.innerHTML="📖 Save as recipe";btn.onclick=()=>{g("rn").value=raw.split("\n")[0].replace(/\*\*/g,"").replace(/^#+\s*/,"").trim().substring(0,80);g("rd").value=raw.substring(0,500);g("rnotes").value="";nr=0;g("savrecbtn").disabled=false;renderStars("rstars",0);showOv("arec");btn.textContent="✓ Opening…";};d.appendChild(btn);g("chmsgs").appendChild(d);}
-function fmtR(text){return text.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").replace(/^#{1,3}\s+(.+)$/gm,"<strong>$1</strong>").replace(/^[-•*]\s+(.+)$/gm,"<li>$1</li>").replace(/(<li>.*<\/li>)/gs,"<ul>$1</ul>").split("\n\n").map(p=>p.startsWith("<ul>")?p:`<p>${p}</p>`).join("");}
-function scrollC(){const el=g("chmsgs");setTimeout(()=>el.scrollTop=el.scrollHeight,50);}
-window.clrChat=function(){chat=[];g("chmsgs").innerHTML=`<div class="cb asst">Chat cleared! What can I help with?</div>`;};
-window.ar=function(el){el.style.height="auto";el.style.height=Math.min(el.scrollHeight,120)+"px";};
-function loadCfgUI(){
-  g("setName").value=cfg.name||"";g("setAdults").value=cfg.adults||"";g("setKids").value=cfg.kids||"";
-  g("setOther").value=cfg.other||"";g("setCuisines").value=cfg.cuisines||"";g("setCookTime").value=cfg.cookTime||"40-60 min";
-  ["nopork","noshellfish","vegetarian","glutenfree"].forEach(k=>{const t=g("tg-"+k);if(t)t.classList.toggle("on",!!cfg[k]);});
-  const notifOn=cfg.notif||false;const nt=g("tg-notif");if(nt)nt.classList.toggle("on",notifOn);
-  g("notifTimeRow").style.display=notifOn?"block":"none";
-  if(g("setNotifTime"))g("setNotifTime").value=cfg.notifTime||"8";
-  if(g("setNotifDays"))g("setNotifDays").value=cfg.notifDays||"3";
-  renderHHList();
-}
+// renderShop and sH defined below with aisle support
+// kitCtx redefined below with variety nudge
 window.saveSettings=function(){
   cfg={...cfg,name:g("setName").value.trim(),adults:g("setAdults").value.trim(),kids:g("setKids").value.trim(),
     nopork:g("tg-nopork").classList.contains("on"),noshellfish:g("tg-noshellfish").classList.contains("on"),
@@ -704,6 +763,291 @@ ${orig}`}]})});
 
 renderShop();
 if(cfg.notif)setTimeout(scheduleNotifCheck,3000);
+
+// ── RECIPE TAGS ──────────────────────────────────────────────────────────
+window.togTag=function(el){el.classList.toggle("sel");};
+function getSelTags(containerId){return [...document.querySelectorAll("#"+containerId+" .tag.sel")].map(t=>t.dataset.tag);}
+function setTagsUI(containerId,tags){document.querySelectorAll("#"+containerId+" .tag").forEach(t=>{t.classList.toggle("sel",(tags||[]).includes(t.dataset.tag));});}
+window.setRT=function(t){rt=t;document.querySelectorAll(".rtab").forEach(x=>x.classList.remove("active"));const el=g("rtab-"+t);if(el)el.classList.add("active");renderRecs();};
+function renderRecs(){let f=[...recs];
+  if(rt==="fav")f=f.filter(r=>r.favorited);
+  else if(rt==="top")f=f.filter(r=>r.rating>=4).sort((a,b)=>b.rating-a.rating);
+  else if(rt==="quick")f=f.filter(r=>(r.tags||[]).includes("Quick")||(r.tags||[]).includes("Under 30 min"));
+  else if(rt==="kid")f=f.filter(r=>(r.tags||[]).includes("Kid-Friendly"));
+  else f=f.sort((a,b)=>new Date(b.savedAt||0)-new Date(a.savedAt||0));
+  g("rsub").textContent=f.length+" recipe"+(f.length!==1?"s":"");
+  const c=g("rbody");if(!f.length){c.innerHTML=`<div class="es"><div class="ei">📖</div><p>${rt==="fav"?"No favorites yet!":rt==="top"?"No 4–5 star recipes yet.":rt==="quick"?"No quick recipes saved yet.":rt==="kid"?"No kid-friendly recipes yet.":"No recipes saved yet.<br/>Mark meals as cooked or tap + Add."}</p></div>`;return;}
+  c.innerHTML=f.map(rH).join("");}
+
+// ── WHAT CAN I MAKE NOW ───────────────────────────────────────────────────
+window.whatCanIMake=async function(){
+  g("rsub").textContent="Thinking…";
+  const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");
+  const saved=recs.map(r=>r.name).join(", ");
+  const restr=[cfg.nopork?"no pork":null,cfg.noshellfish?"no shellfish":null,cfg.vegetarian?"vegetarian":null,cfg.glutenfree?"gluten-free":null,cfg.other||null].filter(Boolean).join(", ");
+  try{
+    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,messages:[{role:"user",content:`Based on this exact inventory: ${is}
+Restrictions: ${restr||"none"}
+Saved recipes: ${saved||"none"}
+Suggest 5 complete meals I can make RIGHT NOW with no extra shopping. Be specific with names. Format as a numbered list.`}]})});
+    const data=await r.json(),text=data.content?.[0]?.text||"";
+    const c=g("rbody");
+    c.innerHTML=`<div style="background:var(--card);border:1px solid var(--ac);border-radius:14px;padding:16px;margin-bottom:12px">
+      <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ac);margin-bottom:10px">🔍 Make right now — no shopping needed</div>
+      <div style="font-size:.88rem;line-height:1.8;color:var(--tx2)">${fmtR(text)}</div>
+      <button class="btn bs bsm" style="margin-top:12px;width:100%" onclick="setRT('all')">← Back to recipes</button>
+    </div>`;
+    g("rsub").textContent="Based on your inventory";
+  }catch{g("rsub").textContent="Couldn't reach Claude";}
+};
+
+// ── RECIPE SAVE (updated with tags + cook count) ──────────────────────────
+window.saveRec=async function(){
+  const nm=g("rn").value.trim();if(!nm)return;
+  const srcUrl=g("rsourceurl")?.value.trim()||"";
+  const tags=getSelTags("rtags");
+  await svr({id:"rec-"+Date.now(),name:nm,rating:nr,favorited:false,notes:g("rnotes").value.trim(),description:g("rd").value.trim(),source:srcUrl?"Web Import":"Manual",sourceUrl:srcUrl||null,tags,cookCount:0,savedAt:new Date().toLocaleDateString()});
+  g("rn").value="";g("rnotes").value="";g("rd").value="";g("rsourceurl").value="";g("rurl").value="";
+  setTagsUI("rtags",[]);nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);showNotif("Recipe saved! 📖");hideOv("arec");
+};
+
+// ── SCHEDULE RECIPE ───────────────────────────────────────────────────────
+window.scheduleRecipe=function(name){
+  g("schedNm").textContent=name;
+  const ns=["S","M","T","W","T","F","S"],t=new Date();t.setHours(0,0,0,0);
+  g("schedWk").innerHTML=wDates().map((d,i)=>{
+    const k=d.toISOString().split("T")[0],iss=d.getTime()===t.getTime(),has=mp[k];
+    return`<div class="wd${iss?" today":""}${has?" hm":""}" onclick="schedSet('${k}','${name}')">
+      <div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>
+      ${has?`<div class="wdm">${has.substring(0,8)}…</div>`:""}
+    </div>`;
+  }).join("");
+  g("schedM").classList.add("active");
+};
+window.schedSet=function(k,name){mp[k]=name;Js("ks-m",mp);g("schedM").classList.remove("active");renderWeek();renderTonight();showNotif("Scheduled! 📅");};
+
+// ── COOK LOG + INSIGHTS ───────────────────────────────────────────────────
+function getCookLog(){return J("ks-cooklog")||[];}
+function addCookLog(name,date){const log=getCookLog();log.unshift({name,date:date||tk()});Js("ks-cooklog",log.slice(0,200));}
+function getWasteLog(){return J("ks-waste")||[];}
+function addWaste(name){const w=getWasteLog();if(!w.find(x=>x.name===name&&x.date===tk()))w.unshift({name,date:tk()});Js("ks-waste",w.slice(0,100));}
+
+window.skipCooked=function(){
+  addCookLog(cn,tk());
+  const td=tk();delete mp[td];Js("ks-m",mp);
+  g("cookedM").classList.remove("active");renderWeek();renderTonight();showNotif("Meal logged!");
+};
+window.saveCooked=async function(){
+  const notes=g("cnotes").value.trim();
+  const hasLeftover=g("tog-leftover")?.classList.contains("on");
+  addCookLog(cn,tk());
+  // Increment cook count on existing recipe
+  const existing=recs.find(r=>r.name.toLowerCase()===cn.toLowerCase());
+  if(existing)await svr({...existing,cookCount:(existing.cookCount||0)+1,lastCooked:tk()});
+  else await svr({id:"rec-"+Date.now(),name:cn,rating:nr,favorited:false,notes,description:"",source:"Meal Plan",tags:[],cookCount:1,savedAt:new Date().toLocaleDateString(),lastCooked:tk()});
+  if(hasLeftover){mp[nextDay()]=cn+" (leftovers)";Js("ks-m",mp);}
+  g("cookedM").classList.remove("active");const td=tk();delete mp[td];Js("ks-m",mp);
+  renderWeek();renderTonight();
+  showNotif(hasLeftover?"Saved! Leftovers planned for tomorrow 🥡":"Saved to recipes! ⭐");
+};
+function nextDay(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().split("T")[0];}
+
+function renderInsights(){
+  const log=getCookLog();
+  // Most cooked
+  const counts={};log.forEach(e=>{counts[e.name]=(counts[e.name]||0)+1;});
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const max=sorted[0]?.[1]||1;
+  const cookedEl=g("ins-cooked");if(cookedEl){
+    cookedEl.innerHTML=sorted.length?sorted.map(([n,c])=>`<div class="ibar-row"><div class="ibar-lbl">${n}</div><div class="ibar-track"><div class="ibar-fill" style="width:${Math.round(c/max*100)}%"></div></div><div class="ibar-val">${c}×</div></div>`).join(""):`<div class="es" style="padding:20px"><p>Cook some meals to see stats!</p></div>`;}
+  // Cuisine mix from meal plan
+  const meals=Object.values(mp).filter(Boolean);
+  const cuisEl=g("ins-cuisine");if(cuisEl&&meals.length){
+    cuisEl.innerHTML=`<div style="font-size:.84rem;line-height:1.8;color:var(--tx2)">${meals.map(m=>`• ${m}`).join("<br/>")}</div>`;
+  }
+  // Waste log
+  const waste=getWasteLog();
+  const wasteEl=g("ins-waste");if(wasteEl){
+    wasteEl.innerHTML=waste.length?waste.slice(0,10).map(w=>`<div class="waste-item"><span style="font-size:.86rem">${w.name}</span><span style="font-size:.74rem;color:var(--rd)">${w.date}</span></div>`).join(""):`<div class="es" style="padding:20px"><p>Nothing wasted yet — great job! 🎉</p></div>`;}
+  // Streak
+  const streakEl=g("ins-streak");if(streakEl){
+    let streak=0,d=new Date();
+    for(let i=0;i<30;i++){const k=new Date(d);k.setDate(d.getDate()-i);const ks=k.toISOString().split("T")[0];if(log.find(e=>e.date===ks))streak++;else if(i>0)break;}
+    streakEl.innerHTML=`<div style="text-align:center;padding:16px"><div style="font-family:'Fraunces',serif;font-size:3rem;color:var(--ac);font-weight:300">${streak}</div><div style="font-size:.82rem;color:var(--mt);margin-top:4px">day cooking streak</div></div>`;}
+}
+
+// ── SHOPPING: AISLE GROUPING ──────────────────────────────────────────────
+let aisleMode=false;
+const AISLES={"Produce":["apple","banana","carrot","celery","onion","garlic","tomato","lettuce","cucumber","pepper","broccoli","spinach","mushroom","lemon","lime","herb","cabbage","squash","jalap","avocado","potato","ginger"],
+  "Meat & Fish":["chicken","beef","lamb","turkey","salmon","cod","tuna","fish","steak","shrimp","pork","bacon","sausage","ground"],
+  "Dairy & Eggs":["egg","butter","cheese","milk","cream","yogurt","ghee","kefir"],
+  "Frozen":["frozen","ice cream","pizza","nugget","waffle","edamame","okra","lima","broccoli floret"],
+  "Pantry":["rice","pasta","flour","oil","vinegar","sauce","spice","salt","pepper","sugar","honey","oat","bread","can","bean","lentil","chickpea","stock","broth"],
+  "Snacks & Drinks":["chip","cracker","cookie","juice","soda","water","tea","coffee","snack","nut","seed"]};
+function guessAisle(name){const n=name.toLowerCase();for(const[aisle,kws]of Object.entries(AISLES)){if(kws.some(k=>n.includes(k)))return aisle;}return"Other";}
+window.togAisle=function(){aisleMode=!aisleMode;g("aislebtn").style.background=aisleMode?"var(--ac)":"";g("aislebtn").style.color=aisleMode?"var(--bg)":"";renderShop();};
+window.setSHT=function(t){["list","deals"].forEach(x=>{g("shtab-"+x)?.classList.remove("active");g("sh-"+x+"-body").style.display="none";});g("shtab-"+t)?.classList.add("active");g("sh-"+t+"-body").style.display="block";};
+window.shareList=function(){var items=shop.filter(function(i){return!i.checked;});if(!items.length){showNotif("List is empty!");return;}var lines=items.map(function(i){return i.price?"\u2022 "+i.name+" (~$"+i.price+")":"\u2022 "+i.name;});var txt="\uD83D\uDED2 Shopping List\n\n"+lines.join("\n");if(navigator.share){navigator.share({title:"Shopping List",text:txt}).catch(function(){});}else if(navigator.clipboard){navigator.clipboard.writeText(txt).then(function(){showNotif("List copied!");});}};
+
+function renderShop(){
+  const c=g("shlist"),un=shop.filter(i=>!i.checked),ch=shop.filter(i=>i.checked);
+  g("clrchk").style.display=ch.length?"block":"none";
+  g("shsub").textContent=un.length+" items to buy";
+  if(!shop.length){c.innerHTML=`<div class="es"><div class="ei">🛒</div><p>Your list is empty!<br/>Add items or use "Build from meal plan".</p></div>`;return;}
+  if(aisleMode&&un.length){
+    const grps={};un.forEach(i=>{const a=guessAisle(i.name);if(!grps[a])grps[a]=[];grps[a].push(i);});
+    c.innerHTML=Object.entries(grps).sort().map(([aisle,its])=>`<div class="shsec">${aisle}</div>${its.map(sH).join("")}`).join("")+(ch.length?`<div class="shsec">Done</div>${ch.map(sH).join("")}`:"");
+  }else{
+    c.innerHTML=(un.length?`<div class="shsec">To buy (${un.length})</div>${un.map(sH).join("")}`:"")+(ch.length?`<div class="shsec">Done</div>${ch.map(sH).join("")}`:"");
+  }
+}
+function sH(item){return`<div class="shit${item.checked?" chk":""}" onclick="togShop('${item.id}')"><div class="shck">${item.checked?"✓":""}</div><div class="shnm">${item.name}</div>${item.price?`<div class="price-tag">~$${item.price}</div>`:""}</div>`;}
+
+// ── DEALS / FLIPP ─────────────────────────────────────────────────────────
+const STORES=["ShopRite","Stop & Shop","Wegmans","Whole Foods","Trader Joe's"];
+const ZIP="08817"; // Edison NJ
+async function fetchFlipp(query){
+  try{
+    const url=`https://backflipp.wishabi.com/flipp/items/search?locale=en-US&postal_code=${ZIP}&q=${encodeURIComponent(query)}`;
+    const r=await fetch(url,{headers:{"Accept":"application/json"}});
+    if(!r.ok)return null;
+    const data=await r.json();
+    return(data.items||[]).slice(0,8).map(item=>({
+      name:item.name||item.display_name||query,
+      store:item.flyer?.merchant?.name||"Local Store",
+      price:item.current_price||item.sale_price||null,
+      origPrice:item.pre_price||null,
+      unit:item.unit_display||"",
+      valid:item.valid_to?new Date(item.valid_to).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"",
+      match:true
+    }));
+  }catch{return null;}
+}
+async function claudeDeals(query){
+  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,tools:[{type:"web_search_20250305",name:"web_search"}],messages:[{role:"user",content:`Search for current weekly deals or sales on "${query}" at ShopRite, Stop & Shop, Wegmans, Whole Foods or Trader Joe's near Edison NJ 08817. Return a JSON array (no other text) of up to 5 deals: [{"name":"...","store":"...","price":"...","valid":"..."}]. If no deals found return [].`}]})});
+  const data=await r.json();
+  const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+  try{const m=text.match(/\[[\s\S]*\]/);return m?JSON.parse(m[0]).map(d=>({...d,match:true})):[];}catch{return[];}
+}
+function renderDeals(deals,query){
+  const el=g("dealslist");
+  if(!deals||!deals.length){el.innerHTML=`<div class="es"><div class="ei">🏷</div><p>No deals found for "${query}".<br/>Try a different search term.</p></div>`;return;}
+  el.innerHTML=deals.map(d=>`<div class="deal-card ${d.match?"deal-match":""}">
+    <div style="flex:1"><div class="deal-store">${d.store}</div>
+    <div class="deal-name">${d.name}</div>
+    <div style="display:flex;align-items:baseline;gap:6px;margin-top:4px">
+      ${d.price?`<span class="deal-price">${typeof d.price==="number"?"$"+d.price.toFixed(2):d.price}</span>`:""}
+      ${d.origPrice?`<span class="deal-orig">${typeof d.origPrice==="number"?"$"+d.origPrice.toFixed(2):d.origPrice}</span>`:""}
+      ${d.unit?`<span style="font-size:.7rem;color:var(--mt)">${d.unit}</span>`:""}
+    </div>
+    ${d.valid?`<div style="font-size:.68rem;color:var(--mt);margin-top:4px">Valid until ${d.valid}</div>`:""}
+    </div>
+    <button class="btn bs bsm" style="align-self:center;flex-shrink:0" onclick="addDealToList('${d.name.replace(/'/g,"\\'")}')">+ List</button>
+  </div>`).join("");
+}
+window.addDealToList=function(name){if(!shop.find(i=>i.name.toLowerCase()===name.toLowerCase())){shop.push({id:Date.now().toString(),name,checked:false});svShop();renderShop();showNotif(name+" added to list!");}else{showNotif("Already on your list!");}};
+window.searchDeals=async function(){
+  const q=g("dealsearch").value.trim();if(!q)return;
+  const st=g("dealsstatus");st.style.display="block";st.textContent="🔍 Searching local flyers…";
+  g("dealslist").innerHTML="";
+  let deals=await fetchFlipp(q);
+  if(!deals||!deals.length){st.textContent="Asking Claude to search…";deals=await claudeDeals(q);}
+  st.style.display="none";
+  renderDeals(deals,q);
+};
+window.dealsFromList=async function(){
+  const items=shop.filter(i=>!i.checked).slice(0,5);
+  if(!items.length){showNotif("Add items to your list first!");return;}
+  const st=g("dealsstatus");st.style.display="block";st.textContent="🔍 Searching deals for your list…";
+  g("dealslist").innerHTML="";
+  const query=items.map(i=>i.name).join(" OR ");
+  let deals=await fetchFlipp(query);
+  if(!deals||!deals.length){st.textContent="Asking Claude to search…";deals=await claudeDeals(items.map(i=>i.name).join(", "));}
+  st.style.display="none";
+  renderDeals(deals||[],items.map(i=>i.name).join(", "));
+};
+
+// ── OPEN RECIPE (updated with schedule button + tags + cook count) ─────────
+window.openER=function(id){
+  const r=recs.find(r=>r.id===id);if(!r)return;eid=id;
+  const rt2=r.rating||0;
+  const st=Array.from({length:5},(_,i)=>`<span class="star${i<rt2?" on":""}" onclick="setStar(${i+1},'e')">${i<rt2?"★":"☆"}</span>`).join("");
+  const srcLink=r.sourceUrl?`<div class="frow"><label class="flbl">Original</label><a href="${r.sourceUrl}" target="_blank" style="font-size:.82rem;color:var(--ac);word-break:break-all">${r.sourceUrl}</a></div>`:"";
+  const tagsHtml=`<div class="frow"><label class="flbl">Tags</label><div class="tags" id="etags">
+    <div class="tag${(r.tags||[]).includes("Quick")?" sel":""}" data-tag="Quick" onclick="togTag(this)">⚡ Quick</div>
+    <div class="tag kid${(r.tags||[]).includes("Kid-Friendly")?" sel":""}" data-tag="Kid-Friendly" onclick="togTag(this)">👶 Kid-Friendly</div>
+    <div class="tag date${(r.tags||[]).includes("Date Night")?" sel":""}" data-tag="Date Night" onclick="togTag(this)">🕯 Date Night</div>
+    <div class="tag batch${(r.tags||[]).includes("Batch Cook")?" sel":""}" data-tag="Batch Cook" onclick="togTag(this)">📦 Batch Cook</div>
+    <div class="tag${(r.tags||[]).includes("Healthy")?" sel":""}" data-tag="Healthy" onclick="togTag(this)">🥗 Healthy</div>
+    <div class="tag${(r.tags||[]).includes("Under 30 min")?" sel":""}" data-tag="Under 30 min" onclick="togTag(this)">⏱ Under 30 min</div>
+  </div></div>`;
+  g("erecbody").innerHTML=`
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn bp bsm" style="flex:1" onclick="scheduleRecipe('${r.name.replace(/'/g,"\'")}')">📅 Schedule</button>
+      ${r.cookCount?`<div style="background:var(--acd);border:1px solid var(--ac);border-radius:9px;padding:7px 14px;font-size:.78rem;color:var(--ac);font-weight:600">🍳 Cooked ${r.cookCount}×</div>`:""}
+    </div>
+    <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-size:.78rem;color:var(--mt);margin-bottom:10px;font-weight:500">⚖️ Scale serving size</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn bs bsm" onclick="scaleRec(0.5)">½×</button><button class="btn bs bsm" onclick="scaleRec(1)">1×</button>
+        <button class="btn bs bsm" onclick="scaleRec(2)">2×</button><button class="btn bs bsm" onclick="scaleRec(3)">3×</button>
+        <input id="scaleCustom" class="qinp" type="number" min="0.25" max="10" step="0.25" placeholder="×" style="width:58px" oninput="if(this.value)scaleRec(parseFloat(this.value))"/>
+      </div>
+      <div id="scaleStatus" style="font-size:.74rem;color:var(--mt);margin-top:8px;display:none"></div>
+    </div>
+    <div class="frow"><label class="flbl">Name</label><input class="fi" id="ern" value="${r.name}"/></div>
+    <div class="frow"><label class="flbl">Rating</label><div class="sinp" id="estars">${st}</div></div>
+    ${tagsHtml}
+    <div class="frow"><label class="flbl">Description / Ingredients</label><textarea class="fta" id="erd" style="min-height:140px">${r.description||""}</textarea></div>
+    <div class="frow"><label class="flbl">Notes</label><input class="fi" id="erno" value="${r.notes||""}"/></div>
+    ${srcLink}
+    <div style="display:flex;align-items:center;gap:10px;margin:12px 0"><span style="font-size:.88rem">Favorite</span><div class="tog${r.favorited?" on":""}" id="etog" onclick="this.classList.toggle('on')"></div></div>
+    <div class="brow"><button class="btn bd" style="flex:1" onclick="delER()">Delete</button><button class="btn bp" style="flex:2" onclick="updR()">Save</button></div>`;
+  showOv("erec");
+};
+
+window.updR=async function(){
+  const r=recs.find(r=>r.id===eid);if(!r)return;
+  const rt2=[...document.querySelectorAll("#estars .star")].filter(s=>s.classList.contains("on")).length;
+  const tags=getSelTags("etags");
+  await svr({...r,name:g("ern").value.trim(),rating:rt2,description:g("erd").value.trim(),notes:g("erno").value.trim(),favorited:g("etog").classList.contains("on"),tags});
+  showNotif("Recipe updated!");hideOv("erec");
+};
+
+// ── SHOWSCREEN UPDATE (insights) ──────────────────────────────────────────
+const _origShowScreen=window.showScreen;
+window.showScreen=function(n){
+  _origShowScreen(n);
+  if(n==="insights")renderInsights();
+};
+
+// ── REMOVE ITEM: log waste if expired ────────────────────────────────────
+const _origRemItem=window.remItem;
+window.remItem=async function(id){
+  const item=inv.find(i=>i.id===id);
+  if(item){const s=xSt(item.expiry);if(s&&(s.c==="expired"||s.c==="expiring"))addWaste(item.name);}
+  await _origRemItem(id);
+};
+
+// ── VARIETY NUDGE IN CLAUDE CTX ───────────────────────────────────────────
+const _origKitCtx=kitCtx;
+// (already defined above — we'll patch it by redefining)
+function kitCtx(){
+  const sec=["fridge","freezer","pantry"].map(loc=>{const its=inv.filter(i=>i.location===loc);return its.length?ll(loc).toUpperCase()+": "+its.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", "):"";}).filter(Boolean).join("\n");
+  const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).map(i=>{const s=xSt(i.expiry);return`${i.name} (${s.l})`;}).join(", ");
+  const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");
+  const favs=recs.filter(r=>r.favorited||r.rating>=4).map(r=>`${r.name}${r.rating?` (${r.rating}★)`:""}`).join(", ");
+  const restr=[cfg.nopork?"no pork":null,cfg.noshellfish?"no shellfish":null,cfg.vegetarian?"vegetarian":null,cfg.glutenfree?"gluten-free":null,cfg.other].filter(Boolean).join(", ");
+  const recent=getCookLog().slice(0,7).map(e=>e.name).join(", ");
+  const cuisines=[...new Set(getCookLog().slice(0,14).map(e=>e.name))];
+  return`You are a helpful kitchen assistant for a family in Edison NJ.
+INVENTORY:\n${sec||"Empty."}
+${ex?"EXPIRING SOON: "+ex:""}
+${ms?"MEAL PLAN: "+ms:""}
+${favs?"FAVOURITE RECIPES: "+favs:""}
+${recent?"RECENTLY COOKED (avoid repeating): "+recent:""}
+HOUSEHOLD: ${cfg.name}, Adults: ${cfg.adults}, Kids: ${cfg.kids}, Restrictions: ${restr||"none"}, Cuisines: ${cfg.cuisines}, Cook time: ${cfg.cookTime}.
+Be concise. Use what they have. Suggest variety — avoid repeating recent meals. Format grocery lists as bullet points starting "- ".`;}
 
 </script>
 <script>
