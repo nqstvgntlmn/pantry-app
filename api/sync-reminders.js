@@ -1,12 +1,11 @@
-// Uses Firestore REST API — no firebase-admin needed, matches existing setup
 const FIREBASE_PROJECT = "family-pantry-c65d6";
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY; // add to Vercel env vars
-
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
 const BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents`;
 
 async function fsGet(path) {
   const r = await fetch(`${BASE}/${path}?key=${FIREBASE_API_KEY}`);
-  return r.json();
+  const json = await r.json();
+  return json;
 }
 
 async function fsSet(path, fields) {
@@ -16,7 +15,9 @@ async function fsSet(path, fields) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return r.json();
+  const json = await r.json();
+  if (json.error) console.error("fsSet error:", JSON.stringify(json.error));
+  return json;
 }
 
 async function fsDelete(path) {
@@ -34,12 +35,24 @@ function toFsFields(obj) {
 }
 
 function fromFsDoc(doc) {
-  if (!doc.fields) return null;
+  if (!doc || !doc.fields) return null;
   const out = { id: doc.name.split("/").pop() };
   for (const [k, v] of Object.entries(doc.fields)) {
-    out[k] = v.stringValue ?? v.booleanValue ?? v.integerValue ?? null;
+    out[k] = v.stringValue !== undefined ? v.stringValue
+           : v.booleanValue !== undefined ? v.booleanValue
+           : v.integerValue !== undefined ? v.integerValue
+           : null;
   }
   return out;
+}
+
+function extractName(item) {
+  if (typeof item === "string") return item.trim();
+  if (typeof item !== "object" || item === null) return "";
+  const val = item.title || item.name || item.Title || item.Name
+           || item.text || item.Text || item.value || item.Value
+           || Object.values(item).find(v => typeof v === "string") || "";
+  return String(val).trim();
 }
 
 export default async function handler(req, res) {
@@ -50,7 +63,6 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  // Simple shared secret check
   const apiKey = req.headers["x-api-key"];
   if (!apiKey || apiKey !== process.env.REMINDERS_SYNC_KEY) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -58,31 +70,33 @@ export default async function handler(req, res) {
 
   const { household, items } = req.body || {};
   if (!household) return res.status(400).json({ error: "household required" });
-  if (!Array.isArray(items)) return res.status(400).json({ error: "items must be array" });
+
+  console.log("household:", household);
+  console.log("items type:", typeof items, Array.isArray(items) ? "array" : "not array");
+  console.log("items sample:", JSON.stringify(items && items[0]));
+  console.log("items count:", items ? (Array.isArray(items) ? items.length : "not array") : "null");
+
+  const itemsArr = Array.isArray(items) ? items : items ? [items] : [];
 
   try {
-    // Get existing shopping list from Firestore
     const listPath = `households/${household}/shopping`;
     const snap = await fsGet(listPath);
     const existing = (snap.documents || []).map(fromFsDoc).filter(Boolean);
+    console.log("existing items:", existing.length);
 
-    // Normalize incoming Reminders items to plain strings
-    const incomingNames = items
-      .map(i => (typeof i === "string" ? i : i.title || i.name || "").trim())
-      .filter(Boolean);
+    const incomingNames = itemsArr.map(extractName).filter(Boolean);
+    console.log("incoming names:", JSON.stringify(incomingNames));
 
     const existingNames = existing.map(e => (e.name || "").toLowerCase());
 
-    // Add items in Reminders but not in shopping list
-    const toAdd = incomingNames.filter(
-      name => !existingNames.includes(name.toLowerCase())
-    );
-
-    // Remove items that came from Reminders but are no longer in incoming list
+    const toAdd = incomingNames.filter(name => !existingNames.includes(name.toLowerCase()));
     const toRemove = existing.filter(
       e => e.src === "reminders" &&
         !incomingNames.map(n => n.toLowerCase()).includes((e.name || "").toLowerCase())
     );
+
+    console.log("toAdd:", toAdd.length, JSON.stringify(toAdd));
+    console.log("toRemove:", toRemove.length);
 
     for (const name of toAdd) {
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -102,10 +116,11 @@ export default async function handler(req, res) {
       ok: true,
       added: toAdd.length,
       removed: toRemove.length,
+      incoming: incomingNames,
       message: `+${toAdd.length} added, -${toRemove.length} removed`,
     });
   } catch (err) {
-    console.error(err);
+    console.error("handler error:", err);
     return res.status(500).json({ error: err.message });
   }
 }
