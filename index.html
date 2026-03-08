@@ -746,8 +746,10 @@ const THEMES = {
 
 let curTheme = J("ks-theme") || "gold";
 let curMode  = J("ks-mode")  || "auto";
+// Expose to inline onclick handlers (module scope fix)
+window.getCurMode = () => curMode;
 
-function applyTheme(themeKey, mode) {
+window.applyTheme = function(themeKey, mode) {
   curTheme = themeKey; curMode = mode;
   Js("ks-theme", themeKey); Js("ks-mode", mode);
   const t = THEMES[themeKey] || THEMES.gold;
@@ -781,7 +783,7 @@ function updateModeButtons(mode) {
 function updateThemePicker(active) {
   const el = g("themePicker"); if(!el) return;
   el.innerHTML = Object.entries(THEMES).map(([k,t]) => `
-    <div onclick="applyTheme('${k}',curMode)" title="${t.name}" style="
+    <div onclick="applyTheme('${k}',getCurMode())" title="${t.name}" style="
       width:36px;height:36px;border-radius:50%;background:${t.swatch};cursor:pointer;
       border:3px solid ${k===active?"var(--tx)":"transparent"};
       box-shadow:${k===active?"0 0 0 2px var(--ac)":"none"};
