@@ -382,7 +382,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
         </div>
       </div>
       <div class="arow">
-        <button class="btn bp bsm" style="flex:1" onclick="showOv('scan')">📷 Scan</button>
+        <button class="btn bp bsm" style="flex:1" onclick="openScanForInventory()">📷 Scan</button>
         <button class="btn bs bsm" style="flex:1" onclick="showOv('madd')">✏️ Add</button>
         <button class="btn bs bsm" onclick="showOv('import')">↓</button>
         <button class="btn bs bsm" onclick="toggleExp()">↗</button>
@@ -487,7 +487,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
     <div id="sh-list-body" style="flex:1;overflow-y:auto">
       <div class="shbody">
-        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp" onclick="qadd()">Add</button></div>
+        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp bsm" onclick="qadd()">Add</button><button class="btn bs bsm" onclick="openScanForList()" title="Scan to shopping list">📷</button></div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <button class="btn bsm bs" style="flex:1" onclick="buildList()">🤖 Build from meal plan</button>
           <button class="btn bsm bs" id="aislebtn" onclick="togAisle()">≡ By aisle</button>
@@ -607,8 +607,9 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
   <!-- OVERLAY: SCAN -->
   <div class="ov" id="ov-scan">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('scan')">←</div><div class="ovttl">Scan Barcode</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('scan')">←</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
     <div class="ovbody">
+      <p id="scan-dest-hint" style="font-size:.78rem;color:var(--mt);padding:8px 0 4px;text-align:center">Scan a barcode to add to your pantry or shopping list.</p>
       <div id="scanbody">
         <div class="sacts"><button class="btn bp bf" onclick="startScan()">📷 Take Photo of Barcode</button><button class="btn bs bf" onclick="togManual()">✏️ Enter Barcode Manually</button></div>
         <p class="shint">Works on all phones including iPhone.<br/>Take a clear close-up photo of the barcode.</p>
@@ -650,7 +651,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
       <div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="chgAQ(-1)">−</button><input class="qinp" id="aqty" type="number" min="1" value="1"/><button class="qbtn" onclick="chgAQ(1)">+</button></div></div>
       <div class="qrow"><span class="qlbl">Unit</span><input class="fun" id="aunit" placeholder="oz, lb, unit…"/></div>
       <div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="aexp" type="date"/></div>
-      <div class="brow"><button class="btn bs" style="flex:1" onclick="hideOv('result');showOv('scan')">← Back</button><button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">Add to Inventory</button></div>
+      <div id="scan-dest-btns">
+  <div class="brow">
+    <button class="btn bs" style="flex:1" onclick="hideOv('result');showOv('scan')">← Back</button>
+    <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">📦 Add to Pantry</button>
+  </div>
+  <button class="btn bs bf" style="margin-top:8px;border-color:var(--gn);color:var(--gn)" onclick="addScannedToList()">🛒 Add to Shopping List instead</button>
+</div>
     </div>
   </div>
 
@@ -832,7 +839,8 @@ window._appStart=function start(code){hid=code;g("LS").style.display="none";g("A
   const arr=getHouseholds();if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
   loadCfgUI();initHome();
   onSnapshot(collection(db,"households",hid,"inventory"),sn=>{inv=sn.docs.map(d=>({id:d.id,...d.data()}));ss("synced");renderAll();},_=>ss("error"));
-  onSnapshot(collection(db,"households",hid,"recipes"),sn=>{recs=sn.docs.map(d=>({id:d.id,...d.data()}));renderRecs();renderSum();});}
+  onSnapshot(collection(db,"households",hid,"recipes"),sn=>{recs=sn.docs.map(d=>({id:d.id,...d.data()}));renderRecs();renderSum();});
+  onSnapshot(collection(db,"households",hid,"shopping"),sn=>{shop=sn.docs.map(d=>({id:d.id,...d.data()}));renderShop();renderSum();});}
 function g(id){return document.getElementById(id);}
 function ss(s){g("sdot").className="sdot "+s;g("slb").textContent=s==="synced"?"🏠 "+hid:s==="syncing"?"Syncing…":"Sync error";}
 async function svi(item){ss("syncing");try{await setDoc(doc(db,"households",hid,"inventory",item.id),item);ss("synced");}catch{ss("error");}}
@@ -926,6 +934,42 @@ function renderInv(){const f=it==="all"||it==="cat"?inv:inv.filter(i=>i.location
   if(it==="all"){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const exH=ex.length?`<div class="lgrp"><div class="lgt" style="color:var(--am)">⚠️ Expiring Soon</div><div class="ilst">${ex.map(iH).join("")}</div></div>`:"";c.innerHTML=exH+["fridge","freezer","pantry"].map(loc=>{const its=f.filter(i=>i.location===loc);return its.length?`<div class="lgrp"><div class="lgt">${ll(loc)}</div><div class="ilst">${its.map(iH).join("")}</div></div>`:""}).join("");return;}
   c.innerHTML=`<div class="ilst">${f.map(iH).join("")}</div>`;}
 window.startScan=function(){g("scerr").style.display="none";g("ffile").click();};
+
+// Open scan but destination will be shopping list
+let scanDestList = false;
+window.openScanForList = function(){
+  scanDestList = true;
+  // Update the overlay title and hint
+  showOv("scan");
+  var ttl = g("scanovttl");
+  if(ttl) ttl.textContent = "Scan → Shopping List";
+  var hint = g("scan-dest-hint");
+  if(hint) hint.textContent = "Running low? Scan to add to your shopping list.";
+};
+// Reset scan dest when opening normally
+var _origShowOvScan = null;
+window.openScanForInventory = function(){
+  scanDestList = false;
+  showOv("scan");
+  var ttl = g("scanovttl");
+  if(ttl) ttl.textContent = "Scan Barcode";
+  var hint = g("scan-dest-hint");
+  if(hint) hint.textContent = "Scan a barcode to add to your pantry or shopping list.";
+};
+window.addScannedToList = function(){
+  if(!cp) return;
+  const name = cp.notFound ? ("Barcode "+cp.barcode) : cp.name;
+  const qty = parseInt(g("aqty").value)||1;
+  const unit = g("aunit").value.trim();
+  const display = name + (qty>1||unit ? " ("+qty+(unit?" "+unit:"")+")" : "");
+  const item = {id:Date.now().toString(), name:display, checked:false, src:"scan"};
+  svShopItem(item);
+  showNotif("Added to list: "+name);
+  hideOv("result");
+  hideOv("scan");
+  scanDestList = false;
+  showScreen("shopping");
+};
 window.togManual=function(){const el=g("mentry");el.style.display=el.style.display==="none"?"block":"none";};
 window.handlePhoto=async function(e){const file=e.target.files[0];if(!file)return;e.target.value="";g("scanbody").style.display="none";g("scspin").style.display="block";g("scst").textContent="Reading image…";const url=await new Promise((r,j)=>{const x=new FileReader();x.onload=e=>r(e.target.result);x.onerror=j;x.readAsDataURL(file);});try{g("scst").textContent="Detecting barcode…";const code=await new Promise((res,rej)=>Quagga.decodeSingle({src:url,numOfWorkers:0,inputStream:{size:1600},decoder:{readers:["ean_reader","ean_8_reader","upc_reader","upc_e_reader","code_128_reader","code_39_reader"],multiple:false},locate:true},r=>{if(r&&r.codeResult&&r.codeResult.code)res(r.codeResult.code);else rej("no");}));g("scst").textContent="Found "+code+" — looking up…";const prod=await lkup(code);cp=prod;g("aqty").value=1;g("aexp").value="";selRL("fridge",g("rl-fridge"));showRes(prod);g("scanbody").style.display="block";g("scspin").style.display="none";}catch{g("scanbody").style.display="block";g("scspin").style.display="none";const err=g("scerr");err.textContent="⚠️ No barcode detected. Try better lighting or enter manually.";err.style.display="block";}};
 window.manLookup=async function(){const v=g("meinp").value.trim();if(!v)return;g("scanbody").style.display="none";g("scspin").style.display="block";g("scst").textContent="Looking up…";const prod=await lkup(v);cp=prod;g("aqty").value=1;g("aexp").value="";selRL("fridge",g("rl-fridge"));g("meinp").value="";showRes(prod);g("scanbody").style.display="block";g("scspin").style.display="none";};
@@ -977,10 +1021,12 @@ window.importFromUrl=async function(){
 // openER defined below with scheduling + tags
 // updR defined below with tags support
 window.delER=async function(){if(!confirm("Delete this recipe?"))return;await dlr(eid);showNotif("Deleted");hideOv("erec");};
-window.qadd=function(){const i=g("shi"),v=i.value.trim();if(!v)return;shop.push({id:Date.now().toString(),name:v,checked:false});i.value="";svShop();renderShop();};
-window.togShop=function(id){const item=shop.find(i=>i.id===id);if(!item)return;item.checked=!item.checked;svShop();renderShop();};
-window.clrChk=function(){shop=shop.filter(i=>!i.checked);svShop();renderShop();renderSum();};
+window.qadd=function(){const i=g("shi"),v=i.value.trim();if(!v)return;const item={id:Date.now().toString(),name:v,checked:false,src:"manual"};svShopItem(item);i.value="";};
+window.togShop=function(id){const item=shop.find(i=>i.id===id);if(!item)return;svShopItem({...item,checked:!item.checked});};
+window.clrChk=function(){shop.filter(i=>i.checked).forEach(i=>dlShopItem(i.id));};
 function svShop(){Js("ks-s",shop);}
+async function svShopItem(item){try{await setDoc(doc(db,"households",hid,"shopping",item.id),item);}catch(e){console.error(e);}}
+async function dlShopItem(id){try{await deleteDoc(doc(db,"households",hid,"shopping",id));}catch(e){console.error(e);}}
 window.buildList=async function(){showNotif("Building list with Claude…");const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");if(!ms){showNotif("No meals planned yet!");return;}const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");try{const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content:`Week meals: ${ms}\nAlready have: ${is}\nList ONLY ingredients still needed. Return ONLY bullet list, each line starting "- ". Concise.`}]})});const data=await r.json(),text=(data.content&&data.content[0]&&data.content[0].text||"");let added=0;text.split("\n").forEach(line=>{const m=line.match(/^[-•*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase())){shop.push({id:Date.now().toString()+Math.random(),name:nm,checked:false});added++;}}});svShop();renderShop();renderSum();showNotif(`Added ${added} items!`);}catch{showNotif("Couldn't build list — check connection");}};
 // renderShop and sH defined below with aisle support
 // kitCtx redefined below with variety nudge
