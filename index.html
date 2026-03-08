@@ -368,10 +368,21 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   <div class="ov" id="ov-arec">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('arec')">←</div><div class="ovttl">Save Recipe</div></div>
     <div class="ovbody">
+      <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-size:.78rem;color:var(--mt);margin-bottom:8px;font-weight:500">🔗 Import from a website</div>
+        <div style="font-size:.74rem;color:var(--mt);margin-bottom:10px;line-height:1.5">Paste any recipe URL — AllRecipes, NYT Cooking, Bon Appétit, any site — and Claude will read it for you.</div>
+        <div style="display:flex;gap:8px">
+          <input class="fi" id="rurl" placeholder="https://www.allrecipes.com/recipe/…" style="flex:1;font-size:.82rem"/>
+          <button class="btn bp bsm" id="rimportbtn" onclick="importFromUrl()">Import</button>
+        </div>
+        <div id="rurlstatus" style="font-size:.74rem;margin-top:8px;display:none"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin:4px 0 14px"><div style="flex:1;height:1px;background:var(--b1)"></div><span style="font-size:.7rem;color:var(--mt);text-transform:uppercase;letter-spacing:.08em">or add manually</span><div style="flex:1;height:1px;background:var(--b1)"></div></div>
       <div class="frow"><label class="flbl">Recipe name <span style="color:var(--rd)">*</span></label><input class="fi" id="rn" placeholder="e.g. Chicken Stir Fry" oninput="valR()"/></div>
       <div class="frow"><label class="flbl">Your rating</label><div class="sinp" id="rstars"><span class="star" onclick="setStar(1,'r')">☆</span><span class="star" onclick="setStar(2,'r')">☆</span><span class="star" onclick="setStar(3,'r')">☆</span><span class="star" onclick="setStar(4,'r')">☆</span><span class="star" onclick="setStar(5,'r')">☆</span></div></div>
       <div class="frow"><label class="flbl">Description / Ingredients <span class="otag">optional</span></label><textarea class="fta" id="rd" placeholder="Key ingredients, method…"></textarea></div>
       <div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><input class="fi" id="rnotes" placeholder="e.g. Add more garlic next time!"/></div>
+      <div class="frow"><label class="flbl">Source URL <span class="otag">optional</span></label><input class="fi" id="rsourceurl" placeholder="Recipe website URL" style="font-size:.82rem"/></div>
       <div class="brow"><button class="btn bp bf" id="savrecbtn" onclick="saveRec()" disabled>Save Recipe</button></div>
     </div>
   </div>
@@ -534,10 +545,31 @@ window.adjE=async function(){const item=inv.find(i=>i.id===adjId);if(!item)retur
 window.remItem=async function(id){await dli(id);showNotif("Item removed");hideOv("adj");};
 window.setRT=function(t){rt=t;document.querySelectorAll(".rtab").forEach(x=>x.classList.remove("active"));g("rtab-"+t).classList.add("active");renderRecs();};
 function renderRecs(){let f=[...recs];if(rt==="fav")f=f.filter(r=>r.favorited);else if(rt==="top")f=f.filter(r=>r.rating>=4).sort((a,b)=>b.rating-a.rating);else f=f.sort((a,b)=>new Date(b.savedAt||0)-new Date(a.savedAt||0));g("rsub").textContent=f.length+" recipe"+(f.length!==1?"s":"");const c=g("rbody");if(!f.length){c.innerHTML=`<div class="es"><div class="ei">📖</div><p>${rt==="fav"?"No favorites yet!<br/>Heart a recipe.":rt==="top"?"No 4–5 star recipes yet.":"No recipes saved yet.<br/>Mark meals as cooked or tap + Add."}</p></div>`;return;}c.innerHTML=f.map(rH).join("");}
-function rH(r){const st=Array.from({length:5},(_,i)=>`<span class="star${i<r.rating?" on":""}">${i<r.rating?"★":"☆"}</span>`).join("");return`<div class="rcd${r.favorited?" fav":""}" onclick="openER('${r.id}')"><div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited?"❤️":"🤍"}</div></div><div class="stars">${st}</div>${r.description?`<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0,100)}${r.description.length>100?"…":""}</div>`:""}${r.notes?`<div class="rnot">${r.notes}</div>`:""}<div class="rmeta"><span>${r.savedAt}</span>${r.source?`<span class="sbdg">${r.source}</span>`:""}</div></div>`;}
+function rH(r){const st=Array.from({length:5},(_,i)=>`<span class="star${i<r.rating?" on":""}">${i<r.rating?"★":"☆"}</span>`).join("");const srcLink=r.sourceUrl?`<a href="${r.sourceUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:.68rem;color:var(--ac);text-decoration:none;border:1px solid rgba(212,168,83,.3);border-radius:20px;padding:2px 8px;background:transparent">🔗 View original</a>`:r.source?`<span class="sbdg">${r.source}</span>`:"";return`<div class="rcd${r.favorited?" fav":""}" onclick="openER('${r.id}')"><div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited?"❤️":"🤍"}</div></div><div class="stars">${st}</div>${r.description?`<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0,100)}${r.description.length>100?"…":""}</div>`:""}${r.notes?`<div class="rnot">${r.notes}</div>`:""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;}
 window.togFav=async function(id){const r=recs.find(r=>r.id===id);if(!r)return;await svr({...r,favorited:!r.favorited});showNotif(r.favorited?"Removed from favorites":"Added to favorites! ❤️");};
 window.valR=function(){g("savrecbtn").disabled=!g("rn").value.trim();};
-window.saveRec=async function(){const nm=g("rn").value.trim();if(!nm)return;await svr({id:"rec-"+Date.now(),name:nm,rating:nr,favorited:false,notes:g("rnotes").value.trim(),description:g("rd").value.trim(),source:"Manual",savedAt:new Date().toLocaleDateString()});g("rn").value="";g("rnotes").value="";g("rd").value="";nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);showNotif("Recipe saved! 📖");hideOv("arec");};
+window.saveRec=async function(){const nm=g("rn").value.trim();if(!nm)return;const srcUrl=g("rsourceurl")?.value.trim()||"";await svr({id:"rec-"+Date.now(),name:nm,rating:nr,favorited:false,notes:g("rnotes").value.trim(),description:g("rd").value.trim(),source:srcUrl?"Web Import":"Manual",sourceUrl:srcUrl||null,savedAt:new Date().toLocaleDateString()});g("rn").value="";g("rnotes").value="";g("rd").value="";g("rsourceurl").value="";g("rurl").value="";nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);showNotif("Recipe saved! 📖");hideOv("arec");};
+window.importFromUrl=async function(){
+  const url=g("rurl").value.trim();if(!url)return;
+  const st=g("rurlstatus"),btn=g("rimportbtn");
+  st.style.display="block";st.style.color="var(--mt)";st.textContent="⏳ Fetching recipe…";btn.disabled=true;
+  try{
+    const prompt=`Please fetch and read this recipe URL: ${url}\n\nExtract the recipe and return ONLY a JSON object with exactly these fields (no extra text, no markdown fences):\n{"name":"recipe name","description":"ingredient list and brief method (2-3 sentences max)","notes":"any useful tips or serving suggestions"}\n\nIf you cannot access the page, return: {"error":"Could not access this page"}`;
+    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:800,tools:[{type:"web_search_20250305",name:"web_search"}],messages:[{role:"user",content:prompt}]})});
+    const data=await r.json();
+    const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+    let parsed;
+    try{parsed=JSON.parse(text.replace(/```json|```/g,"").trim());}catch{const m=text.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);else throw new Error("No JSON found");}
+    if(parsed.error){st.style.color="var(--rd)";st.textContent="⚠️ "+parsed.error;btn.disabled=false;return;}
+    g("rn").value=parsed.name||"";
+    g("rd").value=parsed.description||"";
+    g("rnotes").value=parsed.notes||"";
+    g("rsourceurl").value=url;
+    g("savrecbtn").disabled=!parsed.name;
+    st.style.color="var(--gn)";st.textContent="✓ Recipe imported! Review and save.";
+  }catch(e){st.style.color="var(--rd)";st.textContent="⚠️ Couldn't import — try copying the recipe text manually.";}
+  btn.disabled=false;
+};
 window.openER=function(id){const r=recs.find(r=>r.id===id);if(!r)return;eid=id;const rt=r.rating||0;const st=Array.from({length:5},(_,i)=>`<span class="star${i<rt?" on":""}" onclick="setStar(${i+1},'e')">${i<rt?"★":"☆"}</span>`).join("");g("erecbody").innerHTML=`<div class="frow"><label class="flbl">Name</label><input class="fi" id="ern" value="${r.name}"/></div><div class="frow"><label class="flbl">Rating</label><div class="sinp" id="estars">${st}</div></div><div class="frow"><label class="flbl">Description</label><textarea class="fta" id="erd">${r.description||""}</textarea></div><div class="frow"><label class="flbl">Notes</label><input class="fi" id="erno" value="${r.notes||""}"/></div><div style="display:flex;align-items:center;gap:10px;margin:12px 0"><span style="font-size:.88rem">Favorite</span><div class="tog${r.favorited?" on":""}" id="etog" onclick="this.classList.toggle('on')"></div></div><div class="brow"><button class="btn bd" style="flex:1" onclick="delER()">Delete</button><button class="btn bp" style="flex:2" onclick="updR()">Save</button></div>`;showOv("erec");};
 window.updR=async function(){const r=recs.find(r=>r.id===eid);if(!r)return;const rt=[...document.querySelectorAll("#estars .star")].filter(s=>s.classList.contains("on")).length;await svr({...r,name:g("ern").value.trim(),rating:rt,description:g("erd").value.trim(),notes:g("erno").value.trim(),favorited:g("etog").classList.contains("on")});showNotif("Recipe updated!");hideOv("erec");};
 window.delER=async function(){if(!confirm("Delete this recipe?"))return;await dlr(eid);showNotif("Deleted");hideOv("erec");};
