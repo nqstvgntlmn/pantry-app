@@ -369,6 +369,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
           </div>
         </div>
         <button class="btn bs bsm bf" style="margin-bottom:14px" onclick="dealsFromList()">🛒 Find deals for everything on my list</button>
+        <button class="btn bs bsm bf" style="margin-bottom:6px;font-size:.72rem;opacity:.6" onclick="testProxy()">🔧 Test proxy connection</button>
         <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:10px;padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
         <div id="dealslist"></div>
       </div>
@@ -1017,6 +1018,24 @@ async function claudeSearchDeals(query, store){
   if(m){try{arr=JSON.parse(m[0]);}catch(e){throw new Error("JSON parse failed");}}
   return arr;
 }
+window.testProxy=async function(){
+  var st=g("dealsstatus");st.style.display="block";st.style.color="var(--mt)";
+  st.textContent="Testing proxy (simple call, no web search)...";
+  g("dealslist").innerHTML="";
+  try{
+    var r=await fetch("https://pantry-app-git-main-boras-projects-a7298b6a.vercel.app/api/proxy",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:50,
+        messages:[{role:"user",content:"Say OK"}]})
+    });
+    var data=await r.json();
+    var txt=(data.content||[]).map(function(b){return b.text||"";}).join("");
+    if(txt){st.style.color="var(--gn)";st.textContent="✅ Proxy works! Response: "+txt;}
+    else if(data.error){st.style.color="var(--rd)";st.textContent="❌ API error: "+data.error.message;}
+    else{st.style.color="var(--rd)";st.textContent="❌ Unexpected response: "+JSON.stringify(data).substring(0,100);}
+  }catch(e){st.style.color="var(--rd)";st.textContent="❌ Network error: "+e.message+" (Stack: "+(e.stack||"n/a")+")";}
+};
+
 window.searchDeals=async function(){
   const q=g("dealsearch").value.trim();if(!q){showNotif("Enter something to search");return;}
   const store=g("dealstore")?.value||"any";
