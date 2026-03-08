@@ -533,9 +533,9 @@
         <div class="form-row" style="margin-top:14px">
           <label class="form-label">Location</label>
           <div class="loc-picker">
-            <button class="loc-btn ${item.location==='fridge'?'selected':''}" onclick="updateLocation('fridge')">🌡 Fridge</button>
-            <button class="loc-btn ${item.location==='freezer'?'selected':''}" onclick="updateLocation('freezer')">🧊 Freezer</button>
-            <button class="loc-btn ${item.location==='pantry'?'selected':''}" onclick="updateLocation('pantry')">🥫 Pantry</button>
+            <button class="loc-btn ${item.location==='fridge'?'selected':''}" onclick="updateLocation('fridge', this)">🌡 Fridge</button>
+            <button class="loc-btn ${item.location==='freezer'?'selected':''}" onclick="updateLocation('freezer', this)">🧊 Freezer</button>
+            <button class="loc-btn ${item.location==='pantry'?'selected':''}" onclick="updateLocation('pantry', this)">🥫 Pantry</button>
           </div>
         </div>
         <div class="qty-row">
@@ -551,12 +551,12 @@
     showView('adjust');
   };
 
-  window.updateLocation = async function(loc) {
+  window.updateLocation = async function(loc, btn) {
     const item = inventory.find(i => i.id === adjustId);
     if (!item) return;
     await saveItem({ ...item, location: loc });
     document.querySelectorAll('#adjustContent .loc-btn').forEach(b => b.classList.remove('selected'));
-    event.target.classList.add('selected');
+    btn.classList.add('selected');
   };
 
   window.adjustQty = async function(delta) {
