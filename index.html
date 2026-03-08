@@ -1112,11 +1112,30 @@ Suggest 5 complete meals I can make RIGHT NOW with no extra shopping. Be specifi
 // ── RECIPE SAVE (updated with tags + cook count) ──────────────────────────
 window.saveRec=async function(){
   const nm=g("rn").value.trim();if(!nm)return;
+  const desc=g("rd").value.trim();
   const srcUrl=(g("rsourceurl")?g("rsourceurl").value.trim():"");
   const tags=getSelTags("rtags");
-  await svr({id:"rec-"+Date.now(),name:nm,rating:nr,favorited:false,notes:g("rnotes").value.trim(),description:g("rd").value.trim(),source:srcUrl?"Web Import":"Manual",sourceUrl:srcUrl||null,tags,cookCount:0,savedAt:new Date().toLocaleDateString()});
+  await svr({id:"rec-"+Date.now(),name:nm,rating:nr,favorited:false,notes:g("rnotes").value.trim(),description:desc,source:srcUrl?"Web Import":"Manual",sourceUrl:srcUrl||null,tags,cookCount:0,savedAt:new Date().toLocaleDateString()});
+  let added=0;
+  if(desc){
+    const lines=desc.split(/[\n,]/).map(l=>l.replace(/^\d[\d\/\s]*(cup|tbsp|tsp|oz|lb|g|kg|ml|l|clove|slice|piece|bunch|head|can|package|pkg)s?\.?\s*/gi,"").replace(/^\d+\s*/,"").trim()).filter(l=>l.length>1&&l.length<60);
+    const invNames=inv.map(i=>i.name.toLowerCase());
+    const shopNames=shop.map(i=>i.name.toLowerCase());
+    for(const line of lines){
+      if(/\b(add|mix|heat|cook|bake|stir|boil|fry|slice|chop|dice|combine|place|pour|season|serve|preheat|bring|remove|let|set|transfer)\b/i.test(line))continue;
+      const clean=line.replace(/^[-•*]\s*/,"").trim();
+      if(!clean||clean.length<2)continue;
+      const cl=clean.toLowerCase();
+      if(invNames.some(n=>n.includes(cl)||cl.includes(n)))continue;
+      if(shopNames.some(n=>n===cl))continue;
+      await svShopItem({id:Date.now().toString()+Math.random().toString(36).slice(2),name:clean,checked:false,src:"recipe"});
+      added++;
+    }
+  }
   g("rn").value="";g("rnotes").value="";g("rd").value="";g("rsourceurl").value="";g("rurl").value="";
-  setTagsUI("rtags",[]);nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);showNotif("Recipe saved! 📖");hideOv("arec");
+  setTagsUI("rtags",[]);nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);
+  showNotif(added>0?`Recipe saved! Added ${added} ingredients to shopping list 🛒`:"Recipe saved! 📖");
+  hideOv("arec");
 };
 
 // ── SCHEDULE RECIPE ───────────────────────────────────────────────────────
@@ -1429,6 +1448,7 @@ window.openER=function(id){
   g("erecbody").innerHTML=`
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn bp bsm" style="flex:1" onclick="scheduleRecipe('${r.name.replace(/'/g,"\'")}')">📅 Schedule</button>
+      <button class="btn bs bsm" style="flex:1" onclick="addRecIngToShop('${r.id}')">🛒 Shop ingredients</button>
       ${r.cookCount?`<div style="background:var(--acd);border:1px solid var(--ac);border-radius:9px;padding:7px 14px;font-size:.78rem;color:var(--ac);font-weight:600">🍳 Cooked ${r.cookCount}×</div>`:""}
     </div>
     <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:16px">
@@ -1449,6 +1469,31 @@ window.openER=function(id){
     <div style="display:flex;align-items:center;gap:10px;margin:12px 0"><span style="font-size:.88rem">Favorite</span><div class="tog${r.favorited?" on":""}" id="etog" onclick="this.classList.toggle('on')"></div></div>
     <div class="brow"><button class="btn bd" style="flex:1" onclick="delER()">Delete</button><button class="btn bp" style="flex:2" onclick="updR()">Save</button></div>`;
   showOv("erec");
+};
+
+window.addRecIngToShop=async function(id){
+  const r=recs.find(x=>x.id===id);if(!r||!r.description){showNotif("No ingredients listed");return;}
+  showNotif("Parsing ingredients…");
+  try{
+    const invNames=inv.map(i=>i.name.toLowerCase());
+    const res=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      model:"claude-haiku-4-5-20251001",max_tokens:400,
+      messages:[{role:"user",content:`Extract a list of ingredient names from this recipe description. Return ONLY a JSON array of strings, no markdown, no quantities, just clean ingredient names. Example: ["chicken","garlic","olive oil"]
+
+Recipe: ${r.description}`}]
+    })});
+    const data=await res.json();
+    const text=(data.content&&data.content[0]&&data.content[0].text||"").replace(/```json|```/g,"").trim();
+    const ingredients=JSON.parse(text);
+    const toAdd=ingredients.filter(ing=>!invNames.some(n=>n.includes(ing.toLowerCase())||ing.toLowerCase().includes(n)));
+    if(!toAdd.length){showNotif("All ingredients already in pantry ✓");return;}
+    for(const ing of toAdd){
+      const item={id:"shop-"+Date.now()+"-"+Math.random().toString(36).slice(2),name:ing,checked:false,src:"recipe"};
+      await svShopItem(item);
+    }
+    showNotif(`Added ${toAdd.length} ingredient${toAdd.length!==1?"s":""} to shopping list 🛒`);
+    hideOv("erec");showScreen("shopping");
+  }catch(e){showNotif("Couldn't parse ingredients");}
 };
 
 window.updR=async function(){
