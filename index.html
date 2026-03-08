@@ -373,7 +373,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <div class="hhdr" style="flex-shrink:0">
       <div class="htop">
         <div>
-          <div class="grt" id="grt">Good evening, <span>Bora</span></div>
+          <div class="grt" id="grt"></div>
           <div class="hdt" id="hdt"></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -1116,25 +1116,10 @@ window.saveRec=async function(){
   const srcUrl=(g("rsourceurl")?g("rsourceurl").value.trim():"");
   const tags=getSelTags("rtags");
   await svr({id:"rec-"+Date.now(),name:nm,rating:nr,favorited:false,notes:g("rnotes").value.trim(),description:desc,source:srcUrl?"Web Import":"Manual",sourceUrl:srcUrl||null,tags,cookCount:0,savedAt:new Date().toLocaleDateString()});
-  let added=0;
-  if(desc){
-    const lines=desc.split(/[\n,]/).map(l=>l.replace(/^\d[\d\/\s]*(cup|tbsp|tsp|oz|lb|g|kg|ml|l|clove|slice|piece|bunch|head|can|package|pkg)s?\.?\s*/gi,"").replace(/^\d+\s*/,"").trim()).filter(l=>l.length>1&&l.length<60);
-    const invNames=inv.map(i=>i.name.toLowerCase());
-    const shopNames=shop.map(i=>i.name.toLowerCase());
-    for(const line of lines){
-      if(/\b(add|mix|heat|cook|bake|stir|boil|fry|slice|chop|dice|combine|place|pour|season|serve|preheat|bring|remove|let|set|transfer)\b/i.test(line))continue;
-      const clean=line.replace(/^[-•*]\s*/,"").trim();
-      if(!clean||clean.length<2)continue;
-      const cl=clean.toLowerCase();
-      if(invNames.some(n=>n.includes(cl)||cl.includes(n)))continue;
-      if(shopNames.some(n=>n===cl))continue;
-      await svShopItem({id:Date.now().toString()+Math.random().toString(36).slice(2),name:clean,checked:false,src:"recipe"});
-      added++;
-    }
-  }
+
   g("rn").value="";g("rnotes").value="";g("rd").value="";g("rsourceurl").value="";g("rurl").value="";
   setTagsUI("rtags",[]);nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);
-  showNotif(added>0?`Recipe saved! Added ${added} ingredients to shopping list 🛒`:"Recipe saved! 📖");
+  showNotif("Recipe saved! 📖");
   hideOv("arec");
 };
 
