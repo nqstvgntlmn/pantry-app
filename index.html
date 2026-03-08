@@ -791,7 +791,11 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   <div class="minner">
     <div class="mttl" id="mealMttl">Plan a meal</div>
     <input class="minp" id="mealMinp" placeholder="e.g. Chicken stir fry" onkeydown="if(event.key==='Enter')saveMeal()"/>
-    <div id="recPicker" style="display:none;margin-top:10px"></div>
+    <div id="recPickerWrap" style="display:none;margin-top:10px">
+      <div id="recChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+      <input id="recFilter" placeholder="Or type anything — chicken, garlic, 30 min…" oninput="filterRecs()" style="width:100%;box-sizing:border-box;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:10px;font-size:.9rem;margin-bottom:6px"/>
+      <select id="recPicker" style="width:100%;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:10px;font-size:.95rem" onchange="pickRec(this.value)"><option value="">— pick a saved recipe —</option></select>
+    </div>
     <div class="brow" style="margin-top:12px"><button class="btn bs" style="flex:1" onclick="closeMealM()">Cancel</button><button class="btn bp" style="flex:2" onclick="saveMeal()">Save Meal</button></div>
     <div style="margin-top:10px"><button class="btn bsm bs bf" onclick="clrMeal()">Clear this day</button></div>
   </div>
@@ -908,21 +912,91 @@ function renderSum(){
   g("sgrd").innerHTML=`<div class="sc" onclick="showScreen('inventory')"><div class="sci">🧺</div><div class="scv">${inv.length}</div><div class="scl">Items in stock</div></div><div class="sc${ex>0?" warn":""}" onclick="showScreen('inventory')"><div class="sci">⏱</div><div class="scv">${ex}</div><div class="scl">Expiring soon</div></div><div class="sc" onclick="showScreen('shopping')"><div class="sci">🛒</div><div class="scv">${tb}</div><div class="scl">To buy</div></div><div class="sc" onclick="showScreen('recipes')"><div class="sci">📖</div><div class="scv">${recs.length}</div><div class="scl">Saved recipes</div></div>`;}
 function renderExp(){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const l=g("exslbl"),e=g("expl");if(!ex.length){l.style.display="none";e.innerHTML="";return;}l.style.display="flex";e.innerHTML=ex.map(item=>{const s=xSt(item.expiry);return`<div class="exi${s.c==="expired"?" exp":""}" onclick="openAdj('${item.id}')"><div class="exn">${item.name}</div><div class="exd">${s.l}</div></div>`;}).join("");}
 function updExport(){const t=["fridge","freezer","pantry"].map(loc=>{const its=inv.filter(i=>i.location===loc);return its.length?ll(loc).toUpperCase()+"\n"+its.map(i=>`- ${i.name}${i.brand?` (${i.brand})`:""}: ${i.qty} ${i.unit}`).join("\n"):"";}).filter(Boolean).join("\n\n");g("expbox").textContent=t||"No items yet.";}
+window._pickedRec=null;
 window.openMealM=function(k,lbl){
   md=k;g("mealMttl").textContent="Meal for "+lbl;g("mealMinp").value=mp[k]||"";
+  window._pickedRec=null;
+  window._activeChips=new Set();
+  const filterEl=g("recFilter");if(filterEl)filterEl.value="";
+  window.initRecChips&&initRecChips();
   const rp=g("recPicker");
   if(recs&&recs.length){
     const sorted=[...recs].sort((a,b)=>(b.cookCount||0)-(a.cookCount||0));
-    rp.innerHTML='<div style="font-size:.75rem;color:var(--mt);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">From your recipes</div><div style="display:flex;flex-wrap:wrap;gap:6px">'+sorted.map(r=>`<button class="btn bsm bs" style="font-size:.8rem" onclick="pickRec('${r.name.replace(/'/g,"\'")}')">` +r.name+"</button>").join("")+"</div>";
-    rp.style.display="block";
+    rp.innerHTML='<option value="">— pick a saved recipe —</option>'+sorted.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
+    const cur=mp[k]||"";
+    const match=sorted.find(r=>r.name===cur);
+    rp.value=match?match.id:"";
+    g("recPickerWrap").style.display="block";
   } else {
-    rp.style.display="none";
+    g("recPickerWrap").style.display="none";
   }
   g("mealM").classList.add("active");setTimeout(()=>g("mealMinp").focus(),100);
 };
-window.pickRec=function(name){g("mealMinp").value=name;};
+window.pickRec=function(recId){
+  if(!recId){window._pickedRec=null;g("mealMinp").value="";return;}
+  const r=recs.find(x=>x.id===recId);
+  if(r){window._pickedRec=r;g("mealMinp").value=r.name;}
+};
+const REC_CHIPS=["Chicken","Beef","Fish","Vegetarian","Vegan","Quick","Kids","Healthy","Batch Cook","Date Night"];
+window._activeChips=new Set();
+function chipId(c){return"chip-"+c.split(" ").join("-");}
+window.initRecChips=function(){
+  const el=g("recChips");
+  if(!el)return;
+  el.innerHTML=REC_CHIPS.map(c=>"<button onclick=\"toggleChip('"+c+"')\" id=\""+chipId(c)+"\" style=\"padding:5px 10px;border-radius:20px;border:1px solid var(--bd);background:var(--s2);color:var(--tx2);font-size:.78rem;cursor:pointer;transition:all .15s\">"+c+"</button>").join("");
+};
+window.toggleChip=function(c){
+  const btn=g(chipId(c));
+  if(window._activeChips.has(c)){
+    window._activeChips.delete(c);
+    if(btn){btn.style.background="var(--s2)";btn.style.color="var(--tx2)";btn.style.borderColor="var(--bd)";}
+  } else {
+    window._activeChips.add(c);
+    if(btn){btn.style.background="var(--ac)";btn.style.color="#000";btn.style.borderColor="var(--ac)";}
+  }
+  filterRecs();
+};
+window.filterRecs=function(){
+  const rp=g("recPicker");
+  const text=(g("recFilter")?g("recFilter").value.trim().toLowerCase():"");
+  const chips=[...window._activeChips].map(c=>c.toLowerCase());
+  const sorted=[...recs].sort((a,b)=>(b.cookCount||0)-(a.cookCount||0));
+  const filtered=sorted.filter(r=>{
+    const hay=(r.name+" "+(r.description||"")+" "+(r.tags||[]).join(" ")).toLowerCase();
+    const textOk=text?text.split(/\s+/).every(w=>hay.includes(w)):true;
+    const chipsOk=chips.every(c=>hay.includes(c));
+    return textOk&&chipsOk;
+  });
+  rp.innerHTML='<option value="">— pick a saved recipe —</option>'+filtered.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
+  window._pickedRec=null;g("mealMinp").value="";
+};
 window.closeMealM=function(){g("mealM").classList.remove("active");};
-window.saveMeal=function(){const v=g("mealMinp").value.trim();if(v)mp[md]=v;else delete mp[md];Js("ks-m",mp);closeMealM();renderWeek();renderSum();renderTonight();};
+window.saveMeal=async function(){
+  const v=g("mealMinp").value.trim();
+  if(v)mp[md]=v;else delete mp[md];
+  Js("ks-m",mp);
+  // Add ingredients to shopping list if a recipe was picked
+  if(window._pickedRec&&window._pickedRec.description){
+    const desc=window._pickedRec.description;
+    const invNames=inv.map(i=>i.name.toLowerCase());
+    const shopNames=shop.map(i=>i.name.toLowerCase());
+    const lines=desc.split(/[\n,]/).map(l=>l.replace(/^[\d\/\s]*(cup|tbsp|tsp|oz|lb|g|kg|ml|l|clove|slice|piece|bunch|head|can|package|pkg)s?\.?\s*/gi,"").replace(/^[\d]+\s*/,"").trim()).filter(l=>l.length>1&&l.length<60);
+    let added=0;
+    for(const line of lines){
+      if(/\b(add|mix|heat|cook|bake|stir|boil|fry|slice|chop|dice|combine|place|pour|season|serve|preheat|bring|remove|let|set|transfer)\b/i.test(line))continue;
+      const clean=line.replace(/^[-•*]\s*/,"").trim();
+      if(!clean||clean.length<2)continue;
+      const cl=clean.toLowerCase();
+      if(invNames.some(n=>n.includes(cl)||cl.includes(n)))continue;
+      if(shopNames.some(n=>n===cl))continue;
+      await svShopItem({id:Date.now().toString()+Math.random().toString(36).slice(2),name:clean,checked:false,src:"recipe"});
+      added++;
+    }
+    if(added>0)showNotif(`Added ${added} ingredient${added!==1?"s":""} to shopping list 🛒`);
+  }
+  window._pickedRec=null;
+  closeMealM();renderWeek();renderSum();renderTonight();
+};
 window.clrMeal=function(){delete mp[md];Js("ks-m",mp);closeMealM();renderWeek();renderSum();renderTonight();};
 window.toggleExp=function(){const p=g("exppanel");p.style.display=p.style.display==="none"?"block":"none";};
 window.openCooked=function(k){const m=mp[k];if(!m)return;cn=m;nr=0;g("cookedNm").textContent=m;g("cnotes").value="";renderStars("cstars",0);g("cookedM").classList.add("active");};
