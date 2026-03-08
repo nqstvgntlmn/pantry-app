@@ -23,7 +23,7 @@
 .btn,.tog,.ni,.ov,.modal-inner,.pcard,.rcd,.iit,.wd,.sc{transition:background-color .25s,border-color .2s,color .15s,transform .15s,opacity .15s}
 html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;color:var(--tx);overflow:hidden}
 
-/* ââ LOGIN ââ */
+/* ── LOGIN ── */
 #LS{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px;text-align:center;gap:0;z-index:1000;
   background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(212,168,83,.18) 0%,transparent 60%)}
 .ll{font-size:4rem;margin-bottom:16px;filter:drop-shadow(0 0 24px rgba(212,168,83,.4))}
@@ -32,12 +32,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .li{width:100%;max-width:340px;background:var(--card);border:1.5px solid var(--b2);border-radius:16px;padding:16px 20px;color:var(--tx);font-size:1rem;font-family:"DM Sans",sans-serif;text-align:center;letter-spacing:.05em}
 .li:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.12)}
 
-/* ââ APP ââ */
+/* ── APP ── */
 #APP{position:fixed;inset:0;display:none;flex-direction:column}
 .screen{position:absolute;inset:0;bottom:var(--nh);overflow-y:auto;display:none;flex-direction:column}
 .screen.active{display:flex}
 
-/* ââ NAV ââ */
+/* ── NAV ── */
 #NAV{position:absolute;bottom:0;left:0;right:0;height:var(--nh);background:var(--sf);border-top:1px solid var(--b1);display:flex;align-items:stretch;padding-bottom:var(--safe)}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--mt);padding-bottom:2px;position:relative}
 .ni .ico{font-size:1.7rem;transition:transform .2s,filter .2s;line-height:1}
@@ -48,7 +48,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .ni::after{content:"";position:absolute;top:0;left:25%;right:25%;height:2px;background:var(--ac);border-radius:0 0 2px 2px;opacity:0;transition:opacity .2s}
 .ni.active::after{opacity:1}
 
-/* ââ BUTTONS ââ */
+/* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 22px;border-radius:14px;border:none;font-family:"DM Sans",sans-serif;font-size:.92rem;font-weight:600;cursor:pointer;transition:all .18s;letter-spacing:.01em}
 .bp{background:var(--ac);color:#0c0c0a}.bp:active{background:var(--ac2);transform:scale(.97)}.bp:disabled{opacity:.4;cursor:not-allowed}
 .bs{background:var(--card2);color:var(--tx);border:1.5px solid var(--b2)}.bs:active{background:var(--b1)}
@@ -56,7 +56,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .bf{width:100%}.bsm{padding:8px 15px;font-size:.8rem;border-radius:10px}
 .brow{display:flex;gap:8px;margin-top:16px}
 
-/* ââ UTILS ââ */
+/* ── UTILS ── */
 .sdot{width:7px;height:7px;border-radius:50%;background:var(--mt);display:inline-block;transition:background .3s;flex-shrink:0}
 .sdot.synced{background:var(--gn)}.sdot.syncing{background:var(--ac);animation:pulse 1s infinite}.sdot.error{background:var(--rd)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
@@ -68,7 +68,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mt);margin:20px 0 10px;display:flex;align-items:center;gap:10px}
 .slbl::after{content:"";flex:1;height:1px;background:var(--b1)}
 
-/* ââ HOME ââ */
+/* ── HOME ── */
 .hhdr{padding:24px 20px 16px;flex-shrink:0;
   background:linear-gradient(180deg,rgba(212,168,83,.07) 0%,transparent 100%);
   border-bottom:1px solid var(--b1)}
@@ -81,7 +81,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .setbtn{width:38px;height:38px;border-radius:12px;background:var(--card);border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:pointer;flex-shrink:0;transition:border-color .2s}
 .setbtn:active{border-color:var(--ac)}
 
-/* Stats grid â 2 wide, taller */
+/* Stats grid — 2 wide, taller */
 .sgrd{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .sc{background:var(--card);border:1.5px solid var(--b1);border-radius:18px;padding:18px 16px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
 .sc::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(212,168,83,.06),transparent);pointer-events:none}
@@ -112,7 +112,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .exi.exp{border-color:var(--rd)}.exi:active{transform:scale(.98)}.exn{font-size:.9rem;font-weight:500}
 .exd{font-size:.76rem;color:var(--am);font-weight:600}.exi.exp .exd{color:var(--rd)}
 
-/* ââ INVENTORY ââ */
+/* ── INVENTORY ── */
 .ihdr{padding:24px 20px 0;flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between}
 .iha{display:flex;gap:7px;align-items:center;margin-top:6px;flex-wrap:wrap}
 .itabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;margin-top:14px;padding:0 6px;overflow-x:auto}
@@ -134,7 +134,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .etag{font-size:.64rem;padding:2px 8px;border-radius:20px;margin-top:3px;display:inline-block;font-weight:600}
 .etag.expiring{background:var(--amd);color:var(--am)}.etag.expired{background:var(--rdd);color:var(--rd)}.etag.ok{background:var(--gnd);color:var(--gn)}
 
-/* ââ RECIPES ââ */
+/* ── RECIPES ── */
 .rtabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;padding:0 6px;margin-top:14px}
 .rtab{flex:1;padding:11px 4px;text-align:center;font-size:.72rem;font-weight:600;color:var(--mt);cursor:pointer;border-bottom:2.5px solid transparent;transition:all .18s;letter-spacing:.03em}
 .rtab.active{color:var(--ac);border-bottom-color:var(--ac)}
@@ -150,7 +150,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .rmeta{font-size:.7rem;color:var(--mt);margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .sbdg{font-size:.68rem;padding:2px 9px;border-radius:20px;background:var(--sf);color:var(--mt);border:1px solid var(--b1)}
 
-/* ââ SHOPPING ââ */
+/* ── SHOPPING ── */
 .shbody{padding:16px;flex:1}
 .shit{background:var(--card);border:1.5px solid var(--b1);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:7px;cursor:pointer;transition:all .15s}
 .shit:active{transform:scale(.99)}.shit.chk{opacity:.45}
@@ -162,7 +162,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .qainp:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.1)}
 .shsec{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mt);margin:18px 0 9px;font-weight:600}
 
-/* ââ CHAT ââ */
+/* ── CHAT ── */
 .chhdr{padding:24px 20px 14px;flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between}
 .chmsgs{flex:1;overflow-y:auto;padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
 .cb{max-width:88%;padding:13px 17px;border-radius:18px;font-size:.9rem;line-height:1.65}
@@ -181,7 +181,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .pill{background:var(--card);border:1.5px solid var(--b2);border-radius:20px;padding:8px 15px;font-size:.76rem;color:var(--tx2);white-space:nowrap;cursor:pointer;transition:all .15s;flex-shrink:0;font-weight:500}
 .pill:active{border-color:var(--ac);color:var(--ac);background:var(--acd)}
 
-/* ââ OVERLAYS ââ */
+/* ── OVERLAYS ── */
 .ov{position:fixed;inset:0;bottom:var(--nh);background:var(--bg);display:none;flex-direction:column;overflow-y:auto;z-index:100}
 .ov.active{display:flex}
 .ovhdr{padding:22px 20px 0;display:flex;align-items:center;gap:13px;flex-shrink:0}
@@ -190,7 +190,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .ovttl{font-family:"Fraunces",serif;font-size:1.4rem;font-weight:300}
 .ovbody{padding:18px;flex:1}
 
-/* ââ FORMS ââ */
+/* ── FORMS ── */
 .flbl{font-size:.78rem;color:var(--mt);margin-bottom:7px;display:block;font-weight:600;letter-spacing:.02em}
 .frow{margin:14px 0}
 .otag{font-size:.68rem;color:var(--mt);margin-left:7px;background:var(--sf);padding:2px 7px;border-radius:5px}
@@ -229,7 +229,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .shint{font-size:.75rem;color:var(--mt);text-align:center;margin-top:8px;line-height:1.6}
 .sview{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;text-align:center;gap:18px;flex:1}
 
-/* ââ MODALS ââ */
+/* ── MODALS ── */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)}
 .modal.active{display:flex}
 .minner{background:var(--sf);border-radius:24px 24px 0 0;padding:28px 22px;width:100%;max-width:480px;border-top:1px solid var(--b2);max-height:90vh;overflow-y:auto}
@@ -238,7 +238,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .minp:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.1)}
 .sinp{display:flex;gap:4px}.sinp .star{font-size:1.8rem}
 
-/* ââ SETTINGS ââ */
+/* ── SETTINGS ── */
 .sset{margin-bottom:26px}.ssetttl{font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mt);margin-bottom:14px;font-weight:700}
 .srow{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--b1)}
 .srow:last-child{border-bottom:none}.srlbl{font-size:.9rem}
@@ -246,16 +246,16 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .tog.on{background:var(--gn)}.tog::after{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:white;top:3px;left:3px;transition:left .2s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .tog.on::after{left:23px}
 
-/* ââ EXPORT ââ */
+/* ── EXPORT ── */
 .exppanel{background:var(--sf);border-top:1px solid var(--b1);padding:14px 18px;display:none;flex-shrink:0}
 .expbox{background:var(--card);border:1px solid var(--b1);border-radius:10px;padding:14px;font-size:.74rem;font-family:monospace;color:var(--mt);white-space:pre-wrap;max-height:130px;overflow-y:auto;line-height:1.6}
 
-/* ââ SCREEN HEADERS ââ */
+/* ── SCREEN HEADERS ── */
 .sttl{font-family:"Fraunces",serif;font-size:2rem;color:var(--ac);font-weight:300;letter-spacing:-.03em}
 .ssub{font-size:.8rem;color:var(--mt);margin-top:3px}
 .shdr{padding:24px 20px 0;flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between}
 
-/* ââ TAGS ââ */
+/* ── TAGS ── */
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .tag{font-size:.68rem;padding:4px 10px;border-radius:20px;background:var(--sf);border:1.5px solid var(--b2);color:var(--mt);cursor:pointer;transition:all .15s;font-weight:500}
 .tag.sel{background:var(--acd);border-color:var(--ac);color:var(--ac)}
@@ -264,10 +264,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .tag.date{background:rgba(232,130,154,.12);border-color:#e8829a;color:#e8829a}
 .tag.batch{background:rgba(200,150,10,.12);border-color:var(--am);color:var(--am)}
 
-/* ââ PRICE ââ */
+/* ── PRICE ── */
 .price-tag{font-size:.74rem;color:var(--gn);font-weight:700}
 
-/* ââ INSIGHTS ââ */
+/* ── INSIGHTS ── */
 .istat{background:var(--card);border:1.5px solid var(--b1);border-radius:16px;padding:18px}
 .istat-ttl{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mt);margin-bottom:14px;font-weight:700}
 .ibar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
@@ -278,7 +278,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .waste-item{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--b1)}
 .waste-item:last-child{border-bottom:none}
 
-/* ââ DEALS ââ */
+/* ── DEALS ── */
 .deal-card{background:var(--card);border:1.5px solid var(--b1);border-radius:14px;padding:14px 16px;margin-bottom:9px;display:flex;align-items:flex-start;gap:13px;transition:border-color .2s}
 .deal-store{font-size:.66rem;text-transform:uppercase;letter-spacing:.09em;color:var(--mt);font-weight:600}
 .deal-name{font-size:.9rem;font-weight:600;margin:3px 0}
@@ -350,19 +350,19 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 <body>
 <div id="LS">
   <div id="ls-code" style="display:flex;flex-direction:column;align-items:center;gap:20px;width:100%">
-    <div class="ll">ð§º</div><div class="lt">Kitchen</div>
+    <div class="ll">🧺</div><div class="lt">Kitchen</div>
     <p class="ls">Enter your household code to sync inventory across all family devices.</p>
     <input class="li" id="hci" placeholder="e.g. bora-family" onkeydown="if(event.key==='Enter')joinH()"/>
     <button class="btn bp bf" style="max-width:320px" id="enterBtn">Enter Kitchen</button>
     <p style="font-size:.72rem;color:var(--mt);max-width:280px;line-height:1.5">Share this code with your household so everyone sees the same inventory.</p>
   </div>
   <div id="ls-who" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%">
-    <div class="ll">ð</div>
+    <div class="ll">👋</div>
     <div class="lt">Who's cooking?</div>
     <p class="ls">Pick your name so we can personalize your experience.</p>
     <button class="btn bp bf" style="max-width:320px;font-size:1.1rem" id="pickBora">Bora</button>
     <button class="btn bs bf" style="max-width:320px;font-size:1.1rem" id="pickBushra">Bushra</button>
-    <button class="btn bs bf" style="max-width:320px;font-size:.85rem;color:var(--mt)" onclick="document.getElementById('ls-who').style.display='none';document.getElementById('ls-code').style.display='flex'">â Back</button>
+    <button class="btn bs bf" style="max-width:320px;font-size:.85rem;color:var(--mt)" onclick="document.getElementById('ls-who').style.display='none';document.getElementById('ls-code').style.display='flex'">← Back</button>
   </div>
 </div>
 
@@ -377,15 +377,15 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
           <div class="hdt" id="hdt"></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <div class="srow" style="margin:0"><span class="sdot" id="sdot"></span><span class="slb" id="slb">Connectingâ¦</span></div>
-          <div class="setbtn" onclick="showOv('settings')">âï¸</div>
+          <div class="srow" style="margin:0"><span class="sdot" id="sdot"></span><span class="slb" id="slb">Connecting…</span></div>
+          <div class="setbtn" onclick="showOv('settings')">⚙️</div>
         </div>
       </div>
       <div class="arow">
-        <button class="btn bp bsm" style="flex:1" onclick="openScanForInventory()">ð· Scan</button>
-        <button class="btn bs bsm" style="flex:1" onclick="showOv('madd')">âï¸ Add</button>
-        <button class="btn bs bsm" onclick="showOv('import')">â</button>
-        <button class="btn bs bsm" onclick="toggleExp()">â</button>
+        <button class="btn bp bsm" style="flex:1" onclick="openScanForInventory()">📷 Scan</button>
+        <button class="btn bs bsm" style="flex:1" onclick="showOv('madd')">✏️ Add</button>
+        <button class="btn bs bsm" onclick="showOv('import')">↓</button>
+        <button class="btn bs bsm" onclick="toggleExp()">↗</button>
       </div>
     </div>
     <div class="exppanel" id="exppanel"><div class="expbox" id="expbox">No items yet.</div><p style="font-size:.7rem;color:var(--mt);margin-top:6px">Paste into Claude chat as your living document.</p></div>
@@ -394,11 +394,11 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <div class="hbody">
 
       <!-- TODAY section -->
-      <div class="hsec-lbl">ð Today</div>
+      <div class="hsec-lbl">📅 Today</div>
       <div class="today-grid">
         <!-- Tonight card -->
         <div class="today-card tonight-card" id="tonight-main">
-          <div class="tc-icon">ð½</div>
+          <div class="tc-icon">🍽</div>
           <div class="tc-content">
             <div class="tc-ttl">Tonight's Dinner</div>
             <div id="tnd" class="tc-val"></div>
@@ -407,14 +407,14 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
         </div>
         <!-- Expiring card -->
         <div class="today-card" onclick="showScreen('inventory')">
-          <div class="tc-icon">â±</div>
+          <div class="tc-icon">⏱</div>
           <div class="tc-ttl">Expiring Soon</div>
           <div id="home-exp-val" class="tc-val tc-green">All fresh!</div>
           <div id="home-exp-sub" class="tc-sub">Nothing in next 3 days</div>
         </div>
         <!-- Shopping card -->
         <div class="today-card" onclick="showScreen('shopping')">
-          <div class="tc-icon">ð</div>
+          <div class="tc-icon">🛒</div>
           <div class="tc-ttl">Shopping List</div>
           <div id="home-shop-val" class="tc-val">0</div>
           <div id="home-shop-sub" class="tc-sub">items to buy</div>
@@ -425,17 +425,17 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
       <div id="variety-nudge" style="display:none;background:var(--amd);border:1px solid var(--am);border-radius:14px;padding:12px 16px;font-size:.82rem;color:var(--tx2);line-height:1.6;margin-bottom:16px"></div>
 
       <!-- THIS WEEK section -->
-      <div class="hsec-lbl">ð This Week</div>
+      <div class="hsec-lbl">🗓 This Week</div>
       <div class="week-wrap">
         <div class="wgrd" id="wgrd"></div>
       </div>
 
       <!-- AT A GLANCE section -->
-      <div class="hsec-lbl">ð§º Your Kitchen</div>
+      <div class="hsec-lbl">🧺 Your Kitchen</div>
       <div class="sgrd" id="sgrd"></div>
 
       <!-- Expiring list -->
-      <div id="exslbl" style="display:none" class="hsec-lbl">â ï¸ Expiring Soon</div>
+      <div id="exslbl" style="display:none" class="hsec-lbl">⚠️ Expiring Soon</div>
       <div class="expl" id="expl"></div>
       <div style="height:16px"></div>
     </div>
@@ -444,12 +444,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   <!-- INVENTORY -->
   <div class="screen" id="screen-inventory" style="overflow-y:hidden">
     <div style="flex-shrink:0">
-      <div class="ihdr"><div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loadingâ¦</div></div><div class="iha"><button class="btn bs bsm" onclick="showOv('madd')">âï¸</button><button class="btn bp bsm" onclick="showOv('scan')">ð· Scan</button></div></div>
+      <div class="ihdr"><div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div><div class="iha"><button class="btn bs bsm" onclick="showOv('madd')">✏️</button><button class="btn bp bsm" onclick="showOv('scan')">📷 Scan</button></div></div>
       <div class="itabs">
         <div class="itab active" id="itab-all" onclick="setIT('all')">All</div>
-        <div class="itab" id="itab-fridge" onclick="setIT('fridge')">ð¡ Fridge</div>
-        <div class="itab" id="itab-freezer" onclick="setIT('freezer')">ð§ Freezer</div>
-        <div class="itab" id="itab-pantry" onclick="setIT('pantry')">ð¥« Pantry</div>
+        <div class="itab" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
+        <div class="itab" id="itab-freezer" onclick="setIT('freezer')">🧊 Freezer</div>
+        <div class="itab" id="itab-pantry" onclick="setIT('pantry')">🥫 Pantry</div>
         <div class="itab" id="itab-cat" onclick="setIT('cat')">By Type</div>
       </div>
     </div>
@@ -459,13 +459,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   <!-- RECIPES -->
   <div class="screen" id="screen-recipes" style="overflow-y:hidden">
     <div style="flex-shrink:0">
-      <div class="shdr"><div><div class="sttl">Recipes</div><div class="ssub" id="rsub">Your saved recipes</div></div><div style="display:flex;gap:6px"><button class="btn bs bsm" onclick="whatCanIMake()">ð Make now</button><button class="btn bp bsm" onclick="showOv('arec')">+ Add</button></div></div>
+      <div class="shdr"><div><div class="sttl">Recipes</div><div class="ssub" id="rsub">Your saved recipes</div></div><div style="display:flex;gap:6px"><button class="btn bs bsm" onclick="whatCanIMake()">🔍 Make now</button><button class="btn bp bsm" onclick="showOv('arec')">+ Add</button></div></div>
       <div class="rtabs">
         <div class="rtab active" id="rtab-all" onclick="setRT('all')">All</div>
-        <div class="rtab" id="rtab-fav" onclick="setRT('fav')">â¤ï¸ Favorites</div>
-        <div class="rtab" id="rtab-top" onclick="setRT('top')">â­ Top Rated</div>
-        <div class="rtab" id="rtab-quick" onclick="setRT('quick')">â¡ Quick</div>
-        <div class="rtab" id="rtab-kid" onclick="setRT('kid')">ð¶ Kids</div>
+        <div class="rtab" id="rtab-fav" onclick="setRT('fav')">❤️ Favorites</div>
+        <div class="rtab" id="rtab-top" onclick="setRT('top')">⭐ Top Rated</div>
+        <div class="rtab" id="rtab-quick" onclick="setRT('quick')">⚡ Quick</div>
+        <div class="rtab" id="rtab-kid" onclick="setRT('kid')">👶 Kids</div>
       </div>
     </div>
     <div class="rbody" id="rbody" style="flex:1;overflow-y:auto"></div>
@@ -476,21 +476,21 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <div style="flex-shrink:0">
       <div class="shdr"><div><div class="sttl">Shopping</div><div class="ssub" id="shsub">Your grocery list</div></div>
         <div style="display:flex;gap:6px">
-          <button class="btn bsm bs" onclick="shareList()">ð¤ Share</button>
+          <button class="btn bsm bs" onclick="shareList()">📤 Share</button>
           <button class="btn bsm bs" id="clrchk" onclick="clrChk()" style="display:none">Clear done</button>
         </div>
       </div>
       <div class="itabs" style="margin-top:10px">
         <div class="itab active" id="shtab-list" onclick="setSHT('list')">My List</div>
-        <div class="itab" id="shtab-deals" onclick="setSHT('deals')">ð· Deals</div>
+        <div class="itab" id="shtab-deals" onclick="setSHT('deals')">🏷 Deals</div>
       </div>
     </div>
     <div id="sh-list-body" style="flex:1;overflow-y:auto">
       <div class="shbody">
-        <div class="qarow"><input class="qainp" id="shi" placeholder="Add itemâ¦" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp bsm" onclick="qadd()">Add</button><button class="btn bs bsm" onclick="openScanForList()" title="Scan to shopping list">ð·</button></div>
+        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp bsm" onclick="qadd()">Add</button><button class="btn bs bsm" onclick="openScanForList()" title="Scan to shopping list">📷</button></div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="btn bsm bs" style="flex:1" onclick="buildList()">ð¤ Build from meal plan</button>
-          <button class="btn bsm bs" id="aislebtn" onclick="togAisle()">â¡ By aisle</button>
+          <button class="btn bsm bs" style="flex:1" onclick="buildList()">🤖 Build from meal plan</button>
+          <button class="btn bsm bs" id="aislebtn" onclick="togAisle()">≡ By aisle</button>
         </div>
         <div id="shlist"></div>
       </div>
@@ -500,7 +500,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
         <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:12px">
           <div style="font-size:.75rem;color:var(--mt);margin-bottom:8px;font-weight:500">Store</div>
           <select class="fsel" id="dealstore">
-            <option value="any">ðª Any nearby store</option>
+            <option value="any">🏪 Any nearby store</option>
             <option value="ShopRite">ShopRite</option>
             <option value="Stop &amp; Shop">Stop &amp; Shop</option>
             <option value="Wegmans">Wegmans</option>
@@ -512,12 +512,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
           </select>
           <div style="font-size:.75rem;color:var(--mt);margin-top:10px;margin-bottom:8px;font-weight:500">Search</div>
           <div style="display:flex;gap:8px">
-            <input class="qainp" id="dealsearch" placeholder="e.g. chicken, milk, eggsâ¦" style="flex:1"/>
+            <input class="qainp" id="dealsearch" placeholder="e.g. chicken, milk, eggs…" style="flex:1"/>
             <button class="btn bp" onclick="searchDeals()">Search</button>
           </div>
         </div>
-        <button class="btn bs bsm bf" style="margin-bottom:14px" onclick="dealsFromList()">ð Find deals for everything on my list</button>
-        <button class="btn bs bsm bf" style="margin-bottom:6px;font-size:.72rem;opacity:.6" onclick="testProxy()">ð§ Test proxy connection</button>
+        <button class="btn bs bsm bf" style="margin-bottom:14px" onclick="dealsFromList()">🛒 Find deals for everything on my list</button>
+        <button class="btn bs bsm bf" style="margin-bottom:6px;font-size:.72rem;opacity:.6" onclick="testProxy()">🔧 Test proxy connection</button>
         <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:10px;padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
         <div id="dealslist"></div>
       </div>
@@ -535,8 +535,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
       <div class="pill" onclick="sendPill(this)">Quick weeknight ideas</div>
       <div class="pill" onclick="sendPill(this)">Toddler-friendly meals</div>
     </div>
-    <div class="chmsgs" id="chmsgs"><div class="cb asst">Hey Bora! ð I know your full inventory, meal plan, and saved recipes. What do you need?</div></div>
-    <div class="chia"><textarea class="chta" id="chi" placeholder="Ask anything about your kitchenâ¦" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="ar(this)"></textarea><button class="chsb" id="csb" onclick="sendChat()">â</button></div>
+    <div class="chmsgs" id="chmsgs"><div class="cb asst">Hey Bora! 👋 I know your full inventory, meal plan, and saved recipes. What do you need?</div></div>
+    <div class="chia"><textarea class="chta" id="chi" placeholder="Ask anything about your kitchen…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="ar(this)"></textarea><button class="chsb" id="csb" onclick="sendChat()">↑</button></div>
   </div>
 
   <!-- INSIGHTS SCREEN -->
@@ -550,46 +550,46 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
         <div class="istat" style="text-align:center;padding:14px 8px">
           <div style="font-family:'Fraunces',serif;font-size:2.2rem;color:var(--ac);font-weight:300;line-height:1" id="ins-streak-num">0</div>
-          <div style="font-size:.68rem;color:var(--mt);margin-top:4px;line-height:1.3">day<br/>streak ð¥</div>
+          <div style="font-size:.68rem;color:var(--mt);margin-top:4px;line-height:1.3">day<br/>streak 🔥</div>
         </div>
         <div class="istat" style="text-align:center;padding:14px 8px">
           <div style="font-family:'Fraunces',serif;font-size:2.2rem;color:var(--ac);font-weight:300;line-height:1" id="ins-total-cooked">0</div>
-          <div style="font-size:.68rem;color:var(--mt);margin-top:4px;line-height:1.3">meals<br/>cooked ð³</div>
+          <div style="font-size:.68rem;color:var(--mt);margin-top:4px;line-height:1.3">meals<br/>cooked 🍳</div>
         </div>
         <div class="istat" style="text-align:center;padding:14px 8px">
           <div style="font-family:'Fraunces',serif;font-size:2.2rem;color:var(--ac);font-weight:300;line-height:1" id="ins-waste-count">0</div>
-          <div style="font-size:.68rem;color:var(--mt);margin-top:4px;line-height:1.3">items<br/>wasted ð</div>
+          <div style="font-size:.68rem;color:var(--mt);margin-top:4px;line-height:1.3">items<br/>wasted 🗑</div>
         </div>
       </div>
 
       <!-- Cuisine variety nudge -->
       <div id="ins-variety-nudge" style="display:none;background:var(--amd);border:1px solid var(--am);border-radius:12px;padding:12px 14px;margin-bottom:14px">
-        <div style="font-size:.78rem;font-weight:600;color:var(--am);margin-bottom:4px">ð Variety nudge</div>
+        <div style="font-size:.78rem;font-weight:600;color:var(--am);margin-bottom:4px">🌍 Variety nudge</div>
         <div style="font-size:.82rem;color:var(--tx2);line-height:1.5" id="ins-variety-msg"></div>
       </div>
 
       <!-- This week plan -->
       <div class="istat" style="margin-bottom:14px">
-        <div class="istat-ttl">ð This week</div>
+        <div class="istat-ttl">📅 This week</div>
         <div id="ins-week"></div>
       </div>
 
       <!-- Most cooked -->
       <div class="istat" style="margin-bottom:14px">
-        <div class="istat-ttl">ð Most cooked</div>
+        <div class="istat-ttl">🏆 Most cooked</div>
         <div id="ins-cooked"><div class="es" style="padding:16px"><p>Cook some meals to see stats!</p></div></div>
       </div>
 
       <!-- Cuisine breakdown -->
       <div class="istat" style="margin-bottom:14px">
-        <div class="istat-ttl">ð Cuisine mix <span class="otag">last 14 meals</span></div>
+        <div class="istat-ttl">🌍 Cuisine mix <span class="otag">last 14 meals</span></div>
         <div id="ins-cuisine"><div class="es" style="padding:16px"><p>Cook more meals to see your cuisine breakdown.</p></div></div>
       </div>
 
       <!-- Waste log -->
       <div class="istat" style="margin-bottom:14px">
-        <div class="istat-ttl">ð Waste log <span class="otag">items removed after expiry</span></div>
-        <div id="ins-waste"><div class="es" style="padding:16px"><p>Nothing wasted yet â great job! ð</p></div></div>
+        <div class="istat-ttl">🗑 Waste log <span class="otag">items removed after expiry</span></div>
+        <div id="ins-waste"><div class="es" style="padding:16px"><p>Nothing wasted yet — great job! 🎉</p></div></div>
       </div>
 
     </div>
@@ -597,46 +597,46 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
   <!-- NAV -->
   <div id="NAV">
-    <div class="ni active" id="nav-home" onclick="showScreen('home')"><span class="ico">ð </span><span class="lbl">Home</span></div>
-    <div class="ni" id="nav-inventory" onclick="showScreen('inventory')"><span class="ico">ð§º</span><span class="lbl">Pantry</span></div>
-    <div class="ni" id="nav-recipes" onclick="showScreen('recipes')"><span class="ico">ð</span><span class="lbl">Recipes</span></div>
-    <div class="ni" id="nav-shopping" onclick="showScreen('shopping')"><span class="ico">ð</span><span class="lbl">Shop</span></div>
-    <div class="ni" id="nav-insights" onclick="showScreen('insights')"><span class="ico">ð</span><span class="lbl">Stats</span></div>
-    <div class="ni" id="nav-chat" onclick="showScreen('chat')"><span class="ico">â¨</span><span class="lbl">Claude</span></div>
+    <div class="ni active" id="nav-home" onclick="showScreen('home')"><span class="ico">🏠</span><span class="lbl">Home</span></div>
+    <div class="ni" id="nav-inventory" onclick="showScreen('inventory')"><span class="ico">🧺</span><span class="lbl">Pantry</span></div>
+    <div class="ni" id="nav-recipes" onclick="showScreen('recipes')"><span class="ico">📖</span><span class="lbl">Recipes</span></div>
+    <div class="ni" id="nav-shopping" onclick="showScreen('shopping')"><span class="ico">🛒</span><span class="lbl">Shop</span></div>
+    <div class="ni" id="nav-insights" onclick="showScreen('insights')"><span class="ico">📊</span><span class="lbl">Stats</span></div>
+    <div class="ni" id="nav-chat" onclick="showScreen('chat')"><span class="ico">✨</span><span class="lbl">Claude</span></div>
   </div>
 
   <!-- OVERLAY: SCAN -->
   <div class="ov" id="ov-scan">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('scan')">â</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('scan')">←</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
     <div class="ovbody">
       <p id="scan-dest-hint" style="font-size:.78rem;color:var(--mt);padding:8px 0 4px;text-align:center">Scan a barcode to add to your pantry or shopping list.</p>
       <div id="scanbody">
-        <div class="sacts"><button class="btn bp bf" onclick="startScan()">ð· Take Photo of Barcode</button><button class="btn bs bf" onclick="togManual()">âï¸ Enter Barcode Manually</button></div>
+        <div class="sacts"><button class="btn bp bf" onclick="startScan()">📷 Take Photo of Barcode</button><button class="btn bs bf" onclick="togManual()">✏️ Enter Barcode Manually</button></div>
         <p class="shint">Works on all phones including iPhone.<br/>Take a clear close-up photo of the barcode.</p>
         <div id="mentry" style="display:none;margin-top:16px"><div style="display:flex;gap:8px"><input class="fi" id="meinp" placeholder="e.g. 013000006408" inputmode="numeric" onkeydown="if(event.key==='Enter')manLookup()" style="flex:1"/><button class="btn bp" onclick="manLookup()">Look Up</button></div></div>
         <div class="errmsg" id="scerr"></div>
       </div>
-      <div id="scspin" style="display:none"><div class="sview"><div class="spin"></div><p id="scst" style="color:var(--mt);font-size:.9rem">Processingâ¦</p></div></div>
+      <div id="scspin" style="display:none"><div class="sview"><div class="spin"></div><p id="scst" style="color:var(--mt);font-size:.9rem">Processing…</p></div></div>
     </div>
   </div>
 
   <!-- OVERLAY: MANUAL ADD -->
   <div class="ov" id="ov-madd">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('madd')">â</div><div class="ovttl">Add Item</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('madd')">←</div><div class="ovttl">Add Item</div></div>
     <div class="ovbody">
-      <div class="frow"><label class="flbl">Item name <span style="color:var(--rd)">*</span></label><input class="fi" id="man" placeholder="e.g. Apples, Olive Oilâ¦" oninput="valMA()"/></div>
+      <div class="frow"><label class="flbl">Item name <span style="color:var(--rd)">*</span></label><input class="fi" id="man" placeholder="e.g. Apples, Olive Oil…" oninput="valMA()"/></div>
       <div class="frow"><label class="flbl">Category</label>
         <select class="fsel" id="mac">
-          <option value="Produce">ð¥¦ Produce</option><option value="Proteins">ð Proteins</option>
-          <option value="Dairy">ð§ Dairy &amp; Eggs</option><option value="Grains">ð¾ Grains &amp; Bread</option>
-          <option value="Condiments">ð§´ Condiments</option><option value="Snacks">ð¿ Snacks</option>
-          <option value="Beverages">ð¥¤ Beverages</option><option value="Frozen">âï¸ Frozen</option>
-          <option value="General">ð¦ General</option>
+          <option value="Produce">🥦 Produce</option><option value="Proteins">🍗 Proteins</option>
+          <option value="Dairy">🧀 Dairy &amp; Eggs</option><option value="Grains">🌾 Grains &amp; Bread</option>
+          <option value="Condiments">🧴 Condiments</option><option value="Snacks">🍿 Snacks</option>
+          <option value="Beverages">🥤 Beverages</option><option value="Frozen">❄️ Frozen</option>
+          <option value="General">📦 General</option>
         </select>
       </div>
-      <div class="frow"><label class="flbl">Location</label><div class="lpick"><button class="lbtn sel" id="ml-fridge" onclick="selML('fridge',this)">ð¡ Fridge</button><button class="lbtn" id="ml-freezer" onclick="selML('freezer',this)">ð§ Freezer</button><button class="lbtn" id="ml-pantry" onclick="selML('pantry',this)">ð¥« Pantry</button></div></div>
-      <div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="chgMQ(-1)">â</button><input class="qinp" id="maq" type="number" min="1" value="1"/><button class="qbtn" onclick="chgMQ(1)">+</button></div></div>
-      <div class="qrow"><span class="qlbl">Unit</span><input class="fun" id="mau" placeholder="unit, lb, ozâ¦" value="unit"/></div>
+      <div class="frow"><label class="flbl">Location</label><div class="lpick"><button class="lbtn sel" id="ml-fridge" onclick="selML('fridge',this)">🌡 Fridge</button><button class="lbtn" id="ml-freezer" onclick="selML('freezer',this)">🧊 Freezer</button><button class="lbtn" id="ml-pantry" onclick="selML('pantry',this)">🥫 Pantry</button></div></div>
+      <div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="chgMQ(-1)">−</button><input class="qinp" id="maq" type="number" min="1" value="1"/><button class="qbtn" onclick="chgMQ(1)">+</button></div></div>
+      <div class="qrow"><span class="qlbl">Unit</span><input class="fun" id="mau" placeholder="unit, lb, oz…" value="unit"/></div>
       <div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="mae" type="date"/></div>
       <div class="brow"><button class="btn bp bf" id="mabtn" onclick="addManual()" disabled>Add to Inventory</button></div>
     </div>
@@ -644,81 +644,81 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
   <!-- OVERLAY: RESULT -->
   <div class="ov" id="ov-result">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('result')">â</div><div class="ovttl" id="resttl">Product Found</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('result')">←</div><div class="ovttl" id="resttl">Product Found</div></div>
     <div class="ovbody">
       <div id="resbody"></div>
-      <div class="frow"><label class="flbl">Location</label><div class="lpick"><button class="lbtn" id="rl-fridge" onclick="selRL('fridge',this)">ð¡ Fridge</button><button class="lbtn" id="rl-freezer" onclick="selRL('freezer',this)">ð§ Freezer</button><button class="lbtn" id="rl-pantry" onclick="selRL('pantry',this)">ð¥« Pantry</button></div></div>
-      <div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="chgAQ(-1)">â</button><input class="qinp" id="aqty" type="number" min="1" value="1"/><button class="qbtn" onclick="chgAQ(1)">+</button></div></div>
-      <div class="qrow"><span class="qlbl">Unit</span><input class="fun" id="aunit" placeholder="oz, lb, unitâ¦"/></div>
+      <div class="frow"><label class="flbl">Location</label><div class="lpick"><button class="lbtn" id="rl-fridge" onclick="selRL('fridge',this)">🌡 Fridge</button><button class="lbtn" id="rl-freezer" onclick="selRL('freezer',this)">🧊 Freezer</button><button class="lbtn" id="rl-pantry" onclick="selRL('pantry',this)">🥫 Pantry</button></div></div>
+      <div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="chgAQ(-1)">−</button><input class="qinp" id="aqty" type="number" min="1" value="1"/><button class="qbtn" onclick="chgAQ(1)">+</button></div></div>
+      <div class="qrow"><span class="qlbl">Unit</span><input class="fun" id="aunit" placeholder="oz, lb, unit…"/></div>
       <div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="aexp" type="date"/></div>
       <div id="scan-dest-btns">
   <div class="brow">
-    <button class="btn bs" style="flex:1" onclick="hideOv('result');showOv('scan')">â Back</button>
-    <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">ð¦ Add to Pantry</button>
+    <button class="btn bs" style="flex:1" onclick="hideOv('result');showOv('scan')">← Back</button>
+    <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">📦 Add to Pantry</button>
   </div>
-  <button class="btn bs bf" style="margin-top:8px;border-color:var(--gn);color:var(--gn)" onclick="addScannedToList()">ð Add to Shopping List instead</button>
+  <button class="btn bs bf" style="margin-top:8px;border-color:var(--gn);color:var(--gn)" onclick="addScannedToList()">🛒 Add to Shopping List instead</button>
 </div>
     </div>
   </div>
 
   <!-- OVERLAY: ADJUST -->
   <div class="ov" id="ov-adj">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('adj')">â</div><div class="ovttl">Adjust Item</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('adj')">←</div><div class="ovttl">Adjust Item</div></div>
     <div class="ovbody"><div id="adjbody"></div><div class="brow"><button class="btn bd bf" id="rembtn">Remove Item</button></div></div>
   </div>
 
   <!-- OVERLAY: ADD RECIPE -->
   <div class="ov" id="ov-arec">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('arec')">â</div><div class="ovttl">Save Recipe</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('arec')">←</div><div class="ovttl">Save Recipe</div></div>
     <div class="ovbody">
       <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:16px">
-        <div style="font-size:.78rem;color:var(--mt);margin-bottom:8px;font-weight:500">ð Import from a website</div>
-        <div style="font-size:.74rem;color:var(--mt);margin-bottom:10px;line-height:1.5">Paste any recipe URL â AllRecipes, NYT Cooking, Bon AppÃ©tit, any site â and Claude will read it for you.</div>
+        <div style="font-size:.78rem;color:var(--mt);margin-bottom:8px;font-weight:500">🔗 Import from a website</div>
+        <div style="font-size:.74rem;color:var(--mt);margin-bottom:10px;line-height:1.5">Paste any recipe URL — AllRecipes, NYT Cooking, Bon Appétit, any site — and Claude will read it for you.</div>
         <div style="display:flex;gap:8px">
-          <input class="fi" id="rurl" placeholder="https://www.allrecipes.com/recipe/â¦" style="flex:1;font-size:.82rem"/>
+          <input class="fi" id="rurl" placeholder="https://www.allrecipes.com/recipe/…" style="flex:1;font-size:.82rem"/>
           <button class="btn bp bsm" id="rimportbtn" onclick="importFromUrl()">Import</button>
         </div>
         <div id="rurlstatus" style="font-size:.74rem;margin-top:8px;display:none"></div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin:4px 0 14px"><div style="flex:1;height:1px;background:var(--b1)"></div><span style="font-size:.7rem;color:var(--mt);text-transform:uppercase;letter-spacing:.08em">or add manually</span><div style="flex:1;height:1px;background:var(--b1)"></div></div>
       <div class="frow"><label class="flbl">Recipe name <span style="color:var(--rd)">*</span></label><input class="fi" id="rn" placeholder="e.g. Chicken Stir Fry" oninput="valR()"/></div>
-      <div class="frow"><label class="flbl">Your rating</label><div class="sinp" id="rstars"><span class="star" onclick="setStar(1,'r')">â</span><span class="star" onclick="setStar(2,'r')">â</span><span class="star" onclick="setStar(3,'r')">â</span><span class="star" onclick="setStar(4,'r')">â</span><span class="star" onclick="setStar(5,'r')">â</span></div></div>
-      <div class="frow"><label class="flbl">Description / Ingredients <span class="otag">optional</span></label><textarea class="fta" id="rd" placeholder="Key ingredients, methodâ¦"></textarea></div>
+      <div class="frow"><label class="flbl">Your rating</label><div class="sinp" id="rstars"><span class="star" onclick="setStar(1,'r')">☆</span><span class="star" onclick="setStar(2,'r')">☆</span><span class="star" onclick="setStar(3,'r')">☆</span><span class="star" onclick="setStar(4,'r')">☆</span><span class="star" onclick="setStar(5,'r')">☆</span></div></div>
+      <div class="frow"><label class="flbl">Description / Ingredients <span class="otag">optional</span></label><textarea class="fta" id="rd" placeholder="Key ingredients, method…"></textarea></div>
       <div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><input class="fi" id="rnotes" placeholder="e.g. Add more garlic next time!"/></div>
       <div class="frow"><label class="flbl">Tags <span class="otag">optional</span></label>
         <div class="tags" id="rtags">
-          <div class="tag" data-tag="Quick" onclick="togTag(this)">â¡ Quick</div>
-          <div class="tag kid" data-tag="Kid-Friendly" onclick="togTag(this)">ð¶ Kid-Friendly</div>
-          <div class="tag date" data-tag="Date Night" onclick="togTag(this)">ð¯ Date Night</div>
-          <div class="tag batch" data-tag="Batch Cook" onclick="togTag(this)">ð¦ Batch Cook</div>
-          <div class="tag" data-tag="Healthy" onclick="togTag(this)">ð¥ Healthy</div>
-          <div class="tag" data-tag="Under 30 min" onclick="togTag(this)">â± Under 30 min</div>
+          <div class="tag" data-tag="Quick" onclick="togTag(this)">⚡ Quick</div>
+          <div class="tag kid" data-tag="Kid-Friendly" onclick="togTag(this)">👶 Kid-Friendly</div>
+          <div class="tag date" data-tag="Date Night" onclick="togTag(this)">🕯 Date Night</div>
+          <div class="tag batch" data-tag="Batch Cook" onclick="togTag(this)">📦 Batch Cook</div>
+          <div class="tag" data-tag="Healthy" onclick="togTag(this)">🥗 Healthy</div>
+          <div class="tag" data-tag="Under 30 min" onclick="togTag(this)">⏱ Under 30 min</div>
         </div>
       </div>
       <div class="frow"><label class="flbl">Source URL <span class="otag">optional</span></label><input class="fi" id="rsourceurl" placeholder="Recipe website URL" style="font-size:.82rem"/></div>
-      <div class="brow"><button class="btn bp bf" id="savrecbtn" onclick="saveRec()">Save Recipe</button></div>
+      <div class="brow"><button class="btn bp bf" id="savrecbtn" onclick="saveRec()" disabled>Save Recipe</button></div>
     </div>
   </div>
 
   <!-- OVERLAY: EDIT RECIPE -->
   <div class="ov" id="ov-erec">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('erec')">â</div><div class="ovttl">Edit Recipe</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('erec')">←</div><div class="ovttl">Edit Recipe</div></div>
     <div class="ovbody" id="erecbody"></div>
   </div>
 
   <!-- OVERLAY: IMPORT -->
   <div class="ov" id="ov-import">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('import')">â</div><div class="ovttl">Import Document</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('import')">←</div><div class="ovttl">Import Document</div></div>
     <div class="ovbody">
       <div class="infomsg">Paste your living document from Claude. Items will be added or updated automatically.</div>
-      <textarea class="fta" id="imptxt" placeholder="Paste kitchen inventory markdown hereâ¦" style="min-height:180px"></textarea>
+      <textarea class="fta" id="imptxt" placeholder="Paste kitchen inventory markdown here…" style="min-height:180px"></textarea>
       <div class="brow"><button class="btn bp bf" onclick="importDoc()">Import</button></div>
     </div>
   </div>
 
   <!-- OVERLAY: SETTINGS -->
   <div class="ov" id="ov-settings">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('settings')">â</div><div class="ovttl">Settings</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('settings')">←</div><div class="ovttl">Settings</div></div>
     <div class="ovbody">
       <div class="sset"><div class="ssetttl">My Households</div>
         <div id="hhList"></div>
@@ -745,7 +745,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
               <option value="1">1 day</option><option value="2">2 days</option><option value="3" selected>3 days</option><option value="5">5 days</option><option value="7">7 days</option>
             </select>
           </div>
-          <button class="btn bs bsm" style="width:100%;margin-top:4px" onclick="testNotif()">ð Send test notification</button>
+          <button class="btn bs bsm" style="width:100%;margin-top:4px" onclick="testNotif()">🔔 Send test notification</button>
         </div>
       </div>
       <div class="sset"><div class="ssetttl">Family</div>
@@ -759,8 +759,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
         <div class="frow"><label class="flbl">Mode</label>
           <div style="display:flex;gap:6px">
             <button class="btn bs bsm" id="mode-auto" onclick="setMode('auto')">Auto</button>
-            <button class="btn bs bsm" id="mode-light" onclick="setMode('light')">âï¸ Light</button>
-            <button class="btn bs bsm" id="mode-dark" onclick="setMode('dark')">ð Dark</button>
+            <button class="btn bs bsm" id="mode-light" onclick="setMode('light')">☀️ Light</button>
+            <button class="btn bs bsm" id="mode-dark" onclick="setMode('dark')">🌙 Dark</button>
           </div>
         </div>
       </div>
@@ -769,12 +769,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
         <div class="srow"><span class="srlbl">No shellfish</span><div class="tog" id="tg-noshellfish" onclick="this.classList.toggle('on')"></div></div>
         <div class="srow"><span class="srlbl">Vegetarian</span><div class="tog" id="tg-vegetarian" onclick="this.classList.toggle('on')"></div></div>
         <div class="srow"><span class="srlbl">Gluten-free</span><div class="tog" id="tg-glutenfree" onclick="this.classList.toggle('on')"></div></div>
-        <div class="frow" style="margin-top:12px"><label class="flbl">Other restrictions</label><input class="fi" id="setOther" placeholder="e.g. no nutsâ¦"/></div>
+        <div class="frow" style="margin-top:12px"><label class="flbl">Other restrictions</label><input class="fi" id="setOther" placeholder="e.g. no nuts…"/></div>
       </div>
       <div class="sset"><div class="ssetttl">Preferences</div>
-        <div class="frow"><label class="flbl">Favourite cuisines</label><input class="fi" id="setCuisines" placeholder="e.g. Italian, Thaiâ¦"/></div>
+        <div class="frow"><label class="flbl">Favourite cuisines</label><input class="fi" id="setCuisines" placeholder="e.g. Italian, Thai…"/></div>
         <div class="frow"><label class="flbl">Weeknight cook time</label>
-          <select class="fsel" id="setCookTime"><option value="20-30 min">20â30 min</option><option value="30-45 min">30â45 min</option><option value="40-60 min" selected>40â60 min</option><option value="60+ min">60+ min</option></select>
+          <select class="fsel" id="setCookTime"><option value="20-30 min">20–30 min</option><option value="30-45 min">30–45 min</option><option value="40-60 min" selected>40–60 min</option><option value="60+ min">60+ min</option></select>
         </div>
       </div>
       <div class="brow"><button class="btn bp bf" onclick="saveSettings()">Save Settings</button></div>
@@ -799,12 +799,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 <!-- COOKED MODAL -->
 <div class="modal" id="cookedM">
   <div class="minner">
-    <div class="mttl">ð½ Meal Cooked!</div>
+    <div class="mttl">🍽 Meal Cooked!</div>
     <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:300;margin-bottom:4px" id="cookedNm"></div>
     <div style="font-size:.8rem;color:var(--mt);margin-bottom:16px;line-height:1.5">Log this meal and optionally save to recipes.</div>
-    <div class="frow"><label class="flbl">Rate this meal</label><div class="sinp" id="cstars"><span class="star" onclick="setStar(1,'c')">â</span><span class="star" onclick="setStar(2,'c')">â</span><span class="star" onclick="setStar(3,'c')">â</span><span class="star" onclick="setStar(4,'c')">â</span><span class="star" onclick="setStar(5,'c')">â</span></div></div>
-    <div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><input class="fi" id="cnotes" placeholder="Family loved it!â¦"/></div>
-    <div class="srow" style="padding:12px 0"><span class="srlbl" style="font-size:.84rem">ð¥¡ Made leftovers</span><div class="tog" id="tog-leftover" onclick="this.classList.toggle('on')"></div></div>
+    <div class="frow"><label class="flbl">Rate this meal</label><div class="sinp" id="cstars"><span class="star" onclick="setStar(1,'c')">☆</span><span class="star" onclick="setStar(2,'c')">☆</span><span class="star" onclick="setStar(3,'c')">☆</span><span class="star" onclick="setStar(4,'c')">☆</span><span class="star" onclick="setStar(5,'c')">☆</span></div></div>
+    <div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><input class="fi" id="cnotes" placeholder="Family loved it!…"/></div>
+    <div class="srow" style="padding:12px 0"><span class="srlbl" style="font-size:.84rem">🥡 Made leftovers</span><div class="tog" id="tog-leftover" onclick="this.classList.toggle('on')"></div></div>
     <div class="brow"><button class="btn bs" style="flex:1" onclick="skipCooked()">Just log it</button><button class="btn bp" style="flex:2" onclick="saveCooked()">Save to Recipes</button></div>
   </div>
 </div>
@@ -812,7 +812,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 <!-- SCHEDULE RECIPE MODAL -->
 <div class="modal" id="schedM">
   <div class="minner">
-    <div class="mttl">ð Schedule Recipe</div>
+    <div class="mttl">📅 Schedule Recipe</div>
     <div style="font-size:.88rem;color:var(--tx2);margin-bottom:12px" id="schedNm"></div>
     <div class="wgrd" id="schedWk"></div>
     <div class="brow"><button class="btn bs bf" onclick="g('schedM').classList.remove('active')">Cancel</button></div>
@@ -842,7 +842,7 @@ window._appStart=function start(code){hid=code;g("LS").style.display="none";g("A
   onSnapshot(collection(db,"households",hid,"recipes"),sn=>{recs=sn.docs.map(d=>({id:d.id,...d.data()}));renderRecs();renderSum();});
   onSnapshot(collection(db,"households",hid,"shopping"),sn=>{shop=sn.docs.map(d=>({id:d.id,...d.data()}));renderShop();renderSum();});}
 function g(id){return document.getElementById(id);}
-function ss(s){g("sdot").className="sdot "+s;g("slb").textContent=s==="synced"?"ð  "+hid:s==="syncing"?"Syncingâ¦":"Sync error";}
+function ss(s){g("sdot").className="sdot "+s;g("slb").textContent=s==="synced"?"🏠 "+hid:s==="syncing"?"Syncing…":"Sync error";}
 async function svi(item){ss("syncing");try{await setDoc(doc(db,"households",hid,"inventory",item.id),item);ss("synced");}catch{ss("error");}}
 async function dli(id){ss("syncing");try{await deleteDoc(doc(db,"households",hid,"inventory",id));ss("synced");}catch{ss("error");}}
 async function svr(r){try{await setDoc(doc(db,"households",hid,"recipes",r.id),r);}catch(e){console.error(e);}}
@@ -872,25 +872,25 @@ function renderTonight(){
   if(card)card.onclick=function(){openMealM(td,"Today");};
   if(m){
     if(d)d.innerHTML=m;
-    if(a)a.innerHTML=`<button class="btn bsm bp" onclick="event.stopPropagation();openCooked('${td}')">â Cooked</button><button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">Edit</button>`;
+    if(a)a.innerHTML=`<button class="btn bsm bp" onclick="event.stopPropagation();openCooked('${td}')">✓ Cooked</button><button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">Edit</button>`;
   }else{
     if(d)d.innerHTML=`<span style="font-size:.9rem;color:var(--mt);font-style:italic">No meal planned yet</span>`;
-    if(a)a.innerHTML=`<button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">+ Plan dinner</button><button class="btn bsm bs" onclick="event.stopPropagation();showScreen('chat')">Ask Claude â</button>`;
+    if(a)a.innerHTML=`<button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">+ Plan dinner</button><button class="btn bsm bs" onclick="event.stopPropagation();showScreen('chat')">Ask Claude →</button>`;
   }
 }
-function renderWeek(){const ns=["S","M","T","W","T","F","S"],t=new Date();t.setHours(0,0,0,0);g("wgrd").innerHTML=wDates().map((d,i)=>{const k=d.toISOString().split("T")[0],iss=d.getTime()===t.getTime(),m=mp[k];return`<div class="wd${iss?" today":""}${m?" hm":""}" onclick="openMealM('${k}','${ns[i]} ${d.getDate()}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${m?`<div class="wdm">${m.substring(0,10)}${m.length>10?"â¦":""}</div>`:""}</div>`;}).join("");checkVarietyNudge();}
+function renderWeek(){const ns=["S","M","T","W","T","F","S"],t=new Date();t.setHours(0,0,0,0);g("wgrd").innerHTML=wDates().map((d,i)=>{const k=d.toISOString().split("T")[0],iss=d.getTime()===t.getTime(),m=mp[k];return`<div class="wd${iss?" today":""}${m?" hm":""}" onclick="openMealM('${k}','${ns[i]} ${d.getDate()}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${m?`<div class="wdm">${m.substring(0,10)}${m.length>10?"…":""}</div>`:""}</div>`;}).join("");checkVarietyNudge();}
 function checkVarietyNudge(){
   const el=g("variety-nudge");if(!el)return;
   const meals=wDates().map(d=>mp[d.toISOString().split("T")[0]]).filter(Boolean);
   if(meals.length<3){el.style.display="none";return;}
   const hasBD=meals.some(m=>/dal|curry|biryani|hilsa|mustard|bengali|lentil|khichuri|pulao|bhuna/i.test(m));
-  const hasTR=meals.some(m=>/kebab|kÃ¶fte|pide|bÃ¶rek|meze|pilav|lahmacun|mercimek|dÃ¶ner/i.test(m));
+  const hasTR=meals.some(m=>/kebab|köfte|pide|börek|meze|pilav|lahmacun|mercimek|döner/i.test(m));
   const counts={};meals.forEach(m=>{const w=m.toLowerCase();counts[w]=(counts[w]||0)+1;});
   const repeat=Object.entries(counts).find(([,c])=>c>=3);
-  if(repeat){el.style.display="block";el.innerHTML="ð <strong>"+repeat[0]+"</strong> is planned "+repeat[1]+"Ã this week â maybe try something different?";}
-  else if(!hasBD&&!hasTR){el.style.display="block";el.innerHTML="ð No Bangladeshi or Turkish dishes this week yet â ask Claude for ideas!";}
-  else if(!hasBD){el.style.display="block";el.innerHTML="ð§ð© No Bangladeshi dishes this week â how about a dal or fish curry?";}
-  else if(!hasTR){el.style.display="block";el.innerHTML="ð¹ð· No Turkish dishes this week â kÃ¶fte or mercimek Ã§orbasÄ± would be great!";}
+  if(repeat){el.style.display="block";el.innerHTML="🔄 <strong>"+repeat[0]+"</strong> is planned "+repeat[1]+"× this week — maybe try something different?";}
+  else if(!hasBD&&!hasTR){el.style.display="block";el.innerHTML="🌍 No Bangladeshi or Turkish dishes this week yet — ask Claude for ideas!";}
+  else if(!hasBD){el.style.display="block";el.innerHTML="🇧🇩 No Bangladeshi dishes this week — how about a dal or fish curry?";}
+  else if(!hasTR){el.style.display="block";el.innerHTML="🇹🇷 No Turkish dishes this week — köfte or mercimek çorbası would be great!";}
   else{el.style.display="none";}
 }
 function renderSum(){
@@ -904,7 +904,7 @@ function renderSum(){
   if(shopV)shopV.textContent=tb;
   if(shopS)shopS.textContent=tb===1?"item to buy":tb===0?"all stocked up":"items to buy";
   // Stat grid
-  g("sgrd").innerHTML=`<div class="sc" onclick="showScreen('inventory')"><div class="sci">ð§º</div><div class="scv">${inv.length}</div><div class="scl">Items in stock</div></div><div class="sc${ex>0?" warn":""}" onclick="showScreen('inventory')"><div class="sci">â±</div><div class="scv">${ex}</div><div class="scl">Expiring soon</div></div><div class="sc" onclick="showScreen('shopping')"><div class="sci">ð</div><div class="scv">${tb}</div><div class="scl">To buy</div></div><div class="sc" onclick="showScreen('recipes')"><div class="sci">ð</div><div class="scv">${recs.length}</div><div class="scl">Saved recipes</div></div>`;}
+  g("sgrd").innerHTML=`<div class="sc" onclick="showScreen('inventory')"><div class="sci">🧺</div><div class="scv">${inv.length}</div><div class="scl">Items in stock</div></div><div class="sc${ex>0?" warn":""}" onclick="showScreen('inventory')"><div class="sci">⏱</div><div class="scv">${ex}</div><div class="scl">Expiring soon</div></div><div class="sc" onclick="showScreen('shopping')"><div class="sci">🛒</div><div class="scv">${tb}</div><div class="scl">To buy</div></div><div class="sc" onclick="showScreen('recipes')"><div class="sci">📖</div><div class="scv">${recs.length}</div><div class="scl">Saved recipes</div></div>`;}
 function renderExp(){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const l=g("exslbl"),e=g("expl");if(!ex.length){l.style.display="none";e.innerHTML="";return;}l.style.display="flex";e.innerHTML=ex.map(item=>{const s=xSt(item.expiry);return`<div class="exi${s.c==="expired"?" exp":""}" onclick="openAdj('${item.id}')"><div class="exn">${item.name}</div><div class="exd">${s.l}</div></div>`;}).join("");}
 function updExport(){const t=["fridge","freezer","pantry"].map(loc=>{const its=inv.filter(i=>i.location===loc);return its.length?ll(loc).toUpperCase()+"\n"+its.map(i=>`- ${i.name}${i.brand?` (${i.brand})`:""}: ${i.qty} ${i.unit}`).join("\n"):"";}).filter(Boolean).join("\n\n");g("expbox").textContent=t||"No items yet.";}
 window.openMealM=function(k,lbl){md=k;g("mealMttl").textContent="Meal for "+lbl;g("mealMinp").value=mp[k]||"";g("mealM").classList.add("active");setTimeout(()=>g("mealMinp").focus(),100);};
@@ -915,9 +915,9 @@ window.toggleExp=function(){const p=g("exppanel");p.style.display=p.style.displa
 window.openCooked=function(k){const m=mp[k];if(!m)return;cn=m;nr=0;g("cookedNm").textContent=m;g("cnotes").value="";renderStars("cstars",0);g("cookedM").classList.add("active");};
 // skipCooked and saveCooked defined below with cook log support
 window.setStar=function(n,ctx){nr=n;if(ctx==="r")renderStars("rstars",n);else if(ctx==="c")renderStars("cstars",n);else if(ctx==="e"){renderStars("estars",n);}};
-function renderStars(id,n){const el=g(id);if(!el)return;el.querySelectorAll(".star").forEach((s,i)=>{s.textContent=i<n?"â":"â";s.classList.toggle("on",i<n);});}
+function renderStars(id,n){const el=g(id);if(!el)return;el.querySelectorAll(".star").forEach((s,i)=>{s.textContent=i<n?"★":"☆";s.classList.toggle("on",i<n);});}
 window.setIT=function(t){it=t;document.querySelectorAll(".itab").forEach(x=>x.classList.remove("active"));g("itab-"+t).classList.add("active");renderInv();};
-const CATS={Produce:"ð¥¦",Proteins:"ð",Dairy:"ð§",Grains:"ð¾",Condiments:"ð§´",Snacks:"ð¿",Beverages:"ð¥¤",Frozen:"âï¸",General:"ð¦",Imported:"ð¥"};
+const CATS={Produce:"🥦",Proteins:"🍗",Dairy:"🧀",Grains:"🌾",Condiments:"🧴",Snacks:"🍿",Beverages:"🥤",Frozen:"❄️",General:"📦",Imported:"📥"};
 function gcat(item){const n=(item.name||"").toLowerCase(),c=(item.category||"").toLowerCase();
   if(c.includes("produce")||c.includes("vegetable")||c.includes("fruit")||n.match(/apple|banana|broccoli|carrot|celery|cabbage|tomato|onion|garlic|jalap|spinach|mushroom|squash|lettuce|cucumber|pepper/))return"Produce";
   if(c.includes("protein")||c.includes("meat")||c.includes("seafood")||c.includes("poultry")||n.match(/chicken|beef|lamb|turkey|salmon|cod|tuna|fish|steak|pork|shrimp/))return"Proteins";
@@ -925,13 +925,13 @@ function gcat(item){const n=(item.name||"").toLowerCase(),c=(item.category||"").
   if(c.includes("grain")||c.includes("bread")||c.includes("pasta")||n.match(/rice|pasta|bread|flour|oat|cereal|grain|noodle|tortilla/))return"Grains";
   if(c.includes("condiment")||c.includes("sauce")||n.match(/sauce|ketchup|mustard|oil|vinegar|salt|pepper|spice|herb|seasoning|mayo/))return"Condiments";
   if(item.location==="freezer")return"Frozen";return"General";}
-function ll(l){return{fridge:"ð¡ Fridge",freezer:"ð§ Freezer",pantry:"ð¥« Pantry"}[l]||l;}
+function ll(l){return{fridge:"🌡 Fridge",freezer:"🧊 Freezer",pantry:"🥫 Pantry"}[l]||l;}
 function xSt(exp){if(!exp)return null;const t=new Date();t.setHours(0,0,0,0);const e=new Date(exp+"T00:00:00"),d=Math.round((e-t)/86400000);if(d<0)return{c:"expired",l:"Expired"};if(d===0)return{c:"expiring",l:"Expires today"};if(d<=7)return{c:"expiring",l:`Expires in ${d}d`};return{c:"ok",l:e.toLocaleDateString("en-US",{month:"short",day:"numeric"})};}
-function iH(item){const ic=CATS[gcat(item)]||"ð",img=item.image?`<img src="${item.image}" class="iimg" onerror="this.style.display='none'"/>`:`<div class="iph">${ic}</div>`;const ex=xSt(item.expiry),bc=ex?(ex.c==="expired"?" expired":ex.c==="expiring"?" expiring":""):"",et=ex?`<div class="etag ${ex.c}">${ex.l}</div>`:"";return`<div class="iit${bc}" onclick="openAdj('${item.id}')"><div class="iileft">${img}<div><div class="inm">${item.name}</div><div class="isb">${item.brand||gcat(item)}</div>${et}</div></div><div style="text-align:right"><div class="iqt">${item.qty}</div><div class="iun">${item.unit}</div></div></div>`;}
+function iH(item){const ic=CATS[gcat(item)]||"🛒",img=item.image?`<img src="${item.image}" class="iimg" onerror="this.style.display='none'"/>`:`<div class="iph">${ic}</div>`;const ex=xSt(item.expiry),bc=ex?(ex.c==="expired"?" expired":ex.c==="expiring"?" expiring":""):"",et=ex?`<div class="etag ${ex.c}">${ex.l}</div>`:"";return`<div class="iit${bc}" onclick="openAdj('${item.id}')"><div class="iileft">${img}<div><div class="inm">${item.name}</div><div class="isb">${item.brand||gcat(item)}</div>${et}</div></div><div style="text-align:right"><div class="iqt">${item.qty}</div><div class="iun">${item.unit}</div></div></div>`;}
 function renderInv(){const f=it==="all"||it==="cat"?inv:inv.filter(i=>i.location===it);g("isub").textContent=f.length+" "+({all:"items",fridge:"fridge items",freezer:"frozen items",pantry:"pantry items",cat:"items by type"}[it]||"items");updExport();const c=g("ibody");
-  if(!f.length){c.innerHTML=`<div class="es"><div class="ei">ð§º</div><p>No items here yet.<br/>Tap Scan or Add to get started.</p></div>`;return;}
-  if(it==="cat"){const gr={};f.forEach(item=>{const cat=gcat(item);if(!gr[cat])gr[cat]=[];gr[cat].push(item);});c.innerHTML=Object.entries(gr).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,its])=>`<div class="lgrp"><div class="lgt">${CATS[cat]||"ð¦"} ${cat}</div><div class="ilst">${its.map(iH).join("")}</div></div>`).join("");return;}
-  if(it==="all"){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const exH=ex.length?`<div class="lgrp"><div class="lgt" style="color:var(--am)">â ï¸ Expiring Soon</div><div class="ilst">${ex.map(iH).join("")}</div></div>`:"";c.innerHTML=exH+["fridge","freezer","pantry"].map(loc=>{const its=f.filter(i=>i.location===loc);return its.length?`<div class="lgrp"><div class="lgt">${ll(loc)}</div><div class="ilst">${its.map(iH).join("")}</div></div>`:""}).join("");return;}
+  if(!f.length){c.innerHTML=`<div class="es"><div class="ei">🧺</div><p>No items here yet.<br/>Tap Scan or Add to get started.</p></div>`;return;}
+  if(it==="cat"){const gr={};f.forEach(item=>{const cat=gcat(item);if(!gr[cat])gr[cat]=[];gr[cat].push(item);});c.innerHTML=Object.entries(gr).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,its])=>`<div class="lgrp"><div class="lgt">${CATS[cat]||"📦"} ${cat}</div><div class="ilst">${its.map(iH).join("")}</div></div>`).join("");return;}
+  if(it==="all"){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const exH=ex.length?`<div class="lgrp"><div class="lgt" style="color:var(--am)">⚠️ Expiring Soon</div><div class="ilst">${ex.map(iH).join("")}</div></div>`:"";c.innerHTML=exH+["fridge","freezer","pantry"].map(loc=>{const its=f.filter(i=>i.location===loc);return its.length?`<div class="lgrp"><div class="lgt">${ll(loc)}</div><div class="ilst">${its.map(iH).join("")}</div></div>`:""}).join("");return;}
   c.innerHTML=`<div class="ilst">${f.map(iH).join("")}</div>`;}
 window.startScan=function(){g("scerr").style.display="none";g("ffile").click();};
 
@@ -942,7 +942,7 @@ window.openScanForList = function(){
   // Update the overlay title and hint
   showOv("scan");
   var ttl = g("scanovttl");
-  if(ttl) ttl.textContent = "Scan â Shopping List";
+  if(ttl) ttl.textContent = "Scan → Shopping List";
   var hint = g("scan-dest-hint");
   if(hint) hint.textContent = "Running low? Scan to add to your shopping list.";
 };
@@ -971,13 +971,13 @@ window.addScannedToList = function(){
   showScreen("shopping");
 };
 window.togManual=function(){const el=g("mentry");el.style.display=el.style.display==="none"?"block":"none";};
-window.handlePhoto=async function(e){const file=e.target.files[0];if(!file)return;e.target.value="";g("scanbody").style.display="none";g("scspin").style.display="block";g("scst").textContent="Reading imageâ¦";const url=await new Promise((r,j)=>{const x=new FileReader();x.onload=e=>r(e.target.result);x.onerror=j;x.readAsDataURL(file);});try{g("scst").textContent="Detecting barcodeâ¦";const code=await new Promise((res,rej)=>Quagga.decodeSingle({src:url,numOfWorkers:0,inputStream:{size:1600},decoder:{readers:["ean_reader","ean_8_reader","upc_reader","upc_e_reader","code_128_reader","code_39_reader"],multiple:false},locate:true},r=>{if(r&&r.codeResult&&r.codeResult.code)res(r.codeResult.code);else rej("no");}));g("scst").textContent="Found "+code+" â looking upâ¦";const prod=await lkup(code);cp=prod;g("aqty").value=1;g("aexp").value="";selRL("fridge",g("rl-fridge"));showRes(prod);g("scanbody").style.display="block";g("scspin").style.display="none";}catch{g("scanbody").style.display="block";g("scspin").style.display="none";const err=g("scerr");err.textContent="â ï¸ No barcode detected. Try better lighting or enter manually.";err.style.display="block";}};
-window.manLookup=async function(){const v=g("meinp").value.trim();if(!v)return;g("scanbody").style.display="none";g("scspin").style.display="block";g("scst").textContent="Looking upâ¦";const prod=await lkup(v);cp=prod;g("aqty").value=1;g("aexp").value="";selRL("fridge",g("rl-fridge"));g("meinp").value="";showRes(prod);g("scanbody").style.display="block";g("scspin").style.display="none";};
+window.handlePhoto=async function(e){const file=e.target.files[0];if(!file)return;e.target.value="";g("scanbody").style.display="none";g("scspin").style.display="block";g("scst").textContent="Reading image…";const url=await new Promise((r,j)=>{const x=new FileReader();x.onload=e=>r(e.target.result);x.onerror=j;x.readAsDataURL(file);});try{g("scst").textContent="Detecting barcode…";const code=await new Promise((res,rej)=>Quagga.decodeSingle({src:url,numOfWorkers:0,inputStream:{size:1600},decoder:{readers:["ean_reader","ean_8_reader","upc_reader","upc_e_reader","code_128_reader","code_39_reader"],multiple:false},locate:true},r=>{if(r&&r.codeResult&&r.codeResult.code)res(r.codeResult.code);else rej("no");}));g("scst").textContent="Found "+code+" — looking up…";const prod=await lkup(code);cp=prod;g("aqty").value=1;g("aexp").value="";selRL("fridge",g("rl-fridge"));showRes(prod);g("scanbody").style.display="block";g("scspin").style.display="none";}catch{g("scanbody").style.display="block";g("scspin").style.display="none";const err=g("scerr");err.textContent="⚠️ No barcode detected. Try better lighting or enter manually.";err.style.display="block";}};
+window.manLookup=async function(){const v=g("meinp").value.trim();if(!v)return;g("scanbody").style.display="none";g("scspin").style.display="block";g("scst").textContent="Looking up…";const prod=await lkup(v);cp=prod;g("aqty").value=1;g("aexp").value="";selRL("fridge",g("rl-fridge"));g("meinp").value="";showRes(prod);g("scanbody").style.display="block";g("scspin").style.display="none";};
 async function lkup(bc){return(await tryE(bc))||(await tryO(bc))||(await tryU(bc))||{barcode:bc,name:"",brand:"",quantity:"",category:"General",image:null,source:null,notFound:true};}
 async function tryE(bc){try{const r=await fetch(`https://api.edamam.com/api/food-database/v2/parser?upc=${bc}&app_id=${EID}&app_key=${EK}`);if(!r.ok)return null;const d=await r.json();const f=(d.hints&&d.hints[0]&&d.hints[0].food)||(d.parsed&&d.parsed[0]&&d.parsed[0].food);if(!f)return null;const n=f.nutrients||{};return{barcode:bc,name:f.label||"",brand:f.brand||"",quantity:f.servingSize?`${f.servingSize}${f.servingSizeUnit||"g"}`:"",category:f.category||"General",image:f.image||null,source:"Edamam",notFound:false,nutrition:{calories:n.ENERC_KCAL?Math.round(n.ENERC_KCAL):null,protein:n.PROCNT?`${n.PROCNT.toFixed(1)}g`:null,fat:n.FAT?`${n.FAT.toFixed(1)}g`:null,carbs:n.CHOCDF?`${n.CHOCDF.toFixed(1)}g`:null}};}catch{}return null;}
 async function tryO(bc){try{const r=await fetch("https://world.openfoodfacts.org/api/v0/product/"+bc+".json");const d=await r.json();if(d.status===1&&d.product){const p=d.product,nm=p.product_name||p.product_name_en||"";if(!nm)return null;return{barcode:bc,name:nm,brand:p.brands||"",quantity:p.quantity||"",category:((p.categories_tags||[])[0]||'').replace('en:','')||'General',image:p.image_small_url||null,source:"Open Food Facts",notFound:false,nutrition:null};}}catch{}return null;}
 async function tryU(bc){try{const r=await fetch("https://api.upcitemdb.com/prod/trial/lookup?upc="+bc);const d=await r.json();if(d.code==="OK"&&d.items&&d.items.length>0){const i=d.items[0];return{barcode:bc,name:i.title||"",brand:i.brand||"",quantity:i.size||"",category:i.category||"General",image:(i.images||[])[0]||null,source:"UPC Item DB",notFound:false,nutrition:null};}}catch{}return null;}
-function showRes(prod){hideOv("scan");g("resttl").textContent=prod.notFound?"Not Found":"Product Found â";g("aunit").value=prod.quantity||"unit";let html="";if(prod.notFound){html=`<div class="nfb">â ï¸ Barcode <code>${prod.barcode}</code> not found. Enter name:<input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:10px"/></div>`;setTimeout(()=>g("addbtn").disabled=true,0);}else{const img=prod.image?`<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>`:`<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">ð</div>`;let nut="";if(prod.nutrition&&(prod.nutrition.calories||prod.nutrition.protein)){nut=`<div class="ngrd">${[["Cal",prod.nutrition.calories],["Protein",prod.nutrition.protein],["Fat",prod.nutrition.fat],["Carbs",prod.nutrition.carbs]].map(([l,v])=>`<div class="nb"><div class="nv">${v||"â"}</div><div class="nl">${l}</div></div>`).join("")}</div>`;}html=`<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand?`<div class="pbr">${prod.brand}</div>`:""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${prod.source?`<span class="srcb">${prod.source}</span>`:""}</div></div>${nut}</div>`;setTimeout(()=>g("addbtn").disabled=false,0);}g("resbody").innerHTML=html;showOv("result");}
+function showRes(prod){hideOv("scan");g("resttl").textContent=prod.notFound?"Not Found":"Product Found ✓";g("aunit").value=prod.quantity||"unit";let html="";if(prod.notFound){html=`<div class="nfb">⚠️ Barcode <code>${prod.barcode}</code> not found. Enter name:<input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:10px"/></div>`;setTimeout(()=>g("addbtn").disabled=true,0);}else{const img=prod.image?`<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>`:`<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;let nut="";if(prod.nutrition&&(prod.nutrition.calories||prod.nutrition.protein)){nut=`<div class="ngrd">${[["Cal",prod.nutrition.calories],["Protein",prod.nutrition.protein],["Fat",prod.nutrition.fat],["Carbs",prod.nutrition.carbs]].map(([l,v])=>`<div class="nb"><div class="nv">${v||"—"}</div><div class="nl">${l}</div></div>`).join("")}</div>`;}html=`<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand?`<div class="pbr">${prod.brand}</div>`:""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${prod.source?`<span class="srcb">${prod.source}</span>`:""}</div></div>${nut}</div>`;setTimeout(()=>g("addbtn").disabled=false,0);}g("resbody").innerHTML=html;showOv("result");}
 window.valAdd=function(){const el=g("mnm");g("addbtn").disabled=!el&&el.value.trim();};
 window.selRL=function(loc,btn){selR=loc;document.querySelectorAll("#ov-result .lbtn").forEach(b=>b.classList.remove("sel"));if(btn)btn.classList.add("sel");};
 window.addToInv=async function(){if(!cp)return;const ne=g("mnm");const nm=cp.notFound?(ne?ne.value.trim()||"":""):cp.name;if(!nm)return;const unit=g("aunit").value.trim()||"unit",qty=Math.max(1,parseInt(g("aqty").value)||1),exp=g("aexp").value||null;const id="item-"+cp.barcode.replace(/\W/g,"-"),ex=inv.find(i=>i.id===id);await svi({id,barcode:cp.barcode,name:nm,brand:cp.brand||"",unit,qty:ex?ex.qty+qty:qty,location:selR,category:cp.category||"General",image:cp.image||null,source:cp.source||null,nutrition:cp.nutrition||null,expiry:exp,addedAt:ex?ex.addedAt:new Date().toLocaleDateString()});showNotif(ex?`+${qty} added to ${nm}`:`${nm} added!`);cp=null;hideOv("result");};
@@ -986,21 +986,21 @@ window.selML=function(loc,btn){maL=loc;document.querySelectorAll("#ov-madd .lbtn
 window.valMA=function(){g("mabtn").disabled=!g("man").value.trim();};
 window.chgMQ=function(d){const i=g("maq");i.value=Math.max(1,(parseInt(i.value)||1)+d);};
 window.addManual=async function(){const nm=g("man").value.trim();if(!nm)return;const cat=g("mac").value,unit=g("mau").value.trim()||"unit",qty=Math.max(1,parseInt(g("maq").value)||1),exp=g("mae").value||null,id="itm-"+nm.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"")+"-"+Date.now();await svi({id,barcode:id,name:nm,brand:"",unit,qty,location:maL,category:cat,image:null,source:"Manual",nutrition:null,expiry:exp,addedAt:new Date().toLocaleDateString()});g("man").value="";g("maq").value=1;g("mae").value="";g("mabtn").disabled=true;showNotif(`${nm} added!`);hideOv("madd");};
-window.openAdj=function(id){const item=inv.find(i=>i.id===id);if(!item)return;adjId=id;const ic=CATS[gcat(item)]||"ð",img=item.image?`<img src="${item.image}" class="pimg" onerror="this.style.display='none'"/>`:`<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">${ic}</div>`;let nut="";if(item.nutrition&&(item.nutrition.calories||item.nutrition.protein)){nut=`<div class="ngrd">${[["Cal",item.nutrition.calories],["Protein",item.nutrition.protein],["Fat",item.nutrition.fat],["Carbs",item.nutrition.carbs]].map(([l,v])=>`<div class="nb"><div class="nv">${v||"â"}</div><div class="nl">${l}</div></div>`).join("")}</div>`;}g("adjbody").innerHTML=`<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${item.name}</div>${item.brand?`<div class="pbr">${item.brand}</div>`:""}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div>${item.source?`<span class="srcb" style="display:inline-block;margin-top:4px">${item.source}</span>`:""}</div></div>${nut}<div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location==="fridge"?"sel":""}" onclick="updL('fridge',this)">ð¡ Fridge</button><button class="lbtn ${item.location==="freezer"?"sel":""}" onclick="updL('freezer',this)">ð§ Freezer</button><button class="lbtn ${item.location==="pantry"?"sel":""}" onclick="updL('pantry',this)">ð¥« Pantry</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">â</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry||""}" onchange="adjE()"/></div></div>`;g("rembtn").onclick=()=>remItem(id);showOv("adj");};
+window.openAdj=function(id){const item=inv.find(i=>i.id===id);if(!item)return;adjId=id;const ic=CATS[gcat(item)]||"🛒",img=item.image?`<img src="${item.image}" class="pimg" onerror="this.style.display='none'"/>`:`<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">${ic}</div>`;let nut="";if(item.nutrition&&(item.nutrition.calories||item.nutrition.protein)){nut=`<div class="ngrd">${[["Cal",item.nutrition.calories],["Protein",item.nutrition.protein],["Fat",item.nutrition.fat],["Carbs",item.nutrition.carbs]].map(([l,v])=>`<div class="nb"><div class="nv">${v||"—"}</div><div class="nl">${l}</div></div>`).join("")}</div>`;}g("adjbody").innerHTML=`<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${item.name}</div>${item.brand?`<div class="pbr">${item.brand}</div>`:""}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div>${item.source?`<span class="srcb" style="display:inline-block;margin-top:4px">${item.source}</span>`:""}</div></div>${nut}<div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location==="fridge"?"sel":""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location==="freezer"?"sel":""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location==="pantry"?"sel":""}" onclick="updL('pantry',this)">🥫 Pantry</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry||""}" onchange="adjE()"/></div></div>`;g("rembtn").onclick=()=>remItem(id);showOv("adj");};
 window.updL=async function(loc,btn){const item=inv.find(i=>i.id===adjId);if(!item)return;document.querySelectorAll("#adjbody .lbtn").forEach(b=>b.classList.remove("sel"));btn.classList.add("sel");await svi({...item,location:loc});};
 window.adjQ=async function(d){const item=inv.find(i=>i.id===adjId);if(!item)return;const q=Math.max(0,item.qty+d);g("adjqty").value=q;if(q===0){await remItem(adjId);return;}await svi({...item,qty:q});};
 window.adjQD=async function(){const item=inv.find(i=>i.id===adjId);if(!item)return;const v=parseInt(g("adjqty").value);if(!isNaN(v)&&v>=0)await svi({...item,qty:v});};
 window.adjE=async function(){const item=inv.find(i=>i.id===adjId);if(!item)return;const v=g("adjexp").value||null;await svi({...item,expiry:v});};
 window.remItem=async function(id){await dli(id);showNotif("Item removed");hideOv("adj");};
 // setRT and renderRecs defined below with full tag support
-function rH(r){const st=Array.from({length:5},(_,i)=>`<span class="star${i<r.rating?" on":""}">${i<r.rating?"â":"â"}</span>`).join("");const srcLink=r.sourceUrl?`<a href="${r.sourceUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:.68rem;color:var(--ac);text-decoration:none;border:1px solid rgba(212,168,83,.3);border-radius:20px;padding:2px 8px;background:transparent">ð View original</a>`:r.source?`<span class="sbdg">${r.source}</span>`:"";return`<div class="rcd${r.favorited?" fav":""}" onclick="openER('${r.id}')"><div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited?"â¤ï¸":"ð¤"}</div></div><div class="stars">${st}</div>${r.description?`<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0,100)}${r.description.length>100?"â¦":""}</div>`:""}${r.notes?`<div class="rnot">${r.notes}</div>`:""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;}
-window.togFav=async function(id){const r=recs.find(r=>r.id===id);if(!r)return;await svr({...r,favorited:!r.favorited});showNotif(r.favorited?"Removed from favorites":"Added to favorites! â¤ï¸");};
+function rH(r){const st=Array.from({length:5},(_,i)=>`<span class="star${i<r.rating?" on":""}">${i<r.rating?"★":"☆"}</span>`).join("");const srcLink=r.sourceUrl?`<a href="${r.sourceUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:.68rem;color:var(--ac);text-decoration:none;border:1px solid rgba(212,168,83,.3);border-radius:20px;padding:2px 8px;background:transparent">🔗 View original</a>`:r.source?`<span class="sbdg">${r.source}</span>`:"";return`<div class="rcd${r.favorited?" fav":""}" onclick="openER('${r.id}')"><div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited?"❤️":"🤍"}</div></div><div class="stars">${st}</div>${r.description?`<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0,100)}${r.description.length>100?"…":""}</div>`:""}${r.notes?`<div class="rnot">${r.notes}</div>`:""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;}
+window.togFav=async function(id){const r=recs.find(r=>r.id===id);if(!r)return;await svr({...r,favorited:!r.favorited});showNotif(r.favorited?"Removed from favorites":"Added to favorites! ❤️");};
 window.valR=function(){g("savrecbtn").disabled=!g("rn").value.trim();};
-
+window.saveRec=async function(){const nm=g("rn").value.trim();if(!nm)return;const srcUrl=(g("rsourceurl")?g("rsourceurl").value.trim():"");await svr({id:"rec-"+Date.now(),name:nm,rating:nr,favorited:false,notes:g("rnotes").value.trim(),description:g("rd").value.trim(),source:srcUrl?"Web Import":"Manual",sourceUrl:srcUrl||null,savedAt:new Date().toLocaleDateString()});g("rn").value="";g("rnotes").value="";g("rd").value="";g("rsourceurl").value="";g("rurl").value="";nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);showNotif("Recipe saved! 📖");hideOv("arec");};
 window.importFromUrl=async function(){
   const url=g("rurl").value.trim();if(!url)return;
   const st=g("rurlstatus"),btn=g("rimportbtn");
-  st.style.display="block";st.style.color="var(--mt)";st.textContent="â³ Fetching recipeâ¦";btn.disabled=true;
+  st.style.display="block";st.style.color="var(--mt)";st.textContent="⏳ Fetching recipe…";btn.disabled=true;
   try{
     const prompt=`Please fetch and read this recipe URL: ${url}\n\nExtract the recipe and return ONLY a JSON object with exactly these fields (no extra text, no markdown fences):\n{"name":"recipe name","description":"ingredient list and brief method (2-3 sentences max)","notes":"any useful tips or serving suggestions"}\n\nIf you cannot access the page, return: {"error":"Could not access this page"}`;
     const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:800,tools:[{type:"web_search_20250305",name:"web_search"}],messages:[{role:"user",content:prompt}]})});
@@ -1008,14 +1008,14 @@ window.importFromUrl=async function(){
     const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
     let parsed;
     try{parsed=JSON.parse(text.replace(/```json|```/g,"").trim());}catch{const m=text.match(/\{[\s\S]*\}/);if(m)parsed=JSON.parse(m[0]);else throw new Error("No JSON found");}
-    if(parsed.error){st.style.color="var(--rd)";st.textContent="â ï¸ "+parsed.error;btn.disabled=false;return;}
+    if(parsed.error){st.style.color="var(--rd)";st.textContent="⚠️ "+parsed.error;btn.disabled=false;return;}
     g("rn").value=parsed.name||"";
     g("rd").value=parsed.description||"";
     g("rnotes").value=parsed.notes||"";
     g("rsourceurl").value=url;
     g("savrecbtn").disabled=!parsed.name;
-    st.style.color="var(--gn)";st.textContent="â Recipe imported! Review and save.";
-  }catch(e){st.style.color="var(--rd)";st.textContent="â ï¸ Couldn't import â try copying the recipe text manually.";}
+    st.style.color="var(--gn)";st.textContent="✓ Recipe imported! Review and save.";
+  }catch(e){st.style.color="var(--rd)";st.textContent="⚠️ Couldn't import — try copying the recipe text manually.";}
   btn.disabled=false;
 };
 // openER defined below with scheduling + tags
@@ -1027,7 +1027,7 @@ window.clrChk=function(){shop.filter(i=>i.checked).forEach(i=>dlShopItem(i.id));
 function svShop(){Js("ks-s",shop);}
 async function svShopItem(item){try{await setDoc(doc(db,"households",hid,"shopping",item.id),item);}catch(e){console.error(e);}}
 async function dlShopItem(id){try{await deleteDoc(doc(db,"households",hid,"shopping",id));}catch(e){console.error(e);}}
-window.buildList=async function(){showNotif("Building list with Claudeâ¦");const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");if(!ms){showNotif("No meals planned yet!");return;}const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");try{const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content:`Week meals: ${ms}\nAlready have: ${is}\nList ONLY ingredients still needed. Return ONLY bullet list, each line starting "- ". Concise.`}]})});const data=await r.json(),text=(data.content&&data.content[0]&&data.content[0].text||"");let added=0;text.split("\n").forEach(line=>{const m=line.match(/^[-â¢*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase())){shop.push({id:Date.now().toString()+Math.random(),name:nm,checked:false});added++;}}});svShop();renderShop();renderSum();showNotif(`Added ${added} items!`);}catch{showNotif("Couldn't build list â check connection");}};
+window.buildList=async function(){showNotif("Building list with Claude…");const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");if(!ms){showNotif("No meals planned yet!");return;}const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");try{const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content:`Week meals: ${ms}\nAlready have: ${is}\nList ONLY ingredients still needed. Return ONLY bullet list, each line starting "- ". Concise.`}]})});const data=await r.json(),text=(data.content&&data.content[0]&&data.content[0].text||"");let added=0;text.split("\n").forEach(line=>{const m=line.match(/^[-•*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase())){shop.push({id:Date.now().toString()+Math.random(),name:nm,checked:false});added++;}}});svShop();renderShop();renderSum();showNotif(`Added ${added} items!`);}catch{showNotif("Couldn't build list — check connection");}};
 // renderShop and sH defined below with aisle support
 // kitCtx redefined below with variety nudge
 window.saveSettings=function(){
@@ -1044,37 +1044,37 @@ window.importDoc=async function(){const text=g("imptxt").value.trim();if(!text)r
 let nt=null;
 window.showNotif=function(msg){const el=g("notif");el.textContent=msg;el.style.display="block";el.style.animation="none";void el.offsetWidth;el.style.animation="fn 2.5s ease forwards";if(nt)clearTimeout(nt);nt=setTimeout(()=>el.style.display="none",2500);};
 
-// ââ HOUSEHOLDS âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── HOUSEHOLDS ─────────────────────────────────────────────────────────────
 function getHouseholds(){return J("ks-hhs")||[hid||"bora-family"];}
 function saveHouseholds(arr){Js("ks-hhs",arr);}
 window.addHousehold=function(){const v=g("newHHCode").value.trim().toLowerCase().replace(/\s+/g,"-");if(!v)return;const arr=getHouseholds();if(!arr.includes(v))arr.push(v);saveHouseholds(arr);g("newHHCode").value="";renderHHList();showNotif("Household added!");};
 window.switchHousehold=function(code){if(code===hid)return;localStorage.setItem("ks-h",code);location.reload();};
 window.removeHousehold=function(code){if(code===hid){showNotif("Can't remove active household");return;}const arr=getHouseholds().filter(h=>h!==code);saveHouseholds(arr);renderHHList();};
-function renderHHList(){const arr=getHouseholds();const el=g("hhList");if(!el)return;el.innerHTML=arr.map(h=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border:1px solid ${h===hid?"var(--ac)":"var(--b2)"};border-radius:10px;margin-bottom:6px;cursor:pointer" onclick="switchHousehold('${h}')"><div><div style="font-size:.88rem;font-weight:500;color:${h===hid?"var(--ac)":"var(--tx)"}">${h}</div><div style="font-size:.7rem;color:var(--mt);margin-top:2px">${h===hid?"â Active â tap to stay":"Tap to switch"}</div></div><button onclick="event.stopPropagation();removeHousehold('${h}')" style="background:none;border:none;color:var(--mt);cursor:pointer;font-size:.82rem;padding:4px 8px">${h===hid?"":"â"}</button></div>`).join("");}
+function renderHHList(){const arr=getHouseholds();const el=g("hhList");if(!el)return;el.innerHTML=arr.map(h=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border:1px solid ${h===hid?"var(--ac)":"var(--b2)"};border-radius:10px;margin-bottom:6px;cursor:pointer" onclick="switchHousehold('${h}')"><div><div style="font-size:.88rem;font-weight:500;color:${h===hid?"var(--ac)":"var(--tx)"}">${h}</div><div style="font-size:.7rem;color:var(--mt);margin-top:2px">${h===hid?"● Active — tap to stay":"Tap to switch"}</div></div><button onclick="event.stopPropagation();removeHousehold('${h}')" style="background:none;border:none;color:var(--mt);cursor:pointer;font-size:.82rem;padding:4px 8px">${h===hid?"":"✕"}</button></div>`).join("");}
 
-// ââ NOTIFICATIONS ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
-window.toggleNotif=async function(el){const wasOn=el.classList.contains("on");if(!wasOn){if(!("Notification" in window)){showNotif("Notifications not supported on this browser");return;}if(Notification.permission==="denied"){showNotif("Notifications blocked â enable in browser settings");return;}if(Notification.permission!=="granted"){const p=await Notification.requestPermission();if(p!=="granted"){showNotif("Notifications permission denied");return;}}}el.classList.toggle("on");g("notifTimeRow").style.display=el.classList.contains("on")?"block":"none";};
-window.testNotif=function(){if(Notification.permission!=="granted"){showNotif("Enable notifications first");return;}const expiring=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");});if(!expiring.length){new Notification("Kitchen ð§º",{body:"No items expiring soon â you're all good!",icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>ð§º</text></svg>"});return;}const names=expiring.slice(0,3).map(i=>i.name).join(", ");new Notification("Kitchen ð§º â Expiring Soon",{body:`${names}${expiring.length>3?" + "+(expiring.length-3)+" more":""} need attention`,icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>â±</text></svg>"});};
-function scheduleNotifCheck(){if(!cfg.notif||Notification.permission!=="granted")return;const key="ks-lastnotif",last=parseInt(localStorage.getItem(key)||"0"),now=Date.now(),dayMs=86400000;if(now-last<dayMs)return;localStorage.setItem(key,now.toString());const days=cfg.notifDays||3;const expiring=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).filter(i=>{const s=xSt(i.expiry);if(!s)return false;const exp=new Date(i.expiry+"T00:00:00"),t=new Date();t.setHours(0,0,0,0);const d=Math.round((exp-t)/86400000);return d<=days;});if(!expiring.length)return;const names=expiring.slice(0,3).map(i=>i.name).join(", ");new Notification("Kitchen ð§º â Expiring Soon",{body:`${names}${expiring.length>3?" + "+(expiring.length-3)+" more":""} expiring in ${days} days or less`,icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>â±</text></svg>"});}
+// ── NOTIFICATIONS ──────────────────────────────────────────────────────────
+window.toggleNotif=async function(el){const wasOn=el.classList.contains("on");if(!wasOn){if(!("Notification" in window)){showNotif("Notifications not supported on this browser");return;}if(Notification.permission==="denied"){showNotif("Notifications blocked — enable in browser settings");return;}if(Notification.permission!=="granted"){const p=await Notification.requestPermission();if(p!=="granted"){showNotif("Notifications permission denied");return;}}}el.classList.toggle("on");g("notifTimeRow").style.display=el.classList.contains("on")?"block":"none";};
+window.testNotif=function(){if(Notification.permission!=="granted"){showNotif("Enable notifications first");return;}const expiring=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");});if(!expiring.length){new Notification("Kitchen 🧺",{body:"No items expiring soon — you're all good!",icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧺</text></svg>"});return;}const names=expiring.slice(0,3).map(i=>i.name).join(", ");new Notification("Kitchen 🧺 — Expiring Soon",{body:`${names}${expiring.length>3?" + "+(expiring.length-3)+" more":""} need attention`,icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱</text></svg>"});};
+function scheduleNotifCheck(){if(!cfg.notif||Notification.permission!=="granted")return;const key="ks-lastnotif",last=parseInt(localStorage.getItem(key)||"0"),now=Date.now(),dayMs=86400000;if(now-last<dayMs)return;localStorage.setItem(key,now.toString());const days=cfg.notifDays||3;const expiring=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).filter(i=>{const s=xSt(i.expiry);if(!s)return false;const exp=new Date(i.expiry+"T00:00:00"),t=new Date();t.setHours(0,0,0,0);const d=Math.round((exp-t)/86400000);return d<=days;});if(!expiring.length)return;const names=expiring.slice(0,3).map(i=>i.name).join(", ");new Notification("Kitchen 🧺 — Expiring Soon",{body:`${names}${expiring.length>3?" + "+(expiring.length-3)+" more":""} expiring in ${days} days or less`,icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱</text></svg>"});}
 
-// ââ SERVING SIZE SCALING âââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── SERVING SIZE SCALING ───────────────────────────────────────────────────
 window.scaleRec=async function(mult){
   const descEl=g("erd");if(!descEl)return;const orig=descEl.value.trim();if(!orig){showNotif("No ingredients to scale");return;}
-  const st=g("scaleStatus");st.style.display="block";st.style.color="var(--mt)";st.textContent=`â³ Scaling to ${mult}Ã with Claudeâ¦`;
+  const st=g("scaleStatus");st.style.display="block";st.style.color="var(--mt)";st.textContent=`⏳ Scaling to ${mult}× with Claude…`;
   try{
     const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,messages:[{role:"user",content:`Scale ALL ingredient quantities in this recipe by ${mult}x. Return ONLY the updated recipe text with scaled quantities. Keep the same format. Do not add any explanation.
 
 ${orig}`}]})});
     const data=await r.json(),scaled=(data.content&&data.content[0]&&data.content[0].text||"");
-    if(scaled){descEl.value=scaled.trim();st.style.color="var(--gn)";st.textContent=`â Scaled to ${mult}Ã`;}
-    else{st.style.color="var(--rd)";st.textContent="Couldn't scale â try again";}
-  }catch{st.style.color="var(--rd)";st.textContent="Couldn't reach Claude â check connection";}
+    if(scaled){descEl.value=scaled.trim();st.style.color="var(--gn)";st.textContent=`✓ Scaled to ${mult}×`;}
+    else{st.style.color="var(--rd)";st.textContent="Couldn't scale — try again";}
+  }catch{st.style.color="var(--rd)";st.textContent="Couldn't reach Claude — check connection";}
 };
 
 renderShop();
 if(cfg.notif)setTimeout(scheduleNotifCheck,3000);
 
-// ââ RECIPE TAGS ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── RECIPE TAGS ──────────────────────────────────────────────────────────
 window.togTag=function(el){el.classList.toggle("sel");};
 function getSelTags(containerId){return [...document.querySelectorAll("#"+containerId+" .tag.sel")].map(t=>t.dataset.tag);}
 function setTagsUI(containerId,tags){document.querySelectorAll("#"+containerId+" .tag").forEach(t=>{t.classList.toggle("sel",(tags||[]).includes(t.dataset.tag));});}
@@ -1086,12 +1086,12 @@ function renderRecs(){let f=[...recs];
   else if(rt==="kid")f=f.filter(r=>(r.tags||[]).includes("Kid-Friendly"));
   else f=f.sort((a,b)=>new Date(b.savedAt||0)-new Date(a.savedAt||0));
   g("rsub").textContent=f.length+" recipe"+(f.length!==1?"s":"");
-  const c=g("rbody");if(!f.length){c.innerHTML=`<div class="es"><div class="ei">ð</div><p>${rt==="fav"?"No favorites yet!":rt==="top"?"No 4â5 star recipes yet.":rt==="quick"?"No quick recipes saved yet.":rt==="kid"?"No kid-friendly recipes yet.":"No recipes saved yet.<br/>Mark meals as cooked or tap + Add."}</p></div>`;return;}
+  const c=g("rbody");if(!f.length){c.innerHTML=`<div class="es"><div class="ei">📖</div><p>${rt==="fav"?"No favorites yet!":rt==="top"?"No 4–5 star recipes yet.":rt==="quick"?"No quick recipes saved yet.":rt==="kid"?"No kid-friendly recipes yet.":"No recipes saved yet.<br/>Mark meals as cooked or tap + Add."}</p></div>`;return;}
   c.innerHTML=f.map(rH).join("");}
 
-// ââ WHAT CAN I MAKE NOW âââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── WHAT CAN I MAKE NOW ───────────────────────────────────────────────────
 window.whatCanIMake=async function(){
-  g("rsub").textContent="Thinkingâ¦";
+  g("rsub").textContent="Thinking…";
   const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");
   const saved=recs.map(r=>r.name).join(", ");
   const restr=[cfg.nopork?"no pork":null,cfg.noshellfish?"no shellfish":null,cfg.vegetarian?"vegetarian":null,cfg.glutenfree?"gluten-free":null,cfg.other||null].filter(Boolean).join(", ");
@@ -1103,25 +1103,25 @@ Suggest 5 complete meals I can make RIGHT NOW with no extra shopping. Be specifi
     const data=await r.json(),text=(data.content&&data.content[0]&&data.content[0].text||"");
     const c=g("rbody");
     c.innerHTML=`<div style="background:var(--card);border:1px solid var(--ac);border-radius:14px;padding:16px;margin-bottom:12px">
-      <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ac);margin-bottom:10px">ð Make right now â no shopping needed</div>
+      <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ac);margin-bottom:10px">🔍 Make right now — no shopping needed</div>
       <div style="font-size:.88rem;line-height:1.8;color:var(--tx2)">${fmtR(text)}</div>
-      <button class="btn bs bsm" style="margin-top:12px;width:100%" onclick="setRT('all')">â Back to recipes</button>
+      <button class="btn bs bsm" style="margin-top:12px;width:100%" onclick="setRT('all')">← Back to recipes</button>
     </div>`;
     g("rsub").textContent="Based on your inventory";
   }catch{g("rsub").textContent="Couldn't reach Claude";}
 };
 
-// ââ RECIPE SAVE (updated with tags + cook count) ââââââââââââââââââââââââââ
+// ── RECIPE SAVE (updated with tags + cook count) ──────────────────────────
 window.saveRec=async function(){
   const nm=g("rn").value.trim();if(!nm)return;
   const srcUrl=(g("rsourceurl")?g("rsourceurl").value.trim():"");
   const tags=getSelTags("rtags");
   await svr({id:"rec-"+Date.now(),name:nm,rating:nr,favorited:false,notes:g("rnotes").value.trim(),description:g("rd").value.trim(),source:srcUrl?"Web Import":"Manual",sourceUrl:srcUrl||null,tags,cookCount:0,savedAt:new Date().toLocaleDateString()});
   g("rn").value="";g("rnotes").value="";g("rd").value="";g("rsourceurl").value="";g("rurl").value="";
-  setTagsUI("rtags",[]);nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);showNotif("Recipe saved! ð");hideOv("arec");
+  setTagsUI("rtags",[]);nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);showNotif("Recipe saved! 📖");hideOv("arec");
 };
 
-// ââ SCHEDULE RECIPE âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── SCHEDULE RECIPE ───────────────────────────────────────────────────────
 window.scheduleRecipe=function(name){
   g("schedNm").textContent=name;
   const ns=["S","M","T","W","T","F","S"],t=new Date();t.setHours(0,0,0,0);
@@ -1129,14 +1129,14 @@ window.scheduleRecipe=function(name){
     const k=d.toISOString().split("T")[0],iss=d.getTime()===t.getTime(),has=mp[k];
     return`<div class="wd${iss?" today":""}${has?" hm":""}" onclick="schedSet('${k}','${name}')">
       <div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>
-      ${has?`<div class="wdm">${has.substring(0,8)}â¦</div>`:""}
+      ${has?`<div class="wdm">${has.substring(0,8)}…</div>`:""}
     </div>`;
   }).join("");
   g("schedM").classList.add("active");
 };
-window.schedSet=function(k,name){mp[k]=name;Js("ks-m",mp);g("schedM").classList.remove("active");renderWeek();renderTonight();showNotif("Scheduled! ð");};
+window.schedSet=function(k,name){mp[k]=name;Js("ks-m",mp);g("schedM").classList.remove("active");renderWeek();renderTonight();showNotif("Scheduled! 📅");};
 
-// ââ COOK LOG + INSIGHTS âââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── COOK LOG + INSIGHTS ───────────────────────────────────────────────────
 function getCookLog(){return J("ks-cooklog")||[];}
 function addCookLog(name,date){const log=getCookLog();log.unshift({name,date:date||tk()});Js("ks-cooklog",log.slice(0,200));}
 function getWasteLog(){return J("ks-waste")||[];}
@@ -1158,7 +1158,7 @@ window.saveCooked=async function(){
   if(hasLeftover){mp[nextDay()]=cn+" (leftovers)";Js("ks-m",mp);}
   g("cookedM").classList.remove("active");const td=tk();delete mp[td];Js("ks-m",mp);
   renderWeek();renderTonight();
-  showNotif(hasLeftover?"Saved! Leftovers planned for tomorrow ð¥¡":"Saved to recipes! â­");
+  showNotif(hasLeftover?"Saved! Leftovers planned for tomorrow 🥡":"Saved to recipes! ⭐");
 };
 function nextDay(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().split("T")[0];}
 
@@ -1183,7 +1183,7 @@ function renderInsights(){
       return`<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--b1)${isTd?";background:var(--acd);margin:0 -4px;padding:7px 4px;border-radius:6px":""}">
         <div style="font-size:.72rem;color:var(--mt);min-width:30px;font-weight:${isTd?"600":"400"}">${ns[d.getDay()]}</div>
         <div style="font-size:.72rem;color:var(--mt);min-width:20px">${d.getDate()}</div>
-        <div style="font-size:.84rem;color:${meal?"var(--tx)":"var(--mt)"};font-style:${meal?"normal":"italic"};flex:1">${meal||"â"}</div>
+        <div style="font-size:.84rem;color:${meal?"var(--tx)":"var(--mt)"};font-style:${meal?"normal":"italic"};flex:1">${meal||"—"}</div>
         ${isTd?"<div style='font-size:.66rem;color:var(--ac);font-weight:600'>TODAY</div>":""}
       </div>`;
     }).join("");
@@ -1194,15 +1194,15 @@ function renderInsights(){
   const recent=log.slice(0,7).map(e=>e.name);
   const nudgeEl=g("ins-variety-nudge"),nudgeMsg=g("ins-variety-msg");
   if(nudgeEl&&recent.length>=3){
-    // Detect repeats â crude but effective
+    // Detect repeats — crude but effective
     const counts={};recent.forEach(n=>{const w=n.toLowerCase();counts[w]=(counts[w]||0)+1;});
     const repeat=Object.entries(counts).filter(([,c])=>c>=3);
     const weekMeals=Object.values(mp).filter(Boolean);
     const hasBD=weekMeals.some(m=>/curry|dal|rice|bengali|biryani|hilsa|mustard|lentil/i.test(m));
-    const hasTR=weekMeals.some(m=>/kebab|kÃ¶fte|pide|bÃ¶rek|meze|turkish|pilav|lahmacun/i.test(m));
+    const hasTR=weekMeals.some(m=>/kebab|köfte|pide|börek|meze|turkish|pilav|lahmacun/i.test(m));
     if(repeat.length){nudgeEl.style.display="block";nudgeMsg.textContent=`You've cooked "${repeat[0][0]}" ${repeat[0][1]} times this week. Time to mix it up?`;}
-    else if(!hasBD&&weekMeals.length>=3){nudgeEl.style.display="block";nudgeMsg.textContent="No Bangladeshi dishes this week â how about a dal, biryani, or fish curry?";}
-    else if(!hasTR&&weekMeals.length>=3){nudgeEl.style.display="block";nudgeMsg.textContent="No Turkish dishes planned â kÃ¶fte, mercimek Ã§orbasÄ±, or a pilav would be great this week!";}
+    else if(!hasBD&&weekMeals.length>=3){nudgeEl.style.display="block";nudgeMsg.textContent="No Bangladeshi dishes this week — how about a dal, biryani, or fish curry?";}
+    else if(!hasTR&&weekMeals.length>=3){nudgeEl.style.display="block";nudgeMsg.textContent="No Turkish dishes planned — köfte, mercimek çorbası, or a pilav would be great this week!";}
     else nudgeEl.style.display="none";
   }else if(nudgeEl)nudgeEl.style.display="none";
 
@@ -1214,25 +1214,25 @@ function renderInsights(){
   if(cookedEl){
     if(!sorted.length){cookedEl.innerHTML='<div class="es" style="padding:16px"><p>Cook some meals to see stats!</p></div>';}
     else{
-      const medals=["ð¥","ð¥","ð¥","4ï¸â£","5ï¸â£","6ï¸â£"];
+      const medals=["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣"];
       cookedEl.innerHTML=sorted.map(([n,c],i)=>`
         <div class="ibar-row">
           <div style="font-size:.9rem;margin-right:4px">${medals[i]||""}</div>
           <div class="ibar-lbl">${n}</div>
           <div class="ibar-track"><div class="ibar-fill" style="width:${Math.round(c/max*100)}%"></div></div>
-          <div class="ibar-val">${c}Ã</div>
+          <div class="ibar-val">${c}×</div>
         </div>`).join("");
     }
   }
 
-  // Cuisine breakdown â ask Claude to categorize recent meals
+  // Cuisine breakdown — ask Claude to categorize recent meals
   const cuisineColors={"Bangladeshi":"#e8a44a","Turkish":"#c0392b","Mediterranean":"#27ae60","American":"#3498db","Italian":"#e74c3c","Asian":"#9b59b6","Other":"#95a5a6"};
   const cuisEl=g("ins-cuisine");
   if(cuisEl&&log.length){
     // Simple keyword-based cuisine detection
     const detect=name=>{const n=name.toLowerCase();
       if(/dal|curry|biryani|hilsa|mustard|bengali|lentil|khichuri|pulao|bhuna/i.test(n))return"Bangladeshi";
-      if(/kebab|kÃ¶fte|pide|bÃ¶rek|meze|pilav|lahmacun|mercimek|dÃ¶ner|iskender/i.test(n))return"Turkish";
+      if(/kebab|köfte|pide|börek|meze|pilav|lahmacun|mercimek|döner|iskender/i.test(n))return"Turkish";
       if(/pasta|pizza|risotto|gnocchi|italian/i.test(n))return"Italian";
       if(/tacos|burrito|enchilada|mexican/i.test(n))return"Mexican";
       if(/sushi|ramen|stir.?fry|fried rice|asian|chinese|thai|japanese/i.test(n))return"Asian";
@@ -1248,7 +1248,7 @@ function renderInsights(){
       return`<div style="margin-bottom:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <span style="font-size:.82rem;font-weight:500">${c}</span>
-          <span style="font-size:.74rem;color:var(--mt)">${n} meals Â· ${pct}%</span>
+          <span style="font-size:.74rem;color:var(--mt)">${n} meals · ${pct}%</span>
         </div>
         <div style="height:8px;background:var(--b1);border-radius:4px;overflow:hidden">
           <div style="height:100%;width:${pct}%;background:${col};border-radius:4px;transition:width .6s ease"></div>
@@ -1262,13 +1262,13 @@ function renderInsights(){
   if(wasteEl){
     wasteEl.innerHTML=waste.length
       ?waste.slice(0,10).map(w=>`<div class="waste-item"><span style="font-size:.86rem">${w.name}</span><span style="font-size:.74rem;color:var(--rd)">${w.date}</span></div>`).join("")
-      :'<div class="es" style="padding:16px"><p>Nothing wasted yet â great job! ð</p></div>';
+      :'<div class="es" style="padding:16px"><p>Nothing wasted yet — great job! 🎉</p></div>';
   }
 }
 
 
 
-// ââ SHOPPING: AISLE GROUPING ââââââââââââââââââââââââââââââââââââââââââââââ
+// ── SHOPPING: AISLE GROUPING ──────────────────────────────────────────────
 let aisleMode=false;
 const AISLES={"Produce":["apple","banana","carrot","celery","onion","garlic","tomato","lettuce","cucumber","pepper","broccoli","spinach","mushroom","lemon","lime","herb","cabbage","squash","jalap","avocado","potato","ginger"],
   "Meat & Fish":["chicken","beef","lamb","turkey","salmon","cod","tuna","fish","steak","shrimp","pork","bacon","sausage","ground"],
@@ -1285,7 +1285,7 @@ function renderShop(){
   const c=g("shlist"),un=shop.filter(i=>!i.checked),ch=shop.filter(i=>i.checked);
   g("clrchk").style.display=ch.length?"block":"none";
   g("shsub").textContent=un.length+" items to buy";
-  if(!shop.length){c.innerHTML=`<div class="es"><div class="ei">ð</div><p>Your list is empty!<br/>Add items or use "Build from meal plan".</p></div>`;return;}
+  if(!shop.length){c.innerHTML=`<div class="es"><div class="ei">🛒</div><p>Your list is empty!<br/>Add items or use "Build from meal plan".</p></div>`;return;}
   if(aisleMode&&un.length){
     const grps={};un.forEach(i=>{const a=guessAisle(i.name);if(!grps[a])grps[a]=[];grps[a].push(i);});
     c.innerHTML=Object.entries(grps).sort().map(([aisle,its])=>`<div class="shsec">${aisle}</div>${its.map(sH).join("")}`).join("")+(ch.length?`<div class="shsec">Done</div>${ch.map(sH).join("")}`:"");
@@ -1293,15 +1293,15 @@ function renderShop(){
     c.innerHTML=(un.length?`<div class="shsec">To buy (${un.length})</div>${un.map(sH).join("")}`:"")+(ch.length?`<div class="shsec">Done</div>${ch.map(sH).join("")}`:"");
   }
 }
-function sH(item){return`<div class="shit${item.checked?" chk":""}" onclick="togShop('${item.id}')"><div class="shck">${item.checked?"â":""}</div><div class="shnm">${item.name}</div>${item.price?`<div class="price-tag">~$${item.price}</div>`:""}</div>`;}
+function sH(item){return`<div class="shit${item.checked?" chk":""}" onclick="togShop('${item.id}')"><div class="shck">${item.checked?"✓":""}</div><div class="shnm">${item.name}</div>${item.price?`<div class="price-tag">~$${item.price}</div>`:""}</div>`;}
 
-// ââ DEALS (Claude web search) âââââââââââââââââââââââââââââââââââââââââââââ
+// ── DEALS (Claude web search) ─────────────────────────────────────────────
 function renderDeals(deals, query){
   var el=g("dealslist");
   if(!deals||!deals.length){
     el.innerHTML="";
     var empty=document.createElement("div");empty.className="es";
-    empty.innerHTML='<div class="ei">ð·</div><p>No deals found for <strong>'+query+'</strong>.<br>Try a broader term or pick a different store.</p>';
+    empty.innerHTML='<div class="ei">🏷</div><p>No deals found for <strong>'+query+'</strong>.<br>Try a broader term or pick a different store.</p>';
     el.appendChild(empty);return;
   }
   el.innerHTML="";
@@ -1317,7 +1317,7 @@ function renderDeals(deals, query){
     if(d.savings){var sv=document.createElement("span");sv.className="deal-badge";sv.textContent="Save "+d.savings;priceRow.appendChild(sv);}
     left.appendChild(store);left.appendChild(name);left.appendChild(priceRow);
     if(d.details){var det=document.createElement("div");det.style.cssText="font-size:.74rem;color:var(--tx2);margin-top:5px;line-height:1.5";det.textContent=d.details;left.appendChild(det);}
-    if(d.valid){var vl=document.createElement("div");vl.style.cssText="font-size:.68rem;color:var(--mt);margin-top:4px";vl.textContent="ð "+d.valid;left.appendChild(vl);}
+    if(d.valid){var vl=document.createElement("div");vl.style.cssText="font-size:.68rem;color:var(--mt);margin-top:4px";vl.textContent="📅 "+d.valid;left.appendChild(vl);}
     var btn=document.createElement("button");btn.className="btn bs bsm";btn.style.cssText="align-self:center;flex-shrink:0;margin-left:8px";btn.textContent="+ List";
     (function(n){btn.onclick=function(){addDealToList(n);};})(d.name||"");
     card.appendChild(left);card.appendChild(btn);el.appendChild(card);
@@ -1368,7 +1368,7 @@ window.searchDeals=async function(){
   const store=g("dealstore")&&g("dealstore").value||"any";
   const st=g("dealsstatus");
   st.style.display="block";st.style.color="var(--mt)";
-  st.textContent="ð Searching "+(store!=="any"?store:"nearby stores")+" for "+q+"â¦";
+  st.textContent="🔍 Searching "+(store!=="any"?store:"nearby stores")+" for "+q+"…";
   g("dealslist").innerHTML="";
   try{
     const deals=await claudeSearchDeals(q,store);
@@ -1376,7 +1376,7 @@ window.searchDeals=async function(){
     renderDeals(deals,q);
   }catch(e){
     st.style.color="var(--rd)";
-    st.textContent="Error: "+(e.message||"Unknown error")+" â see debug below";
+    st.textContent="Error: "+(e.message||"Unknown error")+" — see debug below";
     g("dealslist").innerHTML="";
     var dbg=document.createElement("div");
     dbg.style.cssText="background:var(--card);border:1px solid var(--rd);border-radius:10px;padding:12px;font-size:.74rem;font-family:monospace;color:var(--tx2);word-break:break-all;margin-top:8px;white-space:pre-wrap";
@@ -1409,36 +1409,36 @@ window.dealsFromList=async function(){
   g("dealslist").innerHTML="";
   try{
     var deals=await claudeSearchDeals(names,store);st.style.display="none";
-    if(!deals.length){g("dealslist").innerHTML='<div class="es"><div class="ei">ð·</div><p>No deals found this week.<br/>Try searching individually or a different store.</p></div>';}
+    if(!deals.length){g("dealslist").innerHTML='<div class="es"><div class="ei">🏷</div><p>No deals found this week.<br/>Try searching individually or a different store.</p></div>';}
     else{renderDeals(deals,names);}
   }catch(e){st.style.display="none";st.style.color="var(--rd)";st.textContent="Error: "+e.message;}
 };
 
-// ââ OPEN RECIPE (updated with schedule button + tags + cook count) âââââââââ
+// ── OPEN RECIPE (updated with schedule button + tags + cook count) ─────────
 window.openER=function(id){
   const r=recs.find(r=>r.id===id);if(!r)return;eid=id;
   const rt2=r.rating||0;
-  const st=Array.from({length:5},(_,i)=>`<span class="star${i<rt2?" on":""}" onclick="setStar(${i+1},'e')">${i<rt2?"â":"â"}</span>`).join("");
+  const st=Array.from({length:5},(_,i)=>`<span class="star${i<rt2?" on":""}" onclick="setStar(${i+1},'e')">${i<rt2?"★":"☆"}</span>`).join("");
   const srcLink=r.sourceUrl?`<div class="frow"><label class="flbl">Original</label><a href="${r.sourceUrl}" target="_blank" style="font-size:.82rem;color:var(--ac);word-break:break-all">${r.sourceUrl}</a></div>`:"";
   const tagsHtml=`<div class="frow"><label class="flbl">Tags</label><div class="tags" id="etags">
-    <div class="tag${(r.tags||[]).includes("Quick")?" sel":""}" data-tag="Quick" onclick="togTag(this)">â¡ Quick</div>
-    <div class="tag kid${(r.tags||[]).includes("Kid-Friendly")?" sel":""}" data-tag="Kid-Friendly" onclick="togTag(this)">ð¶ Kid-Friendly</div>
-    <div class="tag date${(r.tags||[]).includes("Date Night")?" sel":""}" data-tag="Date Night" onclick="togTag(this)">ð¯ Date Night</div>
-    <div class="tag batch${(r.tags||[]).includes("Batch Cook")?" sel":""}" data-tag="Batch Cook" onclick="togTag(this)">ð¦ Batch Cook</div>
-    <div class="tag${(r.tags||[]).includes("Healthy")?" sel":""}" data-tag="Healthy" onclick="togTag(this)">ð¥ Healthy</div>
-    <div class="tag${(r.tags||[]).includes("Under 30 min")?" sel":""}" data-tag="Under 30 min" onclick="togTag(this)">â± Under 30 min</div>
+    <div class="tag${(r.tags||[]).includes("Quick")?" sel":""}" data-tag="Quick" onclick="togTag(this)">⚡ Quick</div>
+    <div class="tag kid${(r.tags||[]).includes("Kid-Friendly")?" sel":""}" data-tag="Kid-Friendly" onclick="togTag(this)">👶 Kid-Friendly</div>
+    <div class="tag date${(r.tags||[]).includes("Date Night")?" sel":""}" data-tag="Date Night" onclick="togTag(this)">🕯 Date Night</div>
+    <div class="tag batch${(r.tags||[]).includes("Batch Cook")?" sel":""}" data-tag="Batch Cook" onclick="togTag(this)">📦 Batch Cook</div>
+    <div class="tag${(r.tags||[]).includes("Healthy")?" sel":""}" data-tag="Healthy" onclick="togTag(this)">🥗 Healthy</div>
+    <div class="tag${(r.tags||[]).includes("Under 30 min")?" sel":""}" data-tag="Under 30 min" onclick="togTag(this)">⏱ Under 30 min</div>
   </div></div>`;
   g("erecbody").innerHTML=`
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <button class="btn bp bsm" style="flex:1" onclick="scheduleRecipe('${r.name.replace(/'/g,"\'")}')">ð Schedule</button>
-      ${r.cookCount?`<div style="background:var(--acd);border:1px solid var(--ac);border-radius:9px;padding:7px 14px;font-size:.78rem;color:var(--ac);font-weight:600">ð³ Cooked ${r.cookCount}Ã</div>`:""}
+      <button class="btn bp bsm" style="flex:1" onclick="scheduleRecipe('${r.name.replace(/'/g,"\'")}')">📅 Schedule</button>
+      ${r.cookCount?`<div style="background:var(--acd);border:1px solid var(--ac);border-radius:9px;padding:7px 14px;font-size:.78rem;color:var(--ac);font-weight:600">🍳 Cooked ${r.cookCount}×</div>`:""}
     </div>
     <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:16px">
-      <div style="font-size:.78rem;color:var(--mt);margin-bottom:10px;font-weight:500">âï¸ Scale serving size</div>
+      <div style="font-size:.78rem;color:var(--mt);margin-bottom:10px;font-weight:500">⚖️ Scale serving size</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="btn bs bsm" onclick="scaleRec(0.5)">Â½Ã</button><button class="btn bs bsm" onclick="scaleRec(1)">1Ã</button>
-        <button class="btn bs bsm" onclick="scaleRec(2)">2Ã</button><button class="btn bs bsm" onclick="scaleRec(3)">3Ã</button>
-        <input id="scaleCustom" class="qinp" type="number" min="0.25" max="10" step="0.25" placeholder="Ã" style="width:58px" oninput="if(this.value)scaleRec(parseFloat(this.value))"/>
+        <button class="btn bs bsm" onclick="scaleRec(0.5)">½×</button><button class="btn bs bsm" onclick="scaleRec(1)">1×</button>
+        <button class="btn bs bsm" onclick="scaleRec(2)">2×</button><button class="btn bs bsm" onclick="scaleRec(3)">3×</button>
+        <input id="scaleCustom" class="qinp" type="number" min="0.25" max="10" step="0.25" placeholder="×" style="width:58px" oninput="if(this.value)scaleRec(parseFloat(this.value))"/>
       </div>
       <div id="scaleStatus" style="font-size:.74rem;color:var(--mt);margin-top:8px;display:none"></div>
     </div>
@@ -1461,14 +1461,14 @@ window.updR=async function(){
   showNotif("Recipe updated!");hideOv("erec");
 };
 
-// ââ SHOWSCREEN UPDATE (insights) ââââââââââââââââââââââââââââââââââââââââââ
+// ── SHOWSCREEN UPDATE (insights) ──────────────────────────────────────────
 const _origShowScreen=window.showScreen;
 window.showScreen=function(n){
   _origShowScreen(n);
   if(n==="insights")renderInsights();
 };
 
-// ââ REMOVE ITEM: log waste if expired ââââââââââââââââââââââââââââââââââââ
+// ── REMOVE ITEM: log waste if expired ────────────────────────────────────
 const _origRemItem=window.remItem;
 window.remItem=async function(id){
   const item=inv.find(i=>i.id===id);
@@ -1476,14 +1476,14 @@ window.remItem=async function(id){
   await _origRemItem(id);
 };
 
-// ââ VARIETY NUDGE IN CLAUDE CTX âââââââââââââââââââââââââââââââââââââââââââ
+// ── VARIETY NUDGE IN CLAUDE CTX ───────────────────────────────────────────
 const _origKitCtx=kitCtx;
-// (already defined above â we'll patch it by redefining)
+// (already defined above — we'll patch it by redefining)
 function kitCtx(){
   const sec=["fridge","freezer","pantry"].map(loc=>{const its=inv.filter(i=>i.location===loc);return its.length?ll(loc).toUpperCase()+": "+its.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", "):"";}).filter(Boolean).join("\n");
   const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).map(i=>{const s=xSt(i.expiry);return`${i.name} (${s.l})`;}).join(", ");
   const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");
-  const favs=recs.filter(r=>r.favorited||r.rating>=4).map(r=>`${r.name}${r.rating?` (${r.rating}â)`:""}`).join(", ");
+  const favs=recs.filter(r=>r.favorited||r.rating>=4).map(r=>`${r.name}${r.rating?` (${r.rating}★)`:""}`).join(", ");
   const restr=[cfg.nopork?"no pork":null,cfg.noshellfish?"no shellfish":null,cfg.vegetarian?"vegetarian":null,cfg.glutenfree?"gluten-free":null,cfg.other].filter(Boolean).join(", ");
   const recent=getCookLog().slice(0,7).map(e=>e.name).join(", ");
   const cuisines=[...new Set(getCookLog().slice(0,14).map(e=>e.name))];
@@ -1494,12 +1494,12 @@ ${ms?"MEAL PLAN: "+ms:""}
 ${favs?"FAVOURITE RECIPES: "+favs:""}
 ${recent?"RECENTLY COOKED (avoid repeating): "+recent:""}
 HOUSEHOLD: ${cfg.name}, Adults: ${cfg.adults}, Kids: ${cfg.kids}, Restrictions: ${restr||"none"}, Cuisines: ${cfg.cuisines}, Cook time: ${cfg.cookTime}.
-CULTURAL BACKGROUND: Bushra is Bangladeshi, Bora is Turkish â authentically lean toward these cuisines (Bengali spices, mustard oil, dal, hilsa-style fish; Turkish kebabs, meze, bÃ¶rek, yogurt sauces, lentil soups). Suggest these when inventory allows.
-Be concise. Use what they have. Suggest variety â lean toward Bangladeshi and Turkish â avoid repeating recent meals. Format grocery lists as bullet points starting "- ".`;}
+CULTURAL BACKGROUND: Bushra is Bangladeshi, Bora is Turkish — authentically lean toward these cuisines (Bengali spices, mustard oil, dal, hilsa-style fish; Turkish kebabs, meze, börek, yogurt sauces, lentil soups). Suggest these when inventory allows.
+Be concise. Use what they have. Suggest variety — lean toward Bangladeshi and Turkish — avoid repeating recent meals. Format grocery lists as bullet points starting "- ".`;}
 
 </script>
 <script>
-// ââ THEMES (plain script â not module, so all fns are global) âââââââââââââ
+// ── THEMES (plain script — not module, so all fns are global) ─────────────
 const THEMES = {
   gold:{name:"Gold",swatch:"#d4a853",
     dark:{bg:"#0f0f0d",sf:"#1a1a17",card:"#222220",card2:"#2a2a27",b1:"#333330",b2:"#3d3d39",ac:"#d4a853",ac2:"#e8c27a",acr:"212,168,83",tx:"#ede8d8",tx2:"#b8b09a",mt:"#7a7468"},
@@ -1564,7 +1564,7 @@ function _updateThemePicker(active){
     var div=document.createElement("div");
     div.title=t.name;
     div.style.cssText="width:36px;height:36px;border-radius:50%;background:"+t.swatch+";cursor:pointer;border:3px solid "+(sel?"var(--tx)":"transparent")+";box-shadow:"+(sel?"0 0 0 2px var(--ac)":"none")+";transition:all .2s;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.85rem";
-    div.textContent=sel?"â":"";
+    div.textContent=sel?"✓":"";
     div.onclick=function(){ applyTheme(k, curMode); };
     div.onmouseover=function(){ this.style.transform="scale(1.15)"; };
     div.onmouseout=function(){ this.style.transform="scale(1)"; };
