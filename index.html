@@ -287,6 +287,63 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .deal-badge{font-size:.68rem;padding:3px 8px;border-radius:20px;background:var(--gnd);color:var(--gn);border:1px solid var(--gn);white-space:nowrap;font-weight:700}
 .deal-match{border-color:rgba(90,173,111,.5);background:rgba(90,173,111,.04)}
 
+
+/* HOME */
+.hhdr{padding:20px 20px 14px;flex-shrink:0;background:var(--sf);border-bottom:1px solid var(--b1)}
+.htop{display:flex;align-items:flex-start;justify-content:space-between}
+.grt{font-family:"Fraunces",serif;font-size:1.75rem;font-weight:300;letter-spacing:-.03em;line-height:1.15}
+.grt span{color:var(--ac)}.hdt{font-size:.8rem;color:var(--mt);margin-top:3px}
+.srow{display:flex;align-items:center;gap:6px;margin-top:12px}.slb{font-size:.72rem;color:var(--mt)}
+.arow{display:flex;gap:8px;margin-top:12px}
+.hbody{padding:0 16px 16px;flex:1;overflow-y:auto}
+
+/* Section labels PP-style */
+.hsec-lbl{font-size:.78rem;font-weight:700;color:var(--tx2);letter-spacing:.04em;margin:18px 0 10px;display:flex;align-items:center;gap:7px}
+.hsec-lbl::after{content:"";flex:1;height:1px;background:var(--b1)}
+
+/* Today 3-card grid */
+.today-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+.today-card{background:var(--card);border:1.5px solid var(--b1);border-radius:18px;padding:16px 12px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-height:110px;position:relative;overflow:hidden}
+.today-card::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 100% 60% at 50% 0%,rgba(212,168,83,.05),transparent);pointer-events:none}
+.today-card:active{transform:scale(.97);border-color:var(--ac)}
+.tonight-card{grid-column:1/-1;flex-direction:row;align-items:center;gap:14px;min-height:auto;padding:18px}
+.tonight-card .tc-icon{font-size:2rem;flex-shrink:0}
+.tonight-card .tna{margin-top:0;flex-wrap:nowrap}
+.tc-icon{font-size:1.6rem;line-height:1}
+.tc-ttl{font-size:.68rem;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.08em}
+.tc-val{font-family:"Fraunces",serif;font-size:1.4rem;font-weight:300;color:var(--tx);line-height:1.2;margin-top:2px}
+.tonight-card .tc-val{font-size:1.2rem;flex:1}
+.tc-val.tc-green{color:var(--gn);font-size:1.1rem}
+.tc-sub{font-size:.72rem;color:var(--mt);line-height:1.4;margin-top:2px}
+.tna{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+
+/* Week wrap */
+.week-wrap{background:var(--card);border:1.5px solid var(--b1);border-radius:18px;padding:14px;margin-bottom:16px}
+.wgrd{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.wd{background:var(--sf);border:1.5px solid var(--b1);border-radius:10px;padding:8px 3px;text-align:center;cursor:pointer;transition:all .15s;min-height:58px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.wd:active{border-color:var(--ac);transform:scale(.94)}.wd.today{border-color:var(--ac);background:var(--acd)}.wd.hm{border-color:rgba(90,173,111,.5);background:rgba(90,173,111,.06)}
+.wdn{font-size:.56rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mt);font-weight:600}
+.wdd{font-family:"Fraunces",serif;font-size:1.1rem;font-weight:300;color:var(--tx2);line-height:1}.wd.today .wdd{color:var(--ac);font-weight:400}
+.wdm{font-size:.5rem;color:var(--gn);line-height:1.2;text-align:center;overflow:hidden;max-height:22px;padding:0 2px}
+
+/* Stat cards */
+.sgrd{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.sc{background:var(--card);border:1.5px solid var(--b1);border-radius:18px;padding:18px 16px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.sc::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(212,168,83,.05),transparent);pointer-events:none}
+.sc:active{border-color:var(--ac);transform:scale(.98)}.sc.warn{border-color:var(--am)}
+.sci{font-size:1.8rem;margin-bottom:8px;line-height:1}
+.scv{font-family:"Fraunces",serif;font-size:2.4rem;font-weight:300;color:var(--ac);line-height:1}
+.sc.warn .scv{color:var(--am)}.scl{font-size:.74rem;color:var(--mt);margin-top:6px;font-weight:500}
+
+/* Expiry items */
+.expl{display:flex;flex-direction:column;gap:7px}
+.exi{background:var(--card);border:1.5px solid var(--am);border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:all .15s}
+.exi.exp{border-color:var(--rd)}.exi:active{transform:scale(.98)}.exn{font-size:.9rem;font-weight:500}
+.exd{font-size:.76rem;color:var(--am);font-weight:600}.exi.exp .exd{color:var(--rd)}
+
+.setbtn{width:38px;height:38px;border-radius:12px;background:var(--card);border:1.5px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:pointer;flex-shrink:0;transition:border-color .2s}
+.setbtn:active{border-color:var(--ac)}
+
 </style>
 </head>
 <body>
@@ -310,10 +367,19 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
 <div id="APP">
   <!-- HOME -->
-  <div class="screen" id="screen-home">
-    <div class="hhdr">
-      <div class="htop"><div><div class="grt" id="grt">Good evening, <span>Bora</span></div><div class="hdt" id="hdt"></div></div><div class="setbtn" onclick="showOv('settings')">⚙️</div></div>
-      <div class="srow"><span class="sdot" id="sdot"></span><span class="slb" id="slb">Connecting…</span></div>
+  <div class="screen" id="screen-home" style="overflow-y:hidden">
+    <!-- Header -->
+    <div class="hhdr" style="flex-shrink:0">
+      <div class="htop">
+        <div>
+          <div class="grt" id="grt">Good evening, <span>Bora</span></div>
+          <div class="hdt" id="hdt"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="srow" style="margin:0"><span class="sdot" id="sdot"></span><span class="slb" id="slb">Connecting…</span></div>
+          <div class="setbtn" onclick="showOv('settings')">⚙️</div>
+        </div>
+      </div>
       <div class="arow">
         <button class="btn bp bsm" style="flex:1" onclick="showOv('scan')">📷 Scan</button>
         <button class="btn bs bsm" style="flex:1" onclick="showOv('madd')">✏️ Add</button>
@@ -322,17 +388,53 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
       </div>
     </div>
     <div class="exppanel" id="exppanel"><div class="expbox" id="expbox">No items yet.</div><p style="font-size:.7rem;color:var(--mt);margin-top:6px">Paste into Claude chat as your living document.</p></div>
+
+    <!-- Scrollable body -->
     <div class="hbody">
-      <div class="slbl">Tonight</div>
-      <div class="tnc"><div class="tnt">Tonight's Dinner</div><div id="tnd"></div><div class="tna" id="tna"></div></div>
-      <div class="slbl">This Week</div>
-      <div class="wgrd" id="wgrd"></div>
-      <div id="variety-nudge" style="display:none;margin-top:10px;background:var(--amd);border:1px solid var(--am);border-radius:10px;padding:10px 14px;font-size:.8rem;color:var(--tx2);line-height:1.5"></div>
-      <div class="slbl">At a Glance</div>
+
+      <!-- TODAY section -->
+      <div class="hsec-lbl">📅 Today</div>
+      <div class="today-grid">
+        <!-- Tonight card -->
+        <div class="today-card tonight-card" id="tonight-main" onclick="openMealM('TODAY_KEY','Today')">
+          <div class="tc-icon">🍽</div>
+          <div class="tc-ttl">Tonight's Dinner</div>
+          <div id="tnd" class="tc-val"></div>
+          <div class="tna" id="tna"></div>
+        </div>
+        <!-- Expiring card -->
+        <div class="today-card" onclick="showScreen('inventory')">
+          <div class="tc-icon">⏱</div>
+          <div class="tc-ttl">Expiring Soon</div>
+          <div id="home-exp-val" class="tc-val tc-green">All fresh!</div>
+          <div id="home-exp-sub" class="tc-sub">Nothing in next 3 days</div>
+        </div>
+        <!-- Shopping card -->
+        <div class="today-card" onclick="showScreen('shopping')">
+          <div class="tc-icon">🛒</div>
+          <div class="tc-ttl">Shopping List</div>
+          <div id="home-shop-val" class="tc-val">0</div>
+          <div id="home-shop-sub" class="tc-sub">items to buy</div>
+        </div>
+      </div>
+
+      <!-- Variety nudge -->
+      <div id="variety-nudge" style="display:none;background:var(--amd);border:1px solid var(--am);border-radius:14px;padding:12px 16px;font-size:.82rem;color:var(--tx2);line-height:1.6;margin-bottom:16px"></div>
+
+      <!-- THIS WEEK section -->
+      <div class="hsec-lbl">🗓 This Week</div>
+      <div class="week-wrap">
+        <div class="wgrd" id="wgrd"></div>
+      </div>
+
+      <!-- AT A GLANCE section -->
+      <div class="hsec-lbl">🧺 Your Kitchen</div>
       <div class="sgrd" id="sgrd"></div>
-      <div class="slbl" id="exslbl" style="display:none">Expiring Soon</div>
+
+      <!-- Expiring list -->
+      <div id="exslbl" style="display:none" class="hsec-lbl">⚠️ Expiring Soon</div>
       <div class="expl" id="expl"></div>
-      <div style="height:8px"></div>
+      <div style="height:16px"></div>
     </div>
   </div>
 
@@ -761,7 +863,17 @@ function renderAll(){renderHome();renderInv();}
 function renderHome(){renderWeek();renderSum();renderExp();renderTonight();updExport();}
 function tk(){return new Date().toISOString().split("T")[0];}
 function wDates(){const t=new Date();t.setHours(0,0,0,0);const s=new Date(t);s.setDate(t.getDate()-t.getDay());return Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return d;});}
-function renderTonight(){const td=tk(),m=mp[td],d=g("tnd"),a=g("tna");if(m){d.innerHTML=`<div class="tnm">${m}</div>`;a.innerHTML=`<button class="btn bsm bp" onclick="openCooked('${td}')">✓ Mark as Cooked</button><button class="btn bsm bs" onclick="openMealM('${td}','Today')">Edit</button>`;}else{d.innerHTML=`<div class="tne">No meal planned yet</div>`;a.innerHTML=`<button class="btn bsm bs" onclick="openMealM('${td}','Today')">+ Plan dinner</button><button class="btn bsm bs" onclick="showScreen('chat')">Ask Claude →</button>`;}}
+function renderTonight(){
+  const td=tk(),m=mp[td],d=g("tnd"),a=g("tna"),card=g("tonight-main");
+  if(card)card.onclick=function(){openMealM(td,"Today");};
+  if(m){
+    if(d)d.innerHTML=m;
+    if(a)a.innerHTML=`<button class="btn bsm bp" onclick="event.stopPropagation();openCooked('${td}')">✓ Cooked</button><button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">Edit</button>`;
+  }else{
+    if(d)d.innerHTML=`<span style="font-size:.9rem;color:var(--mt);font-style:italic">No meal planned yet</span>`;
+    if(a)a.innerHTML=`<button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">+ Plan dinner</button><button class="btn bsm bs" onclick="event.stopPropagation();showScreen('chat')">Ask Claude →</button>`;
+  }
+}
 function renderWeek(){const ns=["S","M","T","W","T","F","S"],t=new Date();t.setHours(0,0,0,0);g("wgrd").innerHTML=wDates().map((d,i)=>{const k=d.toISOString().split("T")[0],iss=d.getTime()===t.getTime(),m=mp[k];return`<div class="wd${iss?" today":""}${m?" hm":""}" onclick="openMealM('${k}','${ns[i]} ${d.getDate()}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${m?`<div class="wdm">${m.substring(0,10)}${m.length>10?"…":""}</div>`:""}</div>`;}).join("");checkVarietyNudge();}
 function checkVarietyNudge(){
   const el=g("variety-nudge");if(!el)return;
@@ -777,7 +889,18 @@ function checkVarietyNudge(){
   else if(!hasTR){el.style.display="block";el.innerHTML="🇹🇷 No Turkish dishes this week — köfte or mercimek çorbası would be great!";}
   else{el.style.display="none";}
 }
-function renderSum(){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).length,tb=shop.filter(i=>!i.checked).length;g("sgrd").innerHTML=`<div class="sc" onclick="showScreen('inventory')"><div class="sci">🧺</div><div class="scv">${inv.length}</div><div class="scl">Items in stock</div></div><div class="sc${ex>0?" warn":""}" onclick="showScreen('inventory')"><div class="sci">⏱</div><div class="scv">${ex}</div><div class="scl">Expiring soon</div></div><div class="sc" onclick="showScreen('shopping')"><div class="sci">🛒</div><div class="scv">${tb}</div><div class="scl">To buy</div></div><div class="sc" onclick="showScreen('recipes')"><div class="sci">📖</div><div class="scv">${recs.length}</div><div class="scl">Saved recipes</div></div>`;}
+function renderSum(){
+  const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).length;
+  const tb=shop.filter(i=>!i.checked).length;
+  // Update Today cards
+  const expV=g("home-exp-val"),expS=g("home-exp-sub");
+  if(expV){if(ex>0){expV.textContent=ex+" item"+(ex>1?"s":"");expV.className="tc-val";expV.style.color="var(--am)";}else{expV.textContent="All fresh!";expV.className="tc-val tc-green";}}
+  if(expS){expS.textContent=ex>0?"expiring soon":"Nothing in next 3 days";}
+  const shopV=g("home-shop-val"),shopS=g("home-shop-sub");
+  if(shopV)shopV.textContent=tb;
+  if(shopS)shopS.textContent=tb===1?"item to buy":tb===0?"all stocked up":"items to buy";
+  // Stat grid
+  g("sgrd").innerHTML=`<div class="sc" onclick="showScreen('inventory')"><div class="sci">🧺</div><div class="scv">${inv.length}</div><div class="scl">Items in stock</div></div><div class="sc${ex>0?" warn":""}" onclick="showScreen('inventory')"><div class="sci">⏱</div><div class="scv">${ex}</div><div class="scl">Expiring soon</div></div><div class="sc" onclick="showScreen('shopping')"><div class="sci">🛒</div><div class="scv">${tb}</div><div class="scl">To buy</div></div><div class="sc" onclick="showScreen('recipes')"><div class="sci">📖</div><div class="scv">${recs.length}</div><div class="scl">Saved recipes</div></div>`;}
 function renderExp(){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const l=g("exslbl"),e=g("expl");if(!ex.length){l.style.display="none";e.innerHTML="";return;}l.style.display="flex";e.innerHTML=ex.map(item=>{const s=xSt(item.expiry);return`<div class="exi${s.c==="expired"?" exp":""}" onclick="openAdj('${item.id}')"><div class="exn">${item.name}</div><div class="exd">${s.l}</div></div>`;}).join("");}
 function updExport(){const t=["fridge","freezer","pantry"].map(loc=>{const its=inv.filter(i=>i.location===loc);return its.length?ll(loc).toUpperCase()+"\n"+its.map(i=>`- ${i.name}${i.brand?` (${i.brand})`:""}: ${i.qty} ${i.unit}`).join("\n"):"";}).filter(Boolean).join("\n\n");g("expbox").textContent=t||"No items yet.";}
 window.openMealM=function(k,lbl){md=k;g("mealMttl").textContent="Meal for "+lbl;g("mealMinp").value=mp[k]||"";g("mealM").classList.add("active");setTimeout(()=>g("mealMinp").focus(),100);};
