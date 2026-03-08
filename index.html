@@ -855,7 +855,19 @@ async function svi(item){ss("syncing");try{await setDoc(doc(db,"households",hid,
 async function dli(id){ss("syncing");try{await deleteDoc(doc(db,"households",hid,"inventory",id));ss("synced");}catch{ss("error");}}
 async function svr(r){try{await setDoc(doc(db,"households",hid,"recipes",r.id),r);}catch(e){console.error(e);}}
 async function dlr(id){try{await deleteDoc(doc(db,"households",hid,"recipes",id));}catch(e){console.error(e);}}
-window.showScreen=function(n){document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));document.querySelectorAll(".ni").forEach(v=>v.classList.remove("active"));g("screen-"+n).classList.add("active");g("nav-"+n).classList.add("active");if(n==="home")renderHome();if(n==="inventory")renderInv();if(n==="recipes")renderRecs();if(n==="shopping")renderShop();};
+window.showScreen=function(n){
+  // Close any open overlays first
+  document.querySelectorAll(".ov.active").forEach(o=>o.classList.remove("active"));
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  document.querySelectorAll(".ni").forEach(v=>v.classList.remove("active"));
+  g("screen-"+n).classList.add("active");
+  g("nav-"+n).classList.add("active");
+  if(n==="home")renderHome();
+  if(n==="inventory")renderInv();
+  if(n==="recipes")renderRecs();
+  if(n==="shopping")renderShop();
+  if(n==="insights")renderInsights();
+};
 window.showOv=n=>g("ov-"+n).classList.add("active");
 window.hideOv=n=>g("ov-"+n).classList.remove("active");
 function initHome(){const h=new Date().getHours(),gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening",u=localStorage.getItem("ks-who")||(cfg.adults||"Bora").split(",")[0].trim();g("grt").innerHTML=`${gr}, <span>${u}</span>`;g("hdt").textContent=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});renderWeek();showScreen("home");}
@@ -1414,139 +1426,4 @@ window.openER=function(id){
 window.updR=async function(){
   const r=recs.find(r=>r.id===eid);if(!r)return;
   const rt2=[...document.querySelectorAll("#estars .star")].filter(s=>s.classList.contains("on")).length;
-  const tags=getSelTags("etags");
-  await svr({...r,name:g("ern").value.trim(),rating:rt2,description:g("erd").value.trim(),notes:g("erno").value.trim(),favorited:g("etog").classList.contains("on"),tags});
-  showNotif("Recipe updated!");hideOv("erec");
-};
-
-// ── SHOWSCREEN UPDATE (insights) ──────────────────────────────────────────
-const _origShowScreen=window.showScreen;
-window.showScreen=function(n){
-  _origShowScreen(n);
-  if(n==="insights")renderInsights();
-};
-
-// ── REMOVE ITEM: log waste if expired ────────────────────────────────────
-const _origRemItem=window.remItem;
-window.remItem=async function(id){
-  const item=inv.find(i=>i.id===id);
-  if(item){const s=xSt(item.expiry);if(s&&(s.c==="expired"||s.c==="expiring"))addWaste(item.name);}
-  await _origRemItem(id);
-};
-
-// ── VARIETY NUDGE IN CLAUDE CTX ───────────────────────────────────────────
-const _origKitCtx=kitCtx;
-// (already defined above — we'll patch it by redefining)
-function kitCtx(){
-  const sec=["fridge","freezer","pantry"].map(loc=>{const its=inv.filter(i=>i.location===loc);return its.length?ll(loc).toUpperCase()+": "+its.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", "):"";}).filter(Boolean).join("\n");
-  const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).map(i=>{const s=xSt(i.expiry);return`${i.name} (${s.l})`;}).join(", ");
-  const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");
-  const favs=recs.filter(r=>r.favorited||r.rating>=4).map(r=>`${r.name}${r.rating?` (${r.rating}★)`:""}`).join(", ");
-  const restr=[cfg.nopork?"no pork":null,cfg.noshellfish?"no shellfish":null,cfg.vegetarian?"vegetarian":null,cfg.glutenfree?"gluten-free":null,cfg.other].filter(Boolean).join(", ");
-  const recent=getCookLog().slice(0,7).map(e=>e.name).join(", ");
-  const cuisines=[...new Set(getCookLog().slice(0,14).map(e=>e.name))];
-  return`You are a helpful kitchen assistant for a family in Edison NJ.
-INVENTORY:\n${sec||"Empty."}
-${ex?"EXPIRING SOON: "+ex:""}
-${ms?"MEAL PLAN: "+ms:""}
-${favs?"FAVOURITE RECIPES: "+favs:""}
-${recent?"RECENTLY COOKED (avoid repeating): "+recent:""}
-HOUSEHOLD: ${cfg.name}, Adults: ${cfg.adults}, Kids: ${cfg.kids}, Restrictions: ${restr||"none"}, Cuisines: ${cfg.cuisines}, Cook time: ${cfg.cookTime}.
-CULTURAL BACKGROUND: Bushra is Bangladeshi, Bora is Turkish — authentically lean toward these cuisines (Bengali spices, mustard oil, dal, hilsa-style fish; Turkish kebabs, meze, börek, yogurt sauces, lentil soups). Suggest these when inventory allows.
-Be concise. Use what they have. Suggest variety — lean toward Bangladeshi and Turkish — avoid repeating recent meals. Format grocery lists as bullet points starting "- ".`;}
-
-</script>
-<script>
-// ── THEMES (plain script — not module, so all fns are global) ─────────────
-const THEMES = {
-  gold:{name:"Gold",swatch:"#d4a853",
-    dark:{bg:"#0f0f0d",sf:"#1a1a17",card:"#222220",card2:"#2a2a27",b1:"#333330",b2:"#3d3d39",ac:"#d4a853",ac2:"#e8c27a",acr:"212,168,83",tx:"#ede8d8",tx2:"#b8b09a",mt:"#7a7468"},
-    light:{bg:"#faf8f2",sf:"#ffffff",card:"#f3ede0",card2:"#efe8d8",b1:"#ddd5c0",b2:"#cec4ac",ac:"#a8732a",ac2:"#c48f3e",acr:"168,115,42",tx:"#2a2418",tx2:"#5c5040",mt:"#9a8870"}},
-  forest:{name:"Forest",swatch:"#4a9e5c",
-    dark:{bg:"#0a1410",sf:"#111f17",card:"#182a1e",card2:"#1e3326",b1:"#2a4032",b2:"#355040",ac:"#6db56d",ac2:"#8fd08f",acr:"109,181,109",tx:"#e4f0e4",tx2:"#9dbf9d",mt:"#5a7a5a"},
-    light:{bg:"#f2f9f2",sf:"#ffffff",card:"#e8f5e8",card2:"#dff0df",b1:"#c0ddc0",b2:"#a8cca8",ac:"#2e7d32",ac2:"#43a047",acr:"46,125,50",tx:"#0d2010",tx2:"#2e4f2e",mt:"#5a7a5a"}},
-  ocean:{name:"Ocean",swatch:"#38bdf8",
-    dark:{bg:"#060e1a",sf:"#0d1829",card:"#112035",card2:"#162840",b1:"#1e3554",b2:"#264468",ac:"#38bdf8",ac2:"#7dd3fc",acr:"56,189,248",tx:"#e0f2fe",tx2:"#7ab8d4",mt:"#486880"},
-    light:{bg:"#f0f8ff",sf:"#ffffff",card:"#e0f2fe",card2:"#d4ecf9",b1:"#b0d8f0",b2:"#90c4e4",ac:"#0369a1",ac2:"#0284c7",acr:"3,105,161",tx:"#082040",tx2:"#1e4060",mt:"#4a7090"}},
-  bordeaux:{name:"Bordeaux",swatch:"#e8829a",
-    dark:{bg:"#120810",sf:"#1c0e18",card:"#261420",card2:"#301828",b1:"#4a2238",b2:"#5c2a46",ac:"#e8829a",ac2:"#f4aabb",acr:"232,130,154",tx:"#fce8ee",tx2:"#d4909e",mt:"#8a5060"},
-    light:{bg:"#fff5f7",sf:"#ffffff",card:"#ffe8ed",card2:"#ffd8e0",b1:"#f4b8c4",b2:"#eca0b0",ac:"#be3455",ac2:"#d94070",acr:"190,52,85",tx:"#2a080e",tx2:"#6a2030",mt:"#9a5060"}},
-  sand:{name:"Sand",swatch:"#e07a5f",
-    dark:{bg:"#170e08",sf:"#221508",card:"#2e1c0e",card2:"#382414",b1:"#4a3020",b2:"#5c3c28",ac:"#e07a5f",ac2:"#eca080",acr:"224,122,95",tx:"#fdf0e8",tx2:"#c8a090",mt:"#887060"},
-    light:{bg:"#fdf6ec",sf:"#fffbf5",card:"#f5e8d8",card2:"#eedcc8",b1:"#ddc8ac",b2:"#ccb494",ac:"#c1440e",ac2:"#d4602a",acr:"193,68,14",tx:"#2a1808",tx2:"#5c3820",mt:"#9a7060"}},
-  midnight:{name:"Midnight",swatch:"#818cf8",
-    dark:{bg:"#050814",sf:"#0a0d1f",card:"#0f1228",card2:"#141830",b1:"#1e2448",b2:"#272e58",ac:"#818cf8",ac2:"#a5b0ff",acr:"129,140,248",tx:"#e8eaff",tx2:"#9099cc",mt:"#505880"},
-    light:{bg:"#f0f1ff",sf:"#ffffff",card:"#e4e6ff",card2:"#d8dbff",b1:"#b8bdff",b2:"#a0a6f4",ac:"#4f46e5",ac2:"#6366f1",acr:"79,70,229",tx:"#0a0820",tx2:"#202060",mt:"#5050a0"}},
-  lavender:{name:"Lavender",swatch:"#c084fc",
-    dark:{bg:"#0e0814",sf:"#160e20",card:"#1e1430",card2:"#261a3c",b1:"#382454",b2:"#442c66",ac:"#c084fc",ac2:"#d8a8ff",acr:"192,132,252",tx:"#f5ecff",tx2:"#c0a0e0",mt:"#7a5898"},
-    light:{bg:"#faf5ff",sf:"#ffffff",card:"#f3e8ff",card2:"#ecdcff",b1:"#d8b8f8",b2:"#c8a0f0",ac:"#9333ea",ac2:"#a855f7",acr:"147,51,234",tx:"#1a0830",tx2:"#481080",mt:"#805098"}}
-};
-
-var curTheme = (function(){try{return JSON.parse(localStorage.getItem("ks-theme"))||"gold";}catch{return "gold";}}());
-var curMode  = (function(){try{return JSON.parse(localStorage.getItem("ks-mode")) ||"auto";}catch{return "auto";}}());
-
-function applyTheme(themeKey, mode) {
-  curTheme = themeKey; curMode = mode;
-  localStorage.setItem("ks-theme", JSON.stringify(themeKey));
-  localStorage.setItem("ks-mode",  JSON.stringify(mode));
-  var t = THEMES[themeKey] || THEMES.gold;
-  var isDark = mode==="dark" || (mode==="auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  var v = isDark ? t.dark : t.light;
-  var r = document.documentElement.style;
-  r.setProperty("--bg",v.bg);r.setProperty("--sf",v.sf);r.setProperty("--card",v.card);r.setProperty("--card2",v.card2);
-  r.setProperty("--b1",v.b1);r.setProperty("--b2",v.b2);r.setProperty("--ac",v.ac);r.setProperty("--ac2",v.ac2);
-  r.setProperty("--acd","rgba("+v.acr+",.12)");r.setProperty("--tx",v.tx);r.setProperty("--tx2",v.tx2);r.setProperty("--mt",v.mt);
-  r.setProperty("--gn","#6db56d");r.setProperty("--gnd","rgba(109,181,109,.12)");
-  r.setProperty("--rd","#d96b6b");r.setProperty("--rdd","rgba(217,107,107,.12)");
-  r.setProperty("--am","#c8960a");r.setProperty("--amd","rgba(200,150,10,.12)");
-  _updateModeButtons(mode);
-  _updateThemePicker(themeKey);
-}
-
-function setMode(mode){ applyTheme(curTheme, mode); }
-
-function _updateModeButtons(mode){
-  ["auto","light","dark"].forEach(function(m){
-    var b=document.getElementById("mode-"+m);if(!b)return;
-    b.style.background=m===mode?"var(--ac)":"";
-    b.style.color=m===mode?"var(--bg)":"";
-    b.style.borderColor=m===mode?"var(--ac)":"";
-  });
-}
-
-function _updateThemePicker(active){
-  var el=document.getElementById("themePicker");if(!el)return;
-  el.innerHTML="";
-  Object.keys(THEMES).forEach(function(k){
-    var t=THEMES[k], sel=k===active;
-    var div=document.createElement("div");
-    div.title=t.name;
-    div.style.cssText="width:36px;height:36px;border-radius:50%;background:"+t.swatch+";cursor:pointer;border:3px solid "+(sel?"var(--tx)":"transparent")+";box-shadow:"+(sel?"0 0 0 2px var(--ac)":"none")+";transition:all .2s;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.85rem";
-    div.textContent=sel?"✓":"";
-    div.onclick=function(){ applyTheme(k, curMode); };
-    div.onmouseover=function(){ this.style.transform="scale(1.15)"; };
-    div.onmouseout=function(){ this.style.transform="scale(1)"; };
-    el.appendChild(div);
-  });
-}
-
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function(){
-  if(curMode==="auto") applyTheme(curTheme,"auto");
-});
-
-// Hook into showOv to refresh picker when settings opens
-document.addEventListener("DOMContentLoaded", function(){
-  var _orig = window.showOv;
-  window.showOv = function(n){ _orig(n); if(n==="settings"){ setTimeout(function(){ _updateThemePicker(curTheme); _updateModeButtons(curMode); },80); }};
-  applyTheme(curTheme, curMode);
-  // Auto-login if household code already saved
-  var sv=localStorage.getItem("ks-h");
-  if(sv){
-    g("LS").style.display="none";
-    g("APP").style.display="flex";
-    start(sv);
-  }
-});
-</script>
-</body>
-</html>
+  const
