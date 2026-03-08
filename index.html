@@ -524,6 +524,23 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
   </div>
 
+  <!-- MODAL: BUILD LIST PREVIEW -->
+  <div class="modal" id="buildPreviewM">
+    <div class="minner" style="max-height:80vh;display:flex;flex-direction:column">
+      <div class="mttl">🛒 Add to Shopping List</div>
+      <div style="font-size:.78rem;color:var(--mt);margin-bottom:14px;line-height:1.5">Claude suggested these ingredients based on your meal plan. Tap to deselect anything you don't need.</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn bs bsm" style="flex:1" onclick="bpSelAll(true)">Select all</button>
+        <button class="btn bs bsm" style="flex:1" onclick="bpSelAll(false)">Deselect all</button>
+      </div>
+      <div id="bpList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:7px;margin-bottom:16px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn bs" style="flex:1" onclick="document.getElementById('buildPreviewM').classList.remove('active')">Cancel</button>
+        <button class="btn bp" style="flex:2" id="bpAddBtn" onclick="bpConfirm()">Add selected</button>
+      </div>
+    </div>
+  </div>
+
   <!-- CHAT -->
   <div class="screen" id="screen-chat">
     <div class="chhdr"><div><div class="sttl">Ask Claude</div><div class="ssub">Your kitchen-aware AI assistant</div></div><button class="btn bsm bs" onclick="clrChat()">Clear</button></div>
@@ -1113,7 +1130,45 @@ window.clrChk=function(){shop.filter(i=>i.checked).forEach(i=>dlShopItem(i.id));
 function svShop(){Js("ks-s",shop);}
 async function svShopItem(item){try{shop=[...shop.filter(s=>s.id!==item.id),item];renderShop();renderSum();await dbSet(`households/${hid}/shopping/${item.id}`,item);}catch(e){console.error(e);}}
 async function dlShopItem(id){try{shop=shop.filter(s=>s.id!==id);renderShop();renderSum();await dbDelete(`households/${hid}/shopping/${id}`);}catch(e){console.error(e);}}
-window.buildList=async function(){showNotif("Building list with Claude…");const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");if(!ms){showNotif("No meals planned yet!");return;}const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");try{const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content:`Week meals: ${ms}\nAlready have: ${is}\nList ONLY ingredients still needed. Return ONLY bullet list, each line starting "- ". Concise.`}]})});const data=await r.json(),text=(data.content&&data.content[0]&&data.content[0].text||"");let added=0;text.split("\n").forEach(line=>{const m=line.match(/^[-•*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase())){shop.push({id:Date.now().toString()+Math.random(),name:nm,checked:false});added++;}}});svShop();renderShop();renderSum();showNotif(`Added ${added} items!`);}catch{showNotif("Couldn't build list — check connection");}};
+window._bpItems=[];
+window.buildList=async function(){
+  const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");
+  if(!ms){showNotif("No meals planned yet!");return;}
+  const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");
+  const btn=document.querySelector('[onclick="buildList()"]');
+  const origTxt=btn?btn.textContent:"";
+  if(btn){btn.disabled=true;btn.textContent="⏳ Thinking…";}
+  try{
+    const r=await fetch("/api/proxy",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content:`Week meals: ${ms}\nAlready have: ${is}\nList ONLY ingredients still needed. Return ONLY a bullet list, each line starting "- ". No categories, no headers, no explanation.`}]})});
+    const data=await r.json(),text=(data.content&&data.content[0]&&data.content[0].text||"");
+    const suggested=[];
+    text.split("\n").forEach(line=>{const m=line.match(/^[-•*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(nm&&!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase()))suggested.push({name:nm,sel:true});}});
+    if(!suggested.length){showNotif("Nothing new needed — you're all stocked! ✓");return;}
+    window._bpItems=suggested;
+    g("bpList").innerHTML=suggested.map((it,i)=>`<div id="bpitem-${i}" onclick="bpTog(${i})" style="display:flex;align-items:center;gap:12px;padding:13px 16px;background:var(--card);border:1.5px solid var(--b1);border-radius:14px;cursor:pointer;transition:all .15s"><div id="bpck-${i}" style="width:24px;height:24px;border-radius:50%;background:var(--gn);border:2px solid var(--gn);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.8rem;color:#0c0c0a;transition:all .2s">✓</div><div style="font-size:.9rem;font-weight:500">${it.name}</div></div>`).join("");
+    bpUpdBtn();
+    g("buildPreviewM").classList.add("active");
+  }catch{showNotif("Couldn't reach Claude — check connection");}
+  finally{if(btn){btn.disabled=false;btn.textContent=origTxt;}}
+};
+window.bpTog=function(i){
+  window._bpItems[i].sel=!window._bpItems[i].sel;
+  const ck=g("bpck-"+i),row=g("bpitem-"+i);
+  if(window._bpItems[i].sel){ck.textContent="✓";ck.style.background="var(--gn)";ck.style.borderColor="var(--gn)";ck.style.color="#0c0c0a";row.style.borderColor="var(--b1)";}
+  else{ck.textContent="";ck.style.background="transparent";ck.style.borderColor="var(--b2)";row.style.borderColor="var(--b2)";}
+  bpUpdBtn();
+};
+window.bpSelAll=function(on){
+  window._bpItems.forEach((_,i)=>{window._bpItems[i].sel=on;const ck=g("bpck-"+i),row=g("bpitem-"+i);if(on){ck.textContent="✓";ck.style.background="var(--gn)";ck.style.borderColor="var(--gn)";ck.style.color="#0c0c0a";row.style.borderColor="var(--b1)";}else{ck.textContent="";ck.style.background="transparent";ck.style.borderColor="var(--b2)";row.style.borderColor="var(--b2)";}});bpUpdBtn();
+};
+window.bpUpdBtn=function(){const n=window._bpItems.filter(i=>i.sel).length;const btn=g("bpAddBtn");if(btn)btn.textContent=n?`Add ${n} item${n!==1?"s":""}  ✓`:"Nothing selected";if(btn)btn.disabled=!n;};
+window.bpConfirm=async function(){
+  const toAdd=window._bpItems.filter(i=>i.sel);
+  if(!toAdd.length){g("buildPreviewM").classList.remove("active");return;}
+  for(const it of toAdd)await svShopItem({id:Date.now().toString()+Math.random().toString(36).slice(2),name:it.name,checked:false,src:"meal-plan"});
+  g("buildPreviewM").classList.remove("active");
+  showNotif(`Added ${toAdd.length} item${toAdd.length!==1?"s":""}! 🛒`);
+};
 // renderShop and sH defined below with aisle support
 // kitCtx redefined below with variety nudge
 window.saveSettings=function(){
