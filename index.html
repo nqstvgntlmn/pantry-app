@@ -643,7 +643,7 @@ cfg=J("ks-c")||{name:"The Bora Family",adults:"Bora",kids:"1 toddler (age 3)",no
 chat=[],cp=null,selR="fridge",maL="fridge",adjId=null,it="all",rt="all",md=null,cn="",nr=0,eid=null;
 function J(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}}
 function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
-const sv=localStorage.getItem("ks-h");if(sv)start(sv);
+// auto-login handled in DOMContentLoaded below
 window.joinH=function(){
   const c=document.getElementById("hci").value.trim().toLowerCase().replace(/\s+/g,"-");
   if(!c){showNotif("Enter a household code first!");return;}
@@ -1220,6 +1220,13 @@ document.addEventListener("DOMContentLoaded", function(){
   var _orig = window.showOv;
   window.showOv = function(n){ _orig(n); if(n==="settings"){ setTimeout(function(){ _updateThemePicker(curTheme); _updateModeButtons(curMode); },80); }};
   applyTheme(curTheme, curMode);
+  // Auto-login if household code already saved
+  var sv=localStorage.getItem("ks-h");
+  if(sv){
+    g("LS").style.display="none";
+    g("APP").style.display="flex";
+    start(sv);
+  }
 });
 </script>
 </body>
