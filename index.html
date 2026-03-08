@@ -248,11 +248,21 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 </head>
 <body>
 <div id="LS">
-  <div class="ll">🧺</div><div class="lt">Kitchen</div>
-  <p class="ls">Enter your household code to sync inventory across all family devices.</p>
-  <input class="li" id="hci" placeholder="e.g. bora-family" onkeydown="if(event.key==='Enter')joinH()"/>
-  <button class="btn bp bf" style="max-width:320px" onclick="joinH()">Enter Kitchen</button>
-  <p style="font-size:.72rem;color:var(--mt);max-width:280px;line-height:1.5">Share this code with your household so everyone sees the same inventory.</p>
+  <div id="ls-code" style="display:flex;flex-direction:column;align-items:center;gap:20px;width:100%">
+    <div class="ll">🧺</div><div class="lt">Kitchen</div>
+    <p class="ls">Enter your household code to sync inventory across all family devices.</p>
+    <input class="li" id="hci" placeholder="e.g. bora-family" onkeydown="if(event.key==='Enter')joinH()"/>
+    <button class="btn bp bf" style="max-width:320px" onclick="joinH()">Enter Kitchen</button>
+    <p style="font-size:.72rem;color:var(--mt);max-width:280px;line-height:1.5">Share this code with your household so everyone sees the same inventory.</p>
+  </div>
+  <div id="ls-who" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%">
+    <div class="ll">👋</div>
+    <div class="lt">Who's cooking?</div>
+    <p class="ls">Pick your name so we can personalize your experience.</p>
+    <button class="btn bp bf" style="max-width:320px;font-size:1.1rem" onclick="pickName('Bora')">Bora</button>
+    <button class="btn bs bf" style="max-width:320px;font-size:1.1rem" onclick="pickName('Bushra')">Bushra</button>
+    <button class="btn bs bf" style="max-width:320px;font-size:.85rem;color:var(--mt)" onclick="document.getElementById('ls-who').style.display='none';document.getElementById('ls-code').style.display='flex'">← Back</button>
+  </div>
 </div>
 
 <div id="APP">
@@ -338,12 +348,27 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
     <div id="sh-deals-body" style="display:none;flex:1;overflow-y:auto">
       <div class="shbody">
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <input class="qainp" id="dealsearch" placeholder="Search deals (e.g. chicken, milk…)" style="flex:1"/>
-          <button class="btn bp" onclick="searchDeals()">Search</button>
+        <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:12px">
+          <div style="font-size:.75rem;color:var(--mt);margin-bottom:8px;font-weight:500">Store</div>
+          <select class="fsel" id="dealstore">
+            <option value="any">🏪 Any nearby store</option>
+            <option value="ShopRite">ShopRite</option>
+            <option value="Stop &amp; Shop">Stop &amp; Shop</option>
+            <option value="Wegmans">Wegmans</option>
+            <option value="Whole Foods">Whole Foods</option>
+            <option value="Trader Joe's">Trader Joe's</option>
+            <option value="H-Mart">H-Mart</option>
+            <option value="Costco">Costco</option>
+            <option value="Aldi">Aldi</option>
+          </select>
+          <div style="font-size:.75rem;color:var(--mt);margin-top:10px;margin-bottom:8px;font-weight:500">Search</div>
+          <div style="display:flex;gap:8px">
+            <input class="qainp" id="dealsearch" placeholder="e.g. chicken, milk, eggs…" style="flex:1"/>
+            <button class="btn bp" onclick="searchDeals()">Search</button>
+          </div>
         </div>
-        <button class="btn bs bsm bf" style="margin-bottom:12px" onclick="dealsFromList()">🛒 Find deals for my list</button>
-        <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:8px;display:none"></div>
+        <button class="btn bs bsm bf" style="margin-bottom:14px" onclick="dealsFromList()">🛒 Find deals for everything on my list</button>
+        <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:10px;padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
         <div id="dealslist"></div>
       </div>
     </div>
@@ -563,7 +588,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
         </div>
       </div>
       <div class="brow"><button class="btn bp bf" onclick="saveSettings()">Save Settings</button></div>
-      <div style="margin-top:16px;text-align:center"><button class="btn bsm bd" onclick="if(confirm('Sign out?\')){localStorage.clear();location.reload()}">Sign Out</button></div>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:center">
+        <button class="btn bsm bs" onclick="localStorage.removeItem('ks-who');location.reload()">Switch Person</button>
+        <button class="btn bsm bd" onclick="if(confirm('Sign out?')){localStorage.clear();location.reload()}">Sign Out</button>
+      </div>
     </div>
   </div>
 </div>
@@ -615,7 +643,21 @@ chat=[],cp=null,selR="fridge",maL="fridge",adjId=null,it="all",rt="all",md=null,
 function J(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}}
 function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
 const sv=localStorage.getItem("ks-h");if(sv)start(sv);
-window.joinH=function(){const c=document.getElementById("hci").value.trim().toLowerCase().replace(/\s+/g,"-");if(!c)return;localStorage.setItem("ks-h",c);start(c);};
+window.joinH=function(){
+  const c=document.getElementById("hci").value.trim().toLowerCase().replace(/\s+/g,"-");
+  if(!c)return;
+  localStorage.setItem("ks-h",c);
+  // If name already saved on this device, go straight in
+  if(localStorage.getItem("ks-who")){start(c);return;}
+  // Otherwise show name picker
+  document.getElementById("ls-code").style.display="none";
+  document.getElementById("ls-who").style.display="flex";
+};
+window.pickName=function(name){
+  localStorage.setItem("ks-who",name);
+  const c=localStorage.getItem("ks-h");
+  start(c);
+};
 function start(code){hid=code;g("LS").style.display="none";g("APP").style.display="flex";ss("syncing");
   // Ensure current household is in the saved list
   const arr=getHouseholds();if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
@@ -631,7 +673,7 @@ async function dlr(id){try{await deleteDoc(doc(db,"households",hid,"recipes",id)
 window.showScreen=function(n){document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));document.querySelectorAll(".ni").forEach(v=>v.classList.remove("active"));g("screen-"+n).classList.add("active");g("nav-"+n).classList.add("active");if(n==="home")renderHome();if(n==="inventory")renderInv();if(n==="recipes")renderRecs();if(n==="shopping")renderShop();};
 window.showOv=n=>g("ov-"+n).classList.add("active");
 window.hideOv=n=>g("ov-"+n).classList.remove("active");
-function initHome(){const h=new Date().getHours(),gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening",u=(cfg.adults||"Bora").split(",")[0].trim();g("grt").innerHTML=`${gr}, <span>${u}</span>`;g("hdt").textContent=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});renderWeek();showScreen("home");}
+function initHome(){const h=new Date().getHours(),gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening",u=localStorage.getItem("ks-who")||(cfg.adults||"Bora").split(",")[0].trim();g("grt").innerHTML=`${gr}, <span>${u}</span>`;g("hdt").textContent=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});renderWeek();showScreen("home");}
 function renderAll(){renderHome();renderInv();}
 function renderHome(){renderWeek();renderSum();renderExp();renderTonight();updExport();}
 function tk(){return new Date().toISOString().split("T")[0];}
@@ -909,68 +951,81 @@ function renderShop(){
 }
 function sH(item){return`<div class="shit${item.checked?" chk":""}" onclick="togShop('${item.id}')"><div class="shck">${item.checked?"✓":""}</div><div class="shnm">${item.name}</div>${item.price?`<div class="price-tag">~$${item.price}</div>`:""}</div>`;}
 
-// ── DEALS / FLIPP ─────────────────────────────────────────────────────────
-const STORES=["ShopRite","Stop & Shop","Wegmans","Whole Foods","Trader Joe's"];
-const ZIP="08817"; // Edison NJ
-async function fetchFlipp(query){
-  try{
-    const url=`https://backflipp.wishabi.com/flipp/items/search?locale=en-US&postal_code=${ZIP}&q=${encodeURIComponent(query)}`;
-    const r=await fetch(url,{headers:{"Accept":"application/json"}});
-    if(!r.ok)return null;
-    const data=await r.json();
-    return(data.items||[]).slice(0,8).map(item=>({
-      name:item.name||item.display_name||query,
-      store:item.flyer?.merchant?.name||"Local Store",
-      price:item.current_price||item.sale_price||null,
-      origPrice:item.pre_price||null,
-      unit:item.unit_display||"",
-      valid:item.valid_to?new Date(item.valid_to).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"",
-      match:true
-    }));
-  }catch{return null;}
+// ── DEALS (Claude web search) ─────────────────────────────────────────────
+function renderDeals(deals, query){
+  var el=g("dealslist");
+  if(!deals||!deals.length){
+    el.innerHTML="";
+    var empty=document.createElement("div");empty.className="es";
+    empty.innerHTML='<div class="ei">🏷</div><p>No deals found for <strong>'+query+'</strong>.<br>Try a broader term or pick a different store.</p>';
+    el.appendChild(empty);return;
+  }
+  el.innerHTML="";
+  deals.forEach(function(d){
+    var card=document.createElement("div");card.className="deal-card deal-match";
+    var left=document.createElement("div");left.style.flex="1";
+    var store=document.createElement("div");store.className="deal-store";store.textContent=d.store||"Local Store";
+    var name=document.createElement("div");name.className="deal-name";name.textContent=d.name||"";
+    var priceRow=document.createElement("div");priceRow.style.cssText="display:flex;align-items:baseline;gap:6px;margin-top:4px;flex-wrap:wrap";
+    if(d.sale_price){var sp=document.createElement("span");sp.className="deal-price";sp.textContent=d.sale_price;priceRow.appendChild(sp);}
+    if(d.orig_price){var op=document.createElement("span");op.className="deal-orig";op.textContent=d.orig_price;priceRow.appendChild(op);}
+    if(d.unit){var un=document.createElement("span");un.style.cssText="font-size:.7rem;color:var(--mt)";un.textContent=d.unit;priceRow.appendChild(un);}
+    if(d.savings){var sv=document.createElement("span");sv.className="deal-badge";sv.textContent="Save "+d.savings;priceRow.appendChild(sv);}
+    left.appendChild(store);left.appendChild(name);left.appendChild(priceRow);
+    if(d.details){var det=document.createElement("div");det.style.cssText="font-size:.74rem;color:var(--tx2);margin-top:5px;line-height:1.5";det.textContent=d.details;left.appendChild(det);}
+    if(d.valid){var vl=document.createElement("div");vl.style.cssText="font-size:.68rem;color:var(--mt);margin-top:4px";vl.textContent="📅 "+d.valid;left.appendChild(vl);}
+    var btn=document.createElement("button");btn.className="btn bs bsm";btn.style.cssText="align-self:center;flex-shrink:0;margin-left:8px";btn.textContent="+ List";
+    (function(n){btn.onclick=function(){addDealToList(n);};})(d.name||"");
+    card.appendChild(left);card.appendChild(btn);el.appendChild(card);
+  });
 }
-async function claudeDeals(query){
-  const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,tools:[{type:"web_search_20250305",name:"web_search"}],messages:[{role:"user",content:`Search for current weekly deals or sales on "${query}" at ShopRite, Stop & Shop, Wegmans, Whole Foods or Trader Joe's near Edison NJ 08817. Return a JSON array (no other text) of up to 5 deals: [{"name":"...","store":"...","price":"...","valid":"..."}]. If no deals found return [].`}]})});
-  const data=await r.json();
-  const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
-  try{const m=text.match(/\[[\s\S]*\]/);return m?JSON.parse(m[0]).map(d=>({...d,match:true})):[];}catch{return[];}
-}
-function renderDeals(deals,query){
-  const el=g("dealslist");
-  if(!deals||!deals.length){el.innerHTML=`<div class="es"><div class="ei">🏷</div><p>No deals found for "${query}".<br/>Try a different search term.</p></div>`;return;}
-  el.innerHTML=deals.map(d=>`<div class="deal-card ${d.match?"deal-match":""}">
-    <div style="flex:1"><div class="deal-store">${d.store}</div>
-    <div class="deal-name">${d.name}</div>
-    <div style="display:flex;align-items:baseline;gap:6px;margin-top:4px">
-      ${d.price?`<span class="deal-price">${typeof d.price==="number"?"$"+d.price.toFixed(2):d.price}</span>`:""}
-      ${d.origPrice?`<span class="deal-orig">${typeof d.origPrice==="number"?"$"+d.origPrice.toFixed(2):d.origPrice}</span>`:""}
-      ${d.unit?`<span style="font-size:.7rem;color:var(--mt)">${d.unit}</span>`:""}
-    </div>
-    ${d.valid?`<div style="font-size:.68rem;color:var(--mt);margin-top:4px">Valid until ${d.valid}</div>`:""}
-    </div>
-    <button class="btn bs bsm" style="align-self:center;flex-shrink:0" onclick="addDealToList('${d.name.replace(/'/g,"\\'")}')">+ List</button>
-  </div>`).join("");
-}
-window.addDealToList=function(name){if(!shop.find(i=>i.name.toLowerCase()===name.toLowerCase())){shop.push({id:Date.now().toString(),name,checked:false});svShop();renderShop();showNotif(name+" added to list!");}else{showNotif("Already on your list!");}};
-window.searchDeals=async function(){
-  const q=g("dealsearch").value.trim();if(!q)return;
-  const st=g("dealsstatus");st.style.display="block";st.textContent="🔍 Searching local flyers…";
-  g("dealslist").innerHTML="";
-  let deals=await fetchFlipp(q);
-  if(!deals||!deals.length){st.textContent="Asking Claude to search…";deals=await claudeDeals(q);}
-  st.style.display="none";
-  renderDeals(deals,q);
+
+window.addDealToList=function(name){
+  var decoded=(name||"").replace(/&#39;/g,"'");
+  if(!shop.find(function(i){return i.name.toLowerCase()===decoded.toLowerCase();})){
+    shop.push({id:Date.now().toString(),name:decoded,checked:false});
+    svShop();renderShop();showNotif(decoded+" added!");
+  }else{showNotif("Already on your list!");}
 };
-window.dealsFromList=async function(){
-  const items=shop.filter(i=>!i.checked).slice(0,5);
-  if(!items.length){showNotif("Add items to your list first!");return;}
-  const st=g("dealsstatus");st.style.display="block";st.textContent="🔍 Searching deals for your list…";
+
+async function claudeSearchDeals(query, store){
+  var storeStr=(store&&store!=="any")?store:"ShopRite, Stop & Shop, Wegmans, Whole Foods, or Trader Joe's";
+  var prompt="Search for current this-week sales and deals on \""+query+"\" at "+storeStr+" near Edison NJ 08817.\nFind the actual weekly circular or deals page and extract real current deals.\nReturn ONLY a JSON array, no other text, no markdown:\n[{\"name\":\"product name\",\"store\":\"store name\",\"sale_price\":\"$X.XX\",\"orig_price\":\"$X.XX or null\",\"unit\":\"per lb / each / etc\",\"savings\":\"$X off\",\"details\":\"e.g. buy 2 get 1\",\"valid\":\"valid dates\"}]\nReturn [] if no deals found. Include up to 8 deals.";
+  const r=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1200,
+      tools:[{type:"web_search_20250305",name:"web_search"}],
+      messages:[{role:"user",content:prompt}]})
+  });
+  const data=await r.json();
+  const text=(data.content||[]).filter(function(b){return b.type==="text";}).map(function(b){return b.text;}).join("");
+  try{var m=text.match(/\[[\s\S]*?\]/);return m?JSON.parse(m[0]):[];}catch(e){return[];}
+}
+
+window.searchDeals=async function(){
+  const q=g("dealsearch").value.trim();if(!q){showNotif("Enter something to search");return;}
+  const store=g("dealstore")?.value||"any";
+  const st=g("dealsstatus");
+  st.style.display="block";
+  st.textContent="🔍 Searching "+(store!=="any"?store:"nearby stores")+" for "+q+"…";
   g("dealslist").innerHTML="";
-  const query=items.map(i=>i.name).join(" OR ");
-  let deals=await fetchFlipp(query);
-  if(!deals||!deals.length){st.textContent="Asking Claude to search…";deals=await claudeDeals(items.map(i=>i.name).join(", "));}
-  st.style.display="none";
-  renderDeals(deals||[],items.map(i=>i.name).join(", "));
+  try{const deals=await claudeSearchDeals(q,store);st.style.display="none";renderDeals(deals,q);}
+  catch(e){st.style.display="none";g("dealslist").innerHTML='<div class="es"><div class="ei">⚠️</div><p>Search failed. Check connection.</p></div>';}
+};
+
+window.dealsFromList=async function(){
+  const items=shop.filter(function(i){return!i.checked;}).slice(0,6);
+  if(!items.length){showNotif("Add items to your list first!");return;}
+  const store=g("dealstore")?.value||"any";
+  const st=g("dealsstatus");
+  const names=items.map(function(i){return i.name;}).join(", ");
+  st.style.display="block";st.textContent="🔍 Searching deals for: "+names+"…";
+  g("dealslist").innerHTML="";
+  try{
+    const deals=await claudeSearchDeals(names,store);st.style.display="none";
+    if(!deals.length){g("dealslist").innerHTML='<div class="es"><div class="ei">🏷</div><p>No deals found this week.<br/>Try searching individually.</p></div>';}
+    else{renderDeals(deals,names);}
+  }catch(e){st.style.display="none";g("dealslist").innerHTML='<div class="es"><div class="ei">⚠️</div><p>Search failed. Check connection.</p></div>';}
 };
 
 // ── OPEN RECIPE (updated with schedule button + tags + cook count) ─────────
