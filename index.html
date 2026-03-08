@@ -838,7 +838,7 @@ function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
 window._appStart=function start(code){hid=code;g("LS").style.display="none";g("APP").style.display="flex";showScreen("home");ss("syncing");
   // Ensure current household is in the saved list
   const arr=getHouseholds();if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
-  loadCfgUI();setTimeout(initHome,0);
+  loadCfgUI();initHome();
   async function poll(){try{ss("syncing");const[ni,nr2,ns]=await Promise.all([dbList(`households/${hid}/inventory`),dbList(`households/${hid}/recipes`),dbList(`households/${hid}/shopping`)]);inv=ni;recs=nr2;shop=ns;ss("synced");renderAll();renderRecs();renderShop();renderSum();}catch(e){console.error("poll error",e);ss("error");}}
   window._poll=poll;poll();setInterval(poll,6000);}
 function g(id){return document.getElementById(id);}
@@ -865,7 +865,7 @@ window.hideOv=n=>g("ov-"+n).classList.remove("active");
 function initHome(){const h=new Date().getHours(),gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening",u=localStorage.getItem("ks-who")||(cfg.adults||"Bora").split(",")[0].trim();g("grt").innerHTML=`${gr}, <span>${u}</span>`;g("hdt").textContent=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});renderWeek();}
 window.initHome=initHome;
 function renderAll(){renderHome();renderInv();}
-function renderHome(){renderWeek();renderSum();renderExp();renderTonight();updExport();}
+function renderHome(){const h=new Date().getHours(),gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening",u=localStorage.getItem("ks-who")||(cfg.adults||"Bora").split(",")[0].trim(),grtEl=g("grt");if(grtEl&&!grtEl.innerHTML)grtEl.innerHTML=`${gr}, <span>${u}</span>`;renderWeek();renderSum();renderExp();renderTonight();updExport();}
 function tk(){return new Date().toISOString().split("T")[0];}
 function wDates(){const t=new Date();t.setHours(0,0,0,0);const s=new Date(t);s.setDate(t.getDate()-t.getDay());return Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return d;});}
 function renderTonight(){
