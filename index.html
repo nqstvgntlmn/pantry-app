@@ -17,10 +17,16 @@
     .app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
 
     /* Header */
-    .header { padding: 20px 20px 14px; border-bottom: 1px solid var(--border); }
-    .header-row { display: flex; align-items: center; justify-content: space-between; }
+    .header { padding: 20px 20px 0; border-bottom: 1px solid var(--border); }
+    .header-row { display: flex; align-items: center; justify-content: space-between; padding-bottom: 14px; }
     .header h1 { font-family: 'DM Serif Display', serif; font-size: 1.6rem; color: var(--accent); }
     .header p { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    .header-btns { display: flex; gap: 6px; }
+
+    /* Tabs */
+    .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg); }
+    .tab { flex: 1; padding: 11px 4px; text-align: center; font-size: 0.78rem; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.18s; -webkit-tap-highlight-color: transparent; }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
     /* Buttons */
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 11px 18px; border-radius: 9px; border: none; font-family: 'DM Sans', sans-serif; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.18s; -webkit-tap-highlight-color: transparent; }
@@ -32,6 +38,7 @@
     .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
     .btn-full { width: 100%; }
     .btn-row { display: flex; gap: 8px; margin-top: 16px; }
+    .btn-sm { padding: 6px 12px; font-size: 0.75rem; }
 
     /* Content */
     .content { flex: 1; padding: 16px; overflow-y: auto; }
@@ -44,10 +51,14 @@
     .stat-val { font-family: 'DM Serif Display', serif; font-size: 1.6rem; color: var(--accent); }
     .stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
 
+    /* Location group */
+    .loc-group { margin-bottom: 20px; }
+    .loc-group-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .loc-group-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
     /* Inventory list */
-    .section-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 16px 0 8px; }
     .inv-list { display: flex; flex-direction: column; gap: 8px; }
-    .inv-item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .inv-item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: border-color 0.15s; }
     .inv-item:active { border-color: var(--accent); }
     .inv-left { display: flex; align-items: center; gap: 10px; }
     .inv-img { width: 40px; height: 40px; border-radius: 7px; object-fit: contain; background: var(--surface); }
@@ -56,6 +67,7 @@
     .inv-sub { font-size: 0.74rem; color: var(--muted); }
     .inv-qty { font-family: 'DM Serif Display', serif; font-size: 1.2rem; color: var(--accent); text-align: right; }
     .inv-unit { font-size: 0.7rem; color: var(--muted); }
+    .loc-pill { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 0.65rem; background: var(--surface); color: var(--muted); border: 1px solid var(--border); margin-top: 3px; }
 
     /* Empty state */
     .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
@@ -71,6 +83,659 @@
     .prod-barcode { font-size: 0.7rem; color: var(--border); margin-top: 3px; font-family: monospace; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; background: var(--surface); color: var(--muted); border: 1px solid var(--border); margin-top: 4px; }
     .source-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.68rem; background: transparent; color: var(--accent); border: 1px solid var(--accent-dark); margin-top: 4px; margin-left: 4px; }
+
+    /* Form rows */
+    .form-row { margin: 14px 0; }
+    .form-label { font-size: 0.82rem; color: var(--muted); margin-bottom: 6px; display: block; }
+    .qty-row { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
+    .qty-label { font-size: 0.82rem; color: var(--muted); flex: 1; }
+    .qty-ctrl { display: flex; align-items: center; gap: 8px; }
+    .qty-btn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1.2rem; cursor: pointer; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; flex-shrink: 0; }
+    .qty-btn:active { background: var(--border); }
+    .qty-input { width: 64px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; color: var(--text); font-size: 1.1rem; font-family: 'DM Serif Display', serif; text-align: center; }
+    .qty-input:focus { outline: none; border-color: var(--accent); }
+
+    /* Location picker */
+    .loc-picker { display: flex; gap: 8px; }
+    .loc-btn { flex: 1; padding: 10px 6px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 0.82rem; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+    .loc-btn.selected { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+    /* Inputs */
+    .unit-input, .text-input, .name-input, .textarea-input {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; color: var(--text); font-size: 0.9rem; font-family: 'DM Sans', sans-serif;
+    }
+    .unit-input { width: 110px; }
+    .text-input { flex: 1; }
+    .name-input { width: 100%; margin-top: 8px; }
+    .textarea-input { width: 100%; min-height: 120px; resize: vertical; line-height: 1.5; }
+    .unit-input:focus, .text-input:focus, .name-input:focus, .textarea-input:focus { outline: none; border-color: var(--accent); }
+
+    /* Alerts */
+    .not-found-box { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 12px; margin-bottom: 12px; font-size: 0.83rem; color: var(--muted); }
+    .error-box { background: var(--surface); border: 1px solid var(--red); border-radius: 8px; padding: 10px 14px; font-size: 0.83rem; color: var(--red); margin-bottom: 12px; }
+    .info-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 0.83rem; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+
+    /* Export */
+    .export-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 0.78rem; font-family: monospace; color: var(--muted); white-space: pre-wrap; max-height: 200px; overflow-y: auto; margin-top: 8px; line-height: 1.6; }
+
+    /* Scanning screen */
+    .scanning-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; text-align: center; gap: 16px; }
+    .spinner { width: 48px; height: 48px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Notification */
+    .notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: var(--green); color: #1a1a18; padding: 9px 22px; border-radius: 20px; font-size: 0.85rem; font-weight: 500; z-index: 999; pointer-events: none; white-space: nowrap; animation: fadeNote 2.5s ease forwards; }
+    @keyframes fadeNote { 0%{opacity:0;transform:translateX(-50%) translateY(-10px)} 15%{opacity:1;transform:translateX(-50%) translateY(0)} 80%{opacity:1} 100%{opacity:0} }
+
+    /* Views */
+    .view { display: none; }
+    .view.active { display: block; }
+    .input-row { display: flex; gap: 8px; }
+    .divider { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--muted); font-size: 0.78rem; }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-row">
+      <div>
+        <h1>🧺 Pantry</h1>
+        <p>Kitchen Inventory Manager</p>
+      </div>
+      <div class="header-btns">
+        <button class="btn btn-secondary btn-sm" onclick="showView('import')">Import</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleExport()">Export ↗</button>
+      </div>
+    </div>
+    <div id="exportPanel" style="display:none;padding-bottom:14px">
+      <div class="export-box" id="exportBox">No items yet.</div>
+      <p style="font-size:0.72rem;color:var(--muted);margin-top:6px">Copy and paste into Claude chat to sync your living document.</p>
+    </div>
+  </div>
+
+  <!-- TABS (only shown on inventory view) -->
+  <div class="tabs" id="tabBar">
+    <div class="tab active" onclick="setTab('all')" id="tab-all">All</div>
+    <div class="tab" onclick="setTab('fridge')" id="tab-fridge">🌡 Fridge</div>
+    <div class="tab" onclick="setTab('freezer')" id="tab-freezer">🧊 Freezer</div>
+    <div class="tab" onclick="setTab('pantry')" id="tab-pantry">🥫 Pantry</div>
+  </div>
+
+  <!-- Hidden file input -->
+  <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)" />
+
+  <!-- ===== INVENTORY VIEW ===== -->
+  <div class="content view active" id="view-inventory">
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-val" id="statItems">0</div><div class="stat-label">Items</div></div>
+      <div class="stat-box"><div class="stat-val" id="statUnits">0</div><div class="stat-label">Total Units</div></div>
+    </div>
+
+    <div id="errorBox" class="error-box" style="display:none"></div>
+
+    <div class="scan-actions">
+      <button class="btn btn-primary btn-full" onclick="startScan()">📷 Scan Barcode</button>
+      <button class="btn btn-secondary btn-full" onclick="showView('manual')">✏️ Enter Barcode Manually</button>
+    </div>
+    <p class="photo-hint">Works on all phones including iPhone. Take a clear close-up photo of the barcode.</p>
+
+    <div id="invContainer" style="margin-top:8px"></div>
+  </div>
+
+  <!-- ===== SCANNING VIEW ===== -->
+  <div class="content view" id="view-scanning">
+    <div class="scanning-screen">
+      <div class="spinner"></div>
+      <p id="scanStatus" style="color:var(--muted);font-size:0.9rem">Processing…</p>
+    </div>
+  </div>
+
+  <!-- ===== MANUAL VIEW ===== -->
+  <div class="content view" id="view-manual">
+    <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:6px">Manual Entry</h2>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">Type the barcode number from the product label.</p>
+    <div class="input-row">
+      <input class="text-input" id="manualInput" placeholder="e.g. 013000006408" inputmode="numeric" onkeydown="if(event.key==='Enter') manualLookup()" />
+      <button class="btn btn-primary" onclick="manualLookup()">Look Up</button>
+    </div>
+    <div style="margin-top:14px">
+      <button class="btn btn-secondary btn-full" onclick="showView('inventory')">← Back</button>
+    </div>
+  </div>
+
+  <!-- ===== RESULT VIEW ===== -->
+  <div class="content view" id="view-result">
+    <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:12px" id="resultTitle">Product Found ✓</h2>
+    <div id="resultContent"></div>
+
+    <!-- Location picker -->
+    <div class="form-row">
+      <label class="form-label">Where is this going?</label>
+      <div class="loc-picker">
+        <button class="loc-btn" id="loc-fridge" onclick="selectLocation('fridge')">🌡 Fridge</button>
+        <button class="loc-btn" id="loc-freezer" onclick="selectLocation('freezer')">🧊 Freezer</button>
+        <button class="loc-btn" id="loc-pantry" onclick="selectLocation('pantry')">🥫 Pantry</button>
+      </div>
+    </div>
+
+    <!-- Quantity -->
+    <div class="qty-row">
+      <span class="qty-label">Quantity</span>
+      <div class="qty-ctrl">
+        <button class="qty-btn" onclick="changeAddQty(-1)">−</button>
+        <input class="qty-input" id="addQtyInput" type="number" min="1" value="1" oninput="syncQty()" />
+        <button class="qty-btn" onclick="changeAddQty(1)">+</button>
+      </div>
+    </div>
+
+    <!-- Unit -->
+    <div class="qty-row">
+      <span class="qty-label">Unit</span>
+      <input class="unit-input" id="unitInput" placeholder="oz, lb, unit…" />
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" style="flex:1" onclick="showView('inventory')">Cancel</button>
+      <button class="btn btn-primary" style="flex:2" id="addBtn" onclick="addToInventory()">Add to Inventory</button>
+    </div>
+  </div>
+
+  <!-- ===== ADJUST VIEW ===== -->
+  <div class="content view" id="view-adjust">
+    <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:12px">Adjust Item</h2>
+    <div id="adjustContent"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" style="flex:1" onclick="showView('inventory')">← Back</button>
+      <button class="btn btn-danger" style="flex:1" id="removeBtn">Remove</button>
+    </div>
+  </div>
+
+  <!-- ===== IMPORT VIEW ===== -->
+  <div class="content view" id="view-import">
+    <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:6px">Import Living Document</h2>
+    <div class="info-box">
+      Paste your living document (the markdown file from Claude) below. Items already in your inventory will be updated; new items will be added.
+    </div>
+    <textarea class="textarea-input" id="importText" placeholder="Paste your kitchen inventory markdown here…"></textarea>
+    <div class="btn-row">
+      <button class="btn btn-secondary" style="flex:1" onclick="showView('inventory')">Cancel</button>
+      <button class="btn btn-primary" style="flex:2" onclick="importDocument()">Import</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Notification -->
+<div class="notification" id="notification" style="display:none"></div>
+
+<script>
+  // ─── State ────────────────────────────────────────────────────────
+  let inventory = JSON.parse(localStorage.getItem('pantry-inventory') || '[]');
+  let currentProduct = null;
+  let selectedLocation = 'fridge';
+  let adjustBarcode = null;
+  let activeTab = 'all';
+
+  // ─── Init ─────────────────────────────────────────────────────────
+  renderInventory();
+
+  // ─── View Router ──────────────────────────────────────────────────
+  function showView(name) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-' + name).classList.add('active');
+    const showTabs = name === 'inventory';
+    document.getElementById('tabBar').style.display = showTabs ? 'flex' : 'none';
+    if (name === 'inventory') renderInventory();
+  }
+
+  // ─── Tabs ─────────────────────────────────────────────────────────
+  function setTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    renderInventory();
+  }
+
+  // ─── Scan ─────────────────────────────────────────────────────────
+  function startScan() {
+    clearError();
+    document.getElementById('fileInput').click();
+  }
+
+  async function handlePhoto(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    showView('scanning');
+    setScanStatus('Reading image…');
+    const dataUrl = await fileToDataUrl(file);
+    try {
+      setScanStatus('Detecting barcode…');
+      const code = await decodeBarcode(dataUrl);
+      setScanStatus('Found ' + code + ' — looking up product…');
+      const product = await lookupBarcode(code);
+      currentProduct = product;
+      document.getElementById('addQtyInput').value = 1;
+      selectLocation('fridge');
+      showResult(product);
+    } catch (err) {
+      showError('No barcode detected. Try better lighting, get closer, or enter manually.');
+      showView('inventory');
+    }
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = e => res(e.target.result);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+
+  function decodeBarcode(dataUrl) {
+    return new Promise((resolve, reject) => {
+      Quagga.decodeSingle({
+        src: dataUrl, numOfWorkers: 0,
+        inputStream: { size: 1600 },
+        decoder: {
+          readers: ['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader','code_39_reader'],
+          multiple: false
+        },
+        locate: true
+      }, result => {
+        if (result && result.codeResult && result.codeResult.code) {
+          resolve(result.codeResult.code);
+        } else {
+          reject('No barcode found');
+        }
+      });
+    });
+  }
+
+  // ─── Lookup ───────────────────────────────────────────────────────
+  async function lookupBarcode(barcode) {
+    const result = (await tryOpenFoodFacts(barcode)) || (await tryUPCItemDB(barcode));
+    return result || { barcode, name: '', brand: '', quantity: '', category: 'General', image: null, source: null, notFound: true };
+  }
+
+  async function tryOpenFoodFacts(barcode) {
+    try {
+      const res = await fetch('https://world.openfoodfacts.org/api/v0/product/' + barcode + '.json');
+      const data = await res.json();
+      if (data.status === 1 && data.product) {
+        const p = data.product;
+        const name = p.product_name || p.product_name_en || '';
+        if (!name) return null;
+        return { barcode, name, brand: p.brands || '', quantity: p.quantity || '', category: (p.categories_tags || [])[0]?.replace('en:','') || 'General', image: p.image_small_url || null, source: 'Open Food Facts', notFound: false };
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  async function tryUPCItemDB(barcode) {
+    try {
+      const res = await fetch('https://api.upcitemdb.com/prod/trial/lookup?upc=' + barcode);
+      const data = await res.json();
+      if (data.code === 'OK' && data.items && data.items.length > 0) {
+        const item = data.items[0];
+        return { barcode, name: item.title || '', brand: item.brand || '', quantity: item.size || '', category: item.category || 'General', image: (item.images || [])[0] || null, source: 'UPC Item DB', notFound: false };
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  // ─── Manual ───────────────────────────────────────────────────────
+  async function manualLookup() {
+    const val = document.getElementById('manualInput').value.trim();
+    if (!val) return;
+    showView('scanning');
+    setScanStatus('Looking up ' + val + '…');
+    const product = await lookupBarcode(val);
+    currentProduct = product;
+    document.getElementById('addQtyInput').value = 1;
+    selectLocation('fridge');
+    document.getElementById('manualInput').value = '';
+    showResult(product);
+  }
+
+  // ─── Location picker ──────────────────────────────────────────────
+  function selectLocation(loc) {
+    selectedLocation = loc;
+    ['fridge','freezer','pantry'].forEach(l => {
+      document.getElementById('loc-' + l).classList.toggle('selected', l === loc);
+    });
+  }
+
+  // ─── Qty controls ─────────────────────────────────────────────────
+  function changeAddQty(delta) {
+    const input = document.getElementById('addQtyInput');
+    const current = parseInt(input.value) || 1;
+    input.value = Math.max(1, current + delta);
+  }
+
+  function syncQty() {
+    const input = document.getElementById('addQtyInput');
+    if (parseInt(input.value) < 1 || isNaN(parseInt(input.value))) input.value = 1;
+  }
+
+  // ─── Result ───────────────────────────────────────────────────────
+  function showResult(product) {
+    document.getElementById('resultTitle').textContent = product.notFound ? 'Product Not Found' : 'Product Found ✓';
+    document.getElementById('unitInput').value = product.quantity || 'unit';
+
+    let html = '';
+    if (product.notFound) {
+      html = `
+        <div class="not-found-box">
+          ⚠️ Barcode <span style="font-family:monospace">${product.barcode}</span> wasn't found. Enter the name to add manually:
+          <input class="name-input" id="manualName" placeholder="Product name (required)" oninput="validateAdd()" />
+        </div>`;
+      setTimeout(() => document.getElementById('addBtn').disabled = true, 0);
+    } else {
+      const imgHtml = product.image
+        ? `<img src="${product.image}" class="prod-img" onerror="this.style.display='none'" />`
+        : `<div class="prod-img" style="display:flex;align-items:center;justify-content:center;font-size:1.5rem">🛒</div>`;
+      html = `
+        <div class="prod-card">
+          <div class="prod-header">
+            ${imgHtml}
+            <div style="flex:1">
+              <div class="prod-name">${product.name}</div>
+              ${product.brand ? `<div class="prod-brand">${product.brand}</div>` : ''}
+              <div class="prod-barcode">${product.barcode}</div>
+              <span class="badge">${product.category}</span>
+              ${product.source ? `<span class="source-badge">${product.source}</span>` : ''}
+            </div>
+          </div>
+        </div>`;
+      setTimeout(() => document.getElementById('addBtn').disabled = false, 0);
+    }
+    document.getElementById('resultContent').innerHTML = html;
+    showView('result');
+  }
+
+  function validateAdd() {
+    const nameEl = document.getElementById('manualName');
+    document.getElementById('addBtn').disabled = !nameEl || !nameEl.value.trim();
+  }
+
+  // ─── Add to inventory ─────────────────────────────────────────────
+  function addToInventory() {
+    if (!currentProduct) return;
+    const nameEl = document.getElementById('manualName');
+    const name = currentProduct.notFound ? (nameEl ? nameEl.value.trim() : '') : currentProduct.name;
+    if (!name) return;
+    const unit = document.getElementById('unitInput').value.trim() || 'unit';
+    const qty = Math.max(1, parseInt(document.getElementById('addQtyInput').value) || 1);
+    const barcode = currentProduct.barcode;
+    const location = selectedLocation;
+
+    const existing = inventory.findIndex(i => i.barcode === barcode);
+    if (existing >= 0) {
+      inventory[existing].qty += qty;
+      inventory[existing].location = location;
+      showNotification('+' + qty + ' added to ' + name);
+    } else {
+      inventory.push({
+        barcode, name, brand: currentProduct.brand || '',
+        unit, qty, location,
+        category: currentProduct.category || 'General',
+        image: currentProduct.image || null,
+        source: currentProduct.source || null,
+        addedAt: new Date().toLocaleDateString()
+      });
+      showNotification(name + ' added to ' + locLabel(location) + '!');
+    }
+    saveInventory();
+    currentProduct = null;
+    showView('inventory');
+  }
+
+  // ─── Adjust item ──────────────────────────────────────────────────
+  function openAdjust(barcode) {
+    const item = inventory.find(i => i.barcode === barcode);
+    if (!item) return;
+    adjustBarcode = barcode;
+
+    const imgHtml = item.image
+      ? `<img src="${item.image}" class="prod-img" onerror="this.style.display='none'" />`
+      : `<div class="prod-img" style="display:flex;align-items:center;justify-content:center;font-size:1.5rem">🛒</div>`;
+
+    document.getElementById('adjustContent').innerHTML = `
+      <div class="prod-card">
+        <div class="prod-header">
+          ${imgHtml}
+          <div>
+            <div class="prod-name">${item.name}</div>
+            ${item.brand ? `<div class="prod-brand">${item.brand}</div>` : ''}
+            <div style="font-size:0.72rem;color:var(--muted);margin-top:2px">Added ${item.addedAt}</div>
+            ${item.source ? `<span class="source-badge" style="margin-top:4px;display:inline-block">${item.source}</span>` : ''}
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-top:14px">
+          <label class="form-label">Location</label>
+          <div class="loc-picker">
+            <button class="loc-btn ${item.location==='fridge'?'selected':''}" onclick="updateLocation('fridge')">🌡 Fridge</button>
+            <button class="loc-btn ${item.location==='freezer'?'selected':''}" onclick="updateLocation('freezer')">🧊 Freezer</button>
+            <button class="loc-btn ${item.location==='pantry'?'selected':''}" onclick="updateLocation('pantry')">🥫 Pantry</button>
+          </div>
+        </div>
+
+        <div class="qty-row">
+          <span class="qty-label">Quantity</span>
+          <div class="qty-ctrl">
+            <button class="qty-btn" onclick="adjustQty(-1)">−</button>
+            <input class="qty-input" id="adjustQtyInput" type="number" min="0" value="${item.qty}" oninput="adjustQtyDirect()" />
+            <button class="qty-btn" onclick="adjustQty(1)">+</button>
+          </div>
+        </div>
+      </div>`;
+
+    document.getElementById('removeBtn').onclick = () => removeItem(barcode);
+    showView('adjust');
+  }
+
+  function updateLocation(loc) {
+    const item = inventory.find(i => i.barcode === adjustBarcode);
+    if (!item) return;
+    item.location = loc;
+    document.querySelectorAll('#adjustContent .loc-btn').forEach(b => b.classList.remove('selected'));
+    event.target.classList.add('selected');
+    saveInventory();
+  }
+
+  function adjustQty(delta) {
+    const item = inventory.find(i => i.barcode === adjustBarcode);
+    if (!item) return;
+    item.qty = Math.max(0, item.qty + delta);
+    document.getElementById('adjustQtyInput').value = item.qty;
+    if (item.qty === 0) {
+      removeItem(adjustBarcode);
+    } else {
+      saveInventory();
+    }
+  }
+
+  function adjustQtyDirect() {
+    const item = inventory.find(i => i.barcode === adjustBarcode);
+    if (!item) return;
+    const val = parseInt(document.getElementById('adjustQtyInput').value);
+    if (!isNaN(val) && val >= 0) {
+      item.qty = val;
+      saveInventory();
+    }
+  }
+
+  function removeItem(barcode) {
+    inventory = inventory.filter(i => i.barcode !== barcode);
+    saveInventory();
+    showNotification('Item removed');
+    showView('inventory');
+  }
+
+  // ─── Import document ──────────────────────────────────────────────
+  function importDocument() {
+    const text = document.getElementById('importText').value.trim();
+    if (!text) return;
+
+    let imported = 0;
+    let updated = 0;
+
+    // Detect location context from section headers
+    const lines = text.split('\n');
+    let currentLoc = 'pantry';
+
+    lines.forEach(line => {
+      const lower = line.toLowerCase();
+      if (lower.includes('fridge')) currentLoc = 'fridge';
+      else if (lower.includes('freezer')) currentLoc = 'freezer';
+      else if (lower.includes('pantry')) currentLoc = 'pantry';
+
+      // Match lines like: - Item Name: qty unit  OR  | Item Name | qty | unit |
+      const listMatch = line.match(/^[-*]\s+(.+?)(?:[\(:,]\s*(.+?)\s*[\):,])?:\s*(\d+(?:\.\d+)?)\s*([a-zA-Z%\/]+.*)?$/);
+      const tableMatch = line.match(/^\|\s*([^|]+?)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*([^|]+?)\s*\|/);
+
+      let name, qty, unit;
+
+      if (tableMatch) {
+        name = tableMatch[1].trim();
+        qty = parseFloat(tableMatch[2]);
+        unit = tableMatch[3].trim();
+      } else if (listMatch) {
+        name = listMatch[1].trim();
+        qty = parseFloat(listMatch[3]);
+        unit = (listMatch[4] || 'unit').trim();
+      }
+
+      if (name && qty && name !== 'Item' && name !== '---') {
+        const barcode = 'import-' + name.toLowerCase().replace(/\s+/g, '-');
+        const existing = inventory.findIndex(i => i.barcode === barcode);
+        if (existing >= 0) {
+          inventory[existing].qty = qty;
+          inventory[existing].unit = unit || inventory[existing].unit;
+          updated++;
+        } else {
+          inventory.push({
+            barcode, name, brand: '', unit: unit || 'unit',
+            qty, location: currentLoc, category: 'Imported',
+            image: null, source: 'Imported', addedAt: new Date().toLocaleDateString()
+          });
+          imported++;
+        }
+      }
+    });
+
+    saveInventory();
+    document.getElementById('importText').value = '';
+    showNotification(`Imported ${imported} new, updated ${updated}`);
+    showView('inventory');
+  }
+
+  // ─── Render inventory ─────────────────────────────────────────────
+  function locLabel(loc) {
+    return { fridge: '🌡 Fridge', freezer: '🧊 Freezer', pantry: '🥫 Pantry' }[loc] || loc;
+  }
+
+  function renderInventory() {
+    const container = document.getElementById('invContainer');
+    if (!container) return;
+
+    const filtered = activeTab === 'all' ? inventory : inventory.filter(i => i.location === activeTab);
+
+    document.getElementById('statItems').textContent = filtered.length;
+    document.getElementById('statUnits').textContent = filtered.reduce((a,i) => a + i.qty, 0);
+
+    // Export (always full inventory)
+    const exportText = ['fridge','freezer','pantry'].map(loc => {
+      const items = inventory.filter(i => i.location === loc);
+      if (!items.length) return '';
+      const header = locLabel(loc).toUpperCase();
+      return header + '\n' + items.map(i => `- ${i.name}${i.brand ? ` (${i.brand})` : ''}: ${i.qty} ${i.unit}`).join('\n');
+    }).filter(Boolean).join('\n\n');
+    document.getElementById('exportBox').textContent = exportText || 'No items yet.';
+
+    if (filtered.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">${activeTab === 'fridge' ? '🌡' : activeTab === 'freezer' ? '🧊' : activeTab === 'pantry' ? '🥫' : '🏪'}</div><p>No items here yet.<br/>Scan a barcode to add something.</p></div>`;
+      return;
+    }
+
+    if (activeTab === 'all') {
+      // Group by location
+      const groups = [
+        { key: 'fridge', label: '🌡 Fridge' },
+        { key: 'freezer', label: '🧊 Freezer' },
+        { key: 'pantry', label: '🥫 Pantry' },
+      ];
+      container.innerHTML = groups.map(g => {
+        const items = filtered.filter(i => i.location === g.key);
+        if (!items.length) return '';
+        return `<div class="loc-group">
+          <div class="loc-group-title">${g.label}</div>
+          <div class="inv-list">${items.map(itemHTML).join('')}</div>
+        </div>`;
+      }).join('');
+    } else {
+      container.innerHTML = `<div class="inv-list" style="margin-top:8px">${filtered.map(itemHTML).join('')}</div>`;
+    }
+  }
+
+  function itemHTML(item) {
+    const imgHtml = item.image
+      ? `<img src="${item.image}" class="inv-img" onerror="this.src=''" />`
+      : `<div class="inv-placeholder">🛒</div>`;
+    return `
+      <div class="inv-item" onclick="openAdjust('${item.barcode}')">
+        <div class="inv-left">
+          ${imgHtml}
+          <div>
+            <div class="inv-name">${item.name}</div>
+            <div class="inv-sub">${item.brand || item.category}</div>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="inv-qty">${item.qty}</div>
+          <div class="inv-unit">${item.unit}</div>
+        </div>
+      </div>`;
+  }
+
+  // ─── Storage ──────────────────────────────────────────────────────
+  function saveInventory() {
+    localStorage.setItem('pantry-inventory', JSON.stringify(inventory));
+    renderInventory();
+  }
+
+  // ─── Export toggle ────────────────────────────────────────────────
+  function toggleExport() {
+    const p = document.getElementById('exportPanel');
+    p.style.display = p.style.display === 'none' ? 'block' : 'none';
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────
+  function setScanStatus(msg) { document.getElementById('scanStatus').textContent = msg; }
+  function showError(msg) { const el = document.getElementById('errorBox'); el.textContent = '⚠️ ' + msg; el.style.display = 'block'; }
+  function clearError() { document.getElementById('errorBox').style.display = 'none'; }
+
+  let notifTimer = null;
+  function showNotification(msg) {
+    const el = document.getElementById('notification');
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = 'fadeNote 2.5s ease forwards';
+    if (notifTimer) clearTimeout(notifTimer);
+    notifTimer = setTimeout(() => el.style.display = 'none', 2500);
+  }
+</script>
+</body>
+</html>
 
     /* Quantity controls */
     .qty-row { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
