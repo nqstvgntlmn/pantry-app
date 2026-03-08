@@ -993,13 +993,16 @@ async function claudeSearchDeals(query, store){
   var prompt="Search for current this-week sales and deals on \""+query+"\" at "+storeStr+" near Edison NJ 08817.\nFind the actual weekly circular or deals page and extract real current deals.\nReturn ONLY a JSON array, no other text, no markdown:\n[{\"name\":\"product name\",\"store\":\"store name\",\"sale_price\":\"$X.XX\",\"orig_price\":\"$X.XX or null\",\"unit\":\"per lb / each / etc\",\"savings\":\"$X off\",\"details\":\"e.g. buy 2 get 1\",\"valid\":\"valid dates\"}]\nReturn [] if no deals found. Include up to 8 deals.";
   const r=await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1200,
+    body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1200,
       tools:[{type:"web_search_20250305",name:"web_search"}],
       messages:[{role:"user",content:prompt}]})
   });
+  if(!r.ok){const err=await r.text();console.error("Deals API error:",r.status,err);throw new Error("API "+r.status);}
   const data=await r.json();
+  if(data.error){console.error("Claude error:",data.error);throw new Error(data.error.message||"API error");}
   const text=(data.content||[]).filter(function(b){return b.type==="text";}).map(function(b){return b.text;}).join("");
-  try{var m=text.match(/\[[\s\S]*?\]/);return m?JSON.parse(m[0]):[];}catch(e){return[];}
+  console.log("Deals response:",text.substring(0,300));
+  try{var m=text.match(/\[[\s\S]*?\]/);return m?JSON.parse(m[0]):[];}catch(e){console.error("JSON parse fail:",text.substring(0,200));return[];}
 }
 
 window.searchDeals=async function(){
@@ -1010,7 +1013,7 @@ window.searchDeals=async function(){
   st.textContent="🔍 Searching "+(store!=="any"?store:"nearby stores")+" for "+q+"…";
   g("dealslist").innerHTML="";
   try{const deals=await claudeSearchDeals(q,store);st.style.display="none";renderDeals(deals,q);}
-  catch(e){st.style.display="none";g("dealslist").innerHTML='<div class="es"><div class="ei">⚠️</div><p>Search failed. Check connection.</p></div>';}
+  catch(e){st.style.display="none";console.error("searchDeals error:",e);g("dealslist").innerHTML='<div class="es"><div class="ei">⚠️</div><p>'+e.message+'</p><p style="font-size:.74rem;color:var(--mt);margin-top:6px">Open browser console for details.</p></div>';}
 };
 
 window.dealsFromList=async function(){
