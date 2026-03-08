@@ -283,44 +283,50 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   </div>
 
   <!-- INVENTORY -->
-  <div class="screen" id="screen-inventory">
-    <div class="ihdr"><div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div><div class="iha"><button class="btn bs bsm" onclick="showOv('madd')">✏️</button><button class="btn bp bsm" onclick="showOv('scan')">📷 Scan</button></div></div>
-    <div class="itabs">
-      <div class="itab active" id="itab-all" onclick="setIT('all')">All</div>
-      <div class="itab" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
-      <div class="itab" id="itab-freezer" onclick="setIT('freezer')">🧊 Freezer</div>
-      <div class="itab" id="itab-pantry" onclick="setIT('pantry')">🥫 Pantry</div>
-      <div class="itab" id="itab-cat" onclick="setIT('cat')">By Type</div>
+  <div class="screen" id="screen-inventory" style="overflow-y:hidden">
+    <div style="flex-shrink:0">
+      <div class="ihdr"><div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div><div class="iha"><button class="btn bs bsm" onclick="showOv('madd')">✏️</button><button class="btn bp bsm" onclick="showOv('scan')">📷 Scan</button></div></div>
+      <div class="itabs">
+        <div class="itab active" id="itab-all" onclick="setIT('all')">All</div>
+        <div class="itab" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
+        <div class="itab" id="itab-freezer" onclick="setIT('freezer')">🧊 Freezer</div>
+        <div class="itab" id="itab-pantry" onclick="setIT('pantry')">🥫 Pantry</div>
+        <div class="itab" id="itab-cat" onclick="setIT('cat')">By Type</div>
+      </div>
     </div>
-    <div class="ibody" id="ibody"></div>
+    <div class="ibody" id="ibody" style="flex:1;overflow-y:auto"></div>
   </div>
 
   <!-- RECIPES -->
-  <div class="screen" id="screen-recipes">
-    <div class="shdr"><div><div class="sttl">Recipes</div><div class="ssub" id="rsub">Your saved recipes</div></div><div style="display:flex;gap:6px"><button class="btn bs bsm" onclick="whatCanIMake()">🔍 Make now</button><button class="btn bp bsm" onclick="showOv('arec')">+ Add</button></div></div>
-    <div class="rtabs">
-      <div class="rtab active" id="rtab-all" onclick="setRT('all')">All</div>
-      <div class="rtab" id="rtab-fav" onclick="setRT('fav')">❤️ Favorites</div>
-      <div class="rtab" id="rtab-top" onclick="setRT('top')">⭐ Top Rated</div>
-      <div class="rtab" id="rtab-quick" onclick="setRT('quick')">⚡ Quick</div>
-      <div class="rtab" id="rtab-kid" onclick="setRT('kid')">👶 Kids</div>
+  <div class="screen" id="screen-recipes" style="overflow-y:hidden">
+    <div style="flex-shrink:0">
+      <div class="shdr"><div><div class="sttl">Recipes</div><div class="ssub" id="rsub">Your saved recipes</div></div><div style="display:flex;gap:6px"><button class="btn bs bsm" onclick="whatCanIMake()">🔍 Make now</button><button class="btn bp bsm" onclick="showOv('arec')">+ Add</button></div></div>
+      <div class="rtabs">
+        <div class="rtab active" id="rtab-all" onclick="setRT('all')">All</div>
+        <div class="rtab" id="rtab-fav" onclick="setRT('fav')">❤️ Favorites</div>
+        <div class="rtab" id="rtab-top" onclick="setRT('top')">⭐ Top Rated</div>
+        <div class="rtab" id="rtab-quick" onclick="setRT('quick')">⚡ Quick</div>
+        <div class="rtab" id="rtab-kid" onclick="setRT('kid')">👶 Kids</div>
+      </div>
     </div>
-    <div class="rbody" id="rbody"></div>
+    <div class="rbody" id="rbody" style="flex:1;overflow-y:auto"></div>
   </div>
 
   <!-- SHOPPING -->
-  <div class="screen" id="screen-shopping">
-    <div class="shdr"><div><div class="sttl">Shopping</div><div class="ssub" id="shsub">Your grocery list</div></div>
-      <div style="display:flex;gap:6px">
-        <button class="btn bsm bs" onclick="shareList()">📤 Share</button>
-        <button class="btn bsm bs" id="clrchk" onclick="clrChk()" style="display:none">Clear done</button>
+  <div class="screen" id="screen-shopping" style="overflow-y:hidden">
+    <div style="flex-shrink:0">
+      <div class="shdr"><div><div class="sttl">Shopping</div><div class="ssub" id="shsub">Your grocery list</div></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn bsm bs" onclick="shareList()">📤 Share</button>
+          <button class="btn bsm bs" id="clrchk" onclick="clrChk()" style="display:none">Clear done</button>
+        </div>
+      </div>
+      <div class="itabs" style="margin-top:10px">
+        <div class="itab active" id="shtab-list" onclick="setSHT('list')">My List</div>
+        <div class="itab" id="shtab-deals" onclick="setSHT('deals')">🏷 Deals</div>
       </div>
     </div>
-    <div class="itabs" style="margin-top:10px">
-      <div class="itab active" id="shtab-list" onclick="setSHT('list')">My List</div>
-      <div class="itab" id="shtab-deals" onclick="setSHT('deals')">🏷 Deals</div>
-    </div>
-    <div id="sh-list-body">
+    <div id="sh-list-body" style="flex:1;overflow-y:auto">
       <div class="shbody">
         <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp" onclick="qadd()">Add</button></div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
@@ -330,7 +336,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
         <div id="shlist"></div>
       </div>
     </div>
-    <div id="sh-deals-body" style="display:none">
+    <div id="sh-deals-body" style="display:none;flex:1;overflow-y:auto">
       <div class="shbody">
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <input class="qainp" id="dealsearch" placeholder="Search deals (e.g. chicken, milk…)" style="flex:1"/>
