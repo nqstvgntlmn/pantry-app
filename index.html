@@ -658,6 +658,14 @@ window.pickName=function(name){
   localStorage.setItem("ks-who",name);
   const c=localStorage.getItem("ks-h");
   start(c);
+  // Ensure home screen shows after name pick
+  setTimeout(function(){
+    var ls=document.getElementById("LS");
+    if(ls&&ls.style.display!=="none"&&ls.style.opacity!=="0"){
+      ls.style.display="none";
+      showScreen("home");
+    }
+  }, 500);
 };
 function start(code){hid=code;g("LS").style.display="none";g("APP").style.display="flex";ss("syncing");
   // Ensure current household is in the saved list
@@ -744,7 +752,7 @@ window.importFromUrl=async function(){
   st.style.display="block";st.style.color="var(--mt)";st.textContent="⏳ Fetching recipe…";btn.disabled=true;
   try{
     const prompt=`Please fetch and read this recipe URL: ${url}\n\nExtract the recipe and return ONLY a JSON object with exactly these fields (no extra text, no markdown fences):\n{"name":"recipe name","description":"ingredient list and brief method (2-3 sentences max)","notes":"any useful tips or serving suggestions"}\n\nIf you cannot access the page, return: {"error":"Could not access this page"}`;
-    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:800,tools:[{type:"web_search_20250305",name:"web_search"}],messages:[{role:"user",content:prompt}]})});
+    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":CK,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:800,tools:[{type:"web_search_20250305",name:"web_search"}],messages:[{role:"user",content:prompt}]})});
     const data=await r.json();
     const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
     let parsed;
@@ -766,7 +774,7 @@ window.qadd=function(){const i=g("shi"),v=i.value.trim();if(!v)return;shop.push(
 window.togShop=function(id){const item=shop.find(i=>i.id===id);if(!item)return;item.checked=!item.checked;svShop();renderShop();};
 window.clrChk=function(){shop=shop.filter(i=>!i.checked);svShop();renderShop();renderSum();};
 function svShop(){Js("ks-s",shop);}
-window.buildList=async function(){showNotif("Building list with Claude…");const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");if(!ms){showNotif("No meals planned yet!");return;}const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");try{const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content:`Week meals: ${ms}\nAlready have: ${is}\nList ONLY ingredients still needed. Return ONLY bullet list, each line starting "- ". Concise.`}]})});const data=await r.json(),text=data.content?.[0]?.text||"";let added=0;text.split("\n").forEach(line=>{const m=line.match(/^[-•*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase())){shop.push({id:Date.now().toString()+Math.random(),name:nm,checked:false});added++;}}});svShop();renderShop();renderSum();showNotif(`Added ${added} items!`);}catch{showNotif("Couldn't build list — check connection");}};
+window.buildList=async function(){showNotif("Building list with Claude…");const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");if(!ms){showNotif("No meals planned yet!");return;}const is=inv.map(i=>`${i.name} (${i.qty} ${i.unit})`).join(", ");try{const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":CK,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:500,messages:[{role:"user",content:`Week meals: ${ms}\nAlready have: ${is}\nList ONLY ingredients still needed. Return ONLY bullet list, each line starting "- ". Concise.`}]})});const data=await r.json(),text=data.content?.[0]?.text||"";let added=0;text.split("\n").forEach(line=>{const m=line.match(/^[-•*]\s+(.+)/);if(m){const nm=m[1].replace(/\*\*/g,"").trim();if(!shop.find(i=>i.name.toLowerCase()===nm.toLowerCase())){shop.push({id:Date.now().toString()+Math.random(),name:nm,checked:false});added++;}}});svShop();renderShop();renderSum();showNotif(`Added ${added} items!`);}catch{showNotif("Couldn't build list — check connection");}};
 // renderShop and sH defined below with aisle support
 // kitCtx redefined below with variety nudge
 window.saveSettings=function(){
@@ -801,7 +809,7 @@ window.scaleRec=async function(mult){
   const descEl=g("erd");if(!descEl)return;const orig=descEl.value.trim();if(!orig){showNotif("No ingredients to scale");return;}
   const st=g("scaleStatus");st.style.display="block";st.style.color="var(--mt)";st.textContent=`⏳ Scaling to ${mult}× with Claude…`;
   try{
-    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,messages:[{role:"user",content:`Scale ALL ingredient quantities in this recipe by ${mult}x. Return ONLY the updated recipe text with scaled quantities. Keep the same format. Do not add any explanation.
+    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":CK,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,messages:[{role:"user",content:`Scale ALL ingredient quantities in this recipe by ${mult}x. Return ONLY the updated recipe text with scaled quantities. Keep the same format. Do not add any explanation.
 
 ${orig}`}]})});
     const data=await r.json(),scaled=data.content?.[0]?.text||"";
@@ -835,7 +843,7 @@ window.whatCanIMake=async function(){
   const saved=recs.map(r=>r.name).join(", ");
   const restr=[cfg.nopork?"no pork":null,cfg.noshellfish?"no shellfish":null,cfg.vegetarian?"vegetarian":null,cfg.glutenfree?"gluten-free":null,cfg.other||null].filter(Boolean).join(", ");
   try{
-    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,messages:[{role:"user",content:`Based on this exact inventory: ${is}
+    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":CK,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,messages:[{role:"user",content:`Based on this exact inventory: ${is}
 Restrictions: ${restr||"none"}
 Saved recipes: ${saved||"none"}
 Suggest 5 complete meals I can make RIGHT NOW with no extra shopping. Be specific with names. Format as a numbered list.`}]})});
@@ -995,7 +1003,7 @@ async function claudeSearchDeals(query, store){
   const st=g("dealsstatus");
   st.textContent="📡 Calling Claude API…";
   const r=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:{"Content-Type":"application/json"},
+    method:"POST",headers:{"Content-Type":"application/json","x-api-key":CK,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
     body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1500,
       tools:[{type:"web_search_20250305",name:"web_search"}],
       messages:[{role:"user",content:prompt}]})
