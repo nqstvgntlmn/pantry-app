@@ -40,10 +40,9 @@
     .content { flex: 1; padding: 16px; overflow-y: auto; }
     .scan-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
     .photo-hint { font-size: 0.78rem; color: var(--muted); text-align: center; margin-top: 8px; line-height: 1.5; }
-    .stats-row { display: flex; gap: 10px; margin-bottom: 16px; }
-    .stat-box { flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center; }
-    .stat-val { font-family: 'DM Serif Display', serif; font-size: 1.6rem; color: var(--accent); }
-    .stat-label { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+    .stat-bar { display: flex; align-items: center; justify-content: space-between; background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; }
+    .stat-label { font-size: 0.78rem; color: var(--muted); }
+    .stat-val { font-family: 'DM Serif Display', serif; font-size: 1.4rem; color: var(--accent); }
     .loc-group { margin-bottom: 20px; }
     .loc-group-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
     .loc-group-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
@@ -68,6 +67,10 @@
     .prod-barcode { font-size: 0.7rem; color: var(--border); margin-top: 3px; font-family: monospace; }
     .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; background: var(--surface); color: var(--muted); border: 1px solid var(--border); margin-top: 4px; }
     .source-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.68rem; background: transparent; color: var(--accent); border: 1px solid var(--accent-dark); margin-top: 4px; margin-left: 4px; }
+    .nutrition-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+    .nut-box { background: var(--surface); border-radius: 7px; padding: 7px; text-align: center; }
+    .nut-val { font-family: 'DM Serif Display', serif; font-size: 1rem; color: var(--text); }
+    .nut-label { font-size: 0.64rem; color: var(--muted); margin-top: 1px; }
     .form-row { margin: 14px 0; }
     .form-label { font-size: 0.82rem; color: var(--muted); margin-bottom: 6px; display: block; }
     .qty-row { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
@@ -146,10 +149,11 @@
 
   <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)" />
 
+  <!-- INVENTORY -->
   <div class="content view active" id="view-inventory">
-    <div class="stats-row">
-      <div class="stat-box"><div class="stat-val" id="statItems">0</div><div class="stat-label">Items</div></div>
-      <div class="stat-box"><div class="stat-val" id="statUnits">0</div><div class="stat-label">Total Units</div></div>
+    <div class="stat-bar">
+      <span class="stat-label" id="statLabel">Total Items</span>
+      <span class="stat-val" id="statItems">0</span>
     </div>
     <div id="errorBox" class="error-box" style="display:none"></div>
     <div class="scan-actions">
@@ -160,6 +164,7 @@
     <div id="invContainer" style="margin-top:8px"></div>
   </div>
 
+  <!-- SCANNING -->
   <div class="content view" id="view-scanning">
     <div class="scanning-screen">
       <div class="spinner"></div>
@@ -167,6 +172,7 @@
     </div>
   </div>
 
+  <!-- MANUAL -->
   <div class="content view" id="view-manual">
     <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:6px">Manual Entry</h2>
     <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">Type the barcode number from the product label.</p>
@@ -177,6 +183,7 @@
     <div style="margin-top:14px"><button class="btn btn-secondary btn-full" onclick="showView('inventory')">← Back</button></div>
   </div>
 
+  <!-- RESULT -->
   <div class="content view" id="view-result">
     <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:12px" id="resultTitle">Product Found ✓</h2>
     <div id="resultContent"></div>
@@ -206,6 +213,7 @@
     </div>
   </div>
 
+  <!-- ADJUST -->
   <div class="content view" id="view-adjust">
     <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:12px">Adjust Item</h2>
     <div id="adjustContent"></div>
@@ -215,6 +223,7 @@
     </div>
   </div>
 
+  <!-- IMPORT -->
   <div class="content view" id="view-import">
     <h2 style="font-family:'DM Serif Display',serif;font-size:1.2rem;margin-bottom:6px">Import Living Document</h2>
     <div class="info-box">Paste your living document from Claude below. Items will be added or updated automatically.</div>
@@ -240,6 +249,10 @@
     messagingSenderId: "710701847077",
     appId: "1:710701847077:web:407a8937330ad2ebcfe5cc"
   };
+
+  // Edamam credentials
+  const EDAMAM_APP_ID = "2b6ecac2";
+  const EDAMAM_APP_KEY = "8db76605e873aaf2fbdf41256cb24cb4";
 
   const firebaseApp = initializeApp(firebaseConfig);
   const db = getFirestore(firebaseApp);
@@ -329,8 +342,12 @@
     try {
       setScanStatus('Detecting barcode…');
       const code = await new Promise((resolve, reject) => {
-        Quagga.decodeSingle({ src: dataUrl, numOfWorkers: 0, inputStream: { size: 1600 }, decoder: { readers: ['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader','code_39_reader'], multiple: false }, locate: true },
-        result => result?.codeResult?.code ? resolve(result.codeResult.code) : reject('no barcode'));
+        Quagga.decodeSingle({
+          src: dataUrl, numOfWorkers: 0,
+          inputStream: { size: 1600 },
+          decoder: { readers: ['ean_reader','ean_8_reader','upc_reader','upc_e_reader','code_128_reader','code_39_reader'], multiple: false },
+          locate: true
+        }, result => result?.codeResult?.code ? resolve(result.codeResult.code) : reject('no barcode'));
       });
       setScanStatus('Found ' + code + ' — looking up…');
       const product = await lookupBarcode(code);
@@ -344,36 +361,70 @@
     }
   };
 
+  // ─── Database Lookup ──────────────────────────────────────────────
   async function lookupBarcode(barcode) {
-    return (await tryOFF(barcode)) || (await tryUPC(barcode)) ||
-      { barcode, name:'', brand:'', quantity:'', category:'General', image:null, source:null, notFound:true };
+    return (await tryEdamam(barcode)) ||
+           (await tryOpenFoodFacts(barcode)) ||
+           (await tryUPCItemDB(barcode)) ||
+           { barcode, name:'', brand:'', quantity:'', category:'General', image:null, source:null, notFound:true };
   }
 
-  async function tryOFF(barcode) {
+  async function tryEdamam(barcode) {
+    try {
+      const res = await fetch(
+        `https://api.edamam.com/api/food-database/v2/parser?upc=${barcode}&app_id=${EDAMAM_APP_ID}&app_key=${EDAMAM_APP_KEY}`
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const food = data.hints?.[0]?.food || data.parsed?.[0]?.food;
+      if (!food) return null;
+      const nutrients = food.nutrients || {};
+      return {
+        barcode,
+        name: food.label || '',
+        brand: food.brand || '',
+        quantity: food.servingSize ? `${food.servingSize}${food.servingSizeUnit || 'g'}` : '',
+        category: food.category || 'General',
+        image: food.image || null,
+        source: 'Edamam',
+        notFound: false,
+        nutrition: {
+          calories: nutrients.ENERC_KCAL ? Math.round(nutrients.ENERC_KCAL) : null,
+          protein: nutrients.PROCNT ? `${nutrients.PROCNT.toFixed(1)}g` : null,
+          fat: nutrients.FAT ? `${nutrients.FAT.toFixed(1)}g` : null,
+          carbs: nutrients.CHOCDF ? `${nutrients.CHOCDF.toFixed(1)}g` : null,
+        }
+      };
+    } catch(e) { console.warn('Edamam failed:', e); }
+    return null;
+  }
+
+  async function tryOpenFoodFacts(barcode) {
     try {
       const res = await fetch('https://world.openfoodfacts.org/api/v0/product/' + barcode + '.json');
       const data = await res.json();
       if (data.status === 1 && data.product) {
         const p = data.product, name = p.product_name || p.product_name_en || '';
         if (!name) return null;
-        return { barcode, name, brand: p.brands||'', quantity: p.quantity||'', category:(p.categories_tags||[])[0]?.replace('en:','')||'General', image: p.image_small_url||null, source:'Open Food Facts', notFound:false };
+        return { barcode, name, brand: p.brands||'', quantity: p.quantity||'', category:(p.categories_tags||[])[0]?.replace('en:','')||'General', image: p.image_small_url||null, source:'Open Food Facts', notFound:false, nutrition:null };
       }
     } catch(e) {}
     return null;
   }
 
-  async function tryUPC(barcode) {
+  async function tryUPCItemDB(barcode) {
     try {
       const res = await fetch('https://api.upcitemdb.com/prod/trial/lookup?upc=' + barcode);
       const data = await res.json();
       if (data.code === 'OK' && data.items?.length > 0) {
         const i = data.items[0];
-        return { barcode, name: i.title||'', brand: i.brand||'', quantity: i.size||'', category: i.category||'General', image:(i.images||[])[0]||null, source:'UPC Item DB', notFound:false };
+        return { barcode, name: i.title||'', brand: i.brand||'', quantity: i.size||'', category: i.category||'General', image:(i.images||[])[0]||null, source:'UPC Item DB', notFound:false, nutrition:null };
       }
     } catch(e) {}
     return null;
   }
 
+  // ─── Manual ───────────────────────────────────────────────────────
   window.manualLookup = async function() {
     const val = document.getElementById('manualInput').value.trim();
     if (!val) return;
@@ -387,6 +438,7 @@
     showResult(product);
   };
 
+  // ─── Location / Qty ───────────────────────────────────────────────
   window.selectLocation = function(loc) {
     selectedLocation = loc;
     ['fridge','freezer','pantry'].forEach(l => document.getElementById('loc-'+l).classList.toggle('selected', l===loc));
@@ -402,16 +454,25 @@
     if (parseInt(input.value) < 1 || isNaN(parseInt(input.value))) input.value = 1;
   };
 
+  // ─── Result ───────────────────────────────────────────────────────
   function showResult(product) {
     document.getElementById('resultTitle').textContent = product.notFound ? 'Product Not Found' : 'Product Found ✓';
     document.getElementById('unitInput').value = product.quantity || 'unit';
     let html = '';
     if (product.notFound) {
-      html = `<div class="not-found-box">⚠️ Barcode <span style="font-family:monospace">${product.barcode}</span> wasn't found. Enter the name:<input class="name-input" id="manualName" placeholder="Product name (required)" oninput="validateAdd()" /></div>`;
+      html = `<div class="not-found-box">⚠️ Barcode <span style="font-family:monospace">${product.barcode}</span> wasn't found in any database. Enter the name to add manually:<input class="name-input" id="manualName" placeholder="Product name (required)" oninput="validateAdd()" /></div>`;
       setTimeout(() => document.getElementById('addBtn').disabled = true, 0);
     } else {
       const img = product.image ? `<img src="${product.image}" class="prod-img" onerror="this.style.display='none'" />` : `<div class="prod-img" style="display:flex;align-items:center;justify-content:center;font-size:1.5rem">🛒</div>`;
-      html = `<div class="prod-card"><div class="prod-header">${img}<div style="flex:1"><div class="prod-name">${product.name}</div>${product.brand?`<div class="prod-brand">${product.brand}</div>`:''}<div class="prod-barcode">${product.barcode}</div><span class="badge">${product.category}</span>${product.source?`<span class="source-badge">${product.source}</span>`:''}</div></div></div>`;
+      let nutritionHTML = '';
+      if (product.nutrition && (product.nutrition.calories || product.nutrition.protein)) {
+        nutritionHTML = `<div class="nutrition-row">
+          ${[['Cal', product.nutrition.calories], ['Protein', product.nutrition.protein], ['Fat', product.nutrition.fat], ['Carbs', product.nutrition.carbs]].map(([label, val]) =>
+            `<div class="nut-box"><div class="nut-val">${val || '—'}</div><div class="nut-label">${label}</div></div>`
+          ).join('')}
+        </div>`;
+      }
+      html = `<div class="prod-card"><div class="prod-header">${img}<div style="flex:1"><div class="prod-name">${product.name}</div>${product.brand?`<div class="prod-brand">${product.brand}</div>`:''}<div class="prod-barcode">${product.barcode}</div><span class="badge">${product.category}</span>${product.source?`<span class="source-badge">${product.source}</span>`:''}</div></div>${nutritionHTML}</div>`;
       setTimeout(() => document.getElementById('addBtn').disabled = false, 0);
     }
     document.getElementById('resultContent').innerHTML = html;
@@ -423,6 +484,7 @@
     document.getElementById('addBtn').disabled = !el?.value.trim();
   };
 
+  // ─── Add ──────────────────────────────────────────────────────────
   window.addToInventory = async function() {
     if (!currentProduct) return;
     const nameEl = document.getElementById('manualName');
@@ -432,20 +494,42 @@
     const qty = Math.max(1, parseInt(document.getElementById('addQtyInput').value)||1);
     const id = 'item-' + currentProduct.barcode.replace(/\W/g,'-');
     const existing = inventory.find(i => i.id === id);
-    await saveItem({ id, barcode: currentProduct.barcode, name, brand: currentProduct.brand||'', unit, qty: existing ? existing.qty + qty : qty, location: selectedLocation, category: currentProduct.category||'General', image: currentProduct.image||null, source: currentProduct.source||null, addedAt: existing ? existing.addedAt : new Date().toLocaleDateString() });
+    await saveItem({
+      id, barcode: currentProduct.barcode, name,
+      brand: currentProduct.brand||'', unit,
+      qty: existing ? existing.qty + qty : qty,
+      location: selectedLocation,
+      category: currentProduct.category||'General',
+      image: currentProduct.image||null,
+      source: currentProduct.source||null,
+      nutrition: currentProduct.nutrition||null,
+      addedAt: existing ? existing.addedAt : new Date().toLocaleDateString()
+    });
     showNotification(existing ? `+${qty} added to ${name}` : `${name} added to ${locLabel(selectedLocation)}!`);
     currentProduct = null;
     showView('inventory');
   };
 
+  // ─── Adjust ───────────────────────────────────────────────────────
   window.openAdjust = function(id) {
     const item = inventory.find(i => i.id === id);
     if (!item) return;
     adjustId = id;
     const img = item.image ? `<img src="${item.image}" class="prod-img" onerror="this.style.display='none'" />` : `<div class="prod-img" style="display:flex;align-items:center;justify-content:center;font-size:1.5rem">🛒</div>`;
+    let nutritionHTML = '';
+    if (item.nutrition && (item.nutrition.calories || item.nutrition.protein)) {
+      nutritionHTML = `<div class="nutrition-row">
+        ${[['Cal', item.nutrition.calories], ['Protein', item.nutrition.protein], ['Fat', item.nutrition.fat], ['Carbs', item.nutrition.carbs]].map(([label, val]) =>
+          `<div class="nut-box"><div class="nut-val">${val || '—'}</div><div class="nut-label">${label}</div></div>`
+        ).join('')}
+      </div>`;
+    }
     document.getElementById('adjustContent').innerHTML = `
       <div class="prod-card">
-        <div class="prod-header">${img}<div><div class="prod-name">${item.name}</div>${item.brand?`<div class="prod-brand">${item.brand}</div>`:''}<div style="font-size:0.72rem;color:var(--muted);margin-top:2px">Added ${item.addedAt}</div>${item.source?`<span class="source-badge" style="margin-top:4px;display:inline-block">${item.source}</span>`:''}</div></div>
+        <div class="prod-header">${img}
+          <div><div class="prod-name">${item.name}</div>${item.brand?`<div class="prod-brand">${item.brand}</div>`:''}<div style="font-size:0.72rem;color:var(--muted);margin-top:2px">Added ${item.addedAt}</div>${item.source?`<span class="source-badge" style="margin-top:4px;display:inline-block">${item.source}</span>`:''}</div>
+        </div>
+        ${nutritionHTML}
         <div class="form-row" style="margin-top:14px">
           <label class="form-label">Location</label>
           <div class="loc-picker">
@@ -497,6 +581,7 @@
     showView('inventory');
   };
 
+  // ─── Import ───────────────────────────────────────────────────────
   window.importDocument = async function() {
     const text = document.getElementById('importText').value.trim();
     if (!text) return;
@@ -515,7 +600,7 @@
       if (name && qty && name !== 'Item' && name !== '---' && !name.startsWith('-')) {
         const id = 'item-import-' + name.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
         const existing = inventory.find(i => i.id === id);
-        await saveItem({ id, barcode: id, name, brand:'', unit: unit||'unit', qty, location: currentLoc, category:'Imported', image:null, source:'Imported', addedAt: existing ? existing.addedAt : new Date().toLocaleDateString() });
+        await saveItem({ id, barcode: id, name, brand:'', unit: unit||'unit', qty, location: currentLoc, category:'Imported', image:null, source:'Imported', nutrition:null, addedAt: existing ? existing.addedAt : new Date().toLocaleDateString() });
         existing ? updated++ : imported++;
       }
     }
@@ -524,19 +609,29 @@
     showView('inventory');
   };
 
+  // ─── Render ───────────────────────────────────────────────────────
   function locLabel(loc) { return {fridge:'🌡 Fridge',freezer:'🧊 Freezer',pantry:'🥫 Pantry'}[loc]||loc; }
 
   function renderInventory() {
     const container = document.getElementById('invContainer');
     if (!container) return;
     const filtered = activeTab === 'all' ? inventory : inventory.filter(i => i.location === activeTab);
-    document.getElementById('statItems').textContent = filtered.length;
-    document.getElementById('statUnits').textContent = filtered.reduce((a,i) => a+i.qty, 0);
+
+    // Update stat bar label and count based on active tab
+    const labelEl = document.getElementById('statLabel');
+    const countEl = document.getElementById('statItems');
+    if (activeTab === 'all') { labelEl.textContent = 'Total Items'; countEl.textContent = inventory.length; }
+    else if (activeTab === 'fridge') { labelEl.textContent = '🌡 Fridge Items'; countEl.textContent = inventory.filter(i => i.location === 'fridge').length; }
+    else if (activeTab === 'freezer') { labelEl.textContent = '🧊 Freezer Items'; countEl.textContent = inventory.filter(i => i.location === 'freezer').length; }
+    else if (activeTab === 'pantry') { labelEl.textContent = '🥫 Pantry Items'; countEl.textContent = inventory.filter(i => i.location === 'pantry').length; }
+
+    // Export
     const exportText = ['fridge','freezer','pantry'].map(loc => {
       const items = inventory.filter(i => i.location === loc);
       return items.length ? locLabel(loc).toUpperCase()+'\n'+items.map(i=>`- ${i.name}${i.brand?` (${i.brand})`:''}: ${i.qty} ${i.unit}`).join('\n') : '';
     }).filter(Boolean).join('\n\n');
     document.getElementById('exportBox').textContent = exportText || 'No items yet.';
+
     if (filtered.length === 0) {
       container.innerHTML = `<div class="empty-state"><div class="empty-icon">${activeTab==='fridge'?'🌡':activeTab==='freezer'?'🧊':activeTab==='pantry'?'🥫':'🏪'}</div><p>No items here yet.<br/>Scan a barcode to add something.</p></div>`;
       return;
@@ -557,7 +652,6 @@
   }
 
   window.toggleExport = function() { const p = document.getElementById('exportPanel'); p.style.display = p.style.display==='none'?'block':'none'; };
-
   function setScanStatus(msg) { document.getElementById('scanStatus').textContent = msg; }
   function showError(msg) { const el = document.getElementById('errorBox'); el.textContent = '⚠️ '+msg; el.style.display = 'block'; }
   function clearError() { document.getElementById('errorBox').style.display = 'none'; }
