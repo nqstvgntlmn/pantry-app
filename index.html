@@ -696,7 +696,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
         </div>
       </div>
       <div class="frow"><label class="flbl">Source URL <span class="otag">optional</span></label><input class="fi" id="rsourceurl" placeholder="Recipe website URL" style="font-size:.82rem"/></div>
-      <div class="brow"><button class="btn bp bf" id="savrecbtn" onclick="saveRec()" disabled>Save Recipe</button></div>
+      <div class="brow"><button class="btn bp bf" id="savrecbtn" onclick="saveRec()">Save Recipe</button></div>
     </div>
   </div>
 
@@ -996,7 +996,7 @@ window.remItem=async function(id){await dli(id);showNotif("Item removed");hideOv
 function rH(r){const st=Array.from({length:5},(_,i)=>`<span class="star${i<r.rating?" on":""}">${i<r.rating?"★":"☆"}</span>`).join("");const srcLink=r.sourceUrl?`<a href="${r.sourceUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:.68rem;color:var(--ac);text-decoration:none;border:1px solid rgba(212,168,83,.3);border-radius:20px;padding:2px 8px;background:transparent">🔗 View original</a>`:r.source?`<span class="sbdg">${r.source}</span>`:"";return`<div class="rcd${r.favorited?" fav":""}" onclick="openER('${r.id}')"><div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited?"❤️":"🤍"}</div></div><div class="stars">${st}</div>${r.description?`<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0,100)}${r.description.length>100?"…":""}</div>`:""}${r.notes?`<div class="rnot">${r.notes}</div>`:""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;}
 window.togFav=async function(id){const r=recs.find(r=>r.id===id);if(!r)return;await svr({...r,favorited:!r.favorited});showNotif(r.favorited?"Removed from favorites":"Added to favorites! ❤️");};
 window.valR=function(){g("savrecbtn").disabled=!g("rn").value.trim();};
-window.saveRec=async function(){const nm=g("rn").value.trim();if(!nm)return;const srcUrl=(g("rsourceurl")?g("rsourceurl").value.trim():"");await svr({id:"rec-"+Date.now(),name:nm,rating:nr,favorited:false,notes:g("rnotes").value.trim(),description:g("rd").value.trim(),source:srcUrl?"Web Import":"Manual",sourceUrl:srcUrl||null,savedAt:new Date().toLocaleDateString()});g("rn").value="";g("rnotes").value="";g("rd").value="";g("rsourceurl").value="";g("rurl").value="";nr=0;g("savrecbtn").disabled=true;renderStars("rstars",0);showNotif("Recipe saved! 📖");hideOv("arec");};
+
 window.importFromUrl=async function(){
   const url=g("rurl").value.trim();if(!url)return;
   const st=g("rurlstatus"),btn=g("rimportbtn");
@@ -1108,7 +1108,7 @@ Suggest 5 complete meals I can make RIGHT NOW with no extra shopping. Be specifi
       <button class="btn bs bsm" style="margin-top:12px;width:100%" onclick="setRT('all')">← Back to recipes</button>
     </div>`;
     g("rsub").textContent="Based on your inventory";
-  }catch{g("rsub").textContent="Couldn't reach Claude";}
+  }catch{g("rsub").textContent="Your saved recipes";}
 };
 
 // ── RECIPE SAVE (updated with tags + cook count) ──────────────────────────
