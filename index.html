@@ -407,9 +407,33 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   <div class="ov" id="ov-settings">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('settings')">←</div><div class="ovttl">Settings</div></div>
     <div class="ovbody">
-      <div class="sset"><div class="ssetttl">Household</div>
-        <div class="frow"><label class="flbl">Household Code</label><input class="fi" id="setCode"/></div>
+      <div class="sset"><div class="ssetttl">My Households</div>
+        <div id="hhList"></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <input class="fi" id="newHHCode" placeholder="e.g. parents-house" style="flex:1;font-size:.82rem"/>
+          <button class="btn bp bsm" onclick="addHousehold()">+ Add</button>
+        </div>
+        <div style="font-size:.72rem;color:var(--mt);margin-top:8px;line-height:1.5">Tap a household to switch. Share a code with family to sync real-time.</div>
+      </div>
+      <div class="sset"><div class="ssetttl">Current Household</div>
         <div class="frow"><label class="flbl">Household Name</label><input class="fi" id="setName" placeholder="e.g. The Bora Family"/></div>
+      </div>
+      <div class="sset"><div class="ssetttl">Notifications</div>
+        <div class="srow"><span class="srlbl">Expiry alerts</span><div class="tog" id="tg-notif" onclick="toggleNotif(this)"></div></div>
+        <div id="notifTimeRow" style="display:none">
+          <div class="frow"><label class="flbl">Alert me at</label>
+            <select class="fsel" id="setNotifTime">
+              <option value="7">7:00 AM</option><option value="8" selected>8:00 AM</option>
+              <option value="9">9:00 AM</option><option value="17">5:00 PM</option><option value="18">6:00 PM</option>
+            </select>
+          </div>
+          <div class="frow"><label class="flbl">Warn when expiring within</label>
+            <select class="fsel" id="setNotifDays">
+              <option value="1">1 day</option><option value="2">2 days</option><option value="3" selected>3 days</option><option value="5">5 days</option><option value="7">7 days</option>
+            </select>
+          </div>
+          <button class="btn bs bsm" style="width:100%;margin-top:4px" onclick="testNotif()">🔔 Send test notification</button>
+        </div>
       </div>
       <div class="sset"><div class="ssetttl">Family</div>
         <div class="frow"><label class="flbl">Adults</label><input class="fi" id="setAdults" placeholder="e.g. Bora, Sarah"/></div>
@@ -471,7 +495,10 @@ function J(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;
 function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
 const sv=localStorage.getItem("ks-h");if(sv)start(sv);
 window.joinH=function(){const c=document.getElementById("hci").value.trim().toLowerCase().replace(/\s+/g,"-");if(!c)return;localStorage.setItem("ks-h",c);start(c);};
-function start(code){hid=code;g("LS").style.display="none";g("APP").style.display="flex";ss("syncing");loadCfgUI();initHome();
+function start(code){hid=code;g("LS").style.display="none";g("APP").style.display="flex";ss("syncing");
+  // Ensure current household is in the saved list
+  const arr=getHouseholds();if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
+  loadCfgUI();initHome();
   onSnapshot(collection(db,"households",hid,"inventory"),sn=>{inv=sn.docs.map(d=>({id:d.id,...d.data()}));ss("synced");renderAll();},_=>ss("error"));
   onSnapshot(collection(db,"households",hid,"recipes"),sn=>{recs=sn.docs.map(d=>({id:d.id,...d.data()}));renderRecs();renderSum();});}
 function g(id){return document.getElementById(id);}
@@ -570,7 +597,26 @@ window.importFromUrl=async function(){
   }catch(e){st.style.color="var(--rd)";st.textContent="⚠️ Couldn't import — try copying the recipe text manually.";}
   btn.disabled=false;
 };
-window.openER=function(id){const r=recs.find(r=>r.id===id);if(!r)return;eid=id;const rt=r.rating||0;const st=Array.from({length:5},(_,i)=>`<span class="star${i<rt?" on":""}" onclick="setStar(${i+1},'e')">${i<rt?"★":"☆"}</span>`).join("");g("erecbody").innerHTML=`<div class="frow"><label class="flbl">Name</label><input class="fi" id="ern" value="${r.name}"/></div><div class="frow"><label class="flbl">Rating</label><div class="sinp" id="estars">${st}</div></div><div class="frow"><label class="flbl">Description</label><textarea class="fta" id="erd">${r.description||""}</textarea></div><div class="frow"><label class="flbl">Notes</label><input class="fi" id="erno" value="${r.notes||""}"/></div><div style="display:flex;align-items:center;gap:10px;margin:12px 0"><span style="font-size:.88rem">Favorite</span><div class="tog${r.favorited?" on":""}" id="etog" onclick="this.classList.toggle('on')"></div></div><div class="brow"><button class="btn bd" style="flex:1" onclick="delER()">Delete</button><button class="btn bp" style="flex:2" onclick="updR()">Save</button></div>`;showOv("erec");};
+window.openER=function(id){const r=recs.find(r=>r.id===id);if(!r)return;eid=id;const rt=r.rating||0;const st=Array.from({length:5},(_,i)=>`<span class="star${i<rt?" on":""}" onclick="setStar(${i+1},'e')">${i<rt?"★":"☆"}</span>`).join("");const srcLink=r.sourceUrl?`<div class="frow"><label class="flbl">Original URL</label><a href="${r.sourceUrl}" target="_blank" style="font-size:.82rem;color:var(--ac);word-break:break-all">${r.sourceUrl}</a></div>`:"";g("erecbody").innerHTML=`
+  <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:16px">
+    <div style="font-size:.78rem;color:var(--mt);margin-bottom:10px;font-weight:500">⚖️ Scale serving size</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn bs bsm" onclick="scaleRec(0.5)">½×</button>
+      <button class="btn bs bsm" onclick="scaleRec(1)">1×</button>
+      <button class="btn bs bsm" onclick="scaleRec(2)">2×</button>
+      <button class="btn bs bsm" onclick="scaleRec(3)">3×</button>
+      <input id="scaleCustom" class="qinp" type="number" min="0.25" max="10" step="0.25" placeholder="×" style="width:58px" oninput="if(this.value)scaleRec(parseFloat(this.value))"/>
+    </div>
+    <div id="scaleStatus" style="font-size:.74rem;color:var(--mt);margin-top:8px;display:none"></div>
+  </div>
+  <div class="frow"><label class="flbl">Name</label><input class="fi" id="ern" value="${r.name}"/></div>
+  <div class="frow"><label class="flbl">Rating</label><div class="sinp" id="estars">${st}</div></div>
+  <div class="frow"><label class="flbl">Description / Ingredients</label><textarea class="fta" id="erd" style="min-height:140px">${r.description||""}</textarea></div>
+  <div class="frow"><label class="flbl">Notes</label><input class="fi" id="erno" value="${r.notes||""}"/></div>
+  ${srcLink}
+  <div style="display:flex;align-items:center;gap:10px;margin:12px 0"><span style="font-size:.88rem">Favorite</span><div class="tog${r.favorited?" on":""}" id="etog" onclick="this.classList.toggle('on')"></div></div>
+  <div class="brow"><button class="btn bd" style="flex:1" onclick="delER()">Delete</button><button class="btn bp" style="flex:2" onclick="updR()">Save</button></div>`;
+showOv("erec");};
 window.updR=async function(){const r=recs.find(r=>r.id===eid);if(!r)return;const rt=[...document.querySelectorAll("#estars .star")].filter(s=>s.classList.contains("on")).length;await svr({...r,name:g("ern").value.trim(),rating:rt,description:g("erd").value.trim(),notes:g("erno").value.trim(),favorited:g("etog").classList.contains("on")});showNotif("Recipe updated!");hideOv("erec");};
 window.delER=async function(){if(!confirm("Delete this recipe?"))return;await dlr(eid);showNotif("Deleted");hideOv("erec");};
 window.qadd=function(){const i=g("shi"),v=i.value.trim();if(!v)return;shop.push({id:Date.now().toString(),name:v,checked:false});i.value="";svShop();renderShop();};
@@ -590,12 +636,59 @@ function fmtR(text){return text.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>").
 function scrollC(){const el=g("chmsgs");setTimeout(()=>el.scrollTop=el.scrollHeight,50);}
 window.clrChat=function(){chat=[];g("chmsgs").innerHTML=`<div class="cb asst">Chat cleared! What can I help with?</div>`;};
 window.ar=function(el){el.style.height="auto";el.style.height=Math.min(el.scrollHeight,120)+"px";};
-function loadCfgUI(){g("setCode").value=hid||"";g("setName").value=cfg.name||"";g("setAdults").value=cfg.adults||"";g("setKids").value=cfg.kids||"";g("setOther").value=cfg.other||"";g("setCuisines").value=cfg.cuisines||"";g("setCookTime").value=cfg.cookTime||"40-60 min";["nopork","noshellfish","vegetarian","glutenfree"].forEach(k=>{const t=g("tg-"+k);if(t)t.classList.toggle("on",!!cfg[k]);});}
-window.saveSettings=function(){const nh=g("setCode").value.trim().toLowerCase().replace(/\s+/g,"-");cfg={name:g("setName").value.trim(),adults:g("setAdults").value.trim(),kids:g("setKids").value.trim(),nopork:g("tg-nopork").classList.contains("on"),noshellfish:g("tg-noshellfish").classList.contains("on"),vegetarian:g("tg-vegetarian").classList.contains("on"),glutenfree:g("tg-glutenfree").classList.contains("on"),other:g("setOther").value.trim(),cuisines:g("setCuisines").value.trim(),cookTime:g("setCookTime").value};Js("ks-c",cfg);if(nh&&nh!==hid){localStorage.setItem("ks-h",nh);location.reload();return;}showNotif("Settings saved!");hideOv("settings");initHome();};
+function loadCfgUI(){
+  g("setName").value=cfg.name||"";g("setAdults").value=cfg.adults||"";g("setKids").value=cfg.kids||"";
+  g("setOther").value=cfg.other||"";g("setCuisines").value=cfg.cuisines||"";g("setCookTime").value=cfg.cookTime||"40-60 min";
+  ["nopork","noshellfish","vegetarian","glutenfree"].forEach(k=>{const t=g("tg-"+k);if(t)t.classList.toggle("on",!!cfg[k]);});
+  const notifOn=cfg.notif||false;const nt=g("tg-notif");if(nt)nt.classList.toggle("on",notifOn);
+  g("notifTimeRow").style.display=notifOn?"block":"none";
+  if(g("setNotifTime"))g("setNotifTime").value=cfg.notifTime||"8";
+  if(g("setNotifDays"))g("setNotifDays").value=cfg.notifDays||"3";
+  renderHHList();
+}
+window.saveSettings=function(){
+  cfg={...cfg,name:g("setName").value.trim(),adults:g("setAdults").value.trim(),kids:g("setKids").value.trim(),
+    nopork:g("tg-nopork").classList.contains("on"),noshellfish:g("tg-noshellfish").classList.contains("on"),
+    vegetarian:g("tg-vegetarian").classList.contains("on"),glutenfree:g("tg-glutenfree").classList.contains("on"),
+    other:g("setOther").value.trim(),cuisines:g("setCuisines").value.trim(),cookTime:g("setCookTime").value,
+    notif:g("tg-notif").classList.contains("on"),notifTime:g("setNotifTime")?.value||"8",notifDays:parseInt(g("setNotifDays")?.value||"3")};
+  Js("ks-c",cfg);
+  if(cfg.notif)scheduleNotifCheck();
+  showNotif("Settings saved!");hideOv("settings");initHome();
+};
 window.importDoc=async function(){const text=g("imptxt").value.trim();if(!text)return;let imported=0,updated=0,curL="pantry";for(const line of text.split("\n")){const lw=line.toLowerCase();if(lw.includes("fridge"))curL="fridge";else if(lw.includes("freezer"))curL="freezer";else if(lw.includes("pantry"))curL="pantry";const tm=line.match(/^\|\s*([^|]+?)\s*\|\s*(\d+(?:\.\d+)?)\s*\|\s*([^|]+?)\s*\|/);const lm=line.match(/^[-*]\s+(.+?):\s*(\d+(?:\.\d+)?)\s*([a-zA-Z%\/]+.*)?$/);let name,qty,unit;if(tm){name=tm[1].trim();qty=parseFloat(tm[2]);unit=tm[3].trim();}else if(lm){name=lm[1].trim();qty=parseFloat(lm[2]);unit=(lm[3]||"unit").trim();}if(name&&qty&&name!=="Item"&&name!=="---"&&!name.startsWith("-")){const id="item-imp-"+name.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"");const ex=inv.find(i=>i.id===id);await svi({id,barcode:id,name,brand:"",unit:unit||"unit",qty,location:curL,category:"Imported",image:null,source:"Imported",nutrition:null,expiry:null,addedAt:ex?ex.addedAt:new Date().toLocaleDateString()});ex?updated++:imported++;}}g("imptxt").value="";showNotif(`Imported ${imported} new, updated ${updated}`);hideOv("import");};
 let nt=null;
 window.showNotif=function(msg){const el=g("notif");el.textContent=msg;el.style.display="block";el.style.animation="none";void el.offsetWidth;el.style.animation="fn 2.5s ease forwards";if(nt)clearTimeout(nt);nt=setTimeout(()=>el.style.display="none",2500);};
+
+// ── HOUSEHOLDS ─────────────────────────────────────────────────────────────
+function getHouseholds(){return J("ks-hhs")||[hid||"bora-family"];}
+function saveHouseholds(arr){Js("ks-hhs",arr);}
+window.addHousehold=function(){const v=g("newHHCode").value.trim().toLowerCase().replace(/\s+/g,"-");if(!v)return;const arr=getHouseholds();if(!arr.includes(v))arr.push(v);saveHouseholds(arr);g("newHHCode").value="";renderHHList();showNotif("Household added!");};
+window.switchHousehold=function(code){if(code===hid)return;localStorage.setItem("ks-h",code);location.reload();};
+window.removeHousehold=function(code){if(code===hid){showNotif("Can't remove active household");return;}const arr=getHouseholds().filter(h=>h!==code);saveHouseholds(arr);renderHHList();};
+function renderHHList(){const arr=getHouseholds();const el=g("hhList");if(!el)return;el.innerHTML=arr.map(h=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border:1px solid ${h===hid?"var(--ac)":"var(--b2)"};border-radius:10px;margin-bottom:6px;cursor:pointer" onclick="switchHousehold('${h}')"><div><div style="font-size:.88rem;font-weight:500;color:${h===hid?"var(--ac)":"var(--tx)"}">${h}</div><div style="font-size:.7rem;color:var(--mt);margin-top:2px">${h===hid?"● Active — tap to stay":"Tap to switch"}</div></div><button onclick="event.stopPropagation();removeHousehold('${h}')" style="background:none;border:none;color:var(--mt);cursor:pointer;font-size:.82rem;padding:4px 8px">${h===hid?"":"✕"}</button></div>`).join("");}
+
+// ── NOTIFICATIONS ──────────────────────────────────────────────────────────
+window.toggleNotif=async function(el){const wasOn=el.classList.contains("on");if(!wasOn){if(!("Notification" in window)){showNotif("Notifications not supported on this browser");return;}if(Notification.permission==="denied"){showNotif("Notifications blocked — enable in browser settings");return;}if(Notification.permission!=="granted"){const p=await Notification.requestPermission();if(p!=="granted"){showNotif("Notifications permission denied");return;}}}el.classList.toggle("on");g("notifTimeRow").style.display=el.classList.contains("on")?"block":"none";};
+window.testNotif=function(){if(Notification.permission!=="granted"){showNotif("Enable notifications first");return;}const expiring=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");});if(!expiring.length){new Notification("Kitchen 🧺",{body:"No items expiring soon — you're all good!",icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧺</text></svg>"});return;}const names=expiring.slice(0,3).map(i=>i.name).join(", ");new Notification("Kitchen 🧺 — Expiring Soon",{body:`${names}${expiring.length>3?" + "+(expiring.length-3)+" more":""} need attention`,icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱</text></svg>"});};
+function scheduleNotifCheck(){if(!cfg.notif||Notification.permission!=="granted")return;const key="ks-lastnotif",last=parseInt(localStorage.getItem(key)||"0"),now=Date.now(),dayMs=86400000;if(now-last<dayMs)return;localStorage.setItem(key,now.toString());const days=cfg.notifDays||3;const expiring=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).filter(i=>{const s=xSt(i.expiry);if(!s)return false;const exp=new Date(i.expiry+"T00:00:00"),t=new Date();t.setHours(0,0,0,0);const d=Math.round((exp-t)/86400000);return d<=days;});if(!expiring.length)return;const names=expiring.slice(0,3).map(i=>i.name).join(", ");new Notification("Kitchen 🧺 — Expiring Soon",{body:`${names}${expiring.length>3?" + "+(expiring.length-3)+" more":""} expiring in ${days} days or less`,icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱</text></svg>"});}
+
+// ── SERVING SIZE SCALING ───────────────────────────────────────────────────
+window.scaleRec=async function(mult){
+  const descEl=g("erd");if(!descEl)return;const orig=descEl.value.trim();if(!orig){showNotif("No ingredients to scale");return;}
+  const st=g("scaleStatus");st.style.display="block";st.style.color="var(--mt)";st.textContent=`⏳ Scaling to ${mult}× with Claude…`;
+  try{
+    const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,messages:[{role:"user",content:`Scale ALL ingredient quantities in this recipe by ${mult}x. Return ONLY the updated recipe text with scaled quantities. Keep the same format. Do not add any explanation.
+
+${orig}`}]})});
+    const data=await r.json(),scaled=data.content?.[0]?.text||"";
+    if(scaled){descEl.value=scaled.trim();st.style.color="var(--gn)";st.textContent=`✓ Scaled to ${mult}×`;}
+    else{st.style.color="var(--rd)";st.textContent="Couldn't scale — try again";}
+  }catch{st.style.color="var(--rd)";st.textContent="Couldn't reach Claude — check connection";}
+};
+
 renderShop();
+if(cfg.notif)setTimeout(scheduleNotifCheck,3000);
 </script>
 </body>
 </html>
