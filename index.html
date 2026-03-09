@@ -1,14 +1,112 @@
 <!DOCTYPE html>
+<!--
+================================================================================
+  KITCHEN APP — index.html
+================================================================================
+  Single-file PWA for household inventory, meal planning, shopping lists,
+  recipe management, and an AI kitchen assistant (Claude).
+
+  ARCHITECTURE OVERVIEW
+  ─────────────────────
+  • All UI lives in this one HTML file (CSS + JS included).
+  • Backend:  Vercel serverless functions in /api/
+      - /api/db.js            → Firestore proxy (list / set / delete)
+      - /api/proxy.js         → Anthropic Claude API proxy
+      - /api/sync-reminders.js→ Apple Reminders → shopping list sync
+  • Database: Firebase Firestore
+      Path pattern:  households/{householdId}/{collection}/{docId}
+      Collections:   inventory | recipes | shopping
+  • Auth:  household code stored in localStorage as "ks-h"
+           current user stored in localStorage as "ks-who"
+
+  KEY localStorage KEYS
+  ──────────────────────
+  ks-h        Household ID (e.g. "isguder-family")
+  ks-who      Current user name ("Bora" or "Bushra")
+  ks-s        Shopping list (array) — local cache, overwritten by poll()
+  ks-m        Meal plan (object keyed by date "YYYY-MM-DD")
+  ks-c        Config / settings object
+  ks-cooklog  Cook log (array of {name, date})
+  ks-waste    Waste log (array of {name, date})
+  ks-theme    Active colour theme key (e.g. "gold")
+  ks-mode     Colour mode ("auto" | "light" | "dark")
+  ks-hhs      Saved household codes (array)
+
+  GLOBAL STATE (module scope — see <script type="module">)
+  ─────────────────────────────────────────────────────────
+  hid         Active household ID string
+  inv[]       Inventory items (synced from Firestore every 6s)
+  recs[]      Recipes (synced from Firestore every 6s)
+  shop[]      Shopping list items (synced from Firestore every 6s)
+  mp{}        Meal plan object (localStorage only)
+  cfg{}       Settings / preferences object (localStorage only)
+  chat[]      Claude chat message history (in-memory only)
+  cp          Last scanned product object
+  selR        Selected location in scan result overlay
+  maL         Selected location in manual add overlay
+  adjId       ID of item currently open in adjust overlay
+  it          Active inventory tab ("all"|"fridge"|"freezer"|"pantry"|"cat")
+  rt          Active recipe tab ("all"|"fav"|"top"|"quick"|"kid")
+  md          Date key currently open in meal modal (YYYY-MM-DD)
+  cn          Name of meal being logged as cooked
+  nr          Current star rating selection
+  eid         ID of recipe currently open in edit overlay
+
+  POLLING
+  ───────
+  poll() runs immediately on login, then every 6 seconds.
+  It fetches all three Firestore collections in parallel and re-renders.
+
+  SCREENS
+  ───────
+  home | inventory | recipes | shopping | insights | chat
+  Switched via showScreen(name) which toggles .active on .screen divs.
+
+  OVERLAYS (full-screen panels, z-index 100)
+  ──────────────────────────────────────────
+  scan | madd | result | adj | arec | erec | import | settings
+
+  MODALS (bottom-sheet dialogs, z-index 200)
+  ──────────────────────────────────────────
+  buildPreviewM | mealM | cookedM | schedM
+================================================================================
+-->
 <html lang="en">
 <head>
+<!-- Character encoding — must be first meta tag -->
 <meta charset="UTF-8"/>
+<!-- Viewport: fills screen, disables user zoom (app-like feel on mobile) -->
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
 <title>Kitchen</title>
+<!-- App version tag — bump when deploying significant changes -->
 <meta name="version" content="v4.1-deals-debug"/>
+<!-- Quagga: barcode scanning library (decodes barcodes from camera photos) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<!-- Fonts: Fraunces (serif, display headings) + DM Sans (UI body text) -->
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+/*
+  CSS CUSTOM PROPERTIES (design tokens)
+  These are the default dark/gold theme values.
+  applyTheme() in the themes script overrides these at runtime.
+
+  Colour roles:
+    --bg      Page background (darkest)
+    --sf      Surface / nav bar background
+    --card    Card background
+    --card2   Slightly lighter card variant
+    --b1/b2   Border colours (subtle / medium)
+    --ac/ac2  Accent (gold) / lighter accent
+    --acd     Accent with 13% opacity (tinted backgrounds)
+    --gn/gnd  Green (success/fresh) / green dim
+    --rd/rdd  Red (danger/expired) / red dim
+    --am/amd  Amber (warning/expiring) / amber dim
+    --tx/tx2  Primary text / secondary text
+    --mt      Muted text (labels, hints)
+    --nh      Nav bar height (72px)
+    --safe    iOS safe-area bottom inset
+*/
 :root{
   --bg:#0c0c0a;--sf:#161614;--card:#1e1e1b;--card2:#252522;
   --b1:#2e2e2a;--b2:#3a3a35;
@@ -23,6 +121,13 @@
 .btn,.tog,.ni,.ov,.modal-inner,.pcard,.rcd,.iit,.wd,.sc{transition:background-color .25s,border-color .2s,color .15s,transform .15s,opacity .15s}
 html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;color:var(--tx);overflow:hidden}
 
+/* ════════════════════════════════════════════════════
+   LOGIN SCREEN  (#LS)
+   Shown when no household code is in localStorage.
+   Two sub-panels:
+     #ls-code  → enter household code
+     #ls-who   → pick user name (Bora / Bushra)
+   ════════════════════════════════════════════════════ */
 /* ── LOGIN ── */
 #LS{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px;text-align:center;gap:0;z-index:1000;
   background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(212,168,83,.18) 0%,transparent 60%)}
@@ -32,11 +137,23 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .li{width:100%;max-width:340px;background:var(--card);border:1.5px solid var(--b2);border-radius:16px;padding:16px 20px;color:var(--tx);font-size:1rem;font-family:"DM Sans",sans-serif;text-align:center;letter-spacing:.05em}
 .li:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.12)}
 
+/* ════════════════════════════════════════════════════
+   MAIN APP WRAPPER  (#APP)
+   Hidden until login completes.
+   Uses position:fixed + flex column to fill viewport.
+   Each .screen sits inside and is shown/hidden via .active.
+   ════════════════════════════════════════════════════ */
 /* ── APP ── */
 #APP{position:fixed;inset:0;display:none;flex-direction:column}
 .screen{position:absolute;inset:0;bottom:var(--nh);overflow-y:auto;display:none;flex-direction:column}
 .screen.active{display:flex}
 
+/* ════════════════════════════════════════════════════
+   BOTTOM NAVIGATION BAR  (#NAV)
+   Fixed at bottom, 72px tall + iOS safe area.
+   .ni = nav item  |  .ni.active = highlighted tab
+   Tabs: Home · Pantry · Recipes · Shop · Stats · Claude
+   ════════════════════════════════════════════════════ */
 /* ── NAV ── */
 #NAV{position:absolute;bottom:0;left:0;right:0;height:var(--nh);background:var(--sf);border-top:1px solid var(--b1);display:flex;align-items:stretch;padding-bottom:var(--safe)}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--mt);padding-bottom:2px;position:relative}
@@ -48,6 +165,15 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .ni::after{content:"";position:absolute;top:0;left:25%;right:25%;height:2px;background:var(--ac);border-radius:0 0 2px 2px;opacity:0;transition:opacity .2s}
 .ni.active::after{opacity:1}
 
+/* ════════════════════════════════════════════════════
+   BUTTON VARIANTS
+     .btn        base styles
+     .bp         primary (gold fill)
+     .bs         secondary (card fill + border)
+     .bd         danger (transparent + red border)
+     .bf         full-width modifier
+     .bsm        small modifier
+   ════════════════════════════════════════════════════ */
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 22px;border-radius:14px;border:none;font-family:"DM Sans",sans-serif;font-size:.92rem;font-weight:600;cursor:pointer;transition:all .18s;letter-spacing:.01em}
 .bp{background:var(--ac);color:#0c0c0a}.bp:active{background:var(--ac2);transform:scale(.97)}.bp:disabled{opacity:.4;cursor:not-allowed}
@@ -56,6 +182,14 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .bf{width:100%}.bsm{padding:8px 15px;font-size:.8rem;border-radius:10px}
 .brow{display:flex;gap:8px;margin-top:16px}
 
+/* ════════════════════════════════════════════════════
+   UTILITY CLASSES
+     .sdot       sync status dot (synced=green, syncing=pulse, error=red)
+     .notif      toast notification (auto-fades after 2.5s)
+     .spin       loading spinner
+     .es/.ei     empty-state container / icon
+     .slbl       section label with horizontal rule
+   ════════════════════════════════════════════════════ */
 /* ── UTILS ── */
 .sdot{width:7px;height:7px;border-radius:50%;background:var(--mt);display:inline-block;transition:background .3s;flex-shrink:0}
 .sdot.synced{background:var(--gn)}.sdot.syncing{background:var(--ac);animation:pulse 1s infinite}.sdot.error{background:var(--rd)}
@@ -68,6 +202,19 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mt);margin:20px 0 10px;display:flex;align-items:center;gap:10px}
 .slbl::after{content:"";flex:1;height:1px;background:var(--b1)}
 
+/* ════════════════════════════════════════════════════
+   HOME SCREEN
+   Layout: header → today cards → week grid → stats grid → expiry list
+   Key element IDs:
+     #grt          greeting text ("Good evening, Bora")
+     #hdt          date text
+     #tnd          tonight's dinner name
+     #tna          tonight's action buttons
+     #wgrd         7-day week grid
+     #sgrd         stats card grid (inventory/expiring/shopping/recipes)
+     #expl         expiring-soon item list
+     #variety-nudge cuisine variety suggestion banner
+   ════════════════════════════════════════════════════ */
 /* ── HOME ── */
 .hhdr{padding:24px 20px 16px;flex-shrink:0;
   background:linear-gradient(180deg,rgba(212,168,83,.07) 0%,transparent 100%);
@@ -112,6 +259,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .exi.exp{border-color:var(--rd)}.exi:active{transform:scale(.98)}.exn{font-size:.9rem;font-weight:500}
 .exd{font-size:.76rem;color:var(--am);font-weight:600}.exi.exp .exd{color:var(--rd)}
 
+/* ════════════════════════════════════════════════════
+   INVENTORY / PANTRY SCREEN
+   Tabs: All · Fridge · Freezer · Pantry · By Type
+   Items rendered by renderInv() → iH() per item
+   Clicking an item opens the Adjust overlay (ov-adj)
+   ════════════════════════════════════════════════════ */
 /* ── INVENTORY ── */
 .ihdr{padding:24px 20px 0;flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between}
 .iha{display:flex;gap:7px;align-items:center;margin-top:6px;flex-wrap:wrap}
@@ -134,6 +287,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .etag{font-size:.64rem;padding:2px 8px;border-radius:20px;margin-top:3px;display:inline-block;font-weight:600}
 .etag.expiring{background:var(--amd);color:var(--am)}.etag.expired{background:var(--rdd);color:var(--rd)}.etag.ok{background:var(--gnd);color:var(--gn)}
 
+/* ════════════════════════════════════════════════════
+   RECIPES SCREEN
+   Tabs: All · Favorites · Top Rated · Quick · Kids
+   Items rendered by renderRecs() → rH() per recipe
+   Clicking opens Edit Recipe overlay (ov-erec)
+   ════════════════════════════════════════════════════ */
 /* ── RECIPES ── */
 .rtabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;padding:0 6px;margin-top:14px}
 .rtab{flex:1;padding:11px 4px;text-align:center;font-size:.72rem;font-weight:600;color:var(--mt);cursor:pointer;border-bottom:2.5px solid transparent;transition:all .18s;letter-spacing:.03em}
@@ -150,6 +309,15 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .rmeta{font-size:.7rem;color:var(--mt);margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .sbdg{font-size:.68rem;padding:2px 9px;border-radius:20px;background:var(--sf);color:var(--mt);border:1px solid var(--b1)}
 
+/* ════════════════════════════════════════════════════
+   SHOPPING SCREEN
+   Two sub-tabs: My List · Deals
+   My List: rendered by renderShop() → sH() per item
+   Deals:   claudeSearchDeals() → renderDeals()
+   Aisle mode groups items by store section (guessAisle)
+   Apple Reminders sync writes directly to Firestore via
+   /api/sync-reminders — picked up by next poll()
+   ════════════════════════════════════════════════════ */
 /* ── SHOPPING ── */
 .shbody{padding:16px;flex:1}
 .shit{background:var(--card);border:1.5px solid var(--b1);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:7px;cursor:pointer;transition:all .15s}
@@ -162,6 +330,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .qainp:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.1)}
 .shsec{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mt);margin:18px 0 9px;font-weight:600}
 
+/* ════════════════════════════════════════════════════
+   CLAUDE CHAT SCREEN
+   Messages stored in chat[] array (in-memory, not persisted).
+   Each send calls /api/proxy → Anthropic claude-haiku-4-5.
+   kitCtx() builds the system prompt with full kitchen context.
+   Suggestion pills provide quick-start prompts.
+   ════════════════════════════════════════════════════ */
 /* ── CHAT ── */
 .chhdr{padding:24px 20px 14px;flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between}
 .chmsgs{flex:1;overflow-y:auto;padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
@@ -181,6 +356,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .pill{background:var(--card);border:1.5px solid var(--b2);border-radius:20px;padding:8px 15px;font-size:.76rem;color:var(--tx2);white-space:nowrap;cursor:pointer;transition:all .15s;flex-shrink:0;font-weight:500}
 .pill:active{border-color:var(--ac);color:var(--ac);background:var(--acd)}
 
+/* ════════════════════════════════════════════════════
+   OVERLAYS (full-screen panels)
+   .ov            hidden by default (display:none)
+   .ov.active     shown (display:flex)
+   showOv(name)   → adds .active
+   hideOv(name)   → removes .active
+   ════════════════════════════════════════════════════ */
 /* ── OVERLAYS ── */
 .ov{position:fixed;inset:0;bottom:var(--nh);background:var(--bg);display:none;flex-direction:column;overflow-y:auto;z-index:100}
 .ov.active{display:flex}
@@ -190,6 +372,18 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .ovttl{font-family:"Fraunces",serif;font-size:1.4rem;font-weight:300}
 .ovbody{padding:18px;flex:1}
 
+/* ════════════════════════════════════════════════════
+   FORM ELEMENTS
+     .fi     text input
+     .fd     date input
+     .fsel   select / dropdown
+     .fta    textarea
+     .fun    unit input (narrow)
+     .flbl   field label
+     .frow   form row wrapper
+     .qrow   quantity row (label + stepper)
+     .lpick  location picker (Fridge/Freezer/Pantry buttons)
+   ════════════════════════════════════════════════════ */
 /* ── FORMS ── */
 .flbl{font-size:.78rem;color:var(--mt);margin-bottom:7px;display:block;font-weight:600;letter-spacing:.02em}
 .frow{margin:14px 0}
@@ -229,6 +423,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .shint{font-size:.75rem;color:var(--mt);text-align:center;margin-top:8px;line-height:1.6}
 .sview{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;text-align:center;gap:18px;flex:1}
 
+/* ════════════════════════════════════════════════════
+   MODALS (bottom-sheet dialogs)
+   .modal          hidden by default
+   .modal.active   shown (display:flex, slides up from bottom)
+   .minner         content container (max 90vh, scrollable)
+   Modals sit above overlays (z-index 200 vs 100)
+   ════════════════════════════════════════════════════ */
 /* ── MODALS ── */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)}
 .modal.active{display:flex}
@@ -238,6 +439,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .minp:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.1)}
 .sinp{display:flex;gap:4px}.sinp .star{font-size:1.8rem}
 
+/* ════════════════════════════════════════════════════
+   SETTINGS OVERLAY
+   .sset / .ssetttl   section grouping
+   .tog               toggle switch (add .on class to activate)
+   Settings saved to localStorage "ks-c" via saveSettings()
+   ════════════════════════════════════════════════════ */
 /* ── SETTINGS ── */
 .sset{margin-bottom:26px}.ssetttl{font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mt);margin-bottom:14px;font-weight:700}
 .srow{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--b1)}
@@ -246,6 +453,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .tog.on{background:var(--gn)}.tog::after{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:white;top:3px;left:3px;transition:left .2s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .tog.on::after{left:23px}
 
+/* ════════════════════════════════════════════════════
+   EXPORT PANEL (living document)
+   Shows plain-text inventory summary for pasting into Claude.
+   Toggled by toggleExp() button in home header.
+   Updated by updExport() on every inventory change.
+   ════════════════════════════════════════════════════ */
 /* ── EXPORT ── */
 .exppanel{background:var(--sf);border-top:1px solid var(--b1);padding:14px 18px;display:none;flex-shrink:0}
 .expbox{background:var(--card);border:1px solid var(--b1);border-radius:10px;padding:14px;font-size:.74rem;font-family:monospace;color:var(--mt);white-space:pre-wrap;max-height:130px;overflow-y:auto;line-height:1.6}
@@ -267,6 +480,16 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* ── PRICE ── */
 .price-tag{font-size:.74rem;color:var(--gn);font-weight:700}
 
+/* ════════════════════════════════════════════════════
+   INSIGHTS / STATS SCREEN
+   Rendered by renderInsights() on tab switch.
+   Data sources:
+     getCookLog()  → ks-cooklog localStorage
+     getWasteLog() → ks-waste localStorage
+     mp{}          → meal plan
+   Sections: streak · meals cooked · variety nudge ·
+             this week plan · most cooked · cuisine mix · waste log
+   ════════════════════════════════════════════════════ */
 /* ── INSIGHTS ── */
 .istat{background:var(--card);border:1.5px solid var(--b1);border-radius:16px;padding:18px}
 .istat-ttl{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mt);margin-bottom:14px;font-weight:700}
@@ -278,6 +501,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .waste-item{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--b1)}
 .waste-item:last-child{border-bottom:none}
 
+/* ════════════════════════════════════════════════════
+   DEALS TAB (in Shopping screen)
+   Uses Claude web_search tool via /api/proxy to find
+   real grocery store deals near Edison NJ 08817.
+   Results cached in localStorage for 24 hours.
+   claudeSearchDeals(query, store) → renderDeals(deals, query)
+   ════════════════════════════════════════════════════ */
 /* ── DEALS ── */
 .deal-card{background:var(--card);border:1.5px solid var(--b1);border-radius:14px;padding:14px 16px;margin-bottom:9px;display:flex;align-items:flex-start;gap:13px;transition:border-color .2s}
 .deal-store{font-size:.66rem;text-transform:uppercase;letter-spacing:.09em;color:var(--mt);font-weight:600}
@@ -348,7 +578,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 </style>
 </head>
 <body>
+<!-- ════════════════════════════════════════════════════
+     LOGIN SCREEN
+     Shown on first visit or after sign-out.
+     Hidden and replaced by #APP once _appStart(code) runs.
+     ════════════════════════════════════════════════════ -->
 <div id="LS">
+  <!-- Step 1: enter household code (e.g. "isguder-family") -->
   <div id="ls-code" style="display:flex;flex-direction:column;align-items:center;gap:20px;width:100%">
     <div class="ll">🧺</div><div class="lt">Kitchen</div>
     <p class="ls">Enter your household code to sync inventory across all family devices.</p>
@@ -356,6 +592,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <button class="btn bp bf" style="max-width:320px" id="enterBtn">Enter Kitchen</button>
     <p style="font-size:.72rem;color:var(--mt);max-width:280px;line-height:1.5">Share this code with your household so everyone sees the same inventory.</p>
   </div>
+  <!-- Step 2: pick user name — shown after valid code entered -->
   <div id="ls-who" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%">
     <div class="ll">👋</div>
     <div class="lt">Who's cooking?</div>
@@ -366,7 +603,15 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   </div>
 </div>
 
+<!-- ════════════════════════════════════════════════════
+     MAIN APP  (#APP)
+     display:none until _appStart() fires.
+     Contains all screens + overlays + nav bar.
+     ════════════════════════════════════════════════════ -->
 <div id="APP">
+  <!-- ══════════════════════════════════════
+       HOME SCREEN  (#screen-home)
+       ══════════════════════════════════════ -->
   <!-- HOME -->
   <div class="screen" id="screen-home" style="overflow-y:hidden">
     <!-- Header -->
@@ -441,6 +686,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       INVENTORY / PANTRY SCREEN  (#screen-inventory)
+       Tab filter state stored in `it` variable
+       ══════════════════════════════════════ -->
   <!-- INVENTORY -->
   <div class="screen" id="screen-inventory" style="overflow-y:hidden">
     <div style="flex-shrink:0">
@@ -456,6 +705,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <div class="ibody" id="ibody" style="flex:1;overflow-y:auto"></div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       RECIPES SCREEN  (#screen-recipes)
+       Tab filter state stored in `rt` variable
+       ══════════════════════════════════════ -->
   <!-- RECIPES -->
   <div class="screen" id="screen-recipes" style="overflow-y:hidden">
     <div style="flex-shrink:0">
@@ -471,6 +724,11 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <div class="rbody" id="rbody" style="flex:1;overflow-y:auto"></div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       SHOPPING SCREEN  (#screen-shopping)
+       Sub-tabs: My List / Deals
+       Apple Reminders syncs items here via /api/sync-reminders
+       ══════════════════════════════════════ -->
   <!-- SHOPPING -->
   <div class="screen" id="screen-shopping" style="overflow-y:hidden">
     <div style="flex-shrink:0">
@@ -524,6 +782,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       CLAUDE CHAT SCREEN  (#screen-chat)
+       AI kitchen assistant — full inventory context sent with every message
+       ══════════════════════════════════════ -->
   <!-- CHAT -->
   <div class="screen" id="screen-chat">
     <div class="chhdr"><div><div class="sttl">Ask Claude</div><div class="ssub">Your kitchen-aware AI assistant</div></div><button class="btn bsm bs" onclick="clrChat()">Clear</button></div>
@@ -539,6 +801,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <div class="chia"><textarea class="chta" id="chi" placeholder="Ask anything about your kitchen…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="ar(this)"></textarea><button class="chsb" id="csb" onclick="sendChat()">↑</button></div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       INSIGHTS / STATS SCREEN  (#screen-insights)
+       Rendered fresh on every tab switch via renderInsights()
+       ══════════════════════════════════════ -->
   <!-- INSIGHTS SCREEN -->
   <div class="screen" id="screen-insights" style="overflow-y:hidden">
     <div style="flex-shrink:0">
@@ -595,6 +861,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       BOTTOM NAVIGATION BAR  (#NAV)
+       showScreen(name) handles active state
+       ══════════════════════════════════════ -->
   <!-- NAV -->
   <div id="NAV">
     <div class="ni active" id="nav-home" onclick="showScreen('home')"><span class="ico">🏠</span><span class="lbl">Home</span></div>
@@ -605,6 +875,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <div class="ni" id="nav-chat" onclick="showScreen('chat')"><span class="ico">✨</span><span class="lbl">Claude</span></div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       OVERLAY: BARCODE SCANNER  (#ov-scan)
+       Uses Quagga.js to decode barcodes from photos.
+       Product looked up via: Edamam → OpenFoodFacts → UPCItemDB
+       scanDestList flag controls whether result goes to
+       inventory (false) or shopping list (true).
+       ══════════════════════════════════════ -->
   <!-- OVERLAY: SCAN -->
   <div class="ov" id="ov-scan">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('scan')">←</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
@@ -620,6 +897,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       OVERLAY: MANUAL ADD ITEM  (#ov-madd)
+       Lets user type in item name, category, location,
+       quantity, unit, and optional expiry date.
+       Saved via addManual() → svi() → Firestore
+       ══════════════════════════════════════ -->
   <!-- OVERLAY: MANUAL ADD -->
   <div class="ov" id="ov-madd">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('madd')">←</div><div class="ovttl">Add Item</div></div>
@@ -642,6 +925,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       OVERLAY: SCAN RESULT  (#ov-result)
+       Shown after successful barcode lookup.
+       User can adjust qty/location/expiry before adding.
+       Two buttons: Add to Pantry (addToInv) or Shopping List (addScannedToList)
+       ══════════════════════════════════════ -->
   <!-- OVERLAY: RESULT -->
   <div class="ov" id="ov-result">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('result')">←</div><div class="ovttl" id="resttl">Product Found</div></div>
@@ -661,12 +950,24 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       OVERLAY: ADJUST ITEM  (#ov-adj)
+       Opened by tapping any inventory item.
+       Allows editing qty, location, expiry, or deleting.
+       adjId holds the ID of the item being edited.
+       ══════════════════════════════════════ -->
   <!-- OVERLAY: ADJUST -->
   <div class="ov" id="ov-adj">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('adj')">←</div><div class="ovttl">Adjust Item</div></div>
     <div class="ovbody"><div id="adjbody"></div><div class="brow"><button class="btn bd bf" id="rembtn">Remove Item</button></div></div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       OVERLAY: ADD RECIPE  (#ov-arec)
+       Two paths:
+         1. Import from URL → importFromUrl() → Claude web search → fills fields
+         2. Manual entry → saveRec() → Firestore
+       ══════════════════════════════════════ -->
   <!-- OVERLAY: ADD RECIPE -->
   <div class="ov" id="ov-arec">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('arec')">←</div><div class="ovttl">Save Recipe</div></div>
@@ -700,12 +1001,23 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       OVERLAY: EDIT RECIPE  (#ov-erec)
+       Opened by openER(id). Body built dynamically by openER().
+       Includes: scale serving size, schedule, shop ingredients,
+       edit fields, tags, delete.
+       ══════════════════════════════════════ -->
   <!-- OVERLAY: EDIT RECIPE -->
   <div class="ov" id="ov-erec">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('erec')">←</div><div class="ovttl">Edit Recipe</div></div>
     <div class="ovbody" id="erecbody"></div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       OVERLAY: IMPORT DOCUMENT  (#ov-import)
+       Paste a "living document" (markdown inventory export)
+       to bulk-import or update inventory items.
+       ══════════════════════════════════════ -->
   <!-- OVERLAY: IMPORT -->
   <div class="ov" id="ov-import">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('import')">←</div><div class="ovttl">Import Document</div></div>
@@ -716,6 +1028,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     </div>
   </div>
 
+  <!-- ══════════════════════════════════════
+       OVERLAY: SETTINGS  (#ov-settings)
+       Sections: Households · Current HH · Notifications ·
+                 Family · Appearance · Dietary · Preferences
+       Saved via saveSettings() → localStorage "ks-c"
+       ══════════════════════════════════════ -->
   <!-- OVERLAY: SETTINGS -->
   <div class="ov" id="ov-settings">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('settings')">←</div><div class="ovttl">Settings</div></div>
@@ -786,6 +1104,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   </div>
 </div>
 
+<!-- ══════════════════════════════════════
+     BUILD LIST PREVIEW MODAL  (#buildPreviewM)
+     Shown after buildList() calls Claude to suggest ingredients.
+     User can select/deselect individual items before confirming.
+     Must live OUTSIDE #APP div (which has overflow:hidden) to render correctly.
+     bpConfirm() adds selected items to Firestore shopping list.
+     ══════════════════════════════════════ -->
 <!-- BUILD LIST PREVIEW MODAL -->
 <div class="modal" id="buildPreviewM">
   <div class="minner" style="max-height:80vh;display:flex;flex-direction:column">
@@ -803,6 +1128,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   </div>
 </div>
 
+<!-- ══════════════════════════════════════
+     MEAL MODAL  (#mealM)
+     Opens when tapping a day in the week grid.
+     Allows typing a meal name OR picking from saved recipes.
+     Recipe chips + filter input for quick search.
+     saveMeal() also adds ingredients to shopping list if a recipe was picked.
+     ══════════════════════════════════════ -->
 <!-- MEAL MODAL -->
 <div class="modal" id="mealM">
   <div class="minner">
@@ -818,6 +1150,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   </div>
 </div>
 
+<!-- ══════════════════════════════════════
+     COOKED MODAL  (#cookedM)
+     Opened by openCooked(date) from the Tonight card.
+     Logs the meal in ks-cooklog, increments recipe cookCount,
+     optionally saves to recipes, optionally plans leftovers next day.
+     ══════════════════════════════════════ -->
 <!-- COOKED MODAL -->
 <div class="modal" id="cookedM">
   <div class="minner">
@@ -831,6 +1169,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   </div>
 </div>
 
+<!-- ══════════════════════════════════════
+     SCHEDULE RECIPE MODAL  (#schedM)
+     Opened from the Edit Recipe overlay.
+     Shows 7-day grid — tap a day to schedule the recipe.
+     schedSet(date, name) saves to mp{} and re-renders week.
+     ══════════════════════════════════════ -->
 <!-- SCHEDULE RECIPE MODAL -->
 <div class="modal" id="schedM">
   <div class="minner">
@@ -842,32 +1186,87 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 </div>
 
 <input type="file" id="ffile" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)"/>
-<div class="notif" id="notif" style="display:none"></div><script type="module">
+<!-- Hidden toast notification element (shown by showNotif()) -->
+<div class="notif" id="notif" style="display:none"></div>
+
+<!--
+================================================================================
+  MAIN JAVASCRIPT  (type="module" — ES module scope, not global)
+  Everything in here is private UNLESS explicitly assigned to window.*
+  All functions that the HTML onclick= attributes call MUST be on window.
+================================================================================
+-->
+<script type="module">
+
+// ── EDAMAM API CREDENTIALS ──────────────────────────────────────────────────
+// Used for barcode → nutrition lookup (tryE function)
 const EID="2b6ecac2",EK="8db76605e873aaf2fbdf41256cb24cb4";
-// Firestore proxy client — all DB ops routed through /api/db (server-side, bypasses auth rules)
+// ── FIRESTORE PROXY CLIENT ───────────────────────────────────────────────────
+// All database operations go through /api/db (Vercel serverless function)
+// so Firebase API keys never need to be in the browser.
+// _db(op, path, data) is the low-level fetch wrapper.
+// dbList  → returns array of documents
+// dbSet   → upserts a single document
+// dbDelete→ removes a single document
 async function _db(op,path,data){const r=await fetch("/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op,path,data})});return r.json();}
 async function dbList(path){const j=await _db("list",path);return j.docs||[];}
 async function dbSet(path,data){return _db("set",path,data);}
 async function dbDelete(path){return _db("delete",path);}
+// ── GLOBAL APPLICATION STATE ─────────────────────────────────────────────────
+// hid    — active household ID (set in _appStart)
+// inv    — inventory array (live-synced from Firestore)
+// recs   — recipes array (live-synced from Firestore)
+// shop   — shopping list array (live-synced from Firestore)
+// mp     — meal plan {date: mealName} (localStorage only, not in Firestore)
+// cfg    — settings/preferences object (localStorage only)
+// chat   — Claude chat history for current session (in-memory)
+// cp     — last scanned/looked-up product (temp, used by addToInv)
+// selR   — selected storage location in scan result overlay
+// maL    — selected storage location in manual add overlay
+// adjId  — ID of item open in adjust overlay
+// it     — active inventory filter tab
+// rt     — active recipe filter tab
+// md     — date key open in meal modal (YYYY-MM-DD)
+// cn     — meal name being logged as cooked
+// nr     — star rating value currently selected
+// eid    — recipe ID open in edit overlay
 let hid=null,inv=[],recs=[],shop=J("ks-s")||[],mp=J("ks-m")||{},
 cfg=J("ks-c")||{name:"The Bora Family",adults:"Bora",kids:"1 toddler (age 3)",nopork:true,noshellfish:false,vegetarian:false,glutenfree:false,other:"",cuisines:"Bangladeshi, Turkish, Mediterranean, American",cookTime:"40-60 min"},
 chat=[],cp=null,selR="fridge",maL="fridge",adjId=null,it="all",rt="all",md=null,cn="",nr=0,eid=null;
 function J(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}}
 function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
-// joinH and pickName defined in plain script below module
-// auto-login handled in DOMContentLoaded below
+// ── APP ENTRY POINT ───────────────────────────────────────────────────────────
+// _appStart(code) is called by the login script (plain <script> below)
+// AFTER the user has entered a household code and chosen a name.
+// It sets hid, shows the app, and kicks off the 6-second polling loop.
+// NOTE: This is on window.* because the login script (non-module) calls it.
+//       The login script retries every 50ms until _appStart is defined,
+//       because <script type="module"> loads asynchronously.
 window._appStart=function start(code){hid=code;g("LS").style.display="none";g("APP").style.display="flex";showScreen("home");ss("syncing");
   // Ensure current household is in the saved list
   const arr=getHouseholds();if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
   if(typeof loadCfgUI==="function")loadCfgUI();initHome();
+  // poll() — fetches all three Firestore collections in parallel every 6 seconds.
+  // This is how external changes (e.g. from Apple Reminders shortcut or
+  // another family member's device) appear in the app without a page refresh.
+  // window._poll is exposed for manual triggering from browser console.
   async function poll(){try{ss("syncing");const[ni,nr2,ns]=await Promise.all([dbList(`households/${hid}/inventory`),dbList(`households/${hid}/recipes`),dbList(`households/${hid}/shopping`)]);inv=ni;recs=nr2;shop=ns;ss("synced");renderAll();renderRecs();renderShop();renderSum();}catch(e){console.error("poll error",e);ss("error");}}
   window._poll=poll;poll();setInterval(poll,6000);}
 function g(id){return document.getElementById(id);}
+// ss(state) — updates the sync status dot and label in the top-right corner
+// States: "syncing" (pulsing amber) | "synced" (green + household name) | "error" (red)
 function ss(s){g("sdot").className="sdot "+s;g("slb").textContent=s==="synced"?"🏠 "+hid:s==="syncing"?"Syncing…":"Sync error";}
+// svi(item) — Save/upsert an inventory item locally + to Firestore
 async function svi(item){ss("syncing");try{inv=[...inv.filter(i=>i.id!==item.id),item];renderAll();renderSum();await dbSet(`households/${hid}/inventory/${item.id}`,item);ss("synced");}catch(e){console.error(e);ss("error");}}
+// dli(id) — Delete an inventory item locally + from Firestore
 async function dli(id){ss("syncing");try{inv=inv.filter(i=>i.id!==id);renderAll();renderSum();await dbDelete(`households/${hid}/inventory/${id}`);ss("synced");}catch(e){console.error(e);ss("error");}}
+// svr(r) — Save/upsert a recipe locally + to Firestore
 async function svr(r){try{recs=[...recs.filter(x=>x.id!==r.id),r];renderRecs();renderSum();await dbSet(`households/${hid}/recipes/${r.id}`,r);}catch(e){console.error(e);}}
+// dlr(id) — Delete a recipe locally + from Firestore
 async function dlr(id){try{recs=recs.filter(r=>r.id!==id);renderRecs();renderSum();await dbDelete(`households/${hid}/recipes/${id}`);}catch(e){console.error(e);}}
+// showScreen(name) — switches the active screen tab
+// Closes any open overlays, deactivates all screens/nav items,
+// then activates the target screen and nav item.
 window.showScreen=function(n){
   // Close any open overlays first
   document.querySelectorAll(".ov.active").forEach(o=>o.classList.remove("active"));
@@ -883,12 +1282,22 @@ window.showScreen=function(n){
 };
 window.showOv=n=>g("ov-"+n).classList.add("active");
 window.hideOv=n=>g("ov-"+n).classList.remove("active");
+// initHome() — sets greeting text and date label, then renders the week grid
+// Called once on login and again after settings save
 function initHome(){const h=new Date().getHours(),gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening",u=localStorage.getItem("ks-who")||(cfg.adults||"Bora").split(",")[0].trim();g("grt").innerHTML=`${gr}, <span>${u}</span>`;g("hdt").textContent=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});renderWeek();}
 window.initHome=initHome;
+// renderAll() — re-renders both Home and Inventory screens
+// Called after any inventory change
 function renderAll(){renderHome();renderInv();}
+// renderHome() — full re-render of the Home screen
+// Calls renderWeek, renderSum, renderExp, renderTonight, updExport
 function renderHome(){const h=new Date().getHours(),gr=h<12?"Good morning":h<17?"Good afternoon":"Good evening",u=localStorage.getItem("ks-who")||(cfg.adults||"Bora").split(",")[0].trim(),grtEl=g("grt");if(grtEl&&!grtEl.innerHTML)grtEl.innerHTML=`${gr}, <span>${u}</span>`;renderWeek();renderSum();renderExp();renderTonight();updExport();}
+// tk() — returns today's date as "YYYY-MM-DD" string
 function tk(){return new Date().toISOString().split("T")[0];}
+// wDates() — returns array of 7 Date objects for the current Sun–Sat week
 function wDates(){const t=new Date();t.setHours(0,0,0,0);const s=new Date(t);s.setDate(t.getDate()-t.getDay());return Array.from({length:7},(_,i)=>{const d=new Date(s);d.setDate(s.getDate()+i);return d;});}
+// renderTonight() — updates the "Tonight's Dinner" card on the home screen
+// Shows meal name + Cooked/Edit buttons if planned, or Plan/Ask Claude if not
 function renderTonight(){
   const td=tk(),m=mp[td],d=g("tnd"),a=g("tna"),card=g("tonight-main");
   if(card)card.onclick=function(){openMealM(td,"Today");};
@@ -900,7 +1309,11 @@ function renderTonight(){
     if(a)a.innerHTML=`<button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">+ Plan dinner</button><button class="btn bsm bs" onclick="event.stopPropagation();showScreen('chat')">Ask Claude →</button>`;
   }
 }
+// renderWeek() — renders the 7-day week grid with meal names
+// Days with meals get .hm class (green border); today gets .today (gold border)
 function renderWeek(){const ns=["S","M","T","W","T","F","S"],t=new Date();t.setHours(0,0,0,0);g("wgrd").innerHTML=wDates().map((d,i)=>{const k=d.toISOString().split("T")[0],iss=d.getTime()===t.getTime(),m=mp[k];return`<div class="wd${iss?" today":""}${m?" hm":""}" onclick="openMealM('${k}','${ns[i]} ${d.getDate()}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${m?`<div class="wdm">${m.substring(0,10)}${m.length>10?"…":""}</div>`:""}</div>`;}).join("");checkVarietyNudge();}
+// checkVarietyNudge() — shows a suggestion banner if the week lacks
+// Bangladeshi or Turkish dishes, or if the same meal is planned 3+ times
 function checkVarietyNudge(){
   const el=g("variety-nudge");if(!el)return;
   const meals=wDates().map(d=>mp[d.toISOString().split("T")[0]]).filter(Boolean);
@@ -915,6 +1328,8 @@ function checkVarietyNudge(){
   else if(!hasTR){el.style.display="block";el.innerHTML="🇹🇷 No Turkish dishes this week — köfte or mercimek çorbası would be great!";}
   else{el.style.display="none";}
 }
+// renderSum() — updates all the numeric stat cards on the home screen
+// (expiring count, shopping count, inventory count, recipe count)
 function renderSum(){
   const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).length;
   const tb=shop.filter(i=>!i.checked).length;
@@ -927,9 +1342,14 @@ function renderSum(){
   if(shopS)shopS.textContent=tb===1?"item to buy":tb===0?"all stocked up":"items to buy";
   // Stat grid
   g("sgrd").innerHTML=`<div class="sc" onclick="showScreen('inventory')"><div class="sci">🧺</div><div class="scv">${inv.length}</div><div class="scl">Items in stock</div></div><div class="sc${ex>0?" warn":""}" onclick="showScreen('inventory')"><div class="sci">⏱</div><div class="scv">${ex}</div><div class="scl">Expiring soon</div></div><div class="sc" onclick="showScreen('shopping')"><div class="sci">🛒</div><div class="scv">${tb}</div><div class="scl">To buy</div></div><div class="sc" onclick="showScreen('recipes')"><div class="sci">📖</div><div class="scv">${recs.length}</div><div class="scl">Saved recipes</div></div>`;}
+// renderExp() — renders the expiring-soon item list below the week grid
 function renderExp(){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const l=g("exslbl"),e=g("expl");if(!ex.length){l.style.display="none";e.innerHTML="";return;}l.style.display="flex";e.innerHTML=ex.map(item=>{const s=xSt(item.expiry);return`<div class="exi${s.c==="expired"?" exp":""}" onclick="openAdj('${item.id}')"><div class="exn">${item.name}</div><div class="exd">${s.l}</div></div>`;}).join("");}
+// updExport() — refreshes the "living document" export text panel
+// Formats inventory as plain text grouped by location (Fridge/Freezer/Pantry)
 function updExport(){const t=["fridge","freezer","pantry"].map(loc=>{const its=inv.filter(i=>i.location===loc);return its.length?ll(loc).toUpperCase()+"\n"+its.map(i=>`- ${i.name}${i.brand?` (${i.brand})`:""}: ${i.qty} ${i.unit}`).join("\n"):"";}).filter(Boolean).join("\n\n");g("expbox").textContent=t||"No items yet.";}
 window._pickedRec=null;
+// openMealM(dateKey, label) — opens the meal planning modal for a specific day
+// Pre-populates the text input and recipe picker with any existing meal
 window.openMealM=function(k,lbl){
   md=k;g("mealMttl").textContent="Meal for "+lbl;g("mealMinp").value=mp[k]||"";
   window._pickedRec=null;
@@ -988,6 +1408,9 @@ window.filterRecs=function(){
   window._pickedRec=null;g("mealMinp").value="";
 };
 window.closeMealM=function(){g("mealM").classList.remove("active");};
+// saveMeal() — saves the meal for the selected day (md)
+// Also adds recipe ingredients to the shopping list if a saved recipe was picked.
+// Ingredients are filtered: skips anything already in inventory or on the list.
 window.saveMeal=async function(){
   const v=g("mealMinp").value.trim();
   if(v)mp[md]=v;else delete mp[md];
@@ -1022,6 +1445,8 @@ window.setStar=function(n,ctx){nr=n;if(ctx==="r")renderStars("rstars",n);else if
 function renderStars(id,n){const el=g(id);if(!el)return;el.querySelectorAll(".star").forEach((s,i)=>{s.textContent=i<n?"★":"☆";s.classList.toggle("on",i<n);});}
 window.setIT=function(t){it=t;document.querySelectorAll(".itab").forEach(x=>x.classList.remove("active"));g("itab-"+t).classList.add("active");renderInv();};
 const CATS={Produce:"🥦",Proteins:"🍗",Dairy:"🧀",Grains:"🌾",Condiments:"🧴",Snacks:"🍿",Beverages:"🥤",Frozen:"❄️",General:"📦",Imported:"📥"};
+// gcat(item) — infers the best category string for an item
+// Uses item.category field first, then falls back to name-based keyword matching
 function gcat(item){const n=(item.name||"").toLowerCase(),c=(item.category||"").toLowerCase();
   if(c.includes("produce")||c.includes("vegetable")||c.includes("fruit")||n.match(/apple|banana|broccoli|carrot|celery|cabbage|tomato|onion|garlic|jalap|spinach|mushroom|squash|lettuce|cucumber|pepper/))return"Produce";
   if(c.includes("protein")||c.includes("meat")||c.includes("seafood")||c.includes("poultry")||n.match(/chicken|beef|lamb|turkey|salmon|cod|tuna|fish|steak|pork|shrimp/))return"Proteins";
@@ -1029,9 +1454,19 @@ function gcat(item){const n=(item.name||"").toLowerCase(),c=(item.category||"").
   if(c.includes("grain")||c.includes("bread")||c.includes("pasta")||n.match(/rice|pasta|bread|flour|oat|cereal|grain|noodle|tortilla/))return"Grains";
   if(c.includes("condiment")||c.includes("sauce")||n.match(/sauce|ketchup|mustard|oil|vinegar|salt|pepper|spice|herb|seasoning|mayo/))return"Condiments";
   if(item.location==="freezer")return"Frozen";return"General";}
+// ll(location) — returns the display label for a storage location key
+// e.g. "fridge" → "🌡 Fridge"
 function ll(l){return{fridge:"🌡 Fridge",freezer:"🧊 Freezer",pantry:"🥫 Pantry"}[l]||l;}
+// xSt(expiryDateString) — returns expiry status object {c, l}
+//   c: "expired" | "expiring" | "ok"
+//   l: human-readable label ("Expired", "Expires today", "Expires in 3d", "Mar 15")
 function xSt(exp){if(!exp)return null;const t=new Date();t.setHours(0,0,0,0);const e=new Date(exp+"T00:00:00"),d=Math.round((e-t)/86400000);if(d<0)return{c:"expired",l:"Expired"};if(d===0)return{c:"expiring",l:"Expires today"};if(d<=7)return{c:"expiring",l:`Expires in ${d}d`};return{c:"ok",l:e.toLocaleDateString("en-US",{month:"short",day:"numeric"})};}
+// iH(item) — renders a single inventory item row as HTML string
 function iH(item){const ic=CATS[gcat(item)]||"🛒",img=item.image?`<img src="${item.image}" class="iimg" onerror="this.style.display='none'"/>`:`<div class="iph">${ic}</div>`;const ex=xSt(item.expiry),bc=ex?(ex.c==="expired"?" expired":ex.c==="expiring"?" expiring":""):"",et=ex?`<div class="etag ${ex.c}">${ex.l}</div>`:"";return`<div class="iit${bc}" onclick="openAdj('${item.id}')"><div class="iileft">${img}<div><div class="inm">${item.name}</div><div class="isb">${item.brand||gcat(item)}</div>${et}</div></div><div style="text-align:right"><div class="iqt">${item.qty}</div><div class="iun">${item.unit}</div></div></div>`;}
+// renderInv() — full re-render of the inventory list
+// Respects the active tab filter (it variable)
+// "All" view: shows expiring section first, then grouped by location
+// "By Type" view: groups by inferred category
 function renderInv(){const f=it==="all"||it==="cat"?inv:inv.filter(i=>i.location===it);g("isub").textContent=f.length+" "+({all:"items",fridge:"fridge items",freezer:"frozen items",pantry:"pantry items",cat:"items by type"}[it]||"items");updExport();const c=g("ibody");
   if(!f.length){c.innerHTML=`<div class="es"><div class="ei">🧺</div><p>No items here yet.<br/>Tap Scan or Add to get started.</p></div>`;return;}
   if(it==="cat"){const gr={};f.forEach(item=>{const cat=gcat(item);if(!gr[cat])gr[cat]=[];gr[cat].push(item);});c.innerHTML=Object.entries(gr).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,its])=>`<div class="lgrp"><div class="lgt">${CATS[cat]||"📦"} ${cat}</div><div class="ilst">${its.map(iH).join("")}</div></div>`).join("");return;}
@@ -1039,6 +1474,10 @@ function renderInv(){const f=it==="all"||it==="cat"?inv:inv.filter(i=>i.location
   c.innerHTML=`<div class="ilst">${f.map(iH).join("")}</div>`;}
 window.startScan=function(){g("scerr").style.display="none";g("ffile").click();};
 
+// ── SCAN DESTINATION ROUTING ────────────────────────────────────────────────
+// scanDestList flag controls where a scanned item goes:
+//   false → "Add to Pantry" mode (default)
+//   true  → "Add to Shopping List" mode
 // Open scan but destination will be shopping list
 let scanDestList = false;
 window.openScanForList = function(){
@@ -1075,11 +1514,21 @@ window.addScannedToList = function(){
   showScreen("shopping");
 };
 window.togManual=function(){const el=g("mentry");el.style.display=el.style.display==="none"?"block":"none";};
+// handlePhoto(event) — triggered when user selects a photo via the file input
+// Pipeline: read file → Quagga decode → lkup(barcode) → showRes(product)
 window.handlePhoto=async function(e){const file=e.target.files[0];if(!file)return;e.target.value="";g("scanbody").style.display="none";g("scspin").style.display="block";g("scst").textContent="Reading image…";const url=await new Promise((r,j)=>{const x=new FileReader();x.onload=e=>r(e.target.result);x.onerror=j;x.readAsDataURL(file);});try{g("scst").textContent="Detecting barcode…";const code=await new Promise((res,rej)=>Quagga.decodeSingle({src:url,numOfWorkers:0,inputStream:{size:1600},decoder:{readers:["ean_reader","ean_8_reader","upc_reader","upc_e_reader","code_128_reader","code_39_reader"],multiple:false},locate:true},r=>{if(r&&r.codeResult&&r.codeResult.code)res(r.codeResult.code);else rej("no");}));g("scst").textContent="Found "+code+" — looking up…";const prod=await lkup(code);cp=prod;g("aqty").value=1;g("aexp").value="";selRL("fridge",g("rl-fridge"));showRes(prod);g("scanbody").style.display="block";g("scspin").style.display="none";}catch{g("scanbody").style.display="block";g("scspin").style.display="none";const err=g("scerr");err.textContent="⚠️ No barcode detected. Try better lighting or enter manually.";err.style.display="block";}};
 window.manLookup=async function(){const v=g("meinp").value.trim();if(!v)return;g("scanbody").style.display="none";g("scspin").style.display="block";g("scst").textContent="Looking up…";const prod=await lkup(v);cp=prod;g("aqty").value=1;g("aexp").value="";selRL("fridge",g("rl-fridge"));g("meinp").value="";showRes(prod);g("scanbody").style.display="block";g("scspin").style.display="none";};
+// lkup(barcode) — tries three product databases in sequence:
+//   1. Edamam (best nutrition data)
+//   2. Open Food Facts (largest database)
+//   3. UPC Item DB (fallback)
+// Returns a product object or a "notFound" placeholder
 async function lkup(bc){return(await tryE(bc))||(await tryO(bc))||(await tryU(bc))||{barcode:bc,name:"",brand:"",quantity:"",category:"General",image:null,source:null,notFound:true};}
+// tryE(barcode) — Edamam food database lookup (has nutrition macros)
 async function tryE(bc){try{const r=await fetch(`https://api.edamam.com/api/food-database/v2/parser?upc=${bc}&app_id=${EID}&app_key=${EK}`);if(!r.ok)return null;const d=await r.json();const f=(d.hints&&d.hints[0]&&d.hints[0].food)||(d.parsed&&d.parsed[0]&&d.parsed[0].food);if(!f)return null;const n=f.nutrients||{};return{barcode:bc,name:f.label||"",brand:f.brand||"",quantity:f.servingSize?`${f.servingSize}${f.servingSizeUnit||"g"}`:"",category:f.category||"General",image:f.image||null,source:"Edamam",notFound:false,nutrition:{calories:n.ENERC_KCAL?Math.round(n.ENERC_KCAL):null,protein:n.PROCNT?`${n.PROCNT.toFixed(1)}g`:null,fat:n.FAT?`${n.FAT.toFixed(1)}g`:null,carbs:n.CHOCDF?`${n.CHOCDF.toFixed(1)}g`:null}};}catch{}return null;}
+// tryO(barcode) — Open Food Facts lookup (open-source product database)
 async function tryO(bc){try{const r=await fetch("https://world.openfoodfacts.org/api/v0/product/"+bc+".json");const d=await r.json();if(d.status===1&&d.product){const p=d.product,nm=p.product_name||p.product_name_en||"";if(!nm)return null;return{barcode:bc,name:nm,brand:p.brands||"",quantity:p.quantity||"",category:((p.categories_tags||[])[0]||'').replace('en:','')||'General',image:p.image_small_url||null,source:"Open Food Facts",notFound:false,nutrition:null};}}catch{}return null;}
+// tryU(barcode) — UPC Item DB lookup (final fallback)
 async function tryU(bc){try{const r=await fetch("https://api.upcitemdb.com/prod/trial/lookup?upc="+bc);const d=await r.json();if(d.code==="OK"&&d.items&&d.items.length>0){const i=d.items[0];return{barcode:bc,name:i.title||"",brand:i.brand||"",quantity:i.size||"",category:i.category||"General",image:(i.images||[])[0]||null,source:"UPC Item DB",notFound:false,nutrition:null};}}catch{}return null;}
 function showRes(prod){hideOv("scan");g("resttl").textContent=prod.notFound?"Not Found":"Product Found ✓";g("aunit").value=prod.quantity||"unit";let html="";if(prod.notFound){html=`<div class="nfb">⚠️ Barcode <code>${prod.barcode}</code> not found. Enter name:<input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:10px"/></div>`;setTimeout(()=>g("addbtn").disabled=true,0);}else{const img=prod.image?`<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>`:`<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;let nut="";if(prod.nutrition&&(prod.nutrition.calories||prod.nutrition.protein)){nut=`<div class="ngrd">${[["Cal",prod.nutrition.calories],["Protein",prod.nutrition.protein],["Fat",prod.nutrition.fat],["Carbs",prod.nutrition.carbs]].map(([l,v])=>`<div class="nb"><div class="nv">${v||"—"}</div><div class="nl">${l}</div></div>`).join("")}</div>`;}html=`<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand?`<div class="pbr">${prod.brand}</div>`:""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${prod.source?`<span class="srcb">${prod.source}</span>`:""}</div></div>${nut}</div>`;setTimeout(()=>g("addbtn").disabled=false,0);}g("resbody").innerHTML=html;showOv("result");}
 window.valAdd=function(){const el=g("mnm");g("addbtn").disabled=!el&&el.value.trim();};
@@ -1097,9 +1546,12 @@ window.adjQD=async function(){const item=inv.find(i=>i.id===adjId);if(!item)retu
 window.adjE=async function(){const item=inv.find(i=>i.id===adjId);if(!item)return;const v=g("adjexp").value||null;await svi({...item,expiry:v});};
 window.remItem=async function(id){await dli(id);showNotif("Item removed");hideOv("adj");};
 // setRT and renderRecs defined below with full tag support
+// rH(recipe) — renders a single recipe card as HTML string
 function rH(r){const st=Array.from({length:5},(_,i)=>`<span class="star${i<r.rating?" on":""}">${i<r.rating?"★":"☆"}</span>`).join("");const srcLink=r.sourceUrl?`<a href="${r.sourceUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:.68rem;color:var(--ac);text-decoration:none;border:1px solid rgba(212,168,83,.3);border-radius:20px;padding:2px 8px;background:transparent">🔗 View original</a>`:r.source?`<span class="sbdg">${r.source}</span>`:"";return`<div class="rcd${r.favorited?" fav":""}" onclick="openER('${r.id}')"><div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited?"❤️":"🤍"}</div></div><div class="stars">${st}</div>${r.description?`<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0,100)}${r.description.length>100?"…":""}</div>`:""}${r.notes?`<div class="rnot">${r.notes}</div>`:""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;}
 window.togFav=async function(id){const r=recs.find(r=>r.id===id);if(!r)return;await svr({...r,favorited:!r.favorited});showNotif(r.favorited?"Removed from favorites":"Added to favorites! ❤️");};
 window.valR=function(){g("savrecbtn").disabled=!g("rn").value.trim();};
+// importFromUrl() — fetches and parses a recipe from a URL using Claude web search
+// Fills in the Add Recipe form fields with the extracted data
 window.importFromUrl=async function(){
   const url=g("rurl").value.trim();if(!url)return;
   const st=g("rurlstatus"),btn=g("rimportbtn");
@@ -1124,13 +1576,26 @@ window.importFromUrl=async function(){
 // openER defined below with scheduling + tags
 // updR defined below with tags support
 window.delER=async function(){if(!confirm("Delete this recipe?"))return;await dlr(eid);showNotif("Deleted");hideOv("erec");};
+// qadd() — quick-add: reads the text input and adds item to shopping list
 window.qadd=function(){const i=g("shi"),v=i.value.trim();if(!v)return;const item={id:Date.now().toString(),name:v,checked:false,src:"manual"};svShopItem(item);i.value="";};
+// togShop(id) — toggles the checked state of a shopping list item
 window.togShop=function(id){const item=shop.find(i=>i.id===id);if(!item)return;svShopItem({...item,checked:!item.checked});};
+// clrChk() — removes all checked (done) items from the shopping list
 window.clrChk=function(){shop.filter(i=>i.checked).forEach(i=>dlShopItem(i.id));};
+// svShop() — persists shop[] to localStorage "ks-s" (local cache only)
 function svShop(){Js("ks-s",shop);}
+// svShopItem(item) — upserts a shopping item locally + to Firestore
+// Updates local shop[] immediately for instant UI response
 async function svShopItem(item){try{shop=[...shop.filter(s=>s.id!==item.id),item];renderShop();renderSum();await dbSet(`households/${hid}/shopping/${item.id}`,item);}catch(e){console.error(e);}}
+// dlShopItem(id) — removes a shopping item locally + from Firestore
 async function dlShopItem(id){try{shop=shop.filter(s=>s.id!==id);renderShop();renderSum();await dbDelete(`households/${hid}/shopping/${id}`);}catch(e){console.error(e);}}
+// _bpItems — staging array for the Build List preview modal
+// Populated by buildList(), consumed by bpConfirm()
 window._bpItems=[];
+
+// buildList() — calls Claude to suggest missing ingredients based on the week's
+// meal plan and current inventory. Shows a preview modal so the user can
+// select/deselect items before they're added to the shopping list.
 window.buildList=async function(){
   const ms=wDates().map(d=>{const k=d.toISOString().split("T")[0];return mp[k]?`${d.toLocaleDateString("en-US",{weekday:"short"})}: ${mp[k]}`:""}).filter(Boolean).join(", ");
   if(!ms){showNotif("No meals planned yet!");return;}
@@ -1253,6 +1718,7 @@ Suggest 5 complete meals I can make RIGHT NOW with no extra shopping. Be specifi
 };
 
 // ── RECIPE SAVE (updated with tags + cook count) ──────────────────────────
+// saveRec() — saves a new recipe from the Add Recipe overlay form
 window.saveRec=async function(){
   const nm=g("rn").value.trim();if(!nm)return;
   const desc=g("rd").value.trim();
@@ -1267,6 +1733,7 @@ window.saveRec=async function(){
 };
 
 // ── SCHEDULE RECIPE ───────────────────────────────────────────────────────
+// scheduleRecipe(name) — opens the Schedule Recipe modal for a given recipe name
 window.scheduleRecipe=function(name){
   g("schedNm").textContent=name;
   const ns=["S","M","T","W","T","F","S"],t=new Date();t.setHours(0,0,0,0);
@@ -1281,17 +1748,30 @@ window.scheduleRecipe=function(name){
 };
 window.schedSet=function(k,name){mp[k]=name;Js("ks-m",mp);g("schedM").classList.remove("active");renderWeek();renderTonight();showNotif("Scheduled! 📅");};
 
-// ── COOK LOG + INSIGHTS ───────────────────────────────────────────────────
+// ── COOK LOG + INSIGHTS ──────────────────────────────────────────────────────
+// Cook log: array of {name, date} stored in localStorage "ks-cooklog"
+// Used for: cook streak, most cooked meals, cuisine breakdown in Insights
+// Waste log: array of {name, date} stored in localStorage "ks-waste"
+// Items are added to waste log when removed from inventory if they were
+// expiring or expired (see the remItem override below)
+// getCookLog() — returns cook log array from localStorage
 function getCookLog(){return J("ks-cooklog")||[];}
+// addCookLog(name, date) — appends a meal to the cook log (max 200 entries)
 function addCookLog(name,date){const log=getCookLog();log.unshift({name,date:date||tk()});Js("ks-cooklog",log.slice(0,200));}
+// getWasteLog() — returns waste log array from localStorage
 function getWasteLog(){return J("ks-waste")||[];}
+// addWaste(name) — appends an item to the waste log (one entry per item per day)
 function addWaste(name){const w=getWasteLog();if(!w.find(x=>x.name===name&&x.date===tk()))w.unshift({name,date:tk()});Js("ks-waste",w.slice(0,100));}
 
+// skipCooked() — logs the meal as cooked WITHOUT saving to recipes
+// Clears today's meal plan entry and re-renders
 window.skipCooked=function(){
   addCookLog(cn,tk());
   const td=tk();delete mp[td];Js("ks-m",mp);
   g("cookedM").classList.remove("active");renderWeek();renderTonight();showNotif("Meal logged!");
 };
+// saveCooked() — logs the meal as cooked AND saves/updates the recipe
+// Increments cookCount on existing recipe, optionally plans leftovers
 window.saveCooked=async function(){
   const notes=g("cnotes").value.trim();
   const hasLeftover=(g("tog-leftover")&&g("tog-leftover").classList.contains("on"));
@@ -1307,6 +1787,8 @@ window.saveCooked=async function(){
 };
 function nextDay(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().split("T")[0];}
 
+// renderInsights() — full re-render of the Insights/Stats screen
+// Called every time the Stats tab is opened
 function renderInsights(){
   const log=getCookLog();
   const waste=getWasteLog();
@@ -1413,7 +1895,10 @@ function renderInsights(){
 
 
 
-// ── SHOPPING: AISLE GROUPING ──────────────────────────────────────────────
+// ── SHOPPING: AISLE GROUPING ──────────────────────────────────────────────────
+// AISLES maps store section names to keyword arrays.
+// guessAisle(name) checks an item name against these keywords.
+// aisleMode is toggled by the "By aisle" button — groups unchecked items by section.
 let aisleMode=false;
 const AISLES={"Produce":["apple","banana","carrot","celery","onion","garlic","tomato","lettuce","cucumber","pepper","broccoli","spinach","mushroom","lemon","lime","herb","cabbage","squash","jalap","avocado","potato","ginger"],
   "Meat & Fish":["chicken","beef","lamb","turkey","salmon","cod","tuna","fish","steak","shrimp","pork","bacon","sausage","ground"],
@@ -1421,11 +1906,15 @@ const AISLES={"Produce":["apple","banana","carrot","celery","onion","garlic","to
   "Frozen":["frozen","ice cream","pizza","nugget","waffle","edamame","okra","lima","broccoli floret"],
   "Pantry":["rice","pasta","flour","oil","vinegar","sauce","spice","salt","pepper","sugar","honey","oat","bread","can","bean","lentil","chickpea","stock","broth"],
   "Snacks & Drinks":["chip","cracker","cookie","juice","soda","water","tea","coffee","snack","nut","seed"]};
+// guessAisle(name) — returns the most likely store aisle for an item name string
 function guessAisle(name){const n=name.toLowerCase();for(const[aisle,kws]of Object.entries(AISLES)){if(kws.some(k=>n.includes(k)))return aisle;}return"Other";}
 window.togAisle=function(){aisleMode=!aisleMode;g("aislebtn").style.background=aisleMode?"var(--ac)":"";g("aislebtn").style.color=aisleMode?"var(--bg)":"";renderShop();};
 window.setSHT=function(t){["list","deals"].forEach(x=>{var _xt=g("shtab-"+x);if(_xt)_xt.classList.remove("active");g("sh-"+x+"-body").style.display="none";});var _tt=g("shtab-"+t);if(_tt)_tt.classList.add("active");g("sh-"+t+"-body").style.display="block";};
 window.shareList=function(){var items=shop.filter(function(i){return!i.checked;});if(!items.length){showNotif("List is empty!");return;}var lines=items.map(function(i){return i.price?"\u2022 "+i.name+" (~$"+i.price+")":"\u2022 "+i.name;});var txt="\uD83D\uDED2 Shopping List\n\n"+lines.join("\n");if(navigator.share){navigator.share({title:"Shopping List",text:txt}).catch(function(){});}else if(navigator.clipboard){navigator.clipboard.writeText(txt).then(function(){showNotif("List copied!");});}};
 
+// renderShop() — re-renders the shopping list
+// In normal mode: "To buy" section + "Done" section
+// In aisle mode: items grouped by guessAisle() result
 function renderShop(){
   const c=g("shlist"),un=shop.filter(i=>!i.checked),ch=shop.filter(i=>i.checked);
   g("clrchk").style.display=ch.length?"block":"none";
@@ -1438,6 +1927,7 @@ function renderShop(){
     c.innerHTML=(un.length?`<div class="shsec">To buy (${un.length})</div>${un.map(sH).join("")}`:"")+(ch.length?`<div class="shsec">Done</div>${ch.map(sH).join("")}`:"");
   }
 }
+// sH(item) — renders a single shopping list item row as HTML string
 function sH(item){return`<div class="shit${item.checked?" chk":""}" onclick="togShop('${item.id}')"><div class="shck">${item.checked?"✓":""}</div><div class="shnm">${item.name}</div>${item.price?`<div class="price-tag">~$${item.price}</div>`:""}</div>`;}
 
 // ── DEALS (Claude web search) ─────────────────────────────────────────────
@@ -1477,6 +1967,9 @@ window.addDealToList=function(name){
   }else{showNotif("Already on your list!");}
 };
 
+// claudeSearchDeals(query, store) — uses Claude's web_search tool to find
+// real grocery store deals near Edison NJ.
+// Results are cached in localStorage for 24 hours per query+store combo.
 async function claudeSearchDeals(query, store){
   // Check 24hr cache first
   var cacheKey="ks-deals-"+store+"-"+query.toLowerCase().replace(/\s+/g,"_").substring(0,40);
@@ -1508,6 +2001,7 @@ async function claudeSearchDeals(query, store){
   Js(cacheKey,{deals:arr,ts:Date.now(),query:query,store:storeStr});
   return arr;
 }
+// searchDeals() — triggered by the Search button in the Deals tab
 window.searchDeals=async function(){
   const q=g("dealsearch").value.trim();if(!q){showNotif("Enter something to search");return;}
   const store=g("dealstore")&&g("dealstore").value||"any";
@@ -1530,6 +2024,8 @@ window.searchDeals=async function(){
   }
 };
 
+// dealsFromList() — searches deals for all unchecked items on the shopping list
+// Falls back to searching meal plan items if the list is empty
 window.dealsFromList=async function(){
   // Build from meal plan if list is empty
   var items=shop.filter(function(i){return!i.checked;});
@@ -1560,6 +2056,8 @@ window.dealsFromList=async function(){
 };
 
 // ── OPEN RECIPE (updated with schedule button + tags + cook count) ─────────
+// openER(id) — opens the Edit Recipe overlay and builds the form HTML dynamically
+// Includes: schedule button, shop ingredients, serving scaler, tags, rating
 window.openER=function(id){
   const r=recs.find(r=>r.id===id);if(!r)return;eid=id;
   const rt2=r.rating||0;
@@ -1599,6 +2097,8 @@ window.openER=function(id){
   showOv("erec");
 };
 
+// addRecIngToShop(id) — sends recipe description to Claude to extract ingredient names,
+// then adds anything not already in inventory to the shopping list
 window.addRecIngToShop=async function(id){
   const r=recs.find(x=>x.id===id);if(!r||!r.description){showNotif("No ingredients listed");return;}
   showNotif("Parsing ingredients…");
@@ -1624,6 +2124,7 @@ Recipe: ${r.description}`}]
   }catch(e){showNotif("Couldn't parse ingredients");}
 };
 
+// updR() — saves edits from the Edit Recipe form to Firestore
 window.updR=async function(){
   const r=recs.find(r=>r.id===eid);if(!r)return;
   const rt2=[...document.querySelectorAll("#estars .star")].filter(s=>s.classList.contains("on")).length;
@@ -1632,14 +2133,17 @@ window.updR=async function(){
   showNotif("Recipe updated!");hideOv("erec");
 };
 
-// ── SHOWSCREEN UPDATE (insights) ──────────────────────────────────────────
+// ── SHOWSCREEN PATCH ─────────────────────────────────────────────────────────
+// Extends showScreen() to trigger renderInsights() when Stats tab is opened
 const _origShowScreen=window.showScreen;
 window.showScreen=function(n){
   _origShowScreen(n);
   if(n==="insights")renderInsights();
 };
 
-// ── REMOVE ITEM: log waste if expired ────────────────────────────────────
+// ── REMOVE ITEM PATCH ───────────────────────────────────────────────────────
+// Extends remItem() to log removed items to the waste log
+// if they were expiring or already expired at time of removal
 const _origRemItem=window.remItem;
 window.remItem=async function(id){
   const item=inv.find(i=>i.id===id);
@@ -1647,7 +2151,12 @@ window.remItem=async function(id){
   await _origRemItem(id);
 };
 
-// ── VARIETY NUDGE IN CLAUDE CTX ───────────────────────────────────────────
+// ── KITCHEN CONTEXT FUNCTION (kitCtx) ──────────────────────────────────────
+// kitCtx() builds the full system prompt for Claude chat.
+// Includes: inventory, expiring items, meal plan, favourites,
+// recently cooked, household settings, dietary restrictions,
+// and cultural background (Bangladeshi + Turkish cuisine emphasis).
+// Called at the start of every chat message send.
 const _origKitCtx=kitCtx;
 // (already defined above — we'll patch it by redefining)
 function kitCtx(){
@@ -1670,6 +2179,22 @@ Be concise. Use what they have. Suggest variety — lean toward Bangladeshi and 
 
 </script>
 <script>
+/*
+================================================================================
+  THEME ENGINE  (plain <script>, not module — functions are global)
+  Supports 7 colour themes × 3 modes (auto/light/dark) = 21 combinations.
+
+  THEMES object: each theme has .dark and .light colour sets.
+  applyTheme(themeKey, mode) — applies CSS variables to :root, saves to localStorage.
+  setMode(mode)              — changes mode while keeping current theme.
+
+  Theme keys: gold | forest | ocean | bordeaux | sand | midnight | lavender
+  Stored in localStorage: ks-theme (key) + ks-mode (auto|light|dark)
+
+  The system-colour-scheme media query listener auto-switches in "auto" mode.
+  The showOv hook refreshes the picker UI every time Settings is opened.
+================================================================================
+*/
 // ── THEMES (plain script — not module, so all fns are global) ─────────────
 const THEMES = {
   gold:{name:"Gold",swatch:"#d4a853",
@@ -1755,6 +2280,27 @@ document.addEventListener("DOMContentLoaded", function(){
 });
 </script>
 <script>
+/*
+================================================================================
+  LOGIN SCRIPT  (IIFE — plain <script>, not module)
+  This script handles the login flow and auto-login.
+
+  doEnter()  — called when user taps "Enter Kitchen"
+               saves household code to localStorage, then either:
+               a) auto-proceeds to app if user name already saved
+               b) shows the "Who's cooking?" screen
+
+  doPick(name) — called when user taps Bora or Bushra
+                 saves user name and calls _appStart(code)
+
+  AUTO-LOGIN:
+  On DOMContentLoaded, if "ks-h" is already in localStorage,
+  the app starts immediately. Because _appStart lives in a
+  <script type="module"> (which loads async), we RETRY every 50ms
+  until window._appStart is defined before calling it.
+  This prevents a silent failure if the module hasn't finished loading yet.
+================================================================================
+*/
 (function(){
   function doEnter(){
     var raw=document.getElementById("hci").value||"";
