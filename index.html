@@ -398,8 +398,9 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 }
 .swipe-inner.swiping{transition:none} /* track finger with no lag */
 
-/* Red delete panel — always present behind the row, revealed on swipe.
-   Uses position:absolute flush to the right. The row slides over it. */
+/* Red delete panel — clipped to zero width by default using clip-path.
+   This is more reliable than overflow:hidden on iOS Safari.
+   Revealed via .open class when row is swiped. */
 .swipe-del{
   position:absolute;
   right:0;top:0;bottom:0;
@@ -409,10 +410,16 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   font-size:.85rem;font-weight:700;color:#fff;
   letter-spacing:.02em;
   cursor:pointer;
-  /* Square left edge, rounded right edge matching the wrap */
   border-radius:0 14px 14px 0;
-  /* Stretch to fill — important on iOS */
-  align-self:stretch;
+  /* Completely hidden by default — clip from right edge inward */
+  clip-path:inset(0 0 0 100%);
+  transition:clip-path .3s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+/* Revealed when row is swiped open */
+.swipe-wrap.open .swipe-del{
+  clip-path:inset(0 0 0 0%);
+  pointer-events:auto;
 }
 
 /* ── MULTI-SELECT MODE ──────────────────────────────
@@ -430,14 +437,11 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   transform:none !important;
 }
 
-/* Circular checkbox — sits to the LEFT of the row.
-   Positioned absolutely relative to .swipe-wrap,
-   which extends left 44px in select mode.
-   left:0 puts it at the new left edge of the shifted wrap,
-   then we offset left by the full checkbox width + gap. */
+/* Circular checkbox — hidden until select mode is active.
+   Sits to the left of the row inside the margin-left gap. */
 .sel-cb{
   position:absolute;
-  left:-40px;
+  left:-38px;
   top:50%;
   transform:translateY(-50%);
   width:26px;height:26px;border-radius:50%;
@@ -445,15 +449,26 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   background:var(--card);
   display:flex;align-items:center;justify-content:center;
   font-size:.85rem;font-weight:600;
-  color:transparent; /* checkmark hidden until selected */
+  color:transparent;
   transition:all .2s cubic-bezier(.4,0,.2,1);
   pointer-events:none;
+  /* Hidden outside select mode */
+  opacity:0;
+}
+/* Show checkbox only in select mode */
+.swipe-wrap.selecting .sel-cb{
+  opacity:1;
 }
 /* Selected state — red fill, white checkmark */
 .swipe-wrap.selected .sel-cb{
   background:var(--rd);
   border-color:var(--rd);
   color:#fff;
+}
+
+/* Hide the original .shck circle in select mode to avoid double-circle */
+.swipe-wrap.selecting .shck{
+  display:none;
 }
 
 /* "Select" button in list headers */
