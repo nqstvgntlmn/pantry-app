@@ -1333,8 +1333,26 @@ const EID="2b6ecac2",EK="8db76605e873aaf2fbdf41256cb24cb4";
 // dbList  → returns array of documents
 // dbSet   → upserts a single document
 // dbDelete→ removes a single document
-async function _db(op,path,data){const r=await fetch("/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op,path,data})});return r.json();}
-async function dbList(path){const j=await _db("list",path);return j.docs||[];}
+// _db(op, path, data) — low-level fetch wrapper for /api/db
+// Handles non-JSON responses gracefully (Vercel error pages return HTML)
+async function _db(op,path,data){
+  const r=await fetch("/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op,path,data})});
+  // Check content-type before parsing — Vercel error pages return HTML, not JSON
+  const ct=r.headers.get("content-type")||"";
+  if(!ct.includes("application/json")){
+    throw new Error(`/api/db returned non-JSON (status ${r.status}) for op=${op} path=${path}`);
+  }
+  return r.json();
+}
+// dbList — returns array of docs, or [] if collection is empty / doesn't exist yet
+async function dbList(path){
+  try{const j=await _db("list",path);return j.docs||[];}
+  catch(e){
+    // Empty/nonexistent collections are normal on first use — not an error
+    console.warn("dbList empty or error for",path,":",e.message);
+    return [];
+  }
+}
 async function dbSet(path,data){return _db("set",path,data);}
 async function dbDelete(path){return _db("delete",path);}
 // ── GLOBAL APPLICATION STATE ─────────────────────────────────────────────────
@@ -1569,8 +1587,9 @@ window._appStart=async function start(code){
   async function poll(){
     try{
       ss("syncing");
-      // Fetch all seven collections in parallel for maximum speed
-      const[ni,nr2,ns,mpDocs,cfgDocs,clDocs,wlDocs]=await Promise.all([
+      // Use allSettled so a single failing collection never crashes the whole poll.
+      // Each result is {status:"fulfilled",value:[...]} or {status:"rejected",reason:...}
+      const results=await Promise.allSettled([
         dbList(`households/${hid}/inventory`),
         dbList(`households/${hid}/recipes`),
         dbList(`households/${hid}/shopping`),
@@ -1579,6 +1598,18 @@ window._appStart=async function start(code){
         dbList(`households/${hid}/cooklog`),
         dbList(`households/${hid}/wastelog`)
       ]);
+      // Helper: extract value or fall back to current value on failure
+      const val=(r,fallback)=>r.status==="fulfilled"?r.value:fallback;
+
+      const[ni,nr2,ns,mpDocs,cfgDocs,clDocs,wlDocs]=[
+        val(results[0],inv),
+        val(results[1],recs),
+        val(results[2],shop),
+        val(results[3],[]),
+        val(results[4],[]),
+        val(results[5],[]),
+        val(results[6],[])
+      ];
 
       // Update inventory, recipes, shopping list
       inv=ni; recs=nr2; shop=ns;
