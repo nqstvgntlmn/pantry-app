@@ -428,32 +428,26 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
    to the wrap (rather than translating the inner) so the
    row itself doesn't clip — and overflow:visible lets the
    circle appear outside the wrap's left edge.             */
-.swipe-wrap.selecting{
-  margin-left:44px;
-  overflow:visible;
-}
-/* Prevent swipe opening in select mode */
+/* In select mode — no margin shift needed, checkbox is inside the row */
 .swipe-wrap.selecting .swipe-inner{
-  transform:none !important;
+  transform:none !important; /* disable swipe gestures in select mode */
 }
 
-/* Circular checkbox — hidden until select mode is active.
-   Sits to the left of the row inside the margin-left gap. */
+/* Circular checkbox — overlays the .shck position inside the row.
+   Hidden outside select mode; shown + tappable in select mode. */
 .sel-cb{
-  position:absolute;
-  left:-38px;
-  top:50%;
-  transform:translateY(-50%);
+  /* Sit on top of .shck — same size and position */
   width:26px;height:26px;border-radius:50%;
   border:2px solid var(--b2);
   background:var(--card);
+  flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   font-size:.85rem;font-weight:600;
   color:transparent;
-  transition:all .2s cubic-bezier(.4,0,.2,1);
-  pointer-events:none;
-  /* Hidden outside select mode */
+  transition:background .2s, border-color .2s, color .2s;
+  /* Hidden outside select mode — takes up space but invisible */
   opacity:0;
+  /* NOT position:absolute — flows inline so it replaces .shck */
 }
 /* Show checkbox only in select mode */
 .swipe-wrap.selecting .sel-cb{
@@ -465,11 +459,17 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   border-color:var(--rd);
   color:#fff;
 }
-
-/* Hide the original .shck circle in select mode to avoid double-circle */
+/* Hide the original .shck in select mode — sel-cb takes its place */
 .swipe-wrap.selecting .shck{
   display:none;
 }
+
+.atk-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--b1);gap:12px}
+.atk-item:last-child{border-bottom:none}
+.atk-name{font-size:.9rem;font-weight:500;flex:1}
+.atk-loc{display:flex;gap:6px;flex-shrink:0}
+.atk-loc button{padding:5px 9px;border-radius:10px;border:1.5px solid var(--b2);background:transparent;color:var(--mt);font-size:.72rem;cursor:pointer;transition:all .15s;font-family:"DM Sans",sans-serif}
+.atk-loc button.sel{background:var(--ac);border-color:var(--ac);color:var(--bg);font-weight:600}
 
 /* "Select" button in list headers */
 .selbtn{font-size:.75rem}
@@ -882,7 +882,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
           <!-- Select button enters multi-delete mode for shopping list -->
           <button class="btn bsm bs selbtn" id="sh-selbtn" onclick="togShopSelect()">Select</button>
           <button class="btn bsm bs" onclick="shareList()">📤 Share</button>
-          <button class="btn bsm bs" id="clrchk" onclick="clrChk()" style="display:none">Clear done</button>
+          <button class="btn bsm bs" id="clrchk" onclick="openAddToKitchen()" style="display:none">🧺 Add to Kitchen</button>
         </div>
       </div>
       <div class="itabs" style="margin-top:10px">
@@ -1043,6 +1043,24 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
        scanDestList flag controls whether result goes to
        inventory (false) or shopping list (true).
        ══════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════
+       OVERLAY: ADD TO KITCHEN  (#ov-atk)
+       Shown when user taps "Add to Kitchen" after checking off items.
+       Each checked shopping item is listed with a location picker
+       (Fridge / Freezer / Pantry). Tapping "Add All" calls addToKitchen()
+       which saves each item to inventory and removes it from shopping.
+       ══════════════════════════════════════ -->
+  <div class="ov" id="ov-atk">
+    <div class="ovhdr">
+      <div class="bkbtn" onclick="hideOv('atk')">←</div>
+      <div class="ovttl">Add to Kitchen</div>
+    </div>
+    <div class="ovbody" id="atk-body"></div>
+    <div style="padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom))">
+      <button class="btn bp bf" onclick="confirmAddToKitchen()">✅ Add All to Inventory</button>
+    </div>
+  </div>
+
   <!-- OVERLAY: SCAN -->
   <div class="ov" id="ov-scan">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('scan')">←</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
@@ -1369,8 +1387,23 @@ const EID="2b6ecac2",EK="8db76605e873aaf2fbdf41256cb24cb4";
 // dbList  → returns array of documents
 // dbSet   → upserts a single document
 // dbDelete→ removes a single document
-async function _db(op,path,data){const r=await fetch("/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op,path,data})});return r.json();}
-async function dbList(path){const j=await _db("list",path);return j.docs||[];}
+// _db(op, path, data) — POST to /api/db proxy → Firestore REST
+// Checks content-type before parsing: Vercel error pages return HTML,
+// and calling .json() on HTML throws the "Unexpected token '<'" error.
+async function _db(op,path,data){
+  const r=await fetch("/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op,path,data})});
+  const ct=r.headers.get("content-type")||"";
+  if(!ct.includes("application/json")){
+    throw new Error(`/api/db non-JSON response (status ${r.status}) for ${op} ${path}`);
+  }
+  return r.json();
+}
+// dbList — returns docs array, or [] if collection is empty / doesn't exist yet.
+// Empty/nonexistent collections are normal on first use — not a real error.
+async function dbList(path){
+  try{const j=await _db("list",path);return j.docs||[];}
+  catch(e){console.warn("dbList:",path,e.message);return[];}
+}
 async function dbSet(path,data){return _db("set",path,data);}
 async function dbDelete(path){return _db("delete",path);}
 // ── GLOBAL APPLICATION STATE ─────────────────────────────────────────────────
@@ -1605,8 +1638,8 @@ window._appStart=async function start(code){
   async function poll(){
     try{
       ss("syncing");
-      // Fetch all seven collections in parallel for maximum speed
-      const[ni,nr2,ns,mpDocs,cfgDocs,clDocs,wlDocs]=await Promise.all([
+      // allSettled: if one collection is empty/errors, the rest still succeed
+      const res=await Promise.allSettled([
         dbList(`households/${hid}/inventory`),
         dbList(`households/${hid}/recipes`),
         dbList(`households/${hid}/shopping`),
@@ -1615,25 +1648,17 @@ window._appStart=async function start(code){
         dbList(`households/${hid}/cooklog`),
         dbList(`households/${hid}/wastelog`)
       ]);
+      const v=(r,fb)=>r.status==="fulfilled"?r.value:fb;
+      const ni=v(res[0],inv),nr2=v(res[1],recs),ns=v(res[2],shop);
+      const mpDocs=v(res[3],[]),cfgDocs=v(res[4],[]),clDocs=v(res[5],[]),wlDocs=v(res[6],[]);
 
-      // Update inventory, recipes, shopping list
       inv=ni; recs=nr2; shop=ns;
-
-      // Rebuild meal plan object from Firestore documents
-      const newMp={};
-      mpDocs.forEach(d=>{if(d.date&&d.meal) newMp[d.date]=d.meal;});
-      mp=newMp;
-
-      // Merge latest settings (so settings changes from another device apply)
+      const newMp={};mpDocs.forEach(d=>{if(d.date&&d.meal) newMp[d.date]=d.meal;});mp=newMp;
       const cfgDoc=cfgDocs.find(d=>d.id==="config");
       if(cfgDoc) cfg={...CFG_DEFAULT,...cfgDoc};
-
-      // Rebuild cook log and waste log (newest first)
       cookLog=clDocs.sort((a,b)=>new Date(b.loggedAt||b.date||0)-new Date(a.loggedAt||a.date||0));
       wasteLog=wlDocs.sort((a,b)=>new Date(b.loggedAt||b.date||0)-new Date(a.loggedAt||a.date||0));
-
       ss("synced");
-      // Re-render all screens with fresh data
       renderAll();renderRecs();renderShop();renderSum();
     }catch(e){
       console.error("poll error",e);
@@ -1863,9 +1888,9 @@ function iH(item){
     bc=ex?(ex.c==="expired"?" expired":ex.c==="expiring"?" expiring":""):"",
     et=ex?`<div class="etag ${ex.c}">${ex.l}</div>`:"";
   return`<div class="swipe-wrap" id="sw-${item.id}" data-id="${item.id}" data-list="inv">
-    <div class="sel-cb">✓</div>
     <div class="swipe-inner">
       <div class="iit${bc}" onclick="swipeRowTap('${item.id}','inv')">
+        <div class="sel-cb">✓</div>
         <div class="iileft">${img}<div>
           <div class="inm">${item.name}</div>
           <div class="isb">${item.brand||gcat(item)}</div>
@@ -1884,7 +1909,7 @@ function iH(item){
 // Respects the active tab filter (it variable)
 // "All" view: shows expiring section first, then grouped by location
 // "By Type" view: groups by inferred category
-function renderInv(){const f=it==="all"||it==="cat"?inv:inv.filter(i=>i.location===it);g("isub").textContent=f.length+" "+({all:"items",fridge:"fridge items",freezer:"frozen items",pantry:"pantry items",cat:"items by type"}[it]||"items");updExport();const c=g("ibody");
+function renderInv(){const az=(a,b)=>a.name.localeCompare(b.name);const f=(it==="all"||it==="cat"?inv:inv.filter(i=>i.location===it)).slice().sort(az);g("isub").textContent=f.length+" "+({all:"items",fridge:"fridge items",freezer:"frozen items",pantry:"pantry items",cat:"items by type"}[it]||"items");updExport();const c=g("ibody");
   if(!f.length){c.innerHTML=`<div class="es"><div class="ei">🧺</div><p>No items here yet.<br/>Tap Scan or Add to get started.</p></div>`;return;}
   if(it==="cat"){const gr={};f.forEach(item=>{const cat=gcat(item);if(!gr[cat])gr[cat]=[];gr[cat].push(item);});c.innerHTML=Object.entries(gr).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,its])=>`<div class="lgrp"><div class="lgt">${CATS[cat]||"📦"} ${cat}</div><div class="ilst">${its.map(iH).join("")}</div></div>`).join("");if(selectMode==="inv")document.querySelectorAll("#ibody .swipe-wrap").forEach(w=>{w.classList.add("selecting");if(selectedIds.has(w.dataset.id))w.classList.add("selected");});return;}
   if(it==="all"){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const exH=ex.length?`<div class="lgrp"><div class="lgt" style="color:var(--am)">⚠️ Expiring Soon</div><div class="ilst">${ex.map(iH).join("")}</div></div>`:"";c.innerHTML=exH+["fridge","freezer","pantry"].map(loc=>{const its=f.filter(i=>i.location===loc);return its.length?`<div class="lgrp"><div class="lgt">${ll(loc)}</div><div class="ilst">${its.map(iH).join("")}</div></div>`:""}).join("");if(selectMode==="inv")document.querySelectorAll("#ibody .swipe-wrap").forEach(w=>{w.classList.add("selecting");if(selectedIds.has(w.dataset.id))w.classList.add("selected");});return;}
@@ -2006,6 +2031,80 @@ window.qadd=function(){const i=g("shi"),v=i.value.trim();if(!v)return;const item
 // togShop(id) — toggles the checked state of a shopping list item
 window.togShop=function(id){const item=shop.find(i=>i.id===id);if(!item)return;svShopItem({...item,checked:!item.checked});};
 // clrChk() — removes all checked (done) items from the shopping list
+// openAddToKitchen() — opens the "Add to Kitchen" overlay for all checked items.
+// Each item gets a location picker (Fridge/Freezer/Pantry) defaulting to a
+// smart guess based on the item name (frozen→freezer, dairy/meat→fridge, else pantry).
+window.openAddToKitchen=function(){
+  const checked=shop.filter(i=>i.checked);
+  if(!checked.length){showNotif("No completed items!");return;}
+  // Build overlay body: one row per checked item with location picker
+  const body=g("atk-body");
+  body.innerHTML=`<div style="padding:16px">
+    <p style="font-size:.82rem;color:var(--mt);margin-bottom:16px">Choose where each item goes in your kitchen, then tap Add All.</p>
+    ${checked.map(item=>{
+      const def=guessLocation(item.name);
+      return`<div class="atk-item" id="atk-${item.id}" data-loc="${def}">
+        <div class="atk-name">${item.name}</div>
+        <div class="atk-loc">
+          <button onclick="setAtkLoc('${item.id}','fridge',this)" class="${def==='fridge'?'sel':''}">🌡 Fridge</button>
+          <button onclick="setAtkLoc('${item.id}','freezer',this)" class="${def==='freezer'?'sel':''}">🧊 Freeze</button>
+          <button onclick="setAtkLoc('${item.id}','pantry',this)" class="${def==='pantry'?'sel':''}">🥫 Pantry</button>
+        </div>
+      </div>`;
+    }).join("")}
+  </div>`;
+  showOv("atk");
+};
+
+// guessLocation(name) — infers the best storage location for a grocery item name.
+function guessLocation(name){
+  const n=name.toLowerCase();
+  if(/frozen|ice cream|pizza|nugget|waffle|tater|edamame|popsicle/.test(n)) return"freezer";
+  if(/milk|cheese|yogurt|butter|cream|egg|meat|chicken|beef|pork|fish|salmon|shrimp|tofu|deli|bacon|sausage|produce|lettuce|spinach|berry|berries|fruit|vegetable|carrot|broccoli|juice/.test(n)) return"fridge";
+  return"pantry";
+}
+
+// setAtkLoc(id, loc, btn) — toggles the location button selection for an item
+// Stores the chosen location in a data-loc attribute on the row for easy reading
+window.setAtkLoc=function(id,loc,btn){
+  const row=g("atk-"+id);
+  row.dataset.loc=loc;
+  row.querySelectorAll(".atk-loc button").forEach(b=>b.classList.remove("sel"));
+  btn.classList.add("sel");
+};
+
+// confirmAddToKitchen() — reads each item's chosen location from data-loc,
+// adds to inventory, removes from shopping list.
+window.confirmAddToKitchen=async function(){
+  const checked=shop.filter(i=>i.checked);
+  const today=new Date().toLocaleDateString();
+  let added=0;
+  for(const item of checked){
+    const row=g("atk-"+item.id);
+    if(!row) continue;
+    const loc=row.dataset.loc||guessLocation(item.name);
+    // Check if item already in inventory — if so bump qty, else add new
+    const existing=inv.find(i=>i.name.toLowerCase()===item.name.toLowerCase());
+    await svi({
+      id:existing?existing.id:"inv-"+Date.now()+"-"+Math.random().toString(36).slice(2),
+      name:existing?existing.name:item.name,
+      qty:existing?(existing.qty+1):1,
+      unit:existing?existing.unit:"unit",
+      location:loc,
+      category:existing?existing.category:gcat({name:item.name}),
+      addedAt:existing?existing.addedAt:today,
+      brand:existing?existing.brand:"",
+      expiry:existing?existing.expiry:null,
+      image:existing?existing.image:null,
+      source:"shopping",
+    });
+    await dlShopItem(item.id);
+    added++;
+  }
+  hideOv("atk");
+  showNotif(`${added} item${added!==1?"s":""} added to your kitchen! 🧺`);
+};
+
 window.clrChk=function(){shop.filter(i=>i.checked).forEach(i=>dlShopItem(i.id));};
 // svShop() — persists shop[] to localStorage "ks-s" (local cache only)
 function svShop(){Js("ks-s",shop);}
@@ -2370,7 +2469,8 @@ window.shareList=function(){var items=shop.filter(function(i){return!i.checked;}
 // In normal mode: "To buy" section + "Done" section
 // In aisle mode: items grouped by guessAisle() result
 function renderShop(){
-  const c=g("shlist"),un=shop.filter(i=>!i.checked),ch=shop.filter(i=>i.checked);
+  const az=(a,b)=>a.name.localeCompare(b.name);
+  const c=g("shlist"),un=shop.filter(i=>!i.checked).sort(az),ch=shop.filter(i=>i.checked).sort(az);
   g("clrchk").style.display=ch.length?"block":"none";
   g("shsub").textContent=un.length+" items to buy";
   if(!shop.length){c.innerHTML=`<div class="es"><div class="ei">🛒</div><p>Your list is empty!<br/>Add items or use "Build from meal plan".</p></div>`;return;}
@@ -2398,9 +2498,9 @@ function renderShop(){
 // .swipe-del      red delete button revealed on left-swipe
 function sH(item){
   return`<div class="swipe-wrap" id="sw-${item.id}" data-id="${item.id}" data-list="shop">
-    <div class="sel-cb">✓</div>
     <div class="swipe-inner">
       <div class="shit${item.checked?" chk":""}" onclick="swipeRowTap('${item.id}','shop')">
+        <div class="sel-cb">✓</div>
         <div class="shck">${item.checked?"✓":""}</div>
         <div class="shnm">${item.name}</div>
         ${item.price?`<div class="price-tag">~$${item.price}</div>`:""}
@@ -2810,9 +2910,7 @@ window.togShopSelect=function(){
   selectMode="shop";
   selectedIds.clear();
   document.querySelectorAll("#shlist .swipe-wrap").forEach(w=>w.classList.add("selecting"));
-  // Add left padding to the list body so the checkbox circle isn't clipped by the screen edge
-  const body=document.querySelector(".shbody");
-  if(body) body.style.paddingLeft="52px";
+  // no extra padding needed — checkbox is inside the row
   g("sh-selbtn").classList.add("active");
   g("sh-selbtn").textContent="Cancel";
   updateMultiBar();
@@ -2825,9 +2923,7 @@ window.togInvSelect=function(){
   selectMode="inv";
   selectedIds.clear();
   document.querySelectorAll("#ibody .swipe-wrap").forEach(w=>w.classList.add("selecting"));
-  // Add left padding so checkboxes have room
-  const body=g("ibody");
-  if(body) body.style.paddingLeft="52px";
+  // no extra padding needed — checkbox is inside the row
   g("inv-selbtn").classList.add("active");
   g("inv-selbtn").textContent="Cancel";
   updateMultiBar();
@@ -2840,13 +2936,8 @@ window.cancelSelect=function(){
   document.querySelectorAll(".swipe-wrap.selecting").forEach(w=>{
     w.classList.remove("selecting","selected");
   });
-  // Restore original left padding on list bodies
   const sb=g("sh-selbtn");if(sb){sb.classList.remove("active");sb.textContent="Select";}
   const ib=g("inv-selbtn");if(ib){ib.classList.remove("active");ib.textContent="Select";}
-  const shBody=document.querySelector(".shbody");
-  if(shBody) shBody.style.paddingLeft="";
-  const invBody=g("ibody");
-  if(invBody) invBody.style.paddingLeft="";
   updateMultiBar();
 };
 
