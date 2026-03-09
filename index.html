@@ -1786,12 +1786,13 @@ document.addEventListener("DOMContentLoaded", function(){
     if(hci)hci.addEventListener("keydown",function(e){if(e.key==="Enter")doEnter();});
     if(pb)pb.addEventListener("click",function(){doPick("Bora");});
     if(pbu)pbu.addEventListener("click",function(){doPick("Bushra");});
-    // Auto-login
+    // Auto-login — retry until module script has defined _appStart
     var sv=localStorage.getItem("ks-h");
     if(sv){
       document.getElementById("LS").style.display="none";
       document.getElementById("APP").style.display="flex";
-      if(window._appStart)window._appStart(sv);
+      if(window._appStart){window._appStart(sv);}
+      else{var _t=setInterval(function(){if(window._appStart){clearInterval(_t);window._appStart(sv);}},50);}
     }
   });
 })();
