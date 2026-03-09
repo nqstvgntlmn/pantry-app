@@ -365,6 +365,88 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .pill{background:var(--card);border:1.5px solid var(--b2);border-radius:20px;padding:8px 15px;font-size:.76rem;color:var(--tx2);white-space:nowrap;cursor:pointer;transition:all .15s;flex-shrink:0;font-weight:500}
 .pill:active{border-color:var(--ac);color:var(--ac);background:var(--acd)}
 
+
+/* ════════════════════════════════════════════════════
+   SWIPE-TO-DELETE + MULTI-SELECT
+   ─────────────────────────────────────────────────────
+   .swipe-wrap     outer container clips overflow so the
+                   red delete panel never shows until swiped
+   .swipe-inner    the visible row — translateX moves it left
+                   on swipe; transition gives snap-back animation
+   .swipe-del      red delete button revealed behind the row
+   .swipe-wrap.selecting .swipe-inner
+                   in multi-select mode, items shift right to
+                   reveal a checkbox on the left
+   .sel-cb         the circular checkbox (filled when selected)
+   .multi-bar      fixed bottom bar shown in multi-select mode
+                   with "Delete X" and "Cancel" buttons
+   ════════════════════════════════════════════════════ */
+
+/* Outer clip — hides the red delete panel until swiped */
+.swipe-wrap{position:relative;overflow:hidden;border-radius:14px;margin-bottom:7px}
+
+/* The visible row — we translate it left to reveal the delete button */
+.swipe-inner{
+  position:relative;
+  transition:transform .25s cubic-bezier(.4,0,.2,1);
+  will-change:transform;
+  /* Remove margin-bottom from .shit/.iit since .swipe-wrap handles spacing */
+  margin-bottom:0 !important;
+  border-radius:14px;
+}
+/* While actively swiping, disable the transition so it tracks finger exactly */
+.swipe-inner.swiping{transition:none}
+
+/* Red delete panel — sits behind the row, revealed on swipe */
+.swipe-del{
+  position:absolute;right:0;top:0;bottom:0;
+  width:80px;
+  background:var(--rd);
+  display:flex;align-items:center;justify-content:center;
+  border-radius:0 14px 14px 0;
+  font-size:.82rem;font-weight:600;color:#fff;
+  cursor:pointer;
+  flex-direction:column;gap:2px;
+}
+.swipe-del span{font-size:1.1rem}
+
+/* Multi-select mode: shift row right to expose checkbox */
+.swipe-wrap.selecting .swipe-inner{transform:translateX(40px) !important}
+.swipe-wrap.selecting{overflow:visible}
+
+/* Circular checkbox on the left edge */
+.sel-cb{
+  position:absolute;
+  left:-36px;top:50%;transform:translateY(-50%);
+  width:24px;height:24px;border-radius:50%;
+  border:2px solid var(--b2);
+  background:var(--card);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.8rem;transition:all .2s;
+  pointer-events:none; /* tapping the row handles selection */
+}
+.swipe-wrap.selected .sel-cb{background:var(--rd);border-color:var(--rd);color:#fff}
+
+/* "Select" button in the shopping / inventory header */
+.selbtn{font-size:.75rem}
+.selbtn.active{background:var(--ac);color:var(--bg);border-color:var(--ac)}
+
+/* Multi-delete action bar — slides up from bottom when items are selected */
+.multi-bar{
+  position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));
+  left:50%;transform:translateX(-50%) translateY(100px);
+  width:calc(100% - 32px);max-width:420px;
+  background:var(--card2);border:1.5px solid var(--rd);
+  border-radius:16px;padding:12px 16px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  z-index:150;
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
+  box-shadow:0 8px 32px rgba(0,0,0,.4);
+}
+.multi-bar.visible{transform:translateX(-50%) translateY(0)}
+.multi-bar-count{font-size:.88rem;color:var(--tx2)}
+.multi-bar-count strong{color:var(--tx);font-weight:600}
+
 /* ════════════════════════════════════════════════════
    OVERLAYS (full-screen panels)
    .ov            hidden by default (display:none)
@@ -702,7 +784,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   <!-- INVENTORY -->
   <div class="screen" id="screen-inventory" style="overflow-y:hidden">
     <div style="flex-shrink:0">
-      <div class="ihdr"><div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div><div class="iha"><button class="btn bs bsm" onclick="showOv('madd')">✏️</button><button class="btn bp bsm" onclick="showOv('scan')">📷 Scan</button></div></div>
+      <div class="ihdr"><div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div><div class="iha"><button class="btn bs bsm selbtn" id="inv-selbtn" onclick="togInvSelect()">Select</button><button class="btn bs bsm" onclick="showOv('madd')">✏️</button><button class="btn bp bsm" onclick="showOv('scan')">📷 Scan</button></div></div>
       <div class="itabs">
         <div class="itab active" id="itab-all" onclick="setIT('all')">All</div>
         <div class="itab" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
@@ -743,6 +825,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
     <div style="flex-shrink:0">
       <div class="shdr"><div><div class="sttl">Shopping</div><div class="ssub" id="shsub">Your grocery list</div></div>
         <div style="display:flex;gap:6px">
+          <!-- Select button enters multi-delete mode for shopping list -->
+          <button class="btn bsm bs selbtn" id="sh-selbtn" onclick="togShopSelect()">Select</button>
           <button class="btn bsm bs" onclick="shareList()">📤 Share</button>
           <button class="btn bsm bs" id="clrchk" onclick="clrChk()" style="display:none">Clear done</button>
         </div>
@@ -874,6 +958,20 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
        BOTTOM NAVIGATION BAR  (#NAV)
        showScreen(name) handles active state
        ══════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════
+       MULTI-DELETE ACTION BAR  (.multi-bar)
+       Slides up from bottom when items are selected in multi-select mode.
+       Shared between Shopping and Inventory screens.
+       Shown/hidden by updateMultiBar().
+       ══════════════════════════════════════ -->
+  <div class="multi-bar" id="multi-bar">
+    <div class="multi-bar-count"><strong id="multi-count">0</strong> selected</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bs bsm" onclick="cancelSelect()">Cancel</button>
+      <button class="btn bd bsm" onclick="deleteSelected()" style="border-color:var(--rd);color:var(--rd)">🗑 Delete</button>
+    </div>
+  </div>
+
   <!-- NAV -->
   <div id="NAV">
     <div class="ni active" id="nav-home" onclick="showScreen('home')"><span class="ico">🏠</span><span class="lbl">Home</span></div>
@@ -1287,20 +1385,6 @@ function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
 //
 // WASTE LOG  — one doc per log entry (up to 100 kept):
 //   households/{hid}/wastelog/{id}  →  {id, name, date, loggedAt}
-
-// DEFAULT CONFIG — used only on first-ever login before Firestore has any data
-const CFG_DEFAULT={
-  name:"The Bora Family",
-  adults:"Bora",
-  kids:"1 toddler (age 3)",
-  nopork:true,
-  noshellfish:false,
-  vegetarian:false,
-  glutenfree:false,
-  other:"",
-  cuisines:"Bangladeshi, Turkish, Mediterranean, American",
-  cookTime:"40-60 min"
-};
 
 // saveMp(dateKey, mealName | null)
 // Writes one meal plan entry to Firestore (or deletes it if mealName is falsy).
@@ -1716,17 +1800,49 @@ function ll(l){return{fridge:"🌡 Fridge",freezer:"🧊 Freezer",pantry:"🥫 P
 //   c: "expired" | "expiring" | "ok"
 //   l: human-readable label ("Expired", "Expires today", "Expires in 3d", "Mar 15")
 function xSt(exp){if(!exp)return null;const t=new Date();t.setHours(0,0,0,0);const e=new Date(exp+"T00:00:00"),d=Math.round((e-t)/86400000);if(d<0)return{c:"expired",l:"Expired"};if(d===0)return{c:"expiring",l:"Expires today"};if(d<=7)return{c:"expiring",l:`Expires in ${d}d`};return{c:"ok",l:e.toLocaleDateString("en-US",{month:"short",day:"numeric"})};}
-// iH(item) — renders a single inventory item row as HTML string
-function iH(item){const ic=CATS[gcat(item)]||"🛒",img=item.image?`<img src="${item.image}" class="iimg" onerror="this.style.display='none'"/>`:`<div class="iph">${ic}</div>`;const ex=xSt(item.expiry),bc=ex?(ex.c==="expired"?" expired":ex.c==="expiring"?" expiring":""):"",et=ex?`<div class="etag ${ex.c}">${ex.l}</div>`:"";return`<div class="iit${bc}" onclick="openAdj('${item.id}')"><div class="iileft">${img}<div><div class="inm">${item.name}</div><div class="isb">${item.brand||gcat(item)}</div>${et}</div></div><div style="text-align:right"><div class="iqt">${item.qty}</div><div class="iun">${item.unit}</div></div></div>`;}
+// iH(item) — renders a single inventory item row wrapped in a swipe container.
+// Same swipe-wrap pattern as sH() for consistency.
+function iH(item){
+  const ic=CATS[gcat(item)]||"🛒",
+    img=item.image?`<img src="${item.image}" class="iimg" onerror="this.style.display='none'"/>`:`<div class="iph">${ic}</div>`;
+  const ex=xSt(item.expiry),
+    bc=ex?(ex.c==="expired"?" expired":ex.c==="expiring"?" expiring":""):"",
+    et=ex?`<div class="etag ${ex.c}">${ex.l}</div>`:"";
+  return`<div class="swipe-wrap" id="sw-${item.id}" data-id="${item.id}" data-list="inv">
+    <div class="sel-cb">✓</div>
+    <div class="swipe-inner">
+      <div class="iit${bc}" onclick="swipeRowTap('${item.id}','inv')">
+        <div class="iileft">${img}<div>
+          <div class="inm">${item.name}</div>
+          <div class="isb">${item.brand||gcat(item)}</div>
+          ${et}
+        </div></div>
+        <div style="text-align:right">
+          <div class="iqt">${item.qty}</div>
+          <div class="iun">${item.unit}</div>
+        </div>
+      </div>
+    </div>
+    <div class="swipe-del" onclick="swipeDelItem('${item.id}','inv')"><span>🗑</span>Delete</div>
+  </div>`;
+}
 // renderInv() — full re-render of the inventory list
 // Respects the active tab filter (it variable)
 // "All" view: shows expiring section first, then grouped by location
 // "By Type" view: groups by inferred category
 function renderInv(){const f=it==="all"||it==="cat"?inv:inv.filter(i=>i.location===it);g("isub").textContent=f.length+" "+({all:"items",fridge:"fridge items",freezer:"frozen items",pantry:"pantry items",cat:"items by type"}[it]||"items");updExport();const c=g("ibody");
   if(!f.length){c.innerHTML=`<div class="es"><div class="ei">🧺</div><p>No items here yet.<br/>Tap Scan or Add to get started.</p></div>`;return;}
-  if(it==="cat"){const gr={};f.forEach(item=>{const cat=gcat(item);if(!gr[cat])gr[cat]=[];gr[cat].push(item);});c.innerHTML=Object.entries(gr).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,its])=>`<div class="lgrp"><div class="lgt">${CATS[cat]||"📦"} ${cat}</div><div class="ilst">${its.map(iH).join("")}</div></div>`).join("");return;}
-  if(it==="all"){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const exH=ex.length?`<div class="lgrp"><div class="lgt" style="color:var(--am)">⚠️ Expiring Soon</div><div class="ilst">${ex.map(iH).join("")}</div></div>`:"";c.innerHTML=exH+["fridge","freezer","pantry"].map(loc=>{const its=f.filter(i=>i.location===loc);return its.length?`<div class="lgrp"><div class="lgt">${ll(loc)}</div><div class="ilst">${its.map(iH).join("")}</div></div>`:""}).join("");return;}
-  c.innerHTML=`<div class="ilst">${f.map(iH).join("")}</div>`;}
+  if(it==="cat"){const gr={};f.forEach(item=>{const cat=gcat(item);if(!gr[cat])gr[cat]=[];gr[cat].push(item);});c.innerHTML=Object.entries(gr).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,its])=>`<div class="lgrp"><div class="lgt">${CATS[cat]||"📦"} ${cat}</div><div class="ilst">${its.map(iH).join("")}</div></div>`).join("");if(selectMode==="inv")document.querySelectorAll("#ibody .swipe-wrap").forEach(w=>{w.classList.add("selecting");if(selectedIds.has(w.dataset.id))w.classList.add("selected");});return;}
+  if(it==="all"){const ex=inv.filter(i=>{const s=xSt(i.expiry);return s&&(s.c==="expiring"||s.c==="expired");}).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));const exH=ex.length?`<div class="lgrp"><div class="lgt" style="color:var(--am)">⚠️ Expiring Soon</div><div class="ilst">${ex.map(iH).join("")}</div></div>`:"";c.innerHTML=exH+["fridge","freezer","pantry"].map(loc=>{const its=f.filter(i=>i.location===loc);return its.length?`<div class="lgrp"><div class="lgt">${ll(loc)}</div><div class="ilst">${its.map(iH).join("")}</div></div>`:""}).join("");if(selectMode==="inv")document.querySelectorAll("#ibody .swipe-wrap").forEach(w=>{w.classList.add("selecting");if(selectedIds.has(w.dataset.id))w.classList.add("selected");});return;}
+  c.innerHTML=`<div class="ilst">${f.map(iH).join("")}</div>`;
+  // Re-apply multi-select state after innerHTML wipes the DOM classes
+  if(selectMode==="inv"){
+    document.querySelectorAll("#ibody .swipe-wrap").forEach(w=>{
+      w.classList.add("selecting");
+      if(selectedIds.has(w.dataset.id)) w.classList.add("selected");
+    });
+  }
+}
 window.startScan=function(){g("scerr").style.display="none";g("ffile").click();};
 
 // ── SCAN DESTINATION ROUTING ────────────────────────────────────────────────
@@ -2210,9 +2326,32 @@ function renderShop(){
   }else{
     c.innerHTML=(un.length?`<div class="shsec">To buy (${un.length})</div>${un.map(sH).join("")}`:"")+(ch.length?`<div class="shsec">Done</div>${ch.map(sH).join("")}`:"");
   }
+  // Re-apply multi-select state after innerHTML wipes the DOM classes
+  if(selectMode==="shop"){
+    document.querySelectorAll("#shlist .swipe-wrap").forEach(w=>{
+      w.classList.add("selecting");
+      if(selectedIds.has(w.dataset.id)) w.classList.add("selected");
+    });
+  }
 }
-// sH(item) — renders a single shopping list item row as HTML string
-function sH(item){return`<div class="shit${item.checked?" chk":""}" onclick="togShop('${item.id}')"><div class="shck">${item.checked?"✓":""}</div><div class="shnm">${item.name}</div>${item.price?`<div class="price-tag">~$${item.price}</div>`:""}</div>`;}
+// sH(item) — renders a single shopping list item row wrapped in a swipe container.
+// .swipe-wrap     clips overflow and hosts the checkbox for multi-select
+// .swipe-inner    the visible row — gets translateX applied by touch handlers
+// .sel-cb         checkbox shown in multi-select mode
+// .swipe-del      red delete button revealed on left-swipe
+function sH(item){
+  return`<div class="swipe-wrap" id="sw-${item.id}" data-id="${item.id}" data-list="shop">
+    <div class="sel-cb">✓</div>
+    <div class="swipe-inner">
+      <div class="shit${item.checked?" chk":""}" onclick="swipeRowTap('${item.id}','shop')">
+        <div class="shck">${item.checked?"✓":""}</div>
+        <div class="shnm">${item.name}</div>
+        ${item.price?`<div class="price-tag">~$${item.price}</div>`:""}
+      </div>
+    </div>
+    <div class="swipe-del" onclick="swipeDelItem('${item.id}','shop')"><span>🗑</span>Delete</div>
+  </div>`;
+}
 
 // ── DEALS (Claude web search) ─────────────────────────────────────────────
 function renderDeals(deals, query){
@@ -2461,6 +2600,223 @@ ${recent?"RECENTLY COOKED (avoid repeating): "+recent:""}
 HOUSEHOLD: ${cfg.name}, Adults: ${cfg.adults}, Kids: ${cfg.kids}, Restrictions: ${restr||"none"}, Cuisines: ${cfg.cuisines}, Cook time: ${cfg.cookTime}.
 CULTURAL BACKGROUND: Bushra is Bangladeshi, Bora is Turkish — authentically lean toward these cuisines (Bengali spices, mustard oil, dal, hilsa-style fish; Turkish kebabs, meze, börek, yogurt sauces, lentil soups). Suggest these when inventory allows.
 Be concise. Use what they have. Suggest variety — lean toward Bangladeshi and Turkish — avoid repeating recent meals. Format grocery lists as bullet points starting "- ".`;}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+//  SWIPE-TO-DELETE ENGINE
+// ════════════════════════════════════════════════════════════════════════════
+//
+//  HOW IT WORKS
+//  ─────────────
+//  We use a single delegated touchstart listener on the document.
+//  When a finger touches a .swipe-inner element, we record the start X.
+//  As the finger moves (touchmove), we translateX the .swipe-inner by
+//  the delta — clamped to [-80, 0] so it can only slide left.
+//  On touchend:
+//    • If dragged past -50px threshold → snap to -80px (delete revealed)
+//    • Otherwise → snap back to 0 (cancelled)
+//  Tapping the revealed .swipe-del button calls swipeDelItem().
+//  Any tap elsewhere snaps all open rows back to 0.
+//
+//  MULTI-SELECT MODE
+//  ──────────────────
+//  togShopSelect() / togInvSelect() toggle selectMode.
+//  In select mode, swipe is disabled; tapping a row toggles .selected on
+//  its .swipe-wrap. The multi-bar at the bottom counts selections and
+//  exposes a "Delete" button that calls deleteSelected().
+//
+//  STATE
+//  ──────
+//  selectMode    "shop" | "inv" | null  — which list is in select mode
+//  selectedIds   Set of item IDs currently selected
+//  _swipeEl      the .swipe-inner currently being dragged
+//  _swipeX0      touch start X position
+//  _openWrap     the .swipe-wrap currently showing its delete button (if any)
+
+let selectMode=null, selectedIds=new Set(), _swipeEl=null, _swipeX0=0, _openWrap=null;
+
+// ── Touch handlers (delegated to document) ───────────────────────────────────
+
+document.addEventListener("touchstart", e=>{
+  // Only respond to touches on .swipe-inner elements
+  const inner=e.target.closest(".swipe-inner");
+  if(!inner) return;
+  const wrap=inner.closest(".swipe-wrap");
+  if(!wrap) return;
+  // In select mode, skip swipe — row tap handles selection
+  if(selectMode) return;
+  _swipeEl=inner;
+  _swipeX0=e.touches[0].clientX;
+  inner.classList.add("swiping"); // disable transition while dragging
+},{passive:true});
+
+document.addEventListener("touchmove", e=>{
+  if(!_swipeEl) return;
+  const dx=e.touches[0].clientX - _swipeX0;
+  // Only allow leftward swipe (negative dx), clamp to -80px max
+  const tx=Math.max(-80, Math.min(0, dx));
+  _swipeEl.style.transform=`translateX(${tx}px)`;
+  // Suppress scroll if swiping horizontally enough
+  if(Math.abs(dx)>8) e.preventDefault();
+},{passive:false});
+
+document.addEventListener("touchend", e=>{
+  if(!_swipeEl) return;
+  const inner=_swipeEl;
+  const wrap=inner.closest(".swipe-wrap");
+  inner.classList.remove("swiping"); // re-enable transition for snap
+  // Read current translateX value
+  const tx=parseFloat(inner.style.transform.replace("translateX(",""))||0;
+  if(tx < -50){
+    // Past threshold — snap open to -80px to reveal delete button
+    inner.style.transform="translateX(-80px)";
+    // Close any previously open row
+    if(_openWrap && _openWrap!==wrap) _snapClose(_openWrap);
+    _openWrap=wrap;
+  } else {
+    // Not far enough — snap back
+    inner.style.transform="translateX(0)";
+    if(_openWrap===wrap) _openWrap=null;
+  }
+  _swipeEl=null;
+});
+
+// Close open swipe row if user taps anywhere else
+document.addEventListener("touchstart", e=>{
+  if(!_openWrap) return;
+  // Don't snap if tapping the delete button itself
+  if(e.target.closest(".swipe-del")) return;
+  // Don't snap if tapping inside the open row's swipe-inner
+  const inner=e.target.closest(".swipe-inner");
+  if(inner && inner.closest(".swipe-wrap")===_openWrap) return;
+  _snapClose(_openWrap);
+  _openWrap=null;
+},{passive:true});
+
+// _snapClose(wrap) — snaps a swipe-wrap's inner back to position 0
+function _snapClose(wrap){
+  const inner=wrap&&wrap.querySelector(".swipe-inner");
+  if(inner) inner.style.transform="translateX(0)";
+}
+
+// swipeDelItem(id, list) — called when user taps the red delete panel
+// list: "shop" | "inv"
+window.swipeDelItem=async function(id, list){
+  // Snap the row closed immediately for visual feedback
+  const wrap=g("sw-"+id);
+  if(wrap) wrap.style.opacity="0.5";
+  if(list==="shop"){
+    await dlShopItem(id);
+  } else {
+    await dli(id);
+    showNotif("Item removed");
+  }
+};
+
+// swipeRowTap(id, list) — called when user taps a row (not the delete panel)
+// In normal mode: opens adjust overlay (inv) or toggles check (shop)
+// In select mode: toggles the item's selection state
+window.swipeRowTap=function(id, list){
+  // If this row's swipe is open, close it instead of acting
+  const wrap=g("sw-"+id);
+  if(wrap){
+    const inner=wrap.querySelector(".swipe-inner");
+    const tx=parseFloat((inner.style.transform||"").replace("translateX(",""))||0;
+    if(tx < -10){_snapClose(wrap);_openWrap=null;return;}
+  }
+  if(selectMode){
+    // Multi-select mode: toggle selection
+    if(selectedIds.has(id)){
+      selectedIds.delete(id);
+      wrap&&wrap.classList.remove("selected");
+    } else {
+      selectedIds.add(id);
+      wrap&&wrap.classList.add("selected");
+    }
+    updateMultiBar();
+    return;
+  }
+  // Normal mode
+  if(list==="shop") togShop(id);
+  else openAdj(id);
+};
+
+// ── MULTI-SELECT MODE ────────────────────────────────────────────────────────
+
+// togShopSelect() — enters/exits multi-select mode for the shopping list
+window.togShopSelect=function(){
+  if(selectMode==="shop"){ cancelSelect(); return; }
+  // Cancel any other active select mode first
+  if(selectMode) cancelSelect();
+  selectMode="shop";
+  selectedIds.clear();
+  // Add .selecting class to all shopping swipe-wraps
+  document.querySelectorAll("#shlist .swipe-wrap").forEach(w=>w.classList.add("selecting"));
+  g("sh-selbtn").classList.add("active");
+  g("sh-selbtn").textContent="Cancel";
+  updateMultiBar();
+};
+
+// togInvSelect() — enters/exits multi-select mode for the inventory list
+window.togInvSelect=function(){
+  if(selectMode==="inv"){ cancelSelect(); return; }
+  if(selectMode) cancelSelect();
+  selectMode="inv";
+  selectedIds.clear();
+  document.querySelectorAll("#ibody .swipe-wrap").forEach(w=>w.classList.add("selecting"));
+  g("inv-selbtn").classList.add("active");
+  g("inv-selbtn").textContent="Cancel";
+  updateMultiBar();
+};
+
+// cancelSelect() — exits multi-select mode, clears all selections
+window.cancelSelect=function(){
+  selectMode=null;
+  selectedIds.clear();
+  // Remove all selecting/selected classes
+  document.querySelectorAll(".swipe-wrap.selecting").forEach(w=>{
+    w.classList.remove("selecting","selected");
+  });
+  // Reset Select buttons
+  const sb=g("sh-selbtn");if(sb){sb.classList.remove("active");sb.textContent="Select";}
+  const ib=g("inv-selbtn");if(ib){ib.classList.remove("active");ib.textContent="Select";}
+  updateMultiBar();
+};
+
+// deleteSelected() — deletes all selected items from Firestore
+window.deleteSelected=async function(){
+  if(!selectedIds.size) return;
+  const ids=[...selectedIds];
+  const list=selectMode;
+  // Exit select mode first so renders don't fight
+  cancelSelect();
+  // Delete all selected items in parallel
+  if(list==="shop"){
+    await Promise.all(ids.map(id=>dlShopItem(id)));
+    showNotif(`Removed ${ids.length} item${ids.length!==1?"s":""} 🗑`);
+  } else {
+    await Promise.all(ids.map(id=>dli(id)));
+    showNotif(`Removed ${ids.length} item${ids.length!==1?"s":""} 🗑`);
+  }
+};
+
+// updateMultiBar() — updates the multi-delete action bar count and visibility
+function updateMultiBar(){
+  const bar=g("multi-bar");
+  if(!bar) return;
+  const n=selectedIds.size;
+  g("multi-count").textContent=n;
+  // Show bar only when in select mode
+  if(selectMode){
+    bar.classList.add("visible");
+  } else {
+    bar.classList.remove("visible");
+  }
+}
+
+// The select-mode class restoration is handled inline inside
+// renderShop() and renderInv() — see those functions above.
+
 
 </script>
 <script>
