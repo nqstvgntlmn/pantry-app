@@ -19,28 +19,36 @@
   • Auth:  household code stored in localStorage as "ks-h"
            current user stored in localStorage as "ks-who"
 
-  KEY localStorage KEYS
-  ──────────────────────
+  KEY localStorage KEYS  (device-only — intentionally NOT synced)
+  ──────────────────────────────────────────────────────────────
   ks-h        Household ID (e.g. "isguder-family")
   ks-who      Current user name ("Bora" or "Bushra")
-  ks-s        Shopping list (array) — local cache, overwritten by poll()
-  ks-m        Meal plan (object keyed by date "YYYY-MM-DD")
-  ks-c        Config / settings object
-  ks-cooklog  Cook log (array of {name, date})
-  ks-waste    Waste log (array of {name, date})
+  ks-hhs      Saved household codes list (array)
   ks-theme    Active colour theme key (e.g. "gold")
   ks-mode     Colour mode ("auto" | "light" | "dark")
-  ks-hhs      Saved household codes (array)
+  ks-lastnotif Timestamp of last push notification
+
+  FIRESTORE DATA  (shared across ALL devices in the household)
+  ─────────────────────────────────────────────────────────────
+  households/{hid}/inventory/{id}         Pantry items
+  households/{hid}/recipes/{id}           Saved recipes
+  households/{hid}/shopping/{id}          Grocery list items
+  households/{hid}/mealplan/{YYYY-MM-DD}  Meal plan  ← now Firestore
+  households/{hid}/settings/config        Settings   ← now Firestore
+  households/{hid}/cooklog/{id}           Cook log   ← now Firestore
+  households/{hid}/wastelog/{id}          Waste log  ← now Firestore
 
   GLOBAL STATE (module scope — see <script type="module">)
   ─────────────────────────────────────────────────────────
   hid         Active household ID string
-  inv[]       Inventory items (synced from Firestore every 6s)
-  recs[]      Recipes (synced from Firestore every 6s)
-  shop[]      Shopping list items (synced from Firestore every 6s)
-  mp{}        Meal plan object (localStorage only)
-  cfg{}       Settings / preferences object (localStorage only)
-  chat[]      Claude chat message history (in-memory only)
+  inv[]       Inventory items       (Firestore-synced every 6s)
+  recs[]      Recipes               (Firestore-synced every 6s)
+  shop[]      Shopping list items   (Firestore-synced every 6s)
+  mp{}        Meal plan             (Firestore-synced every 6s)
+  cfg{}       Settings              (Firestore-synced every 6s)
+  cookLog[]   Cook history          (Firestore-synced every 6s)
+  wasteLog[]  Waste history         (Firestore-synced every 6s)
+  chat[]      Claude chat history   (in-memory only, not persisted)
   cp          Last scanned product object
   selR        Selected location in scan result overlay
   maL         Selected location in manual add overlay
@@ -55,7 +63,8 @@
   POLLING
   ───────
   poll() runs immediately on login, then every 6 seconds.
-  It fetches all three Firestore collections in parallel and re-renders.
+  It fetches ALL seven Firestore collections in parallel and re-renders:
+  inventory, recipes, shopping, mealplan, settings, cooklog, wastelog.
 
   SCREENS
   ───────
@@ -1213,28 +1222,216 @@ async function dbList(path){const j=await _db("list",path);return j.docs||[];}
 async function dbSet(path,data){return _db("set",path,data);}
 async function dbDelete(path){return _db("delete",path);}
 // ── GLOBAL APPLICATION STATE ─────────────────────────────────────────────────
-// hid    — active household ID (set in _appStart)
-// inv    — inventory array (live-synced from Firestore)
-// recs   — recipes array (live-synced from Firestore)
-// shop   — shopping list array (live-synced from Firestore)
-// mp     — meal plan {date: mealName} (localStorage only, not in Firestore)
-// cfg    — settings/preferences object (localStorage only)
-// chat   — Claude chat history for current session (in-memory)
-// cp     — last scanned/looked-up product (temp, used by addToInv)
-// selR   — selected storage location in scan result overlay
-// maL    — selected storage location in manual add overlay
-// adjId  — ID of item open in adjust overlay
-// it     — active inventory filter tab
-// rt     — active recipe filter tab
-// md     — date key open in meal modal (YYYY-MM-DD)
-// cn     — meal name being logged as cooked
-// nr     — star rating value currently selected
-// eid    — recipe ID open in edit overlay
-let hid=null,inv=[],recs=[],shop=J("ks-s")||[],mp=J("ks-m")||{},
-cfg=J("ks-c")||{name:"The Bora Family",adults:"Bora",kids:"1 toddler (age 3)",nopork:true,noshellfish:false,vegetarian:false,glutenfree:false,other:"",cuisines:"Bangladeshi, Turkish, Mediterranean, American",cookTime:"40-60 min"},
-chat=[],cp=null,selR="fridge",maL="fridge",adjId=null,it="all",rt="all",md=null,cn="",nr=0,eid=null;
+// hid      — active household ID (set in _appStart)
+// inv[]    — inventory items         (Firestore: households/{hid}/inventory)
+// recs[]   — saved recipes           (Firestore: households/{hid}/recipes)
+// shop[]   — shopping list items     (Firestore: households/{hid}/shopping)
+// mp{}     — meal plan {YYYY-MM-DD: mealName} (Firestore: households/{hid}/mealplan)
+// cfg{}    — settings/preferences    (Firestore: households/{hid}/settings/config)
+// cookLog[]— cook history            (Firestore: households/{hid}/cooklog)
+// wasteLog[]—waste history           (Firestore: households/{hid}/wastelog)
+// chat[]   — Claude chat history for current session (in-memory only, not persisted)
+// cp       — last scanned/looked-up product (temp, used by addToInv)
+// selR     — selected location in scan result overlay
+// maL      — selected location in manual add overlay
+// adjId    — ID of item open in adjust overlay
+// it       — active inventory filter tab
+// rt       — active recipe filter tab
+// md       — date key open in meal modal (YYYY-MM-DD)
+// cn       — meal name being logged as cooked
+// nr       — star rating value currently selected
+// eid      — recipe ID open in edit overlay
+
+// DEFAULT CONFIG — used only if Firestore has no config yet (first-ever login)
+const CFG_DEFAULT={
+  name:"The Bora Family",
+  adults:"Bora",
+  kids:"1 toddler (age 3)",
+  nopork:true,
+  noshellfish:false,
+  vegetarian:false,
+  glutenfree:false,
+  other:"",
+  cuisines:"Bangladeshi, Turkish, Mediterranean, American",
+  cookTime:"40-60 min"
+};
+
+let hid=null,
+    inv=[],recs=[],shop=[],
+    mp={},          // populated by loadFirestoreData()
+    cfg={...CFG_DEFAULT}, // populated by loadFirestoreData()
+    cookLog=[],     // populated by loadFirestoreData()
+    wasteLog=[],    // populated by loadFirestoreData()
+    chat=[],cp=null,selR="fridge",maL="fridge",adjId=null,
+    it="all",rt="all",md=null,cn="",nr=0,eid=null;
 function J(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}}
 function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
+// J / Js are still used for device-only keys:
+//   ks-h (household code), ks-who (user name),
+//   ks-theme, ks-mode, ks-hhs (household list), ks-lastnotif
+// The following data is now in Firestore (NOT localStorage):
+//   mp (mealplan), cfg (settings), cookLog, wasteLog
+
+// ── FIRESTORE HELPERS FOR SHARED DATA ────────────────────────────────────────
+// All four of these data types now live in Firestore so Bora and Bushra
+// both see the same data on every device, in real-time.
+//
+// MEAL PLAN  — one doc per day:
+//   households/{hid}/mealplan/{YYYY-MM-DD}  →  {date, meal}
+//
+// SETTINGS   — single shared document:
+//   households/{hid}/settings/config  →  the full cfg object
+//
+// COOK LOG   — one doc per log entry (up to 200 kept):
+//   households/{hid}/cooklog/{id}  →  {id, name, date, loggedAt}
+//
+// WASTE LOG  — one doc per log entry (up to 100 kept):
+//   households/{hid}/wastelog/{id}  →  {id, name, date, loggedAt}
+
+// DEFAULT CONFIG — used only on first-ever login before Firestore has any data
+const CFG_DEFAULT={
+  name:"The Bora Family",
+  adults:"Bora",
+  kids:"1 toddler (age 3)",
+  nopork:true,
+  noshellfish:false,
+  vegetarian:false,
+  glutenfree:false,
+  other:"",
+  cuisines:"Bangladeshi, Turkish, Mediterranean, American",
+  cookTime:"40-60 min"
+};
+
+// saveMp(dateKey, mealName | null)
+// Writes one meal plan entry to Firestore (or deletes it if mealName is falsy).
+// Also updates local mp{} immediately so the UI responds without waiting.
+async function saveMp(dateKey, mealName){
+  if(mealName){
+    mp[dateKey]=mealName;
+    await dbSet(`households/${hid}/mealplan/${dateKey}`,{date:dateKey,meal:mealName});
+  } else {
+    delete mp[dateKey];
+    await dbDelete(`households/${hid}/mealplan/${dateKey}`);
+  }
+}
+
+// saveCfg() — writes the current cfg object to Firestore
+// Called after saveSettings() builds the new cfg.
+async function saveCfg(){
+  await dbSet(`households/${hid}/settings/config`,cfg);
+}
+
+// addCookLogEntry(name, date) — appends a cook log entry to Firestore
+// Uses timestamp + random suffix as ID to guarantee uniqueness.
+async function addCookLogEntry(name, date){
+  const entry={
+    id: Date.now().toString(36)+Math.random().toString(36).slice(2),
+    name,
+    date: date||tk(),
+    loggedAt: new Date().toISOString()
+  };
+  // Update local array immediately (newest first, capped at 200)
+  cookLog.unshift(entry);
+  if(cookLog.length>200) cookLog=cookLog.slice(0,200);
+  await dbSet(`households/${hid}/cooklog/${entry.id}`,entry);
+}
+
+// addWasteEntry(name) — appends a waste log entry to Firestore
+// Deduplicates: only one entry per item name per calendar day.
+async function addWasteEntry(name){
+  // Don't add duplicate for same item on same day
+  if(wasteLog.find(x=>x.name===name&&x.date===tk()))return;
+  const entry={
+    id: Date.now().toString(36)+Math.random().toString(36).slice(2),
+    name,
+    date: tk(),
+    loggedAt: new Date().toISOString()
+  };
+  wasteLog.unshift(entry);
+  if(wasteLog.length>100) wasteLog=wasteLog.slice(0,100);
+  await dbSet(`households/${hid}/wastelog/${entry.id}`,entry);
+}
+
+// loadFirestoreData() — called once in _appStart before poll() begins.
+// Loads mp, cfg, cookLog, wasteLog from Firestore into local in-memory variables.
+// ONE-TIME MIGRATION: if Firestore has no data yet but localStorage does,
+// it migrates the localStorage data to Firestore automatically (then clears localStorage).
+async function loadFirestoreData(){
+  try{
+
+    // ── SETTINGS ─────────────────────────────────────────────────────────────
+    const cfgDocs=await dbList(`households/${hid}/settings`);
+    const cfgDoc=cfgDocs.find(d=>d.id==="config");
+    if(cfgDoc){
+      // Merge Firestore config with defaults so new keys always exist
+      cfg={...CFG_DEFAULT,...cfgDoc};
+    } else {
+      // No Firestore config yet — migrate from localStorage or use defaults
+      const lsCfg=J("ks-c");
+      cfg={...CFG_DEFAULT,...(lsCfg||{})};
+      await saveCfg();
+      if(lsCfg) localStorage.removeItem("ks-c");
+    }
+
+    // ── MEAL PLAN ─────────────────────────────────────────────────────────────
+    const mpDocs=await dbList(`households/${hid}/mealplan`);
+    mp={};
+    // Rebuild mp{} from Firestore documents
+    mpDocs.forEach(d=>{if(d.date&&d.meal) mp[d.date]=d.meal;});
+    if(!mpDocs.length){
+      // Migrate from localStorage if nothing in Firestore yet
+      const lsMp=J("ks-m");
+      if(lsMp&&Object.keys(lsMp).length){
+        mp=lsMp;
+        for(const[k,v] of Object.entries(lsMp)) await saveMp(k,v);
+        localStorage.removeItem("ks-m");
+      }
+    }
+
+    // ── COOK LOG ──────────────────────────────────────────────────────────────
+    const clDocs=await dbList(`households/${hid}/cooklog`);
+    if(clDocs.length){
+      // Sort newest-first (by loggedAt, falling back to date)
+      cookLog=clDocs.sort((a,b)=>new Date(b.loggedAt||b.date||0)-new Date(a.loggedAt||a.date||0));
+    } else {
+      // Migrate from localStorage
+      const lsCl=J("ks-cooklog");
+      if(lsCl&&lsCl.length){
+        // Assign IDs to legacy entries that had none
+        cookLog=lsCl.map((e,i)=>({
+          id: e.id||(Date.now()-i).toString(36),
+          name: e.name,
+          date: e.date,
+          loggedAt: e.loggedAt||new Date().toISOString()
+        }));
+        for(const e of cookLog) await dbSet(`households/${hid}/cooklog/${e.id}`,e);
+        localStorage.removeItem("ks-cooklog");
+      }
+    }
+
+    // ── WASTE LOG ─────────────────────────────────────────────────────────────
+    const wlDocs=await dbList(`households/${hid}/wastelog`);
+    if(wlDocs.length){
+      wasteLog=wlDocs.sort((a,b)=>new Date(b.loggedAt||b.date||0)-new Date(a.loggedAt||a.date||0));
+    } else {
+      const lsWl=J("ks-waste");
+      if(lsWl&&lsWl.length){
+        wasteLog=lsWl.map((e,i)=>({
+          id: e.id||(Date.now()-i).toString(36),
+          name: e.name,
+          date: e.date,
+          loggedAt: e.loggedAt||new Date().toISOString()
+        }));
+        for(const e of wasteLog) await dbSet(`households/${hid}/wastelog/${e.id}`,e);
+        localStorage.removeItem("ks-waste");
+      }
+    }
+
+  }catch(e){
+    // Graceful degradation: if Firestore is unreachable, app still works with defaults
+    console.error("loadFirestoreData error:",e);
+  }
+}
 // ── APP ENTRY POINT ───────────────────────────────────────────────────────────
 // _appStart(code) is called by the login script (plain <script> below)
 // AFTER the user has entered a household code and chosen a name.
@@ -1242,16 +1439,73 @@ function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
 // NOTE: This is on window.* because the login script (non-module) calls it.
 //       The login script retries every 50ms until _appStart is defined,
 //       because <script type="module"> loads asynchronously.
-window._appStart=function start(code){hid=code;g("LS").style.display="none";g("APP").style.display="flex";showScreen("home");ss("syncing");
-  // Ensure current household is in the saved list
-  const arr=getHouseholds();if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
-  if(typeof loadCfgUI==="function")loadCfgUI();initHome();
-  // poll() — fetches all three Firestore collections in parallel every 6 seconds.
-  // This is how external changes (e.g. from Apple Reminders shortcut or
-  // another family member's device) appear in the app without a page refresh.
-  // window._poll is exposed for manual triggering from browser console.
-  async function poll(){try{ss("syncing");const[ni,nr2,ns]=await Promise.all([dbList(`households/${hid}/inventory`),dbList(`households/${hid}/recipes`),dbList(`households/${hid}/shopping`)]);inv=ni;recs=nr2;shop=ns;ss("synced");renderAll();renderRecs();renderShop();renderSum();}catch(e){console.error("poll error",e);ss("error");}}
-  window._poll=poll;poll();setInterval(poll,6000);}
+window._appStart=async function start(code){
+  hid=code;
+  g("LS").style.display="none";
+  g("APP").style.display="flex";
+  showScreen("home");
+  ss("syncing");
+
+  // Ensure current household is in the locally-saved household list
+  const arr=getHouseholds();
+  if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
+
+  // Load all Firestore-backed data (mp, cfg, cookLog, wasteLog)
+  // before rendering anything, so the UI has correct data from the start.
+  // Also handles one-time migration from localStorage if needed.
+  await loadFirestoreData();
+
+  // Now that cfg is loaded, we can populate the Settings UI fields
+  if(typeof loadCfgUI==="function") loadCfgUI();
+  initHome();
+
+  // poll() — fetches ALL Firestore collections in parallel every 6 seconds.
+  // Covers: inventory, recipes, shopping, mealplan, settings, cooklog, wastelog.
+  // This is how changes from another device (Bushra's phone, Apple Reminders, etc.)
+  // appear without a page refresh.
+  // window._poll is exposed for manual triggering from the browser console.
+  async function poll(){
+    try{
+      ss("syncing");
+      // Fetch all seven collections in parallel for maximum speed
+      const[ni,nr2,ns,mpDocs,cfgDocs,clDocs,wlDocs]=await Promise.all([
+        dbList(`households/${hid}/inventory`),
+        dbList(`households/${hid}/recipes`),
+        dbList(`households/${hid}/shopping`),
+        dbList(`households/${hid}/mealplan`),
+        dbList(`households/${hid}/settings`),
+        dbList(`households/${hid}/cooklog`),
+        dbList(`households/${hid}/wastelog`)
+      ]);
+
+      // Update inventory, recipes, shopping list
+      inv=ni; recs=nr2; shop=ns;
+
+      // Rebuild meal plan object from Firestore documents
+      const newMp={};
+      mpDocs.forEach(d=>{if(d.date&&d.meal) newMp[d.date]=d.meal;});
+      mp=newMp;
+
+      // Merge latest settings (so settings changes from another device apply)
+      const cfgDoc=cfgDocs.find(d=>d.id==="config");
+      if(cfgDoc) cfg={...CFG_DEFAULT,...cfgDoc};
+
+      // Rebuild cook log and waste log (newest first)
+      cookLog=clDocs.sort((a,b)=>new Date(b.loggedAt||b.date||0)-new Date(a.loggedAt||a.date||0));
+      wasteLog=wlDocs.sort((a,b)=>new Date(b.loggedAt||b.date||0)-new Date(a.loggedAt||a.date||0));
+
+      ss("synced");
+      // Re-render all screens with fresh data
+      renderAll();renderRecs();renderShop();renderSum();
+    }catch(e){
+      console.error("poll error",e);
+      ss("error");
+    }
+  }
+  window._poll=poll;
+  poll();
+  setInterval(poll,6000);
+};
 function g(id){return document.getElementById(id);}
 // ss(state) — updates the sync status dot and label in the top-right corner
 // States: "syncing" (pulsing amber) | "synced" (green + household name) | "error" (red)
@@ -1408,13 +1662,13 @@ window.filterRecs=function(){
   window._pickedRec=null;g("mealMinp").value="";
 };
 window.closeMealM=function(){g("mealM").classList.remove("active");};
-// saveMeal() — saves the meal for the selected day (md)
+// saveMeal() — saves the meal for the selected day (md) to Firestore
 // Also adds recipe ingredients to the shopping list if a saved recipe was picked.
 // Ingredients are filtered: skips anything already in inventory or on the list.
 window.saveMeal=async function(){
   const v=g("mealMinp").value.trim();
-  if(v)mp[md]=v;else delete mp[md];
-  Js("ks-m",mp);
+  // saveMp handles both local mp{} update AND Firestore write
+  await saveMp(md, v||null);
   // Add ingredients to shopping list if a recipe was picked
   if(window._pickedRec&&window._pickedRec.description){
     const desc=window._pickedRec.description;
@@ -1437,7 +1691,8 @@ window.saveMeal=async function(){
   window._pickedRec=null;
   closeMealM();renderWeek();renderSum();renderTonight();
 };
-window.clrMeal=function(){delete mp[md];Js("ks-m",mp);closeMealM();renderWeek();renderSum();renderTonight();};
+// clrMeal() — clears the meal for the currently-open day and saves to Firestore
+window.clrMeal=async function(){await saveMp(md,null);closeMealM();renderWeek();renderSum();renderTonight();};
 window.toggleExp=function(){const p=g("exppanel");p.style.display=p.style.display==="none"?"block":"none";};
 window.openCooked=function(k){const m=mp[k];if(!m)return;cn=m;nr=0;g("cookedNm").textContent=m;g("cnotes").value="";renderStars("cstars",0);g("cookedM").classList.add("active");};
 // skipCooked and saveCooked defined below with cook log support
@@ -1636,13 +1891,26 @@ window.bpConfirm=async function(){
 };
 // renderShop and sH defined below with aisle support
 // kitCtx redefined below with variety nudge
-window.saveSettings=function(){
-  cfg={...cfg,name:g("setName").value.trim(),adults:g("setAdults").value.trim(),kids:g("setKids").value.trim(),
-    nopork:g("tg-nopork").classList.contains("on"),noshellfish:g("tg-noshellfish").classList.contains("on"),
-    vegetarian:g("tg-vegetarian").classList.contains("on"),glutenfree:g("tg-glutenfree").classList.contains("on"),
-    other:g("setOther").value.trim(),cuisines:g("setCuisines").value.trim(),cookTime:g("setCookTime").value,
-    notif:g("tg-notif").classList.contains("on"),notifTime:(g("setNotifTime")?g("setNotifTime").value:"8"),notifDays:parseInt((g("setNotifDays")?g("setNotifDays").value:"3"))};
-  Js("ks-c",cfg);
+// saveSettings() — collects all settings form values, writes to cfg,
+// then saves to Firestore so both household members see the same preferences.
+window.saveSettings=async function(){
+  cfg={...cfg,
+    name:g("setName").value.trim(),
+    adults:g("setAdults").value.trim(),
+    kids:g("setKids").value.trim(),
+    nopork:g("tg-nopork").classList.contains("on"),
+    noshellfish:g("tg-noshellfish").classList.contains("on"),
+    vegetarian:g("tg-vegetarian").classList.contains("on"),
+    glutenfree:g("tg-glutenfree").classList.contains("on"),
+    other:g("setOther").value.trim(),
+    cuisines:g("setCuisines").value.trim(),
+    cookTime:g("setCookTime").value,
+    notif:g("tg-notif").classList.contains("on"),
+    notifTime:(g("setNotifTime")?g("setNotifTime").value:"8"),
+    notifDays:parseInt((g("setNotifDays")?g("setNotifDays").value:"3"))
+  };
+  // Save to Firestore (shared across all household devices)
+  await saveCfg();
   if(cfg.notif)scheduleNotifCheck();
   showNotif("Settings saved!");hideOv("settings");initHome();
 };
@@ -1746,42 +2014,58 @@ window.scheduleRecipe=function(name){
   }).join("");
   g("schedM").classList.add("active");
 };
-window.schedSet=function(k,name){mp[k]=name;Js("ks-m",mp);g("schedM").classList.remove("active");renderWeek();renderTonight();showNotif("Scheduled! 📅");};
+// schedSet(dateKey, name) — schedules a recipe on a specific day and saves to Firestore
+window.schedSet=async function(k,name){
+  await saveMp(k,name);
+  g("schedM").classList.remove("active");
+  renderWeek();renderTonight();showNotif("Scheduled! 📅");
+};
 
-// ── COOK LOG + INSIGHTS ──────────────────────────────────────────────────────
-// Cook log: array of {name, date} stored in localStorage "ks-cooklog"
-// Used for: cook streak, most cooked meals, cuisine breakdown in Insights
-// Waste log: array of {name, date} stored in localStorage "ks-waste"
-// Items are added to waste log when removed from inventory if they were
-// expiring or expired (see the remItem override below)
-// getCookLog() — returns cook log array from localStorage
-function getCookLog(){return J("ks-cooklog")||[];}
-// addCookLog(name, date) — appends a meal to the cook log (max 200 entries)
-function addCookLog(name,date){const log=getCookLog();log.unshift({name,date:date||tk()});Js("ks-cooklog",log.slice(0,200));}
-// getWasteLog() — returns waste log array from localStorage
-function getWasteLog(){return J("ks-waste")||[];}
-// addWaste(name) — appends an item to the waste log (one entry per item per day)
-function addWaste(name){const w=getWasteLog();if(!w.find(x=>x.name===name&&x.date===tk()))w.unshift({name,date:tk()});Js("ks-waste",w.slice(0,100));}
+// ── COOK LOG + WASTE LOG (Firestore-backed) ───────────────────────────────────
+// cookLog[] and wasteLog[] are in-memory arrays loaded by loadFirestoreData()
+// and kept in sync by both addCookLogEntry() / addWasteEntry() (for writes)
+// and poll() (for reads from other devices).
+//
+// getCookLog() / getWasteLog() are simple accessors used throughout the app —
+// keeping the same function signatures means no other code needs to change.
+
+// getCookLog() — returns the current in-memory cook log array (newest first)
+function getCookLog(){return cookLog;}
+
+// getWasteLog() — returns the current in-memory waste log array (newest first)
+function getWasteLog(){return wasteLog;}
 
 // skipCooked() — logs the meal as cooked WITHOUT saving to recipes
-// Clears today's meal plan entry and re-renders
-window.skipCooked=function(){
-  addCookLog(cn,tk());
-  const td=tk();delete mp[td];Js("ks-m",mp);
-  g("cookedM").classList.remove("active");renderWeek();renderTonight();showNotif("Meal logged!");
+// Clears today's meal from the plan and re-renders
+window.skipCooked=async function(){
+  // Write cook log entry to Firestore
+  await addCookLogEntry(cn,tk());
+  // Remove today's meal from the plan in Firestore
+  await saveMp(tk(),null);
+  g("cookedM").classList.remove("active");
+  renderWeek();renderTonight();showNotif("Meal logged!");
 };
-// saveCooked() — logs the meal as cooked AND saves/updates the recipe
-// Increments cookCount on existing recipe, optionally plans leftovers
+// saveCooked() — logs the meal as cooked AND saves/updates the recipe in Firestore
+// Increments cookCount on the existing recipe, optionally plans leftovers tomorrow
 window.saveCooked=async function(){
   const notes=g("cnotes").value.trim();
   const hasLeftover=(g("tog-leftover")&&g("tog-leftover").classList.contains("on"));
-  addCookLog(cn,tk());
-  // Increment cook count on existing recipe
+
+  // Write cook log entry to Firestore
+  await addCookLogEntry(cn,tk());
+
+  // Upsert the recipe with incremented cook count
   const existing=recs.find(r=>r.name.toLowerCase()===cn.toLowerCase());
-  if(existing)await svr({...existing,cookCount:(existing.cookCount||0)+1,lastCooked:tk()});
+  if(existing) await svr({...existing,cookCount:(existing.cookCount||0)+1,lastCooked:tk()});
   else await svr({id:"rec-"+Date.now(),name:cn,rating:nr,favorited:false,notes,description:"",source:"Meal Plan",tags:[],cookCount:1,savedAt:new Date().toLocaleDateString(),lastCooked:tk()});
-  if(hasLeftover){mp[nextDay()]=cn+" (leftovers)";Js("ks-m",mp);}
-  g("cookedM").classList.remove("active");const td=tk();delete mp[td];Js("ks-m",mp);
+
+  // If leftovers toggled, schedule tomorrow's meal in Firestore
+  if(hasLeftover) await saveMp(nextDay(), cn+" (leftovers)");
+
+  // Clear today's meal from the plan in Firestore
+  await saveMp(tk(),null);
+
+  g("cookedM").classList.remove("active");
   renderWeek();renderTonight();
   showNotif(hasLeftover?"Saved! Leftovers planned for tomorrow 🥡":"Saved to recipes! ⭐");
 };
@@ -2142,12 +2426,13 @@ window.showScreen=function(n){
 };
 
 // ── REMOVE ITEM PATCH ───────────────────────────────────────────────────────
-// Extends remItem() to log removed items to the waste log
+// Extends remItem() to log removed items to the Firestore waste log
 // if they were expiring or already expired at time of removal
 const _origRemItem=window.remItem;
 window.remItem=async function(id){
   const item=inv.find(i=>i.id===id);
-  if(item){const s=xSt(item.expiry);if(s&&(s.c==="expired"||s.c==="expiring"))addWaste(item.name);}
+  // If item was expiring or expired, log it to the shared waste log in Firestore
+  if(item){const s=xSt(item.expiry);if(s&&(s.c==="expired"||s.c==="expiring"))await addWasteEntry(item.name);}
   await _origRemItem(id);
 };
 
