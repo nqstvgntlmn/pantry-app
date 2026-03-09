@@ -397,7 +397,9 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* While actively swiping, disable the transition so it tracks finger exactly */
 .swipe-inner.swiping{transition:none}
 
-/* Red delete panel — sits behind the row, revealed on swipe */
+/* Red delete panel — hidden by default, revealed when .swipe-wrap gets .open class */
+/* We use opacity+pointer-events rather than relying on overflow:hidden clipping,
+   because iOS Safari has known bugs with overflow:hidden + border-radius + position:absolute */
 .swipe-del{
   position:absolute;right:0;top:0;bottom:0;
   width:80px;
@@ -407,6 +409,15 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
   font-size:.82rem;font-weight:600;color:#fff;
   cursor:pointer;
   flex-direction:column;gap:2px;
+  /* Hidden until row is swiped open */
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .15s;
+}
+/* Only show delete button when parent wrap has .open class (set by swipe JS) */
+.swipe-wrap.open .swipe-del{
+  opacity:1;
+  pointer-events:auto;
 }
 .swipe-del span{font-size:1.1rem}
 
@@ -431,19 +442,26 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .selbtn{font-size:.75rem}
 .selbtn.active{background:var(--ac);color:var(--bg);border-color:var(--ac)}
 
-/* Multi-delete action bar — slides up from bottom when items are selected */
+/* Multi-delete action bar — hidden offscreen until Select mode is active */
 .multi-bar{
   position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));
-  left:50%;transform:translateX(-50%) translateY(100px);
+  left:50%;
+  transform:translateX(-50%) translateY(200px); /* well below screen */
+  visibility:hidden; /* also hidden from accessibility tree */
   width:calc(100% - 32px);max-width:420px;
   background:var(--card2);border:1.5px solid var(--rd);
   border-radius:16px;padding:12px 16px;
   display:flex;align-items:center;justify-content:space-between;gap:10px;
   z-index:150;
-  transition:transform .3s cubic-bezier(.4,0,.2,1);
+  transition:transform .3s cubic-bezier(.4,0,.2,1), visibility 0s .3s;
   box-shadow:0 8px 32px rgba(0,0,0,.4);
 }
-.multi-bar.visible{transform:translateX(-50%) translateY(0)}
+/* Slide into view when select mode is active */
+.multi-bar.visible{
+  transform:translateX(-50%) translateY(0);
+  visibility:visible;
+  transition:transform .3s cubic-bezier(.4,0,.2,1), visibility 0s 0s;
+}
 .multi-bar-count{font-size:.88rem;color:var(--tx2)}
 .multi-bar-count strong{color:var(--tx);font-weight:600}
 
@@ -2670,12 +2688,14 @@ document.addEventListener("touchend", e=>{
   if(tx < -50){
     // Past threshold — snap open to -80px to reveal delete button
     inner.style.transform="translateX(-80px)";
+    wrap&&wrap.classList.add("open"); // show the delete button
     // Close any previously open row
     if(_openWrap && _openWrap!==wrap) _snapClose(_openWrap);
     _openWrap=wrap;
   } else {
-    // Not far enough — snap back
+    // Not far enough — snap back and hide delete button
     inner.style.transform="translateX(0)";
+    wrap&&wrap.classList.remove("open");
     if(_openWrap===wrap) _openWrap=null;
   }
   _swipeEl=null;
@@ -2693,10 +2713,11 @@ document.addEventListener("touchstart", e=>{
   _openWrap=null;
 },{passive:true});
 
-// _snapClose(wrap) — snaps a swipe-wrap's inner back to position 0
+// _snapClose(wrap) — snaps a swipe-wrap's inner back to 0 and hides the delete button
 function _snapClose(wrap){
   const inner=wrap&&wrap.querySelector(".swipe-inner");
   if(inner) inner.style.transform="translateX(0)";
+  wrap&&wrap.classList.remove("open");
 }
 
 // swipeDelItem(id, list) — called when user taps the red delete panel
