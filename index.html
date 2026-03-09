@@ -859,7 +859,7 @@ function Js(k,v){localStorage.setItem(k,JSON.stringify(v));}
 window._appStart=function start(code){hid=code;g("LS").style.display="none";g("APP").style.display="flex";showScreen("home");ss("syncing");
   // Ensure current household is in the saved list
   const arr=getHouseholds();if(!arr.includes(code)){arr.push(code);saveHouseholds(arr);}
-  loadCfgUI();initHome();
+  if(typeof loadCfgUI==="function")loadCfgUI();initHome();
   async function poll(){try{ss("syncing");const[ni,nr2,ns]=await Promise.all([dbList(`households/${hid}/inventory`),dbList(`households/${hid}/recipes`),dbList(`households/${hid}/shopping`)]);inv=ni;recs=nr2;shop=ns;ss("synced");renderAll();renderRecs();renderShop();renderSum();}catch(e){console.error("poll error",e);ss("error");}}
   window._poll=poll;poll();setInterval(poll,6000);}
 function g(id){return document.getElementById(id);}
