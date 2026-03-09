@@ -369,94 +369,115 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* ════════════════════════════════════════════════════
    SWIPE-TO-DELETE + MULTI-SELECT
    ─────────────────────────────────────────────────────
-   .swipe-wrap     outer container clips overflow so the
-                   red delete panel never shows until swiped
-   .swipe-inner    the visible row — translateX moves it left
-                   on swipe; transition gives snap-back animation
-   .swipe-del      red delete button revealed behind the row
-   .swipe-wrap.selecting .swipe-inner
-                   in multi-select mode, items shift right to
-                   reveal a checkbox on the left
-   .sel-cb         the circular checkbox (filled when selected)
-   .multi-bar      fixed bottom bar shown in multi-select mode
-                   with "Delete X" and "Cancel" buttons
+   iOS-style swipe: the row slides LEFT over a red Delete
+   button that's already sitting flush on the right edge.
+   The list body gets left padding in select mode so the
+   checkbox circle has room to appear without being clipped.
    ════════════════════════════════════════════════════ */
 
-/* Outer clip — hides the red delete panel until swiped */
-.swipe-wrap{position:relative;overflow:hidden;border-radius:14px;margin-bottom:7px}
+/* Outer wrap — clips the red panel until swiped.
+   overflow:hidden is key; the red panel lives behind the row. */
+.swipe-wrap{
+  position:relative;
+  overflow:hidden;
+  border-radius:14px;
+  margin-bottom:7px;
+  /* Smooth left-padding transition for select mode entry */
+  transition:margin-left .25s cubic-bezier(.4,0,.2,1);
+}
 
-/* The visible row — we translate it left to reveal the delete button */
+/* The visible row — translateX slides it left on swipe */
 .swipe-inner{
   position:relative;
-  transition:transform .25s cubic-bezier(.4,0,.2,1);
+  z-index:1; /* sits above the red panel */
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
   will-change:transform;
-  /* Remove margin-bottom from .shit/.iit since .swipe-wrap handles spacing */
   margin-bottom:0 !important;
   border-radius:14px;
+  background:var(--card); /* ensures row covers the panel at rest */
 }
-/* While actively swiping, disable the transition so it tracks finger exactly */
-.swipe-inner.swiping{transition:none}
+.swipe-inner.swiping{transition:none} /* track finger with no lag */
 
-/* Red delete panel — hidden by default, revealed when .swipe-wrap gets .open class */
-/* We use opacity+pointer-events rather than relying on overflow:hidden clipping,
-   because iOS Safari has known bugs with overflow:hidden + border-radius + position:absolute */
+/* Red delete panel — always present behind the row, revealed on swipe.
+   Uses position:absolute flush to the right. The row slides over it. */
 .swipe-del{
-  position:absolute;right:0;top:0;bottom:0;
-  width:80px;
+  position:absolute;
+  right:0;top:0;bottom:0;
+  width:88px;
   background:var(--rd);
   display:flex;align-items:center;justify-content:center;
-  border-radius:0 14px 14px 0;
-  font-size:.82rem;font-weight:600;color:#fff;
+  font-size:.85rem;font-weight:700;color:#fff;
+  letter-spacing:.02em;
   cursor:pointer;
-  flex-direction:column;gap:2px;
-  /* Hidden until row is swiped open */
-  opacity:0;
-  pointer-events:none;
-  transition:opacity .15s;
+  /* Square left edge, rounded right edge matching the wrap */
+  border-radius:0 14px 14px 0;
+  /* Stretch to fill — important on iOS */
+  align-self:stretch;
 }
-/* Only show delete button when parent wrap has .open class (set by swipe JS) */
-.swipe-wrap.open .swipe-del{
-  opacity:1;
-  pointer-events:auto;
+
+/* ── MULTI-SELECT MODE ──────────────────────────────
+   In select mode, each row shifts right by 44px to
+   reveal the checkbox. We do this by adding margin-left
+   to the wrap (rather than translating the inner) so the
+   row itself doesn't clip — and overflow:visible lets the
+   circle appear outside the wrap's left edge.             */
+.swipe-wrap.selecting{
+  margin-left:44px;
+  overflow:visible;
 }
-.swipe-del span{font-size:1.1rem}
+/* Prevent swipe opening in select mode */
+.swipe-wrap.selecting .swipe-inner{
+  transform:none !important;
+}
 
-/* Multi-select mode: shift row right to expose checkbox */
-.swipe-wrap.selecting .swipe-inner{transform:translateX(40px) !important}
-.swipe-wrap.selecting{overflow:visible}
-
-/* Circular checkbox on the left edge */
+/* Circular checkbox — sits to the LEFT of the row.
+   Positioned absolutely relative to .swipe-wrap,
+   which extends left 44px in select mode.
+   left:0 puts it at the new left edge of the shifted wrap,
+   then we offset left by the full checkbox width + gap. */
 .sel-cb{
   position:absolute;
-  left:-36px;top:50%;transform:translateY(-50%);
-  width:24px;height:24px;border-radius:50%;
+  left:-40px;
+  top:50%;
+  transform:translateY(-50%);
+  width:26px;height:26px;border-radius:50%;
   border:2px solid var(--b2);
   background:var(--card);
   display:flex;align-items:center;justify-content:center;
-  font-size:.8rem;transition:all .2s;
-  pointer-events:none; /* tapping the row handles selection */
+  font-size:.85rem;font-weight:600;
+  color:transparent; /* checkmark hidden until selected */
+  transition:all .2s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
 }
-.swipe-wrap.selected .sel-cb{background:var(--rd);border-color:var(--rd);color:#fff}
+/* Selected state — red fill, white checkmark */
+.swipe-wrap.selected .sel-cb{
+  background:var(--rd);
+  border-color:var(--rd);
+  color:#fff;
+}
 
-/* "Select" button in the shopping / inventory header */
+/* "Select" button in list headers */
 .selbtn{font-size:.75rem}
 .selbtn.active{background:var(--ac);color:var(--bg);border-color:var(--ac)}
 
-/* Multi-delete action bar — hidden offscreen until Select mode is active */
+/* Multi-delete action bar — hidden until select mode active.
+   Slides up from below the nav bar. */
 .multi-bar{
-  position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));
+  position:fixed;
+  bottom:calc(72px + env(safe-area-inset-bottom));
   left:50%;
-  transform:translateX(-50%) translateY(200px); /* well below screen */
-  visibility:hidden; /* also hidden from accessibility tree */
-  width:calc(100% - 32px);max-width:420px;
-  background:var(--card2);border:1.5px solid var(--rd);
-  border-radius:16px;padding:12px 16px;
+  transform:translateX(-50%) translateY(120px);
+  visibility:hidden;
+  width:calc(100% - 32px);max-width:460px;
+  background:var(--card2);
+  border:1.5px solid var(--b1);
+  border-radius:16px;
+  padding:12px 16px;
   display:flex;align-items:center;justify-content:space-between;gap:10px;
   z-index:150;
   transition:transform .3s cubic-bezier(.4,0,.2,1), visibility 0s .3s;
-  box-shadow:0 8px 32px rgba(0,0,0,.4);
+  box-shadow:0 -4px 24px rgba(0,0,0,.35);
 }
-/* Slide into view when select mode is active */
 .multi-bar.visible{
   transform:translateX(-50%) translateY(0);
   visibility:visible;
@@ -1333,26 +1354,8 @@ const EID="2b6ecac2",EK="8db76605e873aaf2fbdf41256cb24cb4";
 // dbList  → returns array of documents
 // dbSet   → upserts a single document
 // dbDelete→ removes a single document
-// _db(op, path, data) — low-level fetch wrapper for /api/db
-// Handles non-JSON responses gracefully (Vercel error pages return HTML)
-async function _db(op,path,data){
-  const r=await fetch("/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op,path,data})});
-  // Check content-type before parsing — Vercel error pages return HTML, not JSON
-  const ct=r.headers.get("content-type")||"";
-  if(!ct.includes("application/json")){
-    throw new Error(`/api/db returned non-JSON (status ${r.status}) for op=${op} path=${path}`);
-  }
-  return r.json();
-}
-// dbList — returns array of docs, or [] if collection is empty / doesn't exist yet
-async function dbList(path){
-  try{const j=await _db("list",path);return j.docs||[];}
-  catch(e){
-    // Empty/nonexistent collections are normal on first use — not an error
-    console.warn("dbList empty or error for",path,":",e.message);
-    return [];
-  }
-}
+async function _db(op,path,data){const r=await fetch("/api/db",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({op,path,data})});return r.json();}
+async function dbList(path){const j=await _db("list",path);return j.docs||[];}
 async function dbSet(path,data){return _db("set",path,data);}
 async function dbDelete(path){return _db("delete",path);}
 // ── GLOBAL APPLICATION STATE ─────────────────────────────────────────────────
@@ -1587,9 +1590,8 @@ window._appStart=async function start(code){
   async function poll(){
     try{
       ss("syncing");
-      // Use allSettled so a single failing collection never crashes the whole poll.
-      // Each result is {status:"fulfilled",value:[...]} or {status:"rejected",reason:...}
-      const results=await Promise.allSettled([
+      // Fetch all seven collections in parallel for maximum speed
+      const[ni,nr2,ns,mpDocs,cfgDocs,clDocs,wlDocs]=await Promise.all([
         dbList(`households/${hid}/inventory`),
         dbList(`households/${hid}/recipes`),
         dbList(`households/${hid}/shopping`),
@@ -1598,18 +1600,6 @@ window._appStart=async function start(code){
         dbList(`households/${hid}/cooklog`),
         dbList(`households/${hid}/wastelog`)
       ]);
-      // Helper: extract value or fall back to current value on failure
-      const val=(r,fallback)=>r.status==="fulfilled"?r.value:fallback;
-
-      const[ni,nr2,ns,mpDocs,cfgDocs,clDocs,wlDocs]=[
-        val(results[0],inv),
-        val(results[1],recs),
-        val(results[2],shop),
-        val(results[3],[]),
-        val(results[4],[]),
-        val(results[5],[]),
-        val(results[6],[])
-      ];
 
       // Update inventory, recipes, shopping list
       inv=ni; recs=nr2; shop=ns;
@@ -2381,6 +2371,9 @@ function renderShop(){
       w.classList.add("selecting");
       if(selectedIds.has(w.dataset.id)) w.classList.add("selected");
     });
+    // Re-apply left padding (innerHTML reset clears inline styles on children but not the body)
+    const body=document.querySelector(".shbody");
+    if(body) body.style.paddingLeft="52px";
   }
 }
 // sH(item) — renders a single shopping list item row wrapped in a swipe container.
@@ -2798,12 +2791,13 @@ window.swipeRowTap=function(id, list){
 // togShopSelect() — enters/exits multi-select mode for the shopping list
 window.togShopSelect=function(){
   if(selectMode==="shop"){ cancelSelect(); return; }
-  // Cancel any other active select mode first
   if(selectMode) cancelSelect();
   selectMode="shop";
   selectedIds.clear();
-  // Add .selecting class to all shopping swipe-wraps
   document.querySelectorAll("#shlist .swipe-wrap").forEach(w=>w.classList.add("selecting"));
+  // Add left padding to the list body so the checkbox circle isn't clipped by the screen edge
+  const body=document.querySelector(".shbody");
+  if(body) body.style.paddingLeft="52px";
   g("sh-selbtn").classList.add("active");
   g("sh-selbtn").textContent="Cancel";
   updateMultiBar();
@@ -2816,6 +2810,9 @@ window.togInvSelect=function(){
   selectMode="inv";
   selectedIds.clear();
   document.querySelectorAll("#ibody .swipe-wrap").forEach(w=>w.classList.add("selecting"));
+  // Add left padding so checkboxes have room
+  const body=g("ibody");
+  if(body) body.style.paddingLeft="52px";
   g("inv-selbtn").classList.add("active");
   g("inv-selbtn").textContent="Cancel";
   updateMultiBar();
@@ -2825,13 +2822,16 @@ window.togInvSelect=function(){
 window.cancelSelect=function(){
   selectMode=null;
   selectedIds.clear();
-  // Remove all selecting/selected classes
   document.querySelectorAll(".swipe-wrap.selecting").forEach(w=>{
     w.classList.remove("selecting","selected");
   });
-  // Reset Select buttons
+  // Restore original left padding on list bodies
   const sb=g("sh-selbtn");if(sb){sb.classList.remove("active");sb.textContent="Select";}
   const ib=g("inv-selbtn");if(ib){ib.classList.remove("active");ib.textContent="Select";}
+  const shBody=document.querySelector(".shbody");
+  if(shBody) shBody.style.paddingLeft="";
+  const invBody=g("ibody");
+  if(invBody) invBody.style.paddingLeft="";
   updateMultiBar();
 };
 
