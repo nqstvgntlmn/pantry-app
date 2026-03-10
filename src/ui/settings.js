@@ -39,7 +39,7 @@ export function loadCfgUI() {
   v("setOther", state.cfg.other);       // free-text dietary notes (e.g. "nut allergy")
   v("setCuisines", state.cfg.cuisines); // preferred cuisine types
   v("setCookTime", state.cfg.cookTime); // max cooking time preference
-  v("setZipcode", state.cfg.zipcode);   // zipcode for Kroger API deal searches
+  v("setZipcode", state.cfg.zipcode);   // zipcode for Flipp deal searches
 
   // Toggle buttons use a CSS class "on" to indicate active state (not a checkbox)
   const tog = (id, on) => { const e = el(id); if (e) e.classList.toggle("on", !!on); };
@@ -97,6 +97,18 @@ export async function saveSettings() {
 
   // Show confirmation toast, close settings overlay, refresh the home screen
   showNotif("Settings saved!"); hideOv("settings"); initHome();
+}
+
+/**
+ * saveZipcode() — Saves just the zipcode field to the household config in Firestore.
+ * Called from the dedicated "Save" button next to the zipcode input, so the user
+ * doesn't have to scroll down and hit the main "Save Settings" button.
+ */
+export async function saveZipcode() {
+  const zip = g("setZipcode")?.value?.trim() || "";
+  state.cfg = { ...state.cfg, zipcode: zip };
+  await saveCfg();
+  showNotif("Saved!");
 }
 
 // ── NOTIFICATIONS ────────────────────────────────────────────────────────────
@@ -422,8 +434,13 @@ export async function removeHousehold(code) {
  * The active household is visually highlighted; inactive ones show a remove button.
  */
 async function renderHHList() {
-  const arr = getHouseholdIds();
+  // Filter out the active household — it's already shown in the main "Household" section above.
+  // This prevents ghost entries (e.g. "My Kitchen") from appearing as both current and "other".
+  const arr = getHouseholdIds().filter(h => h !== state.hid);
   const el = g("hhList"); if (!el) return;
+
+  // If no other households, show a helpful empty state
+  if (!arr.length) { el.innerHTML = `<div style="font-size:.82rem;color:var(--mt);padding:10px 0">No other households yet.</div>`; return; }
 
   // Fetch display names for each household (falls back to raw ID if fetch fails)
   const items = [];
@@ -436,19 +453,18 @@ async function renderHHList() {
     items.push({ id: h, name });
   }
 
-  // Build the HTML: each household is a clickable card that switches to it
+  // Build the HTML: each household is a clickable card that switches to it.
+  // All items here are non-active (active is filtered out above), so each shows
+  // "Tap to switch" and a remove button.
   el.innerHTML = items.map(({ id, name }) => {
-    const active = id === state.hid;
-    // Active household gets an accent border; inactive ones get a subtle border
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border:1px solid ${active ? "var(--ac)" : "var(--b2)"};border-radius:10px;margin-bottom:6px;cursor:pointer" onclick="switchHousehold('${id}')">
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border:1px solid var(--b2);border-radius:10px;margin-bottom:6px;cursor:pointer" onclick="switchHousehold('${id}')">
       <div>
-        <div style="font-size:.88rem;font-weight:500;color:${active ? "var(--ac)" : "var(--tx)"}">${name}</div>
-        <div style="font-size:.7rem;color:var(--mt);margin-top:2px">${active ? "● Active" : "Tap to switch"}</div>
+        <div style="font-size:.88rem;font-weight:500;color:var(--tx)">${name}</div>
+        <div style="font-size:.7rem;color:var(--mt);margin-top:2px">Tap to switch</div>
       </div>
-      <button onclick="event.stopPropagation();removeHousehold('${id}')" style="background:none;border:none;color:var(--mt);cursor:pointer;font-size:.82rem;padding:4px 8px">${active ? "" : "✕"}</button>
+      <button onclick="event.stopPropagation();removeHousehold('${id}')" style="background:none;border:none;color:var(--mt);cursor:pointer;font-size:.82rem;padding:4px 8px">✕</button>
     </div>`;
     // stopPropagation prevents the remove button click from also triggering switchHousehold
-    // Active household has no remove button (empty string) since it can't be removed
   }).join("");
 }
 

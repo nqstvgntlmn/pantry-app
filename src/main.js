@@ -68,7 +68,7 @@ import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCook
 // Settings: config UI, push notifications, household management, theme/dark mode
 // copyInviteCode/shareInviteCode/regenInviteCode: invite code actions
 // removeMemberFromHH: owner removes a member
-import { loadCfgUI, saveSettings, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH } from './ui/settings.js';
+import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH } from './ui/settings.js';
 
 // ── REGISTER RENDER CALLBACKS ────────────────────────────────────────────────
 // db.js needs to re-render the UI after save/delete operations, but it can't
@@ -244,6 +244,7 @@ window._activeChips = new Set();  // Shared state: set of active filter chip IDs
 
 // ── Settings / Themes / Households handlers ──
 window.saveSettings = saveSettings;         // Save settings form to Firestore
+window.saveZipcode = saveZipcode;           // Save just the zipcode to Firestore (inline Save button)
 window.toggleNotif = toggleNotif;           // Toggle push notification permission
 window.testNotif = testNotif;               // Send a test notification
 window.addHousehold = addHousehold;         // Create and join a new household

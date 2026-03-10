@@ -466,8 +466,13 @@
         <div style="font-size:.72rem;color:var(--mt);margin-top:8px;line-height:1.5">Enter an invite code to join another household. Tap a household to switch.</div>
       </div>
       <div class="sset"><div class="ssetttl">Local Deals</div>
-        <div class="frow"><label class="flbl">Your Zipcode</label><input class="fi" id="setZipcode" placeholder="e.g. 08817" maxlength="5" inputmode="numeric" style="letter-spacing:.08em"/></div>
-        <div style="font-size:.72rem;color:var(--mt);margin-top:4px;line-height:1.5">Used to find grocery deals near you via the Kroger API. Covers Kroger, Ralphs, Fred Meyer, Harris Teeter, and more.</div>
+        <div class="frow"><label class="flbl">Your Zipcode</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="fi" id="setZipcode" placeholder="e.g. 08817" maxlength="5" inputmode="numeric" style="letter-spacing:.08em;flex:1"/>
+            <button class="btn bp bsm" onclick="saveZipcode()">Save</button>
+          </div>
+        </div>
+        <div style="font-size:.72rem;color:var(--mt);margin-top:4px;line-height:1.5">Used to find local grocery deals via Flipp. Covers ShopRite, Stop &amp; Shop, Walmart, Target, Aldi, and hundreds more stores.</div>
       </div>
       <div class="sset"><div class="ssetttl">Notifications</div>
         <div class="srow"><span class="srlbl">Expiry alerts</span><div class="tog" id="tg-notif" onclick="toggleNotif(this)"></div></div>
