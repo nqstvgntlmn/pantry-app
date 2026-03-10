@@ -32,8 +32,7 @@ service cloud.firestore {
       // This handles pre-auth household docs that were created without `memberUids`.
       allow read: if request.auth != null
                   && (request.auth.uid in resource.data.memberUids
-                      || request.auth.uid == householdId
-                      || (householdId == "isguder-family" && request.auth.uid == "x5Gz5ydc1UTAkXu0zYuRK5Xmjhm1")); // TEMPORARY — REMOVE AFTER MIGRATION
+                      || request.auth.uid == householdId);
 
       // Only existing members can update the household (e.g. add new members, rename).
       // Same fallback for pre-auth household docs.
@@ -59,10 +58,6 @@ service cloud.firestore {
                            && (request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberUids
                                || request.auth.uid == householdId);
 
-        // TEMPORARY: allow migration read from isguder-family — REMOVE AFTER MIGRATION
-        allow read: if request.auth != null
-                    && householdId == "isguder-family"
-                    && request.auth.uid == "x5Gz5ydc1UTAkXu0zYuRK5Xmjhm1";
       }
     }
 
