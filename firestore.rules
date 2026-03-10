@@ -28,12 +28,17 @@ service cloud.firestore {
 
       // Only existing members can read the household metadata.
       // `memberUids` is a flat array of UIDs maintained alongside the `members` array.
+      // Fallback: also allow if the household ID equals the user's UID (default household).
+      // This handles pre-auth household docs that were created without `memberUids`.
       allow read: if request.auth != null
-                  && request.auth.uid in resource.data.memberUids;
+                  && (request.auth.uid in resource.data.memberUids
+                      || request.auth.uid == householdId);
 
       // Only existing members can update the household (e.g. add new members, rename).
+      // Same fallback for pre-auth household docs.
       allow update: if request.auth != null
-                    && request.auth.uid in resource.data.memberUids;
+                    && (request.auth.uid in resource.data.memberUids
+                        || request.auth.uid == householdId);
 
       // Only the owner can delete the entire household.
       allow delete: if request.auth != null
@@ -50,7 +55,8 @@ service cloud.firestore {
       // batch don't multiply the cost.
       match /{subcollection}/{docId} {
         allow read, write: if request.auth != null
-                           && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberUids;
+                           && (request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberUids
+                               || request.auth.uid == householdId);
       }
     }
 

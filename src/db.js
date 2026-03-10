@@ -150,7 +150,11 @@ export async function createHousehold(uid, name) {
     inviteCode: _genInviteCode(),
     createdAt: new Date().toISOString()
   };
-  await dbSet(`households/${hid}`, doc);
+  try {
+    await dbSet(`households/${hid}`, doc);
+  } catch (e) {
+    console.error(`[createHousehold] FAILED to write households/${hid}:`, e);
+  }
   return { hid, ...doc };
 }
 
