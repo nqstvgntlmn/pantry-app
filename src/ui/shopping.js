@@ -2,10 +2,11 @@
 // This module handles the entire Shopping tab: the shopping list UI, quick-add,
 // inline notes, aisle-grouping mode, "Build from meal plan" (AI-powered),
 // the "Add to Kitchen" flow that moves purchased items into inventory,
-// and a Deals sub-tab that searches for live grocery deals via Claude web search.
+// a Deals sub-tab that searches for live grocery deals via Flipp API,
+// and bidirectional Reminders sync (records completed items for iOS Shortcut polling).
 
-import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify)
-import { svShopItem, dlShopItem } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one
+import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
+import { svShopItem, dlShopItem, dbSet } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write
 import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
@@ -156,8 +157,8 @@ export function toggleVoice() {
 export function sH(item) {
   // Default to qty 1 if the field is missing (backwards compat with old items)
   const qty = item.qty || 1;
-  // Only show the qty badge when quantity is more than 1 (reduces visual noise)
-  const qtyBadge = qty > 1 ? `<span class="sh-qty" onclick="event.stopPropagation();openShQty('${item.id}')"> × ${qty}</span>` : `<span class="sh-qty sh-qty-one" onclick="event.stopPropagation();openShQty('${item.id}')"></span>`;
+  // Always show the qty badge so users can tap to edit; qty=1 gets a muted style via sh-qty-one
+  const qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}" onclick="event.stopPropagation();openShQty('${item.id}')"> × ${qty}</span>`;
 
   return `<div class="swipe-wrap" id="sw-${item.id}" data-id="${item.id}" data-list="shop">
     <div class="swipe-inner">
@@ -278,14 +279,33 @@ export function qadd() {
 }
 
 /**
+ * recordCompleted(name) — Records a completed shopping item for bidirectional
+ * Reminders sync. Writes to households/{hid}/completed_items/{id} so the
+ * iOS Shortcut can poll /api/completed-items and mark it done in Apple Reminders.
+ * Fire-and-forget — errors are logged but don't block the UI.
+ */
+export function recordCompleted(name) {
+  if (!state.hid || !name) return;
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  dbSet(`households/${state.hid}/completed_items/${id}`, {
+    name,
+    completedAt: new Date().toISOString()
+  }).catch(e => console.warn("recordCompleted error:", e));
+}
+
+/**
  * togShop(id) — Toggles the checked/unchecked state of a shopping item.
  * Called when a user taps a row to mark it as bought or un-bought.
  * Persists the change via svShopItem (which writes to Firestore and re-renders).
+ * When checking off an item, also records it as completed for Reminders sync.
  */
 export function togShop(id) {
   const item = state.shop.find(i => i.id === id);
   if (!item) return;
-  svShopItem({ ...item, checked: !item.checked });
+  const nowChecked = !item.checked;
+  svShopItem({ ...item, checked: nowChecked });
+  // Record completion for bidirectional Reminders sync (only when checking off, not unchecking)
+  if (nowChecked) recordCompleted(item.name);
 }
 
 /**
@@ -390,6 +410,9 @@ export function setSHT(t) {
   // Then activate only the selected tab
   const _tt = g("shtab-" + t); if (_tt) _tt.classList.add("active");
   const body = g("sh-" + t + "-body"); if (body) body.style.display = "block";
+
+  // When switching to the Deals tab, refresh the zipcode status banner
+  if (t === "deals") renderDealsZipBanner();
 }
 
 /**
@@ -607,15 +630,35 @@ export async function bpConfirm() {
   showNotif(`Added ${toAdd.length} item${toAdd.length !== 1 ? "s" : ""}! 🛒`);
 }
 
-// ── DEALS ────────────────────────────────────────────────────────────────────
-// The Deals sub-tab lets users search for current grocery deals via Claude web search.
-// Results are rendered as cards with store name, sale/original price, savings badge,
-// and a "+ List" button to add the deal item directly to the shopping list.
+// ── DEALS (FLIPP API) ────────────────────────────────────────────────────────
+// The Deals sub-tab fetches REAL local grocery deals from the Flipp API.
+// Flipp aggregates weekly flyer/circular data from hundreds of US grocery chains
+// including ShopRite, Stop & Shop, Walmart, Target, Aldi, and many more.
+// Results are actual store circular data — no AI-generated estimates.
+// If no deals are found, we show a clear message (never falls back to AI).
+
+/**
+ * renderDealsZipBanner() — Shows the user's configured zipcode in the Deals tab,
+ * or prompts them to set one in Settings if not configured yet.
+ * Called when the Deals tab is opened.
+ */
+export function renderDealsZipBanner() {
+  const banner = g("deals-zip-banner");
+  if (!banner) return;
+  const zip = state.cfg.zipcode;
+  if (zip) {
+    banner.innerHTML = `📍 Searching deals near <strong>${zip}</strong> <span style="font-size:.72rem;color:var(--mt)">(change in Settings)</span>`;
+    banner.style.borderColor = "var(--b2)";
+  } else {
+    banner.innerHTML = `⚠️ Set your zipcode in <strong style="cursor:pointer;color:var(--ac)" onclick="hideOv('');showOv('settings')">Settings</strong> to find local deals near you.`;
+    banner.style.borderColor = "var(--am)";
+  }
+}
 
 /**
  * renderDeals(deals, query) — Renders an array of deal objects into the #dealslist container.
- * Each deal object has: { name, store, sale_price, orig_price, unit, savings, details, valid }.
- * If no deals are found, shows an empty-state placeholder.
+ * Each deal object has: { name, brand, store, storeAddress, regular, sale_price, onSale, savings, image, size }.
+ * If no deals are found, shows an empty-state placeholder with a clear message.
  *
  * Uses imperative DOM creation (createElement) rather than innerHTML for the cards,
  * which avoids XSS issues with deal names that could contain HTML.
@@ -623,116 +666,138 @@ export async function bpConfirm() {
 function renderDeals(deals, query) {
   const el = g("dealslist");
   if (!deals || !deals.length) {
-    el.innerHTML = `<div class="es"><div class="ei">🏷</div><p>No deals found for <strong>${query}</strong>.<br>Try a broader term or pick a different store.</p></div>`;
+    el.innerHTML = `<div class="es"><div class="ei">🏷</div><p>No deals found for <strong>${query}</strong>.<br>Try a different search term or check back later for new circulars.</p></div>`;
     return;
   }
   el.innerHTML = ""; // Clear previous results
   deals.forEach(d => {
-    // Build each deal card using DOM elements
-    const card = document.createElement("div"); card.className = "deal-card deal-match";
+    // Build each deal card using DOM elements (avoids XSS with untrusted API data)
+    const card = document.createElement("div"); card.className = "deal-card" + (d.onSale ? " deal-match" : "");
     const left = document.createElement("div"); left.style.flex = "1"; // Left side: text content
-    const store = document.createElement("div"); store.className = "deal-store"; store.textContent = d.store || "Local Store";
+
+    // Store name (with merchant logo if available from Flipp)
+    const store = document.createElement("div"); store.className = "deal-store"; store.textContent = d.store || "Store";
     const name = document.createElement("div"); name.className = "deal-name"; name.textContent = d.name || "";
 
-    // Price row: sale price, original price (strikethrough via CSS), unit, and savings badge
+    // Brand + size line (if available)
+    if (d.brand || d.size) {
+      const meta = document.createElement("div");
+      meta.style.cssText = "font-size:.72rem;color:var(--mt);margin-top:1px";
+      meta.textContent = [d.brand, d.size].filter(Boolean).join(" · ");
+      left.appendChild(store); left.appendChild(name); left.appendChild(meta);
+    } else {
+      left.appendChild(store); left.appendChild(name);
+    }
+
+    // Price row: sale price, regular price (strikethrough via CSS), and savings badge
     const priceRow = document.createElement("div"); priceRow.style.cssText = "display:flex;align-items:baseline;gap:6px;margin-top:4px;flex-wrap:wrap";
     if (d.sale_price) { const sp = document.createElement("span"); sp.className = "deal-price"; sp.textContent = d.sale_price; priceRow.appendChild(sp); }
-    if (d.orig_price) { const op = document.createElement("span"); op.className = "deal-orig"; op.textContent = d.orig_price; priceRow.appendChild(op); }
-    if (d.unit) { const un = document.createElement("span"); un.style.cssText = "font-size:.7rem;color:var(--mt)"; un.textContent = d.unit; priceRow.appendChild(un); }
+    // Show original price with strikethrough only when item is on sale
+    if (d.onSale && d.regular) { const op = document.createElement("span"); op.className = "deal-orig"; op.textContent = d.regular; priceRow.appendChild(op); }
     if (d.savings) { const sv = document.createElement("span"); sv.className = "deal-badge"; sv.textContent = "Save " + d.savings; priceRow.appendChild(sv); }
-    left.appendChild(store); left.appendChild(name); left.appendChild(priceRow);
-
-    // Optional: promo details text and validity dates
-    if (d.details) { const det = document.createElement("div"); det.style.cssText = "font-size:.74rem;color:var(--tx2);margin-top:5px;line-height:1.5"; det.textContent = d.details; left.appendChild(det); }
-    if (d.valid) { const vl = document.createElement("div"); vl.style.cssText = "font-size:.68rem;color:var(--mt);margin-top:4px"; vl.textContent = "📅 " + d.valid; left.appendChild(vl); }
+    left.appendChild(priceRow);
 
     // "+ List" button: adds this deal's item to the shopping list
     const btn = document.createElement("button"); btn.className = "btn bs bsm"; btn.style.cssText = "align-self:center;flex-shrink:0;margin-left:8px"; btn.textContent = "+ List";
-    // IIFE closure to capture the deal name for the click handler (avoids stale reference in loop)
+    // Closure captures the deal name for the click handler (avoids stale reference in loop)
     ((n) => { btn.onclick = () => addDealToList(n); })(d.name || "");
     card.appendChild(left); card.appendChild(btn); el.appendChild(card);
   });
 }
 
 /**
+ * renderNearbyStores(stores) — Displays a compact list of stores with deals
+ * found near the user's zipcode. Shown after the first successful search.
+ */
+function renderNearbyStores(stores) {
+  const el = g("deals-stores");
+  if (!el || !stores || !stores.length) return;
+  el.style.display = "block";
+  el.innerHTML = `<div style="font-size:.72rem;color:var(--mt);font-weight:600;margin-bottom:4px">Stores with deals</div>` +
+    stores.map(s => `<div style="font-size:.74rem;color:var(--tx2);padding:2px 0">${s.name}</div>`).join("");
+}
+
+/**
  * addDealToList(name) — Adds a deal item to the shopping list.
- * Decodes HTML entities (&#39; -> apostrophe) since deal names may come from API responses.
  * Deduplicates by checking if an item with the same name (case-insensitive) already exists.
  */
 export function addDealToList(name) {
-  const decoded = (name || "").replace(/&#39;/g, "'"); // Fix HTML-encoded apostrophes
+  const decoded = (name || "").replace(/&#39;/g, "'"); // Fix any HTML-encoded apostrophes
   if (!state.shop.find(i => i.name.toLowerCase() === decoded.toLowerCase())) {
-    svShopItem({ id: Date.now().toString(), name: decoded, qty: 1, checked: false });
+    svShopItem({ id: Date.now().toString(), name: decoded, qty: 1, checked: false, src: "deal" });
     showNotif(decoded + " added!");
   } else { showNotif("Already on your list!"); }
 }
 
 /**
- * claudeSearchDeals(query, store) — Core deal-search engine.
+ * fetchDeals(query) — Core deal-fetching function via the Flipp API.
  *
- * Uses Claude Haiku with the web_search tool to find current grocery deals.
- * The prompt instructs Claude to do exactly ONE web search and return structured
- * JSON with deal info (name, store, prices, savings, dates).
- *
- * Caching: Results are cached in localStorage for 24 hours (86400000ms) per
- * store+query combination to avoid redundant API calls. Cache key prefix is "ks-deals-".
+ * Calls /api/deals with the user's configured zipcode and the search query.
+ * Results are cached in localStorage for 2 hours per query to reduce API calls.
+ * Flipp covers ShopRite, Stop & Shop, Walmart, Target, Aldi, and many more.
  *
  * @param {string} query — What to search for (e.g. "chicken breast")
- * @param {string} store — Store filter ("any" or a specific store name)
- * @returns {Array} — Array of deal objects
+ * @returns {Object} — { deals: [...], stores: [...], sources: [...] }
  */
-async function claudeSearchDeals(query, store) {
-  // Build a cache key from store + normalized query; check localStorage for recent results
-  const cacheKey = "ks-deals-" + store + "-" + query.toLowerCase().replace(/\s+/g, "_").substring(0, 40);
-  const cached = J(cacheKey); // J = JSON parse from localStorage
-  if (cached && cached.ts && (Date.now() - cached.ts) < 86400000) return cached.deals; // Return cached if < 24h old
+async function fetchDeals(query) {
+  const zipcode = state.cfg.zipcode;
+  if (!zipcode) throw new Error("Set your zipcode in Settings to search for local deals.");
 
-  // If no specific store, search across several common NJ grocery chains
-  const storeStr = (store && store !== "any") ? store : "ShopRite, Stop & Shop, Wegmans, Whole Foods, or Trader Joe's";
-  const prompt = 'Search for current this-week grocery deals on: ' + query + ' at ' + storeStr + ' near Edison NJ 08817. Do ONE web search only. Return ONLY a JSON array, no markdown fences: [{"name":"product","store":"store","sale_price":"$X.XX","orig_price":"$X.XX","unit":"per lb","savings":"$X off","details":"promo details","valid":"dates"}]. Return [] if nothing found. Up to 8 deals.';
+  // Check localStorage cache (2-hour TTL — flyer data updates weekly, so this is fine)
+  const cacheKey = "ks-deals-" + zipcode + "-" + query.toLowerCase().replace(/\s+/g, "_").substring(0, 40);
+  const cached = J(cacheKey);
+  if (cached && cached.ts && (Date.now() - cached.ts) < 7200000) return cached; // 2 hours
 
-  const st = g("dealsstatus");
-  if (st) st.textContent = "Searching this week's flyers (1 search)...";
+  // Call the serverless deals proxy endpoint (Flipp API)
+  const r = await fetch("/api/deals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ zipcode, query })
+  });
 
-  // Call Claude via server-side proxy with web_search tool enabled
-  const r = await fetch("/api/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1000, tools: [{ type: "web_search_20250305", name: "web_search" }], system: "You are a grocery deals finder. Use exactly ONE web search. Return only a JSON array.", messages: [{ role: "user", content: prompt }] }) });
-  if (!r.ok) { const err = await r.text(); throw new Error("HTTP " + r.status + ": " + err.substring(0, 200)); }
   const data = await r.json();
-  if (data.error) throw new Error("API error: " + data.error.message);
 
-  // Extract text blocks from the response (skip tool_use blocks)
-  const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-  if (!text) throw new Error("No response. Stop: " + data.stop_reason);
+  // Handle API-level errors
+  if (!r.ok || data.error) {
+    throw new Error(data.message || data.error || "Deals API request failed");
+  }
 
-  // Parse the JSON array from Claude's response, stripping any markdown code fences
-  const clean = text.replace(/```json|```/g, "").trim();
-  let arr = [], m = clean.match(/\[[\s\S]*\]/); // Extract the JSON array from the text
-  if (m) { try { arr = JSON.parse(m[0]); } catch { arr = []; } } // Gracefully handle malformed JSON
-
-  // Cache the results in localStorage for 24 hours
-  Js(cacheKey, { deals: arr, ts: Date.now(), query, store: storeStr });
-  return arr;
+  // Cache successful results for 2 hours
+  Js(cacheKey, { ...data, ts: Date.now() });
+  return data;
 }
 
 /**
  * searchDeals() — Triggered by the "Search" button in the Deals tab.
- * Reads the user's search query and optional store filter, then calls
- * claudeSearchDeals and renders the results (or shows an error).
+ * Reads the user's search query, calls the Flipp API via /api/deals, and renders results.
+ * Shows clear error messages when the API is unavailable or no deals are found.
  */
 export async function searchDeals() {
-  const q = g("dealsearch").value.trim(); if (!q) { showNotif("Enter something to search"); return; }
-  const store = g("dealstore")?.value || "any"; // Store dropdown, defaults to "any"
-  const st = g("dealsstatus"); // Status message element (shows loading/error text)
+  const q = g("dealsearch").value.trim();
+  if (!q) { showNotif("Enter something to search"); return; }
+
+  const st = g("dealsstatus"); // Status message element
   st.style.display = "block"; st.style.color = "var(--mt)";
-  st.textContent = "🔍 Searching " + (store !== "any" ? store : "nearby stores") + " for " + q + "…";
+  st.textContent = "🔍 Searching deals for " + q + " near " + (state.cfg.zipcode || "your area") + "…";
   g("dealslist").innerHTML = ""; // Clear previous results
+
   try {
-    const deals = await claudeSearchDeals(q, store);
+    const data = await fetchDeals(q);
     st.style.display = "none"; // Hide status on success
-    renderDeals(deals, q);
+
+    // Show message from API if provided (e.g. no coverage in this area)
+    if (data.message) {
+      g("dealslist").innerHTML = `<div class="es"><div class="ei">🏷</div><p>${data.message}</p></div>`;
+      return;
+    }
+
+    // Render stores with deals (helps user see which stores are covered nearby)
+    if (data.stores) renderNearbyStores(data.stores);
+
+    renderDeals(data.deals, q);
   } catch (e) {
     st.style.color = "var(--rd)"; // Red text for errors
-    st.textContent = "Error: " + (e.message || "Unknown error");
+    st.textContent = e.message || "Unknown error";
   }
 }
 
@@ -742,55 +807,42 @@ export async function searchDeals() {
  * Searches deals for all unchecked shopping list items at once (up to 8 items,
  * combined into a single search query to minimize API calls).
  *
- * Fallback behavior: if the shopping list is empty but there are meals planned,
+ * If the shopping list is empty but there are meals planned,
  * offers to search deals based on the meal plan instead (via confirm dialog).
  */
 export async function dealsFromList() {
   const items = state.shop.filter(i => !i.checked);
 
-  // Fallback: if list is empty, offer to search by meal plan instead
+  // If list is empty, offer to search by meal plan instead
   if (!items.length) {
     const meals = Object.values(state.mp).filter(Boolean);
     if (!meals.length) { showNotif("Add items to your list first!"); return; }
     const confirmed = confirm("Your list is empty. Search deals for this week's meals?\n\n" + meals.join(", "));
     if (!confirmed) return;
-    const store = g("dealstore")?.value || "any";
     const st = g("dealsstatus");
     st.style.display = "block"; st.textContent = "Searching deals for your meal plan...";
     g("dealslist").innerHTML = "";
-    try { const deals = await claudeSearchDeals(meals.join(", "), store); st.style.display = "none"; renderDeals(deals, meals.join(", ")); }
-    catch (e) { st.style.display = "none"; st.style.color = "var(--rd)"; st.textContent = "Error: " + e.message; }
+    try {
+      const data = await fetchDeals(meals.join(", "));
+      st.style.display = "none";
+      if (data.message) { g("dealslist").innerHTML = `<div class="es"><div class="ei">🏷</div><p>${data.message}</p></div>`; return; }
+      if (data.stores) renderNearbyStores(data.stores);
+      renderDeals(data.deals, meals.join(", "));
+    } catch (e) { st.style.color = "var(--rd)"; st.textContent = e.message; }
     return;
   }
 
   // Normal path: search deals for up to 8 unchecked shopping list items
-  const store = g("dealstore")?.value || "any";
   const st = g("dealsstatus");
-  const names = items.slice(0, 8).map(i => i.name).join(", "); // Cap at 8 to keep the query reasonable
+  const names = items.slice(0, 8).map(i => i.name).join(", "); // Cap at 8 for a reasonable query
   st.style.display = "block"; st.style.color = "var(--mt)"; st.textContent = "Searching deals for: " + names + "...";
   g("dealslist").innerHTML = "";
   try {
-    const deals = await claudeSearchDeals(names, store); st.style.display = "none";
-    if (!deals.length) g("dealslist").innerHTML = '<div class="es"><div class="ei">🏷</div><p>No deals found this week.<br/>Try searching individually or a different store.</p></div>';
-    else renderDeals(deals, names);
-  } catch (e) { st.style.display = "none"; st.style.color = "var(--rd)"; st.textContent = "Error: " + e.message; }
-}
-
-/**
- * testProxy() — Diagnostic function: sends a minimal request to /api/proxy
- * to verify the server-side Claude API proxy is reachable and working.
- * Displays success (green) or error (red) in the deals status element.
- * Useful for debugging when deal searches fail — helps isolate whether
- * the issue is the proxy connection or the search query itself.
- */
-export async function testProxy() {
-  const st = g("dealsstatus");
-  st.style.display = "block"; st.style.color = "var(--mt)"; st.textContent = "Testing proxy...";
-  try {
-    // Send a trivial prompt to confirm the proxy + Claude API are both responding
-    const r = await fetch("/api/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 20, messages: [{ role: "user", content: "Say 'connected' in one word." }] }) });
-    const data = await r.json();
-    if (data.error) { st.style.color = "var(--rd)"; st.textContent = "Error: " + (data.error.message || JSON.stringify(data.error)); }
-    else { st.style.color = "var(--gn)"; st.textContent = "✓ Proxy connected! Response: " + (data.content?.[0]?.text || "OK"); }
-  } catch (e) { st.style.color = "var(--rd)"; st.textContent = "Connection failed: " + e.message; }
+    const data = await fetchDeals(names);
+    st.style.display = "none";
+    if (data.message) { g("dealslist").innerHTML = `<div class="es"><div class="ei">🏷</div><p>${data.message}</p></div>`; return; }
+    if (data.stores) renderNearbyStores(data.stores);
+    if (!data.deals.length) g("dealslist").innerHTML = '<div class="es"><div class="ei">🏷</div><p>No deals found for your list items.<br/>Try searching for individual items.</p></div>';
+    else renderDeals(data.deals, names);
+  } catch (e) { st.style.color = "var(--rd)"; st.textContent = e.message; }
 }

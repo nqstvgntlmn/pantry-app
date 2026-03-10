@@ -39,6 +39,7 @@ export function loadCfgUI() {
   v("setOther", state.cfg.other);       // free-text dietary notes (e.g. "nut allergy")
   v("setCuisines", state.cfg.cuisines); // preferred cuisine types
   v("setCookTime", state.cfg.cookTime); // max cooking time preference
+  v("setZipcode", state.cfg.zipcode);   // zipcode for Kroger API deal searches
 
   // Toggle buttons use a CSS class "on" to indicate active state (not a checkbox)
   const tog = (id, on) => { const e = el(id); if (e) e.classList.toggle("on", !!on); };
@@ -82,6 +83,7 @@ export async function saveSettings() {
     other: g("setOther").value.trim(),
     cuisines: g("setCuisines").value.trim(),
     cookTime: g("setCookTime").value,
+    zipcode: (g("setZipcode") ? g("setZipcode").value.trim() : ""),
     notif: g("tg-notif").classList.contains("on"),
     notifTime: (g("setNotifTime") ? g("setNotifTime").value : "8"),
     notifDays: parseInt((g("setNotifDays") ? g("setNotifDays").value : "3"))

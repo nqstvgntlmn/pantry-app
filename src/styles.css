@@ -188,7 +188,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* ── SHOPPING QTY ── */
 .sh-qty{font-size:.76rem;color:var(--ac);font-weight:700;cursor:pointer;padding:2px 6px;border-radius:8px;transition:background .15s}
 .sh-qty:active{background:var(--acd)}
-.sh-qty-one{padding:0}
+.sh-qty-one{opacity:.4}
 .sh-qty-edit{display:none;padding:8px 16px 10px;border-top:1px solid var(--b1)}
 .sh-qty-edit.open{display:flex;align-items:center;gap:10px}
 .sh-qty-lbl{font-size:.74rem;color:var(--mt);font-weight:600;flex-shrink:0}

@@ -19,7 +19,8 @@ export const CFG_DEFAULT = {
   glutenfree: false,              // dietary flag: gluten-free household
   other: "",                      // catch-all for additional dietary notes
   cuisines: "Bangladeshi, Turkish, Mediterranean, American", // preferred cuisine styles (fed to AI recipe generation)
-  cookTime: "40-60 min"           // target cook time per meal (fed to AI recipe generation)
+  cookTime: "40-60 min",          // target cook time per meal (fed to AI recipe generation)
+  zipcode: ""                     // user's zipcode for local grocery deal searches (Flipp API)
 };
 
 // ── Shared mutable state object ──────────────────────────────────────────────

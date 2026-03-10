@@ -44,7 +44,7 @@ import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, a
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, testProxy, addDealToList, initVoice, toggleVoice } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -165,12 +165,14 @@ window.bpSelAll = bpSelAll;     // Select all items in the bulk-purchase overlay
 window.bpUpdBtn = function() { /* no-op: button state is handled internally by the shopping module */ };
 window.bpConfirm = bpConfirm;   // Confirm bulk purchase selections
 window._bpItems = [];           // Shared state: items selected for bulk purchase
-window.searchDeals = searchDeals;     // Search for grocery deals
+window.searchDeals = searchDeals;     // Search for grocery deals via Kroger API
 window.dealsFromList = dealsFromList; // Find deals matching current shopping list items
-window.testProxy = testProxy;        // Test if the CORS proxy is reachable (for deal search)
 window.addDealToList = addDealToList; // Add a found deal item to the shopping list
-// clrChk — delete all checked (purchased) items from the shopping list
-window.clrChk = function() { state.shop.filter(i => i.checked).forEach(i => dlShopItem(i.id)); };
+window.renderDealsZipBanner = renderDealsZipBanner; // Update zipcode banner in Deals tab
+// clrChk — delete all checked (purchased) items from the shopping list.
+// Also records each item as completed for bidirectional Reminders sync,
+// so the iOS Shortcut can mark them done in Apple Reminders.
+window.clrChk = function() { state.shop.filter(i => i.checked).forEach(i => { recordCompleted(i.name); dlShopItem(i.id); }); };
 
 // ── Recipes screen handlers ──
 window.setRT = setRT;           // Set the recipe tab filter (e.g. "all", "favorites")
