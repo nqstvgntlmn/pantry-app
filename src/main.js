@@ -5,6 +5,7 @@ import './styles.css';
 import { state, CFG_DEFAULT, J, Js } from './state.js';
 import { dbList, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem } from './db.js';
 import { g, showNotif, showOv, hideOv, renderStars, tk } from './helpers.js';
+import { onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOut, getCurrentUser } from './auth.js';
 
 // UI modules
 import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv } from './ui/home.js';
@@ -235,46 +236,167 @@ if (state.cfg.notif) setTimeout(scheduleNotifCheck, 3000);
 // Render initial state
 renderShop();
 
-// ── LOGIN FLOW ───────────────────────────────────────────────────────────────
+// ── AUTH FLOW ────────────────────────────────────────────────────────────────
+// Firebase Auth drives the entire login/app lifecycle.
+// On sign-in: resolve household → _appStart.
+// On sign-out: show auth screen.
 
-function doEnter() {
-  const raw = g("hci")?.value || "";
-  const c = raw.trim().toLowerCase().replace(/\s+/g, "-") || "my-kitchen";
-  localStorage.setItem("ks-h", c);
-  if (localStorage.getItem("ks-who")) {
-    g("LS").style.display = "none";
-    g("APP").style.display = "flex";
-    window._appStart(c);
+// showAuthScreen(view) — toggles between "signin" and "signup" views
+function showAuthScreen(view) {
+  g("auth-loading").style.display = "none";
+  g("auth-signin").style.display = view === "signin" ? "flex" : "none";
+  g("auth-signup").style.display = view === "signup" ? "flex" : "none";
+  g("authError").style.display = "none";
+  g("signupError").style.display = "none";
+}
+
+// showAuthError(id, msg) — display an error in the given container
+function showAuthError(id, msg) {
+  const el = g(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+// friendlyAuthError(err) — convert Firebase error codes to readable messages
+function friendlyAuthError(err) {
+  const map = {
+    'auth/invalid-email': 'Please enter a valid email address.',
+    'auth/user-disabled': 'This account has been disabled.',
+    'auth/user-not-found': 'No account found with this email.',
+    'auth/wrong-password': 'Incorrect password.',
+    'auth/invalid-credential': 'Incorrect email or password.',
+    'auth/email-already-in-use': 'An account with this email already exists.',
+    'auth/weak-password': 'Password must be at least 6 characters.',
+    'auth/too-many-requests': 'Too many attempts. Please try again later.',
+    'auth/popup-closed-by-user': 'Sign-in popup was closed.',
+    'auth/cancelled-popup-request': 'Sign-in was cancelled.',
+    'auth/account-exists-with-different-credential': 'An account already exists with this email using a different sign-in method.',
+  };
+  return map[err.code] || err.message || 'Something went wrong. Please try again.';
+}
+
+// disableBtn(btn, loading) — toggle button disabled state with spinner text
+function disableBtn(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    btn._origText = btn.textContent;
+    btn.textContent = "Please wait…";
+    btn.disabled = true;
+  } else {
+    btn.textContent = btn._origText || btn.textContent;
+    btn.disabled = false;
+  }
+}
+
+// ── Auth button handlers ────────────────────────────────────────────────────
+
+// Google sign-in
+g("btnGoogle")?.addEventListener("click", async () => {
+  const btn = g("btnGoogle");
+  disableBtn(btn, true);
+  g("authError").style.display = "none";
+  try {
+    await signInGoogle();
+  } catch (err) {
+    showAuthError("authError", friendlyAuthError(err));
+  }
+  disableBtn(btn, false);
+});
+
+// Apple sign-in
+g("btnApple")?.addEventListener("click", async () => {
+  const btn = g("btnApple");
+  disableBtn(btn, true);
+  g("authError").style.display = "none";
+  try {
+    await signInApple();
+  } catch (err) {
+    showAuthError("authError", friendlyAuthError(err));
+  }
+  disableBtn(btn, false);
+});
+
+// Email sign-in
+g("btnEmailSign")?.addEventListener("click", async () => {
+  const email = g("authEmail")?.value?.trim();
+  const pass = g("authPass")?.value;
+  if (!email || !pass) {
+    showAuthError("authError", "Please enter your email and password.");
     return;
   }
-  g("ls-code").style.display = "none";
-  g("ls-who").style.display = "flex";
-}
+  const btn = g("btnEmailSign");
+  disableBtn(btn, true);
+  g("authError").style.display = "none";
+  try {
+    await signInEmail(email, pass);
+  } catch (err) {
+    showAuthError("authError", friendlyAuthError(err));
+  }
+  disableBtn(btn, false);
+});
 
-function doPick(name) {
-  localStorage.setItem("ks-who", name);
-  const c = localStorage.getItem("ks-h") || "my-kitchen";
-  g("LS").style.display = "none";
-  g("APP").style.display = "flex";
-  window._appStart(c);
-}
+// Email sign-up
+g("btnEmailSignup")?.addEventListener("click", async () => {
+  const name = g("signupName")?.value?.trim();
+  const email = g("signupEmail")?.value?.trim();
+  const pass = g("signupPass")?.value;
+  if (!name) {
+    showAuthError("signupError", "Please enter your name.");
+    return;
+  }
+  if (!email || !pass) {
+    showAuthError("signupError", "Please enter your email and password.");
+    return;
+  }
+  const btn = g("btnEmailSignup");
+  disableBtn(btn, true);
+  g("signupError").style.display = "none";
+  try {
+    await signUpEmail(email, pass, name);
+  } catch (err) {
+    showAuthError("signupError", friendlyAuthError(err));
+  }
+  disableBtn(btn, false);
+});
 
-window.doEnter = doEnter;
+// Toggle between sign-in and sign-up views
+g("btnToggleSignup")?.addEventListener("click", () => showAuthScreen("signup"));
+g("btnToggleSignin")?.addEventListener("click", () => showAuthScreen("signin"));
 
-// Set up login event listeners
-const eb = g("enterBtn");
-const hci = g("hci");
-const pb = g("pickBora");
-const pbu = g("pickBushra");
-if (eb) eb.addEventListener("click", doEnter);
-if (hci) hci.addEventListener("keydown", e => { if (e.key === "Enter") doEnter(); });
-if (pb) pb.addEventListener("click", () => doPick("Bora"));
-if (pbu) pbu.addEventListener("click", () => doPick("Bushra"));
+// Allow Enter key to submit email forms
+g("authPass")?.addEventListener("keydown", e => { if (e.key === "Enter") g("btnEmailSign")?.click(); });
+g("signupPass")?.addEventListener("keydown", e => { if (e.key === "Enter") g("btnEmailSignup")?.click(); });
 
-// Auto-login if household code exists in localStorage
-const savedHid = localStorage.getItem("ks-h");
-if (savedHid) {
-  g("LS").style.display = "none";
-  g("APP").style.display = "flex";
-  window._appStart(savedHid);
-}
+// ── Sign out (called from settings) ─────────────────────────────────────────
+window.doSignOut = async function() {
+  if (!confirm("Sign out of Kitchen?")) return;
+  await signOut();
+};
+
+// ── Auth state listener — drives the entire app lifecycle ───────────────────
+let appBooted = false;
+
+onAuth((user) => {
+  if (user) {
+    // User is signed in → resolve household and boot app
+    // Use uid-based household for now; Phase 2 steps 4-5 will add proper household resolution
+    const hid = localStorage.getItem("ks-h") || user.uid;
+    localStorage.setItem("ks-h", hid);
+    localStorage.setItem("ks-who", user.displayName || user.email?.split("@")[0] || "You");
+
+    g("LS").style.display = "none";
+    g("APP").style.display = "flex";
+
+    if (!appBooted) {
+      appBooted = true;
+      window._appStart(hid);
+    }
+  } else {
+    // User is signed out → show auth screen, hide app
+    appBooted = false;
+    g("APP").style.display = "none";
+    g("LS").style.display = "flex";
+    showAuthScreen("signin");
+  }
+});
