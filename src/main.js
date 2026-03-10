@@ -25,7 +25,7 @@ import { g, showNotif, showOv, hideOv, renderStars, tk } from './helpers.js';
 
 // Firebase Auth wrappers: onAuth listens for auth state changes,
 // sign-in/sign-up/sign-out functions, getCurrentUser returns the Firebase user object
-import { onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOut, getCurrentUser } from './auth.js';
+import { onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOut, getCurrentUser, getIdToken } from './auth.js';
 
 // ── UI MODULE IMPORTS ────────────────────────────────────────────────────────
 // Each UI module owns one screen or feature area. Functions are imported here
@@ -229,6 +229,7 @@ window.switchHousehold = switchHousehold;   // Switch to a different household
 window.removeHousehold = removeHousehold;   // Leave/remove a household
 window.setMode = setMode;                   // Set light/dark/auto theme mode
 window.showNotif = showNotif;               // Show a toast notification (used from settings HTML)
+window.getIdToken = getIdToken;             // Expose for console migration scripts
 
 // ── APP START ────────────────────────────────────────────────────────────────
 // _appStart is called once after auth succeeds and a household ID is resolved.
