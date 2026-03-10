@@ -57,7 +57,7 @@ import { renderInsights } from './ui/insights.js';
 import { sendChat, sendPill, clrChat, ar, kitCtx } from './ui/chat.js';
 
 // Scanner: barcode/photo scanning, manual lookup, add scanned items to inventory or list
-import { startScan, openScanForList, openScanForInventory, addScannedToList, togManual, handlePhoto, manLookup, selRL, valAdd, addToInv, chgAQ } from './ui/scan.js';
+import { startScan, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, togManual, handlePhoto, manLookup, selRL, valAdd, addToInv, chgAQ } from './ui/scan.js';
 
 // Swipe gestures: swipe-to-delete, row tap, multi-select mode for shopping/inventory
 import { initSwipe, swipeDelItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected } from './ui/swipe.js';
@@ -210,6 +210,7 @@ window.startScan = startScan;                   // Start the barcode scanner cam
 window.openScanForList = openScanForList;       // Open scanner in "add to shopping list" mode
 window.openScanForInventory = openScanForInventory; // Open scanner in "add to inventory" mode
 window.addScannedToList = addScannedToList;     // Add a scanned item to the shopping list
+window.toggleScanNote = toggleScanNote;         // Toggle the optional note field in scan result overlay
 window.togManual = togManual;                   // Toggle manual barcode entry mode
 window.handlePhoto = handlePhoto;               // Process a photo (receipt/label) for item recognition
 window.manLookup = manLookup;                   // Look up a manually entered barcode

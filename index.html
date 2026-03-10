@@ -369,6 +369,11 @@
       <div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="chgAQ(-1)">−</button><input class="qinp" id="aqty" type="number" min="1" value="1"/><button class="qbtn" onclick="chgAQ(1)">+</button></div></div>
       <div class="qrow"><span class="qlbl">Unit</span><input class="fun" id="aunit" placeholder="oz, lb, unit…"/></div>
       <div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="aexp" type="date"/></div>
+      <!-- Collapsible note field for adding a note when adding scanned item to shopping list -->
+      <div style="margin-bottom:4px"><button class="sh-add-note-toggle" onclick="toggleScanNote()">+ Add a note</button></div>
+      <div class="sh-add-note-wrap" id="scanNoteWrap" style="display:none">
+        <textarea class="sh-note-inp" id="scanNoteInp" rows="2" placeholder="Add a note… (e.g. brand, size, store)"></textarea>
+      </div>
       <div id="scan-dest-btns">
         <div class="brow">
           <button class="btn bs" style="flex:1" onclick="hideOv('result');showOv('scan')">← Back</button>

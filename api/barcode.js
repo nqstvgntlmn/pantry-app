@@ -1,8 +1,9 @@
 // ── BARCODE LOOKUP API ──────────────────────────────────────────────────────
 // Serverless function that looks up a barcode (UPC/EAN) against a waterfall
-// of six free product databases. Tries each in priority order and returns
+// of five free product databases. Tries each in priority order and returns
 // the first successful match. This keeps all API keys server-side and
 // centralizes lookup logic so the frontend makes a single request.
+// Five databases are tried in priority order; the first match wins.
 //
 // Waterfall order:
 //   1. Edamam         — best for food + nutritional data
@@ -10,7 +11,6 @@
 //   3. Open Beauty Facts — cosmetics, shampoos, personal care (no key needed)
 //   4. Open Pet Food Facts — pet food and treats (no key needed)
 //   5. UPC Item DB    — general products, 100 lookups/day free tier (no key needed for trial)
-//   6. Go UPC         — last resort fallback (requires GO_UPC_KEY env var)
 //
 // Request:  GET /api/barcode?code=013000006408
 // Response: { found: true, product: { barcode, name, brand, category, image, source, description, nutrition } }
@@ -206,40 +206,6 @@ async function tryUpcItemDb(bc) {
 }
 
 /**
- * tryGoUpc(barcode) — Queries the Go UPC API as a last-resort fallback.
- * Requires a GO_UPC_KEY environment variable. If the key is not set,
- * this step is silently skipped. Covers a broad range of products.
- */
-async function tryGoUpc(bc) {
-  const key = process.env.GO_UPC_KEY;
-  if (!key) return null; // Skip if no API key configured
-
-  try {
-    const r = await fetch(
-      `https://go-upc.com/api/v1/code/${bc}`,
-      { headers: { Authorization: `Bearer ${key}` } }
-    );
-    if (!r.ok) return null;
-    const d = await r.json();
-
-    if (d.product && d.product.name) {
-      return {
-        barcode: bc,
-        name: d.product.name || "",
-        brand: d.product.brand || "",
-        quantity: "",
-        category: d.product.category || "General",
-        image: d.product.imageUrl || null,
-        source: "Go UPC",
-        description: d.product.description || "",
-        nutrition: null,
-      };
-    }
-  } catch {}
-  return null;
-}
-
-/**
  * Vercel serverless handler — accepts a GET request with a barcode query param,
  * runs the waterfall of product database lookups, and returns the first match.
  * If no database has the product, returns { found: false }.
@@ -265,13 +231,12 @@ export default async function handler(req, res) {
     (await tryOpenBeautyFacts(code)) ||
     (await tryOpenPetFoodFacts(code)) ||
     (await tryUpcItemDb(code)) ||
-    (await tryGoUpc(code)) ||
     null;
 
   if (product) {
     return res.status(200).json({ found: true, product });
   }
 
-  // All six databases returned nothing for this barcode
+  // All five databases returned nothing for this barcode
   return res.status(200).json({ found: false });
 }

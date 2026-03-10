@@ -3,8 +3,8 @@
 //   1. Capturing a barcode image (camera photo or file picker)
 //   2. Decoding the barcode using Quagga.js (client-side barcode reader)
 //   3. Looking up the decoded barcode via the /api/barcode serverless endpoint
-//      which tries six product databases in waterfall order:
-//      Edamam → Open Food Facts → Open Beauty Facts → Open Pet Food Facts → UPC Item DB → Go UPC
+//      which tries five product databases in waterfall order:
+//      Edamam → Open Food Facts → Open Beauty Facts → Open Pet Food Facts → UPC Item DB
 //   4. Displaying the product info and letting the user add it to inventory or shopping list
 //
 // The scan flow supports two destinations:
@@ -43,10 +43,24 @@ export function openScanForInventory() {
   const hint = g("scan-dest-hint"); if (hint) hint.textContent = "Scan a barcode to add to your pantry or shopping list.";
 }
 
+// Toggles the optional note field in the scan result overlay.
+// Mirrors the toggleAddNote() behavior from the shopping list quick-add flow.
+// When shown, focuses the textarea so the user can start typing immediately.
+export function toggleScanNote() {
+  const wrap = g("scanNoteWrap");
+  if (!wrap) return;
+  const showing = wrap.style.display === "none";
+  wrap.style.display = showing ? "block" : "none";
+  if (showing) {
+    const inp = g("scanNoteInp");
+    if (inp) inp.focus();
+  }
+}
+
 // Adds the currently scanned product to the shopping list (not inventory).
 // Called when the user taps "Add to List" from the scan result overlay.
-// Builds a display string with quantity/unit info, saves the product image URL
-// for thumbnail display in the list, persists it, and navigates to the shopping screen.
+// Builds a display string with quantity/unit info, captures the optional note,
+// saves the product image URL for thumbnail display, persists it, and navigates to shopping.
 export function addScannedToList() {
   if (!state.cp) return;                  // Guard: no scanned product available
 
@@ -60,10 +74,15 @@ export function addScannedToList() {
   // Build a human-readable display string, e.g. "Milk (2 gallons)"
   const display = name + (qty > 1 || unit ? " (" + qty + (unit ? " " + unit : "") + ")" : "");
 
+  // Capture the optional note from the collapsible note field (if expanded and filled)
+  const noteInp = g("scanNoteInp");
+  const note = noteInp ? noteInp.value.trim() : "";
+
   // Build the shopping list item, including the product image URL from the scan
   // so it can be displayed as a thumbnail in the shopping list
   const item = { id: Date.now().toString(), name: display, qty: 1, checked: false, src: "scan" };
   if (state.cp.image) item.image = state.cp.image; // Persist the product image for list thumbnail
+  if (note) item.note = note; // Include note only if the user typed something
 
   // Persist the new shopping list item to the database
   svShopItem(item);
@@ -71,6 +90,12 @@ export function addScannedToList() {
   showNotif("Added to list: " + name);    // Toast confirmation
   hideOv("result"); hideOv("scan");       // Close both overlays (result and scan)
   state.scanDestList = false;             // Reset destination flag back to default
+
+  // Reset and collapse the note field so it's clean for the next scan
+  if (noteInp) noteInp.value = "";
+  const wrap = g("scanNoteWrap");
+  if (wrap) wrap.style.display = "none";
+
   window.showScreen("shopping");          // Navigate to the shopping list screen
 }
 
@@ -107,7 +132,7 @@ export async function handlePhoto(e) {
 
     g("scst").textContent = "Found " + code + " — looking up…";
 
-    // Look up the barcode via the serverless endpoint (tries 6 databases)
+    // Look up the barcode via the serverless endpoint (tries 5 databases)
     const prod = await lkup(code);
     state.cp = prod;                       // Store the current product in global state for later use
 
@@ -157,13 +182,12 @@ export async function manLookup() {
 }
 
 // Master product lookup — calls the /api/barcode serverless endpoint which
-// tries six product databases in waterfall order:
+// tries five product databases in waterfall order:
 //   1. Edamam (food + nutrition data)
 //   2. Open Food Facts (community food DB)
 //   3. Open Beauty Facts (cosmetics, personal care)
 //   4. Open Pet Food Facts (pet food and treats)
 //   5. UPC Item DB (general US products)
-//   6. Go UPC (last resort fallback)
 // Returns the product object on success, or a "not found" placeholder if all fail.
 async function lkup(bc) {
   try {
@@ -181,6 +205,22 @@ async function lkup(bc) {
 
   // No database had this barcode — return a placeholder so the user can enter the name manually
   return { barcode: bc, name: "", brand: "", quantity: "", category: "General", image: null, source: null, description: "", notFound: true };
+}
+
+/**
+ * srcUrl(source, barcode) — Returns the URL to the product's page on the source database website.
+ * Used to make the source badge a tappable link so users can view full product details
+ * on the original database. Returns "#" as a safe fallback for unknown sources.
+ */
+function srcUrl(source, barcode) {
+  switch (source) {
+    case "Open Food Facts":     return `https://world.openfoodfacts.org/product/${barcode}`;
+    case "Open Beauty Facts":   return `https://world.openbeautyfacts.org/product/${barcode}`;
+    case "Open Pet Food Facts": return `https://world.openpetfoodfacts.org/product/${barcode}`;
+    case "UPC Item DB":         return `https://www.upcitemdb.com/upc/${barcode}`;
+    case "Edamam":              return `https://www.edamam.com/food-database/en/`;
+    default:                    return "#";
+  }
 }
 
 // Renders the scan result overlay with product details (or a "not found" form).
@@ -212,8 +252,11 @@ function showRes(prod) {
     // Build the description line if the API returned one
     const desc = prod.description ? `<div class="pdsc">${prod.description}</div>` : "";
 
-    // Assemble the full product card HTML with image, name, brand, category, source, description, and nutrition
-    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand ? `<div class="pbr">${prod.brand}</div>` : ""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${prod.source ? `<span class="srcb">${prod.source}</span>` : ""}</div></div>${desc}${nut}</div>`;
+    // Build the source badge — if we can link to the product's page on the source database, make it tappable
+    const srcHtml = prod.source ? `<a href="${srcUrl(prod.source, prod.barcode)}" target="_blank" rel="noopener" class="srcb" style="text-decoration:none">${prod.source} ↗</a>` : "";
+
+    // Assemble the full product card HTML with image, name, brand, category, source link, description, and nutrition
+    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand ? `<div class="pbr">${prod.brand}</div>` : ""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}</div></div>${desc}${nut}</div>`;
 
     // Enable the add button immediately since we have a valid product name
     setTimeout(() => g("addbtn").disabled = false, 0);
