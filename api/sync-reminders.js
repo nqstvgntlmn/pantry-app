@@ -18,14 +18,33 @@ import admin from "firebase-admin";
  */
 function getDb() {
   if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: "family-pantry-c65d6",
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        // Vercel stores the key with literal "\n" — convert to real newlines
-        privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-      }),
-    });
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+
+    // Log whether env vars are present (values redacted for security)
+    console.log("FIREBASE_CLIENT_EMAIL set:", !!clientEmail, clientEmail ? `(${clientEmail.length} chars)` : "(missing)");
+    console.log("FIREBASE_PRIVATE_KEY set:", !!privateKeyRaw, privateKeyRaw ? `(${privateKeyRaw.length} chars)` : "(missing)");
+
+    if (!clientEmail || !privateKeyRaw) {
+      const missing = [!clientEmail && "FIREBASE_CLIENT_EMAIL", !privateKeyRaw && "FIREBASE_PRIVATE_KEY"].filter(Boolean);
+      console.error("Missing required env vars:", missing.join(", "));
+      throw new Error("Server misconfigured: missing " + missing.join(", "));
+    }
+
+    const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
+
+    try {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: "family-pantry-c65d6",
+          clientEmail,
+          privateKey,
+        }),
+      });
+    } catch (initErr) {
+      console.error("Firebase Admin initializeApp failed:", initErr);
+      throw initErr;
+    }
   }
   return admin.firestore();
 }
@@ -80,7 +99,13 @@ export default async function handler(req, res) {
   const itemsArr = flatten(items);
 
   try {
-    const db = getDb();
+    let db;
+    try {
+      db = getDb();
+    } catch (dbErr) {
+      console.error("getDb() failed:", dbErr.message, dbErr.stack);
+      return res.status(500).json({ error: "Firebase init failed: " + dbErr.message });
+    }
     const shopRef = db.collection(`households/${household}/shopping`);
 
     // Fetch all existing shopping items in one read

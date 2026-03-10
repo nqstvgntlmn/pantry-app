@@ -17,7 +17,7 @@ import { wDates } from '../helpers.js'; // wDates = returns array of Date object
 // ── VOICE INPUT (Web Speech API) ─────────────────────────────────────────────
 // Uses the SpeechRecognition API to let users speak items into the shopping list.
 // The mic button is hidden if the browser doesn't support the API (graceful fallback).
-// Listens continuously until the user taps the mic button again to stop.
+// Auto-stops after detecting silence (no manual stop needed).
 // Shows a live interim transcript in the input field while speaking.
 
 /** Module-level reference to the active SpeechRecognition instance (null when not listening) */
@@ -56,8 +56,7 @@ function _setMicUI(active) {
  * toggleVoice() — Starts or stops voice recognition.
  * Tap once to start listening — button pulses, "Listening..." label appears,
  * and a live transcript is shown in the input field as the user speaks.
- * Tap again to stop — whatever was recognized gets added to the shopping list.
- * The user has full control over when to stop; there is no auto-stop on silence.
+ * Recognition auto-stops when the user pauses speaking (silence detection).
  */
 export function toggleVoice() {
   // If already listening, stop — the onend handler will finalize and add the item
@@ -73,7 +72,7 @@ export function toggleVoice() {
   _recognition.lang = "en-US";
   _recognition.interimResults = true;   // Show live transcript as the user speaks
   _recognition.maxAlternatives = 1;
-  _recognition.continuous = true;       // Keep listening until user taps stop — no auto-stop
+  _recognition.continuous = false;      // Auto-stop after silence — no manual stop needed
 
   _finalTranscript = "";
   _listening = true;
@@ -113,7 +112,7 @@ export function toggleVoice() {
   };
 
   /**
-   * onend — Fires when recognition stops (user tapped stop or an error occurred).
+   * onend — Fires when recognition stops (silence detected or an error occurred).
    * Takes whatever was recognized, adds it to the shopping list, and resets UI.
    */
   _recognition.onend = () => {
