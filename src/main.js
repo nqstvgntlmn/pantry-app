@@ -28,6 +28,9 @@ import { g, showNotif, showOv, hideOv, renderStars, tk } from './helpers.js';
 // sign-in/sign-up/sign-out functions, getCurrentUser returns the Firebase user object
 import { onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOut, getCurrentUser, getIdToken } from './auth.js';
 
+// Real-time Firestore listeners — replaces 30s polling for instant sync
+import { startRealtimeSync, stopRealtimeSync } from './realtime.js';
+
 // Expose getIdToken on window immediately so it's available in the browser console
 // for migration scripts. Must be at top level, not inside any callback.
 window.getIdToken = getIdToken;
@@ -37,10 +40,10 @@ window.getIdToken = getIdToken;
 // so they can be attached to `window` for HTML onclick access.
 
 // Home screen: dashboard rendering, weekly/tonight views, export panel
-import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv } from './ui/home.js';
+import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop } from './ui/home.js';
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, addManual, valMA, chgMQ, selML, importDoc } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
@@ -54,7 +57,7 @@ import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, updR, delER, 
 import { renderInsights } from './ui/insights.js';
 
 // Chat screen: AI chat, pill suggestions, clear history, auto-reply, kitchen context builder
-import { sendChat, sendPill, clrChat, ar, kitCtx } from './ui/chat.js';
+import { sendChat, sendPill, clrChat, ar, kitCtx, importChatRecipe } from './ui/chat.js';
 
 // Scanner: barcode/photo scanning, manual lookup, add scanned items to inventory or list
 import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, togManual, manLookup, selRL, valAdd, addToInv, chgAQ } from './ui/scan.js';
@@ -69,6 +72,9 @@ import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCook
 // copyInviteCode/shareInviteCode/regenInviteCode: invite code actions
 // removeMemberFromHH: owner removes a member
 import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH } from './ui/settings.js';
+
+// Onboarding: first-time user experience (4-step walkthrough)
+import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
 
 // ── REGISTER RENDER CALLBACKS ────────────────────────────────────────────────
 // db.js needs to re-render the UI after save/delete operations, but it can't
@@ -126,6 +132,7 @@ window.hideOv = hideOv;
 
 // ── Home screen handlers ──
 window.initHome = initHome;
+window.addLowToShop = addLowToShop;   // Add a low-stock item to the shopping list
 // toggleExp — toggle the export panel's visibility (show/hide)
 window.toggleExp = function() { const p = g("exppanel"); p.style.display = p.style.display === "none" ? "block" : "none"; };
 
@@ -143,6 +150,8 @@ window.chgMQ = chgMQ;           // Change quantity in the manual-add form
 window.selML = selML;           // Select a location in the manual-add form
 window.remItem = remItem;       // Remove (delete) an inventory item
 window.importDoc = importDoc;   // Import inventory items from a document/file
+window.adjLowThresh = adjLowThresh;   // Adjust low-stock threshold by +/- 1
+window.adjLowThreshD = adjLowThreshD; // Handle direct input of low-stock threshold
 
 // ── Shopping screen handlers ──
 window.qadd = qadd;             // Quick-add an item to the shopping list
@@ -204,6 +213,7 @@ window.sendChat = sendChat;     // Send a chat message to the AI assistant
 window.sendPill = sendPill;     // Send a pre-built "pill" suggestion as a chat message
 window.clrChat = clrChat;       // Clear the chat history
 window.ar = ar;                 // Auto-reply / process AI response actions
+window.importChatRecipe = importChatRecipe; // Import a recipe card from chat into saved recipes
 
 // ── Scanner screen handlers ──
 window.stopLiveScanner = stopLiveScanner;       // Stop the live barcode scanner and release camera
@@ -258,6 +268,10 @@ window.copyInviteCode = copyInviteCode;     // Copy household invite code to cli
 window.shareInviteCode = shareInviteCode;   // Share invite code via Web Share API
 window.regenInviteCode = regenInviteCode;   // Regenerate a new invite code (owner only)
 window.removeMemberFromHH = removeMemberFromHH; // Remove a member from the household (owner only)
+// ── Onboarding handlers ──
+window.onboardNext = onboardNext;           // Advance to the next onboarding step
+window.finishOnboarding = finishOnboarding; // Complete onboarding and close overlay
+window.skipOnboarding = skipOnboarding;     // Skip onboarding entirely
 // getIdToken is exposed on window at the top of this file (after import)
 
 // ── APP START ────────────────────────────────────────────────────────────────
@@ -324,77 +338,37 @@ window._appStart = async function(code) {
   // Detect Web Speech API support and show mic button if available
   initVoice();
 
-  // ── Polling loop ──
-  // poll() fetches ALL Firestore collections for the current household and
-  // updates in-memory state. This is a simple "pull" sync strategy — the app
-  // does not use Firestore realtime listeners, so it polls every 30 seconds.
-  // The interval is paused while any write is in-flight (via pausePoll/resumePoll
-  // in db.js) to prevent stale Firestore reads from overwriting optimistic state.
-  async function poll() {
-    try {
-      ss("syncing");
+  // ── Real-time sync ──
+  // Instead of polling every 30 seconds, we use Firestore onSnapshot listeners
+  // for instant sync across all household members. The listeners update state
+  // and trigger UI re-renders automatically when data changes on any device.
+  // Writes still go through the REST proxy (/api/db) for security rules.
+  startRealtimeSync(state.hid);
 
-      // Fetch all 7 collections in parallel. Promise.allSettled ensures one
-      // failure doesn't block the others.
-      const res = await Promise.allSettled([
-        dbList(`households/${state.hid}/inventory`),
-        dbList(`households/${state.hid}/recipes`),
-        dbList(`households/${state.hid}/shopping`),
-        dbList(`households/${state.hid}/mealplan`),
-        dbList(`households/${state.hid}/settings`),
-        dbList(`households/${state.hid}/cooklog`),
-        dbList(`households/${state.hid}/wastelog`)
-      ]);
-
-      // Helper: extract the value from a settled promise, or fall back to
-      // the previous state if the fetch failed
-      const v = (r, fb) => r.status === "fulfilled" ? r.value : fb;
-
-      // Update global state with fresh data (or keep old data on failure).
-      // No need to guard individual collections — the entire poll interval
-      // is paused while any write is in-flight, so stale reads can't land here.
-      state.inv  = v(res[0], state.inv);
-      state.recs = v(res[1], state.recs);
-      state.shop = v(res[2], state.shop);
-      const mpDocs = v(res[3], []);
-      const cfgDocs = v(res[4], []);
-      const clDocs = v(res[5], []);
-      const wlDocs = v(res[6], []);
-
-      // Convert meal plan docs array into a { date: meal } lookup object
-      const newMp = {}; mpDocs.forEach(d => { if (d.date && d.meal) newMp[d.date] = d.meal; }); state.mp = newMp;
-
-      // Merge config doc with defaults so new config keys always have values
-      const cfgDoc = cfgDocs.find(d => d.id === "config");
-      if (cfgDoc) state.cfg = { ...CFG_DEFAULT, ...cfgDoc };
-
-      // Sort cook log and waste log by date (newest first) for display
-      state.cookLog = clDocs.sort((a, b) => new Date(b.loggedAt || b.date || 0) - new Date(a.loggedAt || a.date || 0));
-      state.wasteLog = wlDocs.sort((a, b) => new Date(b.loggedAt || b.date || 0) - new Date(a.loggedAt || a.date || 0));
-
-      // Update sync status indicator to "synced" (green dot or similar)
-      ss("synced");
-
-      // Re-render all screens with the fresh data
-      renderAll(); renderRecs(); renderShop(); renderSum();
-    } catch (e) {
-      console.error("poll error", e);
-      // Show error indicator so the user knows sync failed
-      ss("error");
-    }
+  // Also run one initial REST-based poll for the data that loadFirestoreData
+  // doesn't cover (inventory, recipes, shopping list). This ensures we have
+  // data immediately before the onSnapshot callbacks fire.
+  try {
+    ss("syncing");
+    const res = await Promise.allSettled([
+      dbList(`households/${state.hid}/inventory`),
+      dbList(`households/${state.hid}/recipes`),
+      dbList(`households/${state.hid}/shopping`)
+    ]);
+    const v = (r, fb) => r.status === "fulfilled" ? r.value : fb;
+    state.inv  = v(res[0], state.inv);
+    state.recs = v(res[1], state.recs);
+    state.shop = v(res[2], state.shop);
+    ss("synced");
+    renderAll(); renderRecs(); renderShop(); renderSum();
+  } catch (e) {
+    console.error("initial load error", e);
+    ss("error");
   }
 
-  // Expose poll on window so it can be triggered manually (e.g. from dev tools)
-  window._poll = poll;
-
-  // Run the first poll immediately, then repeat every 30 seconds.
-  // The interval ID is stored in db.js so writes can pause/resume it.
-  poll();
-  const pollId = setInterval(poll, 30000);
-  // Register the interval with db.js so pausePoll/resumePoll can stop and
-  // restart it around write operations
-  window._pollFn = poll;
-  window._pollIntervalId = pollId;
+  // Check if this is a first-time user and show onboarding if needed.
+  // Slight delay ensures the main UI is visible first.
+  setTimeout(checkOnboarding, 500);
 };
 
 // ── INITIALIZATION ───────────────────────────────────────────────────────────
@@ -709,6 +683,8 @@ onAuth(async (user) => {
     }
   } else {
     // ── User is signed out ──
+    // Stop all real-time Firestore listeners to prevent memory leaks
+    stopRealtimeSync();
     // Reset the boot flag so a fresh sign-in will re-initialize the app
     appBooted = false;
     // Hide the app and show the login/auth screen

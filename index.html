@@ -145,8 +145,12 @@
       <div class="week-wrap"><div class="wgrd" id="wgrd"></div></div>
       <div class="hsec-lbl">🧺 Your Kitchen</div>
       <div class="sgrd" id="sgrd"></div>
+      <div id="lowstocklbl" style="display:none" class="hsec-lbl">📉 Running Low</div>
+      <div class="expl" id="lowstocklist"></div>
       <div id="exslbl" style="display:none" class="hsec-lbl">⚠️ Expiring Soon</div>
       <div class="expl" id="expl"></div>
+      <div id="activitylbl" style="display:none" class="hsec-lbl">📋 Recent Activity</div>
+      <div id="activityfeed"></div>
       <div style="height:16px"></div>
     </div>
   </div>
@@ -244,6 +248,7 @@
       <div class="pill" onclick="sendPill(this)">Use what's expiring</div>
       <div class="pill" onclick="sendPill(this)">Quick weeknight ideas</div>
       <div class="pill" onclick="sendPill(this)">Toddler-friendly meals</div>
+      <div class="pill" onclick="sendPill(this)">Suggest recipes from my pantry</div>
     </div>
     <div class="chmsgs" id="chmsgs"><div class="cb asst">Hey Bora! 👋 I know your full inventory, meal plan, and saved recipes. What do you need?</div></div>
     <div class="chia"><textarea class="chta" id="chi" placeholder="Ask anything about your kitchen…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="ar(this)"></textarea><button class="chsb" id="csb" onclick="sendChat()">↑</button></div>
@@ -453,6 +458,14 @@
       <textarea class="fta" id="imptxt" placeholder="Paste kitchen inventory markdown here…" style="min-height:180px"></textarea>
       <div class="brow"><button class="btn bp bf" onclick="importDoc()">Import</button></div>
     </div>
+  </div>
+
+  <!-- OVERLAY: ONBOARDING -->
+  <div class="ov" id="ov-onboarding" style="z-index:200;bottom:0">
+    <div class="ovhdr" style="justify-content:flex-end">
+      <button class="btn bsm bs" onclick="skipOnboarding()">Skip</button>
+    </div>
+    <div class="ovbody" id="onboarding-body" style="max-width:420px;margin:0 auto"></div>
   </div>
 
   <!-- OVERLAY: SETTINGS -->

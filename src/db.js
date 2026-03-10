@@ -638,10 +638,13 @@ export async function svi(item) {
   pausePoll();
   try {
     // Replace existing item (by id) or append if new — spread creates a new array
+    const isNew = !state.inv.find(i => i.id === item.id);
     state.inv = [...state.inv.filter(i => i.id !== item.id), item];
     renderCallbacks.renderAll?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/inventory/${item.id}`, item);
+    // Log activity for new items (not quantity adjustments)
+    if (isNew) logActivity("added", item.name + " to inventory");
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
   finally { resumePoll(); }
@@ -656,10 +659,12 @@ export async function dli(id) {
   ss("syncing");
   pausePoll();
   try {
+    const removed = state.inv.find(i => i.id === id);
     state.inv = state.inv.filter(i => i.id !== id);
     renderCallbacks.renderAll?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/inventory/${id}`);
+    if (removed) logActivity("removed", removed.name + " from inventory");
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
   finally { resumePoll(); }
@@ -703,10 +708,12 @@ export async function dlr(id) {
 export async function svShopItem(item) {
   pausePoll();
   try {
+    const isNew = !state.shop.find(s => s.id === item.id);
     state.shop = [...state.shop.filter(s => s.id !== item.id), item];
     renderCallbacks.renderShop?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/shopping/${item.id}`, item);
+    if (isNew) logActivity("added", item.name + " to shopping list");
   } catch (e) { console.error(e); }
   finally { resumePoll(); }
 }
@@ -863,6 +870,62 @@ export async function saveRecipeToKitchen(pubRecipe) {
   };
   await svr(recipe);
   return recipe;
+}
+
+// ── ACTIVITY FEED ────────────────────────────────────────────────────────────
+// Logs household actions so members can see what others have done recently.
+// Stored in households/{hid}/activity/{id} with auto-cleanup of old entries.
+
+/**
+ * logActivity — records a household action to the activity feed.
+ * Called automatically by save/delete operations (inventory, shopping, recipes).
+ * @param {string} action — verb describing the action (e.g. "added", "removed")
+ * @param {string} itemName — the name of the item acted upon
+ */
+export async function logActivity(action, itemName) {
+  if (!state.hid || !itemName) return;
+  const memberName = localStorage.getItem("ks-who") || "Someone";
+  const id = "act-" + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const entry = {
+    memberName,
+    action,
+    itemName,
+    timestamp: new Date().toISOString()
+  };
+  try {
+    await dbSet(`households/${state.hid}/activity/${id}`, entry);
+    // Auto-cleanup: delete entries older than 7 days
+    _cleanOldActivity();
+  } catch { /* activity logging is best-effort, don't block the main operation */ }
+}
+
+/**
+ * _cleanOldActivity — removes activity entries older than 7 days.
+ * Runs asynchronously in the background after each new log entry.
+ */
+async function _cleanOldActivity() {
+  try {
+    const entries = await dbList(`households/${state.hid}/activity`);
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    for (const e of entries) {
+      if (e.timestamp && new Date(e.timestamp).getTime() < cutoff) {
+        await dbDelete(`households/${state.hid}/activity/${e.id}`);
+      }
+    }
+  } catch { /* best-effort cleanup */ }
+}
+
+/**
+ * loadActivity — fetches the most recent activity entries for the household.
+ * Returns the last 10 entries sorted newest first.
+ */
+export async function loadActivity() {
+  try {
+    const entries = await dbList(`households/${state.hid}/activity`);
+    return entries
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+      .slice(0, 10);
+  } catch { return []; }
 }
 
 // ── HELPER ───────────────────────────────────────────────────────────────────

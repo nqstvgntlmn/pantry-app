@@ -139,7 +139,7 @@ export function openAdj(id) {
   // Inject the full overlay body: header card, nutrition, location picker,
   // quantity stepper, expiry date picker, and notes textarea.
   // Each control calls its own global handler on change (e.g. updL, adjQ).
-  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${item.name}</div>${item.brand ? `<div class="pbr">${item.brand}</div>` : ""}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div>${item.source ? `<span class="srcb" style="display:inline-block;margin-top:4px">${item.source}</span>` : ""}</div></div>${nut}<div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div></div>`;
+  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${item.name}</div>${item.brand ? `<div class="pbr">${item.brand}</div>` : ""}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div>${item.source ? `<span class="srcb" style="display:inline-block;margin-top:4px">${item.source}</span>` : ""}</div></div>${nut}<div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Low stock alert at</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${item.lowStockThreshold || 1}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div></div>`;
 
   // Wire the "Remove" button at the bottom of the overlay
   g("rembtn").onclick = () => remItem(id);
@@ -211,6 +211,24 @@ export async function adjNote() {
   if (!item) return;
   const v = (g("adjnote").value || "").trim();
   await svi({ ...item, note: v || null });
+}
+
+// Adjusts the low-stock alert threshold by a delta (+1 / -1).
+// When qty drops to or below this threshold, the item appears in "Running Low".
+export async function adjLowThresh(d) {
+  const item = state.inv.find(i => i.id === state.adjId);
+  if (!item) return;
+  const v = Math.max(0, (item.lowStockThreshold || 1) + d);
+  g("adjlowthresh").value = v;
+  await svi({ ...item, lowStockThreshold: v });
+}
+
+// Handles direct input into the low-stock threshold field (free-type).
+export async function adjLowThreshD() {
+  const item = state.inv.find(i => i.id === state.adjId);
+  if (!item) return;
+  const v = parseInt(g("adjlowthresh").value);
+  if (!isNaN(v) && v >= 0) await svi({ ...item, lowStockThreshold: v });
 }
 
 // Switches the active inventory tab (all / fridge / freezer / pantry / cat).

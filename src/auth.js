@@ -42,7 +42,8 @@ const firebaseConfig = {
 };
 
 // Initialize the Firebase app singleton — must happen before any other Firebase service is used.
-const app = initializeApp(firebaseConfig);
+// Exported so other modules (e.g. Firestore real-time listeners) can reuse it.
+export const app = initializeApp(firebaseConfig);
 
 // Get the Auth service instance tied to our app. All sign-in/sign-out calls go through this.
 const auth = getAuth(app);

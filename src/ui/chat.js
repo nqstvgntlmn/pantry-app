@@ -5,7 +5,8 @@
 // and renders the chat UI bubbles.
 
 import { state } from '../state.js';
-import { g, tk, wDates, xSt, ll } from '../helpers.js';
+import { g, tk, wDates, xSt, ll, showNotif } from '../helpers.js';
+import { svr } from '../db.js';
 // g      = getElementById shorthand
 // tk     = token/key helper
 // wDates = returns array of Date objects for the current week
@@ -55,7 +56,14 @@ ${favs ? "FAVOURITE RECIPES: " + favs : ""}
 ${recent ? "RECENTLY COOKED (avoid repeating): " + recent : ""}
 HOUSEHOLD: ${state.cfg.name}, Adults: ${state.cfg.adults}, Kids: ${state.cfg.kids}, Restrictions: ${restr || "none"}, Cuisines: ${state.cfg.cuisines}, Cook time: ${state.cfg.cookTime}.
 CULTURAL BACKGROUND: Bushra is Bangladeshi, Bora is Turkish — authentically lean toward these cuisines (Bengali spices, mustard oil, dal, hilsa-style fish; Turkish kebabs, meze, börek, yogurt sauces, lentil soups). Suggest these when inventory allows.
-Be concise. Use what they have. Suggest variety — lean toward Bangladeshi and Turkish — avoid repeating recent meals. Format grocery lists as bullet points starting "- ".`;
+Be concise. Use what they have. Suggest variety — lean toward Bangladeshi and Turkish — avoid repeating recent meals. Format grocery lists as bullet points starting "- ".
+
+RECIPE FORMAT RULE: When suggesting recipes (any time you provide a recipe with ingredients/steps), wrap EACH recipe in :::RECIPE::: and :::END::: markers with a JSON object containing: title, ingredients (newline-separated list), steps (numbered newline-separated list), cuisine, cookTime, servings.
+Example:
+:::RECIPE:::
+{"title":"Dal Tadka","ingredients":"1 cup red lentils\\n2 tomatoes, chopped\\n1 tsp cumin seeds\\n1 tsp turmeric","steps":"1. Wash and boil lentils until soft\\n2. Heat oil, add cumin seeds\\n3. Add tomatoes, cook until soft\\n4. Combine with lentils and simmer","cuisine":"Bangladeshi","cookTime":"30 min","servings":4}
+:::END:::
+Always use this format so the app can offer a one-tap save button. You can include normal text before/after recipe blocks.`;
 }
 
 // ─── formatResponse ──────────────────────────────────────────────────────────
@@ -144,23 +152,113 @@ export async function sendChat() {
   if (csb) csb.disabled = false;
 }
 
+// ─── parseRecipeBlocks ───────────────────────────────────────────────────────
+// Extracts structured recipe JSON blocks from Claude's response text.
+// Returns { cleanText, recipes } where cleanText has the recipe blocks removed
+// and recipes is an array of parsed recipe objects.
+function parseRecipeBlocks(text) {
+  const recipes = [];
+  // Match :::RECIPE::: ... :::END::: blocks and extract the JSON inside
+  const cleaned = text.replace(/:::RECIPE:::\s*([\s\S]*?)\s*:::END:::/g, (_, json) => {
+    try {
+      const r = JSON.parse(json.trim());
+      if (r.title) recipes.push(r);
+    } catch { /* skip malformed JSON */ }
+    return ""; // remove the block from display text
+  });
+  return { cleanText: cleaned.trim(), recipes };
+}
+
+// ─── renderRecipeCard ────────────────────────────────────────────────────────
+// Builds HTML for a recipe suggestion card with title, preview info, and
+// a one-tap "Add to My Recipes" button. The recipe data is encoded in the
+// button's data attribute so importChatRecipe() can read it on click.
+function renderRecipeCard(recipe) {
+  const dataStr = JSON.stringify(recipe).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  const ingPreview = (recipe.ingredients || "").split("\n").slice(0, 3).join(", ");
+  return `<div style="background:var(--card);border:1.5px solid var(--ac);border-radius:14px;padding:16px;margin:10px 0">
+    <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:300;color:var(--ac);margin-bottom:6px">${(recipe.title || "").replace(/</g, "&lt;")}</div>
+    ${recipe.cuisine ? `<div style="font-size:.72rem;color:var(--mt);margin-bottom:6px">${recipe.cuisine}${recipe.cookTime ? " · " + recipe.cookTime : ""}${recipe.servings ? " · " + recipe.servings + " servings" : ""}</div>` : ""}
+    ${ingPreview ? `<div style="font-size:.8rem;color:var(--tx2);line-height:1.5;margin-bottom:10px">${ingPreview.replace(/</g, "&lt;")}…</div>` : ""}
+    <button class="btn bp bsm" onclick="importChatRecipe(this)" data-recipe="${dataStr}">📖 Add to My Recipes</button>
+  </div>`;
+}
+
+// ─── importChatRecipe ────────────────────────────────────────────────────────
+// Called when the user taps "Add to My Recipes" on a chat recipe card.
+// Parses the recipe JSON from the button's data attribute and saves it
+// to the household's Firestore recipes collection.
+export async function importChatRecipe(btn) {
+  try {
+    const recipe = JSON.parse(btn.dataset.recipe);
+    const id = "rec-" + Date.now();
+    // Build the description from ingredients + steps combined
+    const desc = [recipe.ingredients || "", recipe.steps ? "\n\nSteps:\n" + recipe.steps : ""].join("").trim();
+    await svr({
+      id,
+      name: recipe.title || "Untitled Recipe",
+      rating: 0,
+      favorited: false,
+      notes: "",
+      description: desc,
+      source: "Claude Chat",
+      sourceUrl: null,
+      tags: [],
+      cuisine: recipe.cuisine || "",
+      cookTime: recipe.cookTime || "",
+      servings: recipe.servings || "",
+      cookCount: 0,
+      savedAt: new Date().toLocaleDateString(),
+      isPublic: false
+    });
+    btn.textContent = "✓ Saved!";
+    btn.disabled = true;
+    btn.style.background = "var(--gn)";
+    showNotif("Recipe saved! 📖");
+  } catch {
+    showNotif("Couldn't save recipe");
+  }
+}
+
 // ─── appendBubble ────────────────────────────────────────────────────────────
 // Creates a chat bubble DOM element and appends it to the messages container.
 // User messages are displayed as plain text; assistant messages are run through
 // formatResponse() to render markdown-like formatting as HTML.
+// If the assistant response contains :::RECIPE::: blocks, they're parsed out
+// and rendered as interactive recipe cards with import buttons.
 function appendBubble(role, text) {
   const msgs = g("chmsgs");
-  if (!msgs) return; // Guard against missing container (e.g. screen not rendered yet)
+  if (!msgs) return;
 
-  const div = document.createElement("div");
-  // Apply CSS classes: "cb" = chat bubble base, "user"/"asst" = alignment/color styling
-  div.className = "cb " + (role === "user" ? "user" : "asst");
-  // User messages are plain text (safe because we don't innerHTML user input as-is
-  // in a dangerous way here — it's their own message). Assistant messages get
-  // HTML formatting via formatResponse which escapes HTML entities first.
-  div.innerHTML = role === "user" ? text : formatResponse(text);
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight; // Auto-scroll to show the newest message
+  if (role === "assistant") {
+    // Check for structured recipe blocks in Claude's response
+    const { cleanText, recipes } = parseRecipeBlocks(text);
+
+    // Render the text portion (if any) as a normal chat bubble
+    if (cleanText) {
+      const div = document.createElement("div");
+      div.className = "cb asst";
+      div.innerHTML = formatResponse(cleanText);
+      msgs.appendChild(div);
+    }
+
+    // Render each recipe as an interactive card below the text
+    recipes.forEach((r) => {
+      const wrapper = document.createElement("div");
+      wrapper.style.maxWidth = "88%";
+      wrapper.style.alignSelf = "flex-start";
+      wrapper.innerHTML = renderRecipeCard(r);
+      msgs.appendChild(wrapper);
+    });
+  } else {
+    // User messages: render as plain text
+    const div = document.createElement("div");
+    div.className = "cb user";
+    div.innerHTML = text;
+    msgs.appendChild(div);
+  }
+
+  msgs.scrollTop = msgs.scrollHeight;
 }
 
 // ─── sendPill ────────────────────────────────────────────────────────────────

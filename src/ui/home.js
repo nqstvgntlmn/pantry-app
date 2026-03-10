@@ -12,7 +12,7 @@
 
 import { state } from '../state.js';
 import { g, tk, wDates, xSt, ll, showNotif } from '../helpers.js';
-import { saveMp } from '../db.js';
+import { saveMp, svShopItem, loadActivity } from '../db.js';
 
 // initHome() — called once on app boot.
 // Sets the time-aware greeting ("Good morning/afternoon/evening"), displays
@@ -66,7 +66,9 @@ export function renderHome() {
   renderWeek();     // 7-day meal plan grid
   renderSum();      // numeric stat cards (inventory count, expiring, shopping, recipes)
   renderExp();      // expiring-soon item list
+  renderLowStock(); // "Running Low" item list
   renderTonight();  // "Tonight's Dinner" card
+  renderActivityFeed(); // Recent household activity
   updExport();      // plain-text inventory export panel
 }
 
@@ -223,6 +225,124 @@ export function renderExp() {
   // Each row shows the item name and its expiry label (e.g. "Expires in 2d").
   l.style.display = "flex";
   e.innerHTML = ex.map(item => { const s = xSt(item.expiry); return `<div class="exi${s.c === "expired" ? " exp" : ""}" onclick="openAdj('${item.id}')"><div class="exn">${item.name}</div><div class="exd">${s.l}</div></div>`; }).join("");
+}
+
+// ─── LOW STOCK ALERTS ────────────────────────────────────────────────────────
+// Shows items that are at or below their low-stock threshold on the home screen.
+// Each item can be added to the shopping list with one tap.
+
+// renderLowStock() — renders the "Running Low" section on the home screen.
+// Items are considered low when qty <= item.lowStockThreshold (default: 1).
+// Sorted by quantity ascending so the most urgent items appear first.
+function renderLowStock() {
+  const low = state.inv
+    .filter(i => i.qty <= (i.lowStockThreshold || 1))
+    .sort((a, b) => a.qty - b.qty);
+
+  const lbl = g("lowstocklbl");
+  const lst = g("lowstocklist");
+  if (!lbl || !lst) return;
+
+  // Hide the section if nothing is running low
+  if (!low.length) { lbl.style.display = "none"; lst.innerHTML = ""; return; }
+
+  lbl.style.display = "flex";
+  lst.innerHTML = low.map(item => `<div class="exi" style="border-color:var(--am)">
+    <div style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer" onclick="openAdj('${item.id}')">
+      <div class="exn">${item.name}</div>
+      <div style="font-size:.74rem;color:var(--am);font-weight:600">${item.qty} ${item.unit}</div>
+    </div>
+    <button class="btn bsm bs" style="flex-shrink:0;font-size:.72rem" onclick="event.stopPropagation();addLowToShop('${item.id}')">🛒 Add to list</button>
+  </div>`).join("");
+
+  // Update the Pantry nav badge to show low-stock count
+  updatePantryBadge(low.length);
+}
+
+// addLowToShop(id) — adds a low-stock inventory item to the shopping list
+// with one tap. Prevents duplicates by checking if the item is already listed.
+export async function addLowToShop(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+
+  // Check if this item is already on the shopping list
+  const existing = state.shop.find(s =>
+    s.name.toLowerCase() === item.name.toLowerCase() && !s.checked
+  );
+  if (existing) {
+    showNotif(`${item.name} is already on your list`);
+    return;
+  }
+
+  await svShopItem({
+    id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2),
+    name: item.name,
+    qty: 1,
+    checked: false,
+    src: "low-stock"
+  });
+  showNotif(`${item.name} added to shopping list 🛒`);
+}
+
+// updatePantryBadge(count) — shows/hides a small badge on the Pantry nav tab
+// indicating how many items are running low.
+function updatePantryBadge(count) {
+  const nav = g("nav-inventory");
+  if (!nav) return;
+  // Remove any existing badge
+  const old = nav.querySelector(".nav-badge");
+  if (old) old.remove();
+  // Add badge if count > 0
+  if (count > 0) {
+    const badge = document.createElement("span");
+    badge.className = "nav-badge";
+    badge.textContent = count;
+    badge.style.cssText = "position:absolute;top:4px;right:calc(50% - 18px);background:var(--am);color:#0c0c0a;font-size:.58rem;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px";
+    nav.appendChild(badge);
+  }
+}
+
+// ─── ACTIVITY FEED ───────────────────────────────────────────────────────────
+// Shows recent household actions (e.g. "Bushra added Milk to shopping list")
+// on the home screen so members can see what's changed.
+
+// renderActivityFeed() — loads and displays the last 5 activity entries.
+// Runs asynchronously since it fetches from Firestore.
+async function renderActivityFeed() {
+  const el = g("activityfeed");
+  const lbl = g("activitylbl");
+  if (!el) return;
+
+  const entries = await loadActivity();
+  if (!entries.length) {
+    if (lbl) lbl.style.display = "none";
+    el.innerHTML = "";
+    return;
+  }
+
+  if (lbl) lbl.style.display = "flex";
+
+  // Format relative time (e.g. "2 min ago", "3h ago", "yesterday")
+  const ago = (ts) => {
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + "m ago";
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + "h ago";
+    const days = Math.floor(hrs / 24);
+    if (days === 1) return "yesterday";
+    return days + "d ago";
+  };
+
+  // Show up to 5 most recent entries
+  el.innerHTML = entries.slice(0, 5).map(e =>
+    `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--acd);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;color:var(--ac);font-weight:700">${(e.memberName || "?")[0].toUpperCase()}</div>
+      <div style="flex:1;font-size:.82rem;color:var(--tx2);line-height:1.4"><strong style="color:var(--tx)">${(e.memberName || "Someone").replace(/</g, "&lt;")}</strong> ${(e.action || "").replace(/</g, "&lt;")} <strong>${(e.itemName || "").replace(/</g, "&lt;")}</strong></div>
+      <div style="font-size:.68rem;color:var(--mt);flex-shrink:0">${ago(e.timestamp)}</div>
+    </div>`
+  ).join("");
 }
 
 // updExport() — builds a plain-text summary of the entire inventory, grouped by

@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-B9kalOPr.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CbqrOv93.css">
+  <script type="module" crossorigin src="/assets/index-B1uj3bxi.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CZfq4yz8.css">
 </head>
 <body>
 
@@ -147,8 +147,12 @@
       <div class="week-wrap"><div class="wgrd" id="wgrd"></div></div>
       <div class="hsec-lbl">🧺 Your Kitchen</div>
       <div class="sgrd" id="sgrd"></div>
+      <div id="lowstocklbl" style="display:none" class="hsec-lbl">📉 Running Low</div>
+      <div class="expl" id="lowstocklist"></div>
       <div id="exslbl" style="display:none" class="hsec-lbl">⚠️ Expiring Soon</div>
       <div class="expl" id="expl"></div>
+      <div id="activitylbl" style="display:none" class="hsec-lbl">📋 Recent Activity</div>
+      <div id="activityfeed"></div>
       <div style="height:16px"></div>
     </div>
   </div>
@@ -246,6 +250,7 @@
       <div class="pill" onclick="sendPill(this)">Use what's expiring</div>
       <div class="pill" onclick="sendPill(this)">Quick weeknight ideas</div>
       <div class="pill" onclick="sendPill(this)">Toddler-friendly meals</div>
+      <div class="pill" onclick="sendPill(this)">Suggest recipes from my pantry</div>
     </div>
     <div class="chmsgs" id="chmsgs"><div class="cb asst">Hey Bora! 👋 I know your full inventory, meal plan, and saved recipes. What do you need?</div></div>
     <div class="chia"><textarea class="chta" id="chi" placeholder="Ask anything about your kitchen…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="ar(this)"></textarea><button class="chsb" id="csb" onclick="sendChat()">↑</button></div>
@@ -327,21 +332,27 @@
 
   <!-- OVERLAY: SCAN -->
   <div class="ov" id="ov-scan">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('scan')">←</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="stopLiveScanner();hideOv('scan')">←</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
     <div class="ovbody">
       <p id="scan-dest-hint" style="font-size:.78rem;color:var(--mt);padding:8px 0 4px;text-align:center">Scan a barcode to add to your pantry or shopping list.</p>
       <div id="scanbody">
-        <!-- Targeting reticle: visual guide showing users where to aim the camera -->
-        <div class="scan-reticle" aria-hidden="true">
-          <div class="reticle-corners">
-            <span class="rc rc-tl"></span><span class="rc rc-tr"></span>
-            <span class="rc rc-bl"></span><span class="rc rc-br"></span>
+        <!-- Live camera viewfinder: streams the rear camera and auto-detects barcodes in real time -->
+        <div id="scanner-viewport">
+          <div id="scanner-video"></div>
+          <!-- Targeting reticle: centered on live feed so the user knows where to aim -->
+          <div class="scan-reticle" aria-hidden="true">
+            <div class="reticle-corners">
+              <span class="rc rc-tl"></span><span class="rc rc-tr"></span>
+              <span class="rc rc-bl"></span><span class="rc rc-br"></span>
+            </div>
+            <div class="reticle-line"></div>
           </div>
-          <div class="reticle-line"></div>
-          <div class="reticle-label">Align barcode here</div>
+          <!-- Success checkmark: briefly flashes when a barcode is detected -->
+          <div id="scan-success" class="scan-success" style="display:none">✓</div>
         </div>
-        <div class="sacts"><button class="btn bp bf" onclick="startScan()">📷 Take Photo of Barcode</button><button class="btn bs bf" onclick="togManual()">✏️ Enter Barcode Manually</button></div>
-        <p class="shint">Works on all phones including iPhone.<br/>Fill the viewfinder with the barcode for best results.</p>
+        <!-- Live scanning status: pulses while camera is active to reassure the user -->
+        <div id="scan-status" class="scan-status">Scanning…</div>
+        <div class="sacts"><button class="btn bs bf" onclick="togManual()">✏️ Enter Barcode Manually</button></div>
         <div id="mentry" style="display:none;margin-top:16px"><div style="display:flex;gap:8px"><input class="fi" id="meinp" placeholder="e.g. 013000006408" inputmode="numeric" onkeydown="if(event.key==='Enter')manLookup()" style="flex:1"/><button class="btn bp" onclick="manLookup()">Look Up</button></div></div>
         <div class="errmsg" id="scerr"></div>
       </div>
@@ -387,7 +398,7 @@
       </div>
       <div id="scan-dest-btns">
         <div class="brow">
-          <button class="btn bs" style="flex:1" onclick="hideOv('result');showOv('scan')">← Back</button>
+          <button class="btn bs" style="flex:1" onclick="resumeScanner()">← Back</button>
           <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">📦 Add to Pantry</button>
         </div>
         <button class="btn bs bf" style="margin-top:8px;border-color:var(--gn);color:var(--gn)" onclick="addScannedToList()">🛒 Add to Shopping List instead</button>
@@ -449,6 +460,14 @@
       <textarea class="fta" id="imptxt" placeholder="Paste kitchen inventory markdown here…" style="min-height:180px"></textarea>
       <div class="brow"><button class="btn bp bf" onclick="importDoc()">Import</button></div>
     </div>
+  </div>
+
+  <!-- OVERLAY: ONBOARDING -->
+  <div class="ov" id="ov-onboarding" style="z-index:200;bottom:0">
+    <div class="ovhdr" style="justify-content:flex-end">
+      <button class="btn bsm bs" onclick="skipOnboarding()">Skip</button>
+    </div>
+    <div class="ovbody" id="onboarding-body" style="max-width:420px;margin:0 auto"></div>
   </div>
 
   <!-- OVERLAY: SETTINGS -->
@@ -606,7 +625,6 @@
   </div>
 </div>
 
-<input type="file" id="ffile" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)"/>
 <div class="notif" id="notif" style="display:none"></div>
 
 </body>

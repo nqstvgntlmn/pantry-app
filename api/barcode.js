@@ -30,12 +30,42 @@ function isLowQualityName(name) {
   if (!name || name.length < 3) return true;
   const lower = name.toLowerCase().trim();
   // Ends with common truncation artifacts from import databases
-  if (/\b(imp|exp|impo|expo)\.?$/i.test(lower)) return true;
+  if (/\b(imp|exp|impo|expo|inc|co|lt|gm|oz|pk)\.?$/i.test(lower)) return true;
   // Ends mid-word (lowercase letter after a space, 1-2 chars — likely truncated)
   if (/\s[a-z]{1,2}$/.test(lower)) return true;
   // All uppercase single word under 5 chars (often a code, not a name)
   if (/^[A-Z]{1,4}$/.test(name.trim())) return true;
   return false;
+}
+
+/**
+ * cleanProductName(name, brand) — Combines brand + product name into a clean display name.
+ * Strips truncation artifacts, excessive packaging info, and ensures the brand is included
+ * at the start of the name (e.g. "Melinda's Ghost Pepper Sauce" not "Ghost Pepper Sauce imp").
+ */
+function cleanProductName(name, brand) {
+  if (!name) return brand || "Unknown Product";
+  let clean = name.trim();
+
+  // Strip common trailing truncation artifacts (e.g. "imp", "exp", trailing incomplete words)
+  clean = clean.replace(/\s*\b(imp|exp|impo|expo|inc|co|ltd|llc|corp)\.?\s*$/gi, "").trim();
+
+  // Strip excessive packaging info in parentheses at the end (e.g. "(12 oz box)")
+  clean = clean.replace(/\s*\([\d.,]+\s*(oz|lb|lbs|g|kg|ml|l|fl|ct|pk|pack|count|unit|each)\.?\)$/gi, "").trim();
+
+  // Remove trailing commas, dashes, or pipes left after stripping
+  clean = clean.replace(/[,\-|]+\s*$/, "").trim();
+
+  // If brand exists and the name doesn't already start with the brand, prepend it
+  if (brand && brand.trim()) {
+    const brandClean = brand.trim();
+    const nameStart = clean.toLowerCase().slice(0, brandClean.length);
+    if (nameStart !== brandClean.toLowerCase()) {
+      clean = brandClean + " " + clean;
+    }
+  }
+
+  return clean || brand || "Unknown Product";
 }
 
 /**
@@ -263,6 +293,8 @@ export default async function handler(req, res) {
         if (!result.image && bestFallback.image) result.image = bestFallback.image;
         if (!result.description && bestFallback.description) result.description = bestFallback.description;
       }
+      // Clean the product name: strip artifacts and prepend brand if missing
+      result.name = cleanProductName(result.name, result.brand);
       return res.status(200).json({ found: true, product: result });
     }
 
@@ -270,8 +302,9 @@ export default async function handler(req, res) {
     if (!bestFallback) bestFallback = result;
   }
 
-  // No high-quality result found; return the best fallback we have
+  // No high-quality result found; return the best fallback we have (with cleaned name)
   if (bestFallback) {
+    bestFallback.name = cleanProductName(bestFallback.name, bestFallback.brand);
     return res.status(200).json({ found: true, product: bestFallback });
   }
 

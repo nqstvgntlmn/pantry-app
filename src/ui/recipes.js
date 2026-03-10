@@ -151,10 +151,10 @@ export function valR() { g("savrecbtn").disabled = !g("rn").value.trim(); }
 // ── URL IMPORT (AI-POWERED) ─────────────────────────────────────────────────
 
 /**
- * Fetches a recipe from a URL using the Claude API with web search tool.
- * Sends the URL to Claude Haiku, which reads the page and extracts structured
- * recipe data (name, description, notes). On success, populates the Add Recipe
- * form fields so the user can review before saving.
+ * Fetches a recipe from a URL using the dedicated import-recipe endpoint.
+ * Extracts full recipe structure: title, ingredients, steps, cuisine, cook time,
+ * servings. On success, populates the Add Recipe form fields so the user can
+ * review before saving. Supports AllRecipes, NYT Cooking, Food Network, etc.
  */
 export async function importFromUrl() {
   const url = g("rurl").value.trim(); if (!url) return;
@@ -164,35 +164,44 @@ export async function importFromUrl() {
   st.style.display = "block"; st.style.color = "var(--mt)"; st.textContent = "⏳ Fetching recipe…"; btn.disabled = true;
 
   try {
-    // Prompt asks Claude to visit the URL (via web_search tool) and return
-    // structured JSON with recipe name, description, and notes
-    const prompt = `Please fetch and read this recipe URL: ${url}\n\nExtract the recipe and return ONLY a JSON object with exactly these fields (no extra text, no markdown fences):\n{"name":"recipe name","description":"ingredient list and brief method (2-3 sentences max)","notes":"any useful tips or serving suggestions"}\n\nIf you cannot access the page, return: {"error":"Could not access this page"}`;
-
-    // Call our backend proxy which forwards to the Anthropic API
-    const r = await fetch("/api/proxy", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 800, tools: [{ type: "web_search_20250305", name: "web_search" }], messages: [{ role: "user", content: prompt }] }) });
+    // Call the dedicated import-recipe endpoint which uses Claude + web_search
+    const r = await fetch("/api/import-recipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
     const data = await r.json();
 
-    // Claude's response may contain multiple content blocks (text + tool_use);
-    // we only care about the text blocks, which we concatenate
-    const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+    if (!data.success) {
+      st.style.color = "var(--rd)";
+      st.textContent = "⚠️ " + (data.error || "Couldn't import this recipe");
+      btn.disabled = false;
+      return;
+    }
 
-    // Parse the JSON from the response — try direct parse first, then
-    // fall back to regex extraction in case Claude wrapped it in markdown fences
-    let parsed;
-    try { parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { const m = text.match(/\{[\s\S]*\}/); if (m) parsed = JSON.parse(m[0]); else throw new Error("No JSON found"); }
+    const p = data.recipe;
 
-    // If Claude returned an error message (e.g. couldn't access the page)
-    if (parsed.error) { st.style.color = "var(--rd)"; st.textContent = "⚠️ " + parsed.error; btn.disabled = false; return; }
+    // Build the description: combine ingredients + steps into a single field
+    // so the existing recipe view can display them together
+    const desc = [
+      p.ingredients || "",
+      p.steps ? "\n\nSteps:\n" + p.steps : ""
+    ].join("").trim();
 
     // Populate the Add Recipe form with the extracted data
-    g("rn").value = parsed.name || "";
-    g("rd").value = parsed.description || "";
-    g("rnotes").value = parsed.notes || "";
-    g("rsourceurl").value = url; // store the original URL as the recipe source
-    g("savrecbtn").disabled = !parsed.name; // enable Save only if we got a name
-    st.style.color = "var(--gn)"; st.textContent = "✓ Recipe imported! Review and save.";
-  } catch { st.style.color = "var(--rd)"; st.textContent = "⚠️ Couldn't import — try copying the recipe text manually."; }
-  btn.disabled = false; // re-enable the import button regardless of outcome
+    g("rn").value = p.title || "";
+    g("rd").value = desc || p.description || "";
+    g("rnotes").value = p.notes || "";
+    g("rsourceurl").value = url;
+    if (g("rcuisine")) g("rcuisine").value = p.cuisine || "";
+    g("savrecbtn").disabled = !p.title;
+    st.style.color = "var(--gn)";
+    st.textContent = "✓ Recipe imported! Review and save.";
+  } catch {
+    st.style.color = "var(--rd)";
+    st.textContent = "⚠️ Couldn't import — try copying the recipe text manually.";
+  }
+  btn.disabled = false;
 }
 
 // ── SAVE NEW RECIPE ──────────────────────────────────────────────────────────
