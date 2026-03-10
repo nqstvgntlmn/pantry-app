@@ -193,46 +193,59 @@ async function migrateHousehold(oldHid, newHid) {
  */
 export async function resolveHousehold(user) {
   const uid = user.uid;
+  console.log(`[resolveHousehold] ENTER — uid=${uid}`);
 
   // Check if this user has logged in before by looking for their profile doc
   const userDoc = await dbGet(`users/${uid}`);
+  console.log(`[resolveHousehold] userDoc=`, userDoc);
 
   if (userDoc) {
     // Returning user — use their first household (or uid as fallback).
     const hid = userDoc.householdIds?.length ? userDoc.householdIds[0] : uid;
+    console.log(`[resolveHousehold] RETURNING USER — hid=${hid}, householdIds=`, userDoc.householdIds);
 
     // Check for a pending migration that didn't complete on a previous login.
     // If ks-h still holds an old anonymous household ID, migrate now.
     const oldHid = localStorage.getItem("ks-h");
+    console.log(`[resolveHousehold] RETURNING USER — ks-h="${oldHid}", hid="${hid}", uid="${uid}"`);
+    console.log(`[resolveHousehold] RETURNING USER — migration condition: oldHid=${!!oldHid}, oldHid!==hid=${oldHid !== hid}, oldHid!==uid=${oldHid !== uid}`);
     if (oldHid && oldHid !== hid && oldHid !== uid) {
-      console.log(`Late migration: ${oldHid} → ${hid}`);
+      console.log(`[resolveHousehold] LATE MIGRATION TRIGGERED: ${oldHid} → ${hid}`);
       await migrateHousehold(oldHid, hid);
       localStorage.removeItem("ks-h");
+      console.log(`[resolveHousehold] Late migration DONE, ks-h removed`);
+    } else {
+      console.log(`[resolveHousehold] RETURNING USER — NO migration needed`);
     }
 
     return hid;
   }
 
   // ── First-time login flow ──
+  console.log(`[resolveHousehold] FIRST-TIME LOGIN — no userDoc found`);
 
   // Check if there's pre-auth data stored under an old anonymous household ID
   const oldHid = localStorage.getItem("ks-h");
   const hasOldData = oldHid && oldHid !== uid;
+  console.log(`[resolveHousehold] FIRST-TIME — ks-h="${oldHid}", hasOldData=${hasOldData}`);
 
   // Create the household doc. If migrating, preserve the old kitchen name.
   const cfgName = state.cfg?.name || "My Kitchen";
+  console.log(`[resolveHousehold] FIRST-TIME — creating household, cfgName="${cfgName}"`);
   await createHousehold(uid, hasOldData ? cfgName : "My Kitchen");
 
   // Copy old anonymous data into the new UID-based household
   if (hasOldData) {
-    console.log(`Migrating household data: ${oldHid} → ${uid}`);
+    console.log(`[resolveHousehold] FIRST-TIME MIGRATION: ${oldHid} → ${uid}`);
     await migrateHousehold(oldHid, uid);
+    console.log(`[resolveHousehold] FIRST-TIME MIGRATION DONE`);
   }
 
   // Create the user profile and link it to the new household
   const profile = await createUserProfile(user);
   profile.householdIds = [uid];
   await dbSet(`users/${uid}`, profile);
+  console.log(`[resolveHousehold] User profile created & saved`);
 
   // Clean up localStorage: the old anonymous household ID is no longer needed
   localStorage.removeItem("ks-h");
@@ -246,6 +259,7 @@ export async function resolveHousehold(user) {
     localStorage.setItem("ks-hhs", JSON.stringify(updated));
   }
 
+  console.log(`[resolveHousehold] EXIT — returning uid=${uid}`);
   return uid;
 }
 
