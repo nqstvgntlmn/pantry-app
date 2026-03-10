@@ -47,6 +47,9 @@ const app = initializeApp(firebaseConfig);
 // Get the Auth service instance tied to our app. All sign-in/sign-out calls go through this.
 const auth = getAuth(app);
 
+// Expose auth instance on window for console-based migration scripts
+window._firebaseAuth = auth;
+
 // ── Providers ───────────────────────────────────────────────────────────────
 // Each OAuth provider is instantiated once and reused for every sign-in attempt.
 
