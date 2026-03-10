@@ -199,9 +199,17 @@ export async function resolveHousehold(user) {
 
   if (userDoc) {
     // Returning user — use their first household (or uid as fallback).
-    // householdIds[0] is the "active" household for now (multi-household
-    // switching could use a different index in the future).
     const hid = userDoc.householdIds?.length ? userDoc.householdIds[0] : uid;
+
+    // Check for a pending migration that didn't complete on a previous login.
+    // If ks-h still holds an old anonymous household ID, migrate now.
+    const oldHid = localStorage.getItem("ks-h");
+    if (oldHid && oldHid !== hid && oldHid !== uid) {
+      console.log(`Late migration: ${oldHid} → ${hid}`);
+      await migrateHousehold(oldHid, hid);
+      localStorage.removeItem("ks-h");
+    }
+
     return hid;
   }
 
