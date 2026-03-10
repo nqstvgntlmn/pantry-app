@@ -325,21 +325,27 @@
 
   <!-- OVERLAY: SCAN -->
   <div class="ov" id="ov-scan">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('scan')">←</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
+    <div class="ovhdr"><div class="bkbtn" onclick="stopLiveScanner();hideOv('scan')">←</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
     <div class="ovbody">
       <p id="scan-dest-hint" style="font-size:.78rem;color:var(--mt);padding:8px 0 4px;text-align:center">Scan a barcode to add to your pantry or shopping list.</p>
       <div id="scanbody">
-        <!-- Targeting reticle: visual guide showing users where to aim the camera -->
-        <div class="scan-reticle" aria-hidden="true">
-          <div class="reticle-corners">
-            <span class="rc rc-tl"></span><span class="rc rc-tr"></span>
-            <span class="rc rc-bl"></span><span class="rc rc-br"></span>
+        <!-- Live camera viewfinder: streams the rear camera and auto-detects barcodes in real time -->
+        <div id="scanner-viewport">
+          <div id="scanner-video"></div>
+          <!-- Targeting reticle: centered on live feed so the user knows where to aim -->
+          <div class="scan-reticle" aria-hidden="true">
+            <div class="reticle-corners">
+              <span class="rc rc-tl"></span><span class="rc rc-tr"></span>
+              <span class="rc rc-bl"></span><span class="rc rc-br"></span>
+            </div>
+            <div class="reticle-line"></div>
           </div>
-          <div class="reticle-line"></div>
-          <div class="reticle-label">Align barcode here</div>
+          <!-- Success checkmark: briefly flashes when a barcode is detected -->
+          <div id="scan-success" class="scan-success" style="display:none">✓</div>
         </div>
-        <div class="sacts"><button class="btn bp bf" onclick="startScan()">📷 Take Photo of Barcode</button><button class="btn bs bf" onclick="togManual()">✏️ Enter Barcode Manually</button></div>
-        <p class="shint">Works on all phones including iPhone.<br/>Fill the viewfinder with the barcode for best results.</p>
+        <!-- Live scanning status: pulses while camera is active to reassure the user -->
+        <div id="scan-status" class="scan-status">Scanning…</div>
+        <div class="sacts"><button class="btn bs bf" onclick="togManual()">✏️ Enter Barcode Manually</button></div>
         <div id="mentry" style="display:none;margin-top:16px"><div style="display:flex;gap:8px"><input class="fi" id="meinp" placeholder="e.g. 013000006408" inputmode="numeric" onkeydown="if(event.key==='Enter')manLookup()" style="flex:1"/><button class="btn bp" onclick="manLookup()">Look Up</button></div></div>
         <div class="errmsg" id="scerr"></div>
       </div>
@@ -385,7 +391,7 @@
       </div>
       <div id="scan-dest-btns">
         <div class="brow">
-          <button class="btn bs" style="flex:1" onclick="hideOv('result');showOv('scan')">← Back</button>
+          <button class="btn bs" style="flex:1" onclick="resumeScanner()">← Back</button>
           <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">📦 Add to Pantry</button>
         </div>
         <button class="btn bs bf" style="margin-top:8px;border-color:var(--gn);color:var(--gn)" onclick="addScannedToList()">🛒 Add to Shopping List instead</button>
@@ -604,7 +610,6 @@
   </div>
 </div>
 
-<input type="file" id="ffile" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)"/>
 <div class="notif" id="notif" style="display:none"></div>
 
 <script type="module" src="/src/main.js"></script>

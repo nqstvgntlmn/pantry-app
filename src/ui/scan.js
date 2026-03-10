@@ -1,11 +1,15 @@
-// ── BARCODE SCANNER ──────────────────────────────────────────────────────────
-// This module handles everything related to barcode scanning:
-//   1. Capturing a barcode image (camera photo or file picker)
-//   2. Decoding the barcode using Quagga.js (client-side barcode reader)
-//   3. Looking up the decoded barcode via the /api/barcode serverless endpoint
-//      which tries five product databases in waterfall order:
-//      Edamam → Open Food Facts → Open Beauty Facts → Open Pet Food Facts → UPC Item DB
-//   4. Displaying the product info and letting the user add it to inventory or shopping list
+// ── BARCODE SCANNER (LIVE) ──────────────────────────────────────────────────
+// This module handles real-time barcode scanning using the device's rear camera.
+// Instead of taking a photo and decoding it, the camera streams continuously
+// inside a viewfinder and Quagga.js detects barcodes automatically in real time
+// (similar to MyFitnessPal's scanner UX).
+//
+// Flow:
+//   1. User opens the scan overlay → camera starts streaming inside the viewfinder
+//   2. Quagga continuously analyzes video frames for barcodes
+//   3. When a barcode is detected with high confidence, we auto-look it up
+//   4. Product result is shown — user can add to inventory or shopping list
+//   5. Manual barcode entry remains available as a fallback
 //
 // The scan flow supports two destinations:
 //   - Inventory mode (default): scanned product goes into the pantry
@@ -15,11 +19,161 @@ import { state } from '../state.js';            // Global app state (holds curre
 import { svi, svShopItem } from '../db.js';      // svi = save inventory item, svShopItem = save shopping list item (both persist to Firebase)
 import { g, showNotif, showOv, hideOv } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels
 
-// Initiates a barcode scan by opening the device's file picker (or camera on mobile).
-// Hides any previous error message before prompting the user to select a photo.
-export function startScan() {
-  g("scerr").style.display = "none";   // Clear any lingering "no barcode detected" error
-  g("ffile").click();                   // Programmatically trigger the hidden <input type="file"> element
+// Track whether the live scanner is currently active to avoid double-init
+let scannerRunning = false;
+
+// Debounce flag: prevents multiple rapid detections from triggering concurrent lookups
+let processingBarcode = false;
+
+// Starts the live camera scanner inside the viewfinder element.
+// Initializes Quagga with the rear camera, begins streaming, and registers
+// the onDetected callback for automatic barcode recognition.
+function startLiveScanner() {
+  if (scannerRunning) return;  // Already running, skip re-init
+
+  const target = g("scanner-video");
+  if (!target) return;
+
+  // Show the scanning status indicator while camera is initializing
+  const statusEl = g("scan-status");
+  if (statusEl) { statusEl.textContent = "Starting camera…"; statusEl.style.display = "block"; }
+
+  // Initialize Quagga with live video from the rear camera.
+  // The video streams into #scanner-video and Quagga analyzes frames in real time.
+  Quagga.init({
+    inputStream: {
+      name: "Live",
+      type: "LiveStream",
+      target: target,             // DOM element where the video + canvas get injected
+      constraints: {
+        facingMode: "environment", // Use rear camera (front-facing would be "user")
+        width: { ideal: 1280 },   // Request HD resolution for better barcode detection
+        height: { ideal: 720 }
+      }
+    },
+    locator: {
+      patchSize: "medium",        // Balance between speed and accuracy for locating barcodes
+      halfSample: true            // Downsample for faster frame processing on mobile
+    },
+    decoder: {
+      // Support all common retail barcode formats
+      readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader", "code_39_reader"]
+    },
+    locate: true,                 // Auto-detect barcode region within each frame
+    frequency: 10                 // Analyze 10 frames per second (good balance of speed vs CPU)
+  }, function(err) {
+    if (err) {
+      // Camera access denied or not available — show error and suggest manual entry
+      console.error("Scanner init error:", err);
+      const errEl = g("scerr");
+      if (errEl) {
+        errEl.textContent = "⚠️ Could not access camera. Try entering the barcode manually.";
+        errEl.style.display = "block";
+      }
+      if (statusEl) statusEl.style.display = "none";
+      return;
+    }
+
+    // Camera initialized successfully — start processing video frames
+    Quagga.start();
+    scannerRunning = true;
+    if (statusEl) statusEl.textContent = "Scanning…";
+  });
+
+  // Register the detection callback — fires each time Quagga decodes a barcode.
+  // We check confidence and debounce to avoid false positives and double-lookups.
+  Quagga.onDetected(onBarcodeDetected);
+}
+
+// Stops the live scanner and releases the camera.
+// Called when the user navigates away from the scan overlay (back button)
+// or after a successful barcode detection to free the camera resource.
+export function stopLiveScanner() {
+  if (!scannerRunning) return;
+  try { Quagga.stop(); } catch { /* ignore if already stopped */ }
+  Quagga.offDetected(onBarcodeDetected);  // Remove the detection listener to prevent stale callbacks
+  scannerRunning = false;
+  processingBarcode = false;
+}
+
+// Handles a barcode detection event from Quagga's live stream.
+// Validates the result confidence to filter out false positives,
+// shows a success animation, then triggers the product lookup.
+async function onBarcodeDetected(result) {
+  if (processingBarcode) return;           // Already processing a detection, ignore this one
+
+  const code = result && result.codeResult && result.codeResult.code;
+  if (!code) return;
+
+  // Require minimum confidence to avoid false positives from noisy frames.
+  // Quagga reports errors per character; lower decodedCodes error = higher confidence.
+  const errors = result.codeResult.decodedCodes
+    ?.filter(d => d.error !== undefined)
+    ?.map(d => d.error) || [];
+  const avgError = errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 1;
+  if (avgError > 0.25) return;             // Skip low-confidence reads (threshold tuned for live scanning)
+
+  processingBarcode = true;                // Lock to prevent concurrent lookups
+
+  // Flash the success checkmark animation over the viewfinder
+  showSuccessFlash();
+
+  // Stop the camera while we look up the product (saves battery, prevents more detections)
+  stopLiveScanner();
+
+  // Transition to the spinner view for the lookup phase
+  g("scanbody").style.display = "none";
+  g("scspin").style.display = "block";
+  g("scst").textContent = "Found " + code + " — looking up…";
+
+  try {
+    // Look up the barcode via the serverless endpoint (tries 5 databases in waterfall)
+    const prod = await lkup(code);
+    state.cp = prod;                       // Store the current product in global state for later use
+
+    // Reset the quantity and expiry fields in the result overlay to defaults
+    g("aqty").value = 1; g("aexp").value = "";
+    selRL("fridge", g("rl-fridge"));       // Pre-select "fridge" as the default storage location
+
+    showRes(prod);                         // Render the product result overlay
+  } catch {
+    // Lookup failed — show error and let user retry or enter manually
+    const err = g("scerr");
+    err.textContent = "⚠️ Lookup failed. Check your connection or enter the barcode manually.";
+    err.style.display = "block";
+  }
+
+  // Restore the scan body UI (hidden during spinner phase)
+  g("scanbody").style.display = "block";
+  g("scspin").style.display = "none";
+  processingBarcode = false;
+}
+
+// Briefly shows a green checkmark flash over the camera viewfinder
+// to give the user immediate visual feedback that a barcode was recognized.
+function showSuccessFlash() {
+  const el = g("scan-success");
+  if (!el) return;
+
+  // Reset and re-trigger the CSS animation by cloning and replacing the element
+  el.style.display = "flex";
+  el.style.animation = "none";
+  // Force a reflow so re-applying the animation actually replays it
+  void el.offsetHeight;
+  el.style.animation = "";
+
+  // Hide after the animation completes (450ms matches the CSS animation duration)
+  setTimeout(() => { el.style.display = "none"; }, 500);
+}
+
+// Resumes the live scanner after navigating back from the result overlay.
+// Preserves the current scan destination (inventory vs shopping list)
+// so the user doesn't lose their context.
+export function resumeScanner() {
+  hideOv("result");
+  showOv("scan");
+  g("scerr").style.display = "none";
+  startLiveScanner();
 }
 
 // Opens the scan overlay in "shopping list" mode.
@@ -31,6 +185,8 @@ export function openScanForList() {
   showOv("scan");                         // Show the scan overlay panel
   const ttl = g("scanovttl"); if (ttl) ttl.textContent = "Scan → Shopping List";
   const hint = g("scan-dest-hint"); if (hint) hint.textContent = "Running low? Scan to add to your shopping list.";
+  g("scerr").style.display = "none";     // Clear any previous errors
+  startLiveScanner();                     // Begin live camera scanning immediately
 }
 
 // Opens the scan overlay in "inventory" mode (the default).
@@ -41,6 +197,8 @@ export function openScanForInventory() {
   showOv("scan");                         // Show the scan overlay panel
   const ttl = g("scanovttl"); if (ttl) ttl.textContent = "Scan Barcode";
   const hint = g("scan-dest-hint"); if (hint) hint.textContent = "Scan a barcode to add to your pantry or shopping list.";
+  g("scerr").style.display = "none";     // Clear any previous errors
+  startLiveScanner();                     // Begin live camera scanning immediately
 }
 
 // Toggles the optional note field in the scan result overlay.
@@ -99,83 +257,20 @@ export function addScannedToList() {
 }
 
 // Toggles visibility of the manual barcode entry section.
-// Used when the user wants to type a barcode number instead of scanning a photo.
+// Used when the user wants to type a barcode number instead of scanning with the camera.
 export function togManual() {
   const el = g("mentry");
   el.style.display = el.style.display === "none" ? "block" : "none";
 }
 
-// Handles the file input change event when the user selects/takes a barcode photo.
-// Flow: read image -> decode barcode with Quagga -> look up product -> show result.
-// Shows a spinner with status text during each async step.
-export async function handlePhoto(e) {
-  const file = e.target.files[0]; if (!file) return;  // No file selected (user cancelled)
-  e.target.value = "";                                 // Reset the input so the same file can be re-selected
-
-  // Show spinner, hide the scan body while processing
-  g("scanbody").style.display = "none";
-  g("scspin").style.display = "block";
-  g("scst").textContent = "Reading image…";
-
-  // Convert the selected file to a data URL (base64) so Quagga can process it in-browser
-  const url = await new Promise((r, j) => { const x = new FileReader(); x.onload = e => r(e.target.result); x.onerror = j; x.readAsDataURL(file); });
-
-  try {
-    g("scst").textContent = "Detecting barcode…";
-
-    // Use Quagga.decodeSingle to detect a barcode from the static image.
-    // Enhanced settings for better detection of angled, partially visible, or low-light barcodes:
-    //   - inputStream.size: 2400 (higher resolution processing for finer barcode lines)
-    //   - locator.patchSize: "medium" with halfSample off for more accurate barcode location
-    //   - decoder.readers: comprehensive format list including I2of5 and Codabar
-    //   - decoder.multiple: true tries to find multiple barcodes, we take the best one
-    //   - locate: true enables automatic barcode region detection within the image
-    const code = await new Promise((res, rej) => Quagga.decodeSingle({
-      src: url,
-      numOfWorkers: 0,
-      inputStream: { size: 2400 },
-      locator: { patchSize: "medium", halfSample: false },
-      decoder: {
-        readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader", "code_39_reader", "i2of5_reader", "codabar_reader"],
-        multiple: true
-      },
-      locate: true
-    }, r => {
-      // When multiple: true, pick the result with the highest confidence (most error-corrected reads)
-      if (r && r.codeResult && r.codeResult.code) return res(r.codeResult.code);
-      rej("no");
-    }));
-
-    g("scst").textContent = "Found " + code + " — looking up…";
-
-    // Look up the barcode via the serverless endpoint (tries 5 databases)
-    const prod = await lkup(code);
-    state.cp = prod;                       // Store the current product in global state for later use
-
-    // Reset the quantity and expiry fields in the result overlay to defaults
-    g("aqty").value = 1; g("aexp").value = "";
-    selRL("fridge", g("rl-fridge"));       // Pre-select "fridge" as the default storage location
-
-    showRes(prod);                         // Render the product result overlay
-
-    // Hide spinner, restore scan body
-    g("scanbody").style.display = "block";
-    g("scspin").style.display = "none";
-  } catch {
-    // Barcode detection failed — restore UI and show an error message
-    g("scanbody").style.display = "block";
-    g("scspin").style.display = "none";
-    const err = g("scerr");
-    err.textContent = "⚠️ No barcode detected. Try better lighting or enter manually.";
-    err.style.display = "block";
-  }
-}
-
 // Looks up a barcode that the user typed manually into the text input.
-// Follows the same flow as handlePhoto but skips the image decode step
+// Follows the same flow as a live detection but skips the camera step
 // since we already have the barcode string.
 export async function manLookup() {
   const v = g("meinp").value.trim(); if (!v) return;  // Ignore empty input
+
+  // Stop the live scanner if it's running (user chose manual entry instead)
+  stopLiveScanner();
 
   // Show spinner while looking up the product
   g("scanbody").style.display = "none";
