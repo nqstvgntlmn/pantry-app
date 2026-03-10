@@ -1,0 +1,64 @@
+// ── FIRESTORE SECURITY RULES ────────────────────────────────────────────────
+// These rules lock all data to authenticated users only.
+// Household data is restricted to members whose UID appears in the
+// household document's `memberUids` array.
+//
+// Data model enforced:
+//   users/{uid}                          — only the owning user can read/write
+//   households/{hid}                     — only members can read/update; any auth'd user can create
+//   households/{hid}/{subcollection}/**  — only household members can read/write
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── USER PROFILES ──
+    // Each user can only read and write their own profile document.
+    // No other user can see or modify someone else's profile.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ── HOUSEHOLD DOCUMENTS ──
+    match /households/{householdId} {
+
+      // Any authenticated user can create a new household (e.g. on first login).
+      // The client is responsible for adding themselves as a member.
+      allow create: if request.auth != null;
+
+      // Only existing members can read the household metadata.
+      // `memberUids` is a flat array of UIDs maintained alongside the `members` array.
+      allow read: if request.auth != null
+                  && request.auth.uid in resource.data.memberUids;
+
+      // Only existing members can update the household (e.g. add new members, rename).
+      allow update: if request.auth != null
+                    && request.auth.uid in resource.data.memberUids;
+
+      // Only the owner can delete the entire household.
+      allow delete: if request.auth != null
+                    && request.auth.uid == resource.data.ownerUid;
+
+      // ── HOUSEHOLD SUBCOLLECTIONS ──
+      // All subcollections (inventory, recipes, shopping, mealplan, settings,
+      // cooklog, wastelog) share the same rule: the requesting user's UID must
+      // appear in the parent household's `memberUids` array.
+      //
+      // `get()` reads the parent household doc to check membership.
+      // This costs one extra read per request, but Firestore caches it within
+      // the same security evaluation so multiple subcollection checks in one
+      // batch don't multiply the cost.
+      match /{subcollection}/{docId} {
+        allow read, write: if request.auth != null
+                           && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberUids;
+      }
+    }
+
+    // ── DEFAULT DENY ──
+    // Any path not matched above is denied by default (Firestore's behavior).
+    // This explicit match makes the intent clear.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
