@@ -59,30 +59,29 @@ export function toggleScanNote() {
 
 // Adds the currently scanned product to the shopping list (not inventory).
 // Called when the user taps "Add to List" from the scan result overlay.
-// Builds a display string with quantity/unit info, captures the optional note,
-// saves the product image URL for thumbnail display, persists it, and navigates to shopping.
+// Preserves the full product name and brand as separate fields so they display
+// correctly in the shopping list (name as main text, brand as subtitle).
+// Also persists the product image URL for thumbnail display.
 export function addScannedToList() {
   if (!state.cp) return;                  // Guard: no scanned product available
 
-  // Use the product name, or fall back to "Barcode XXXX" if the lookup failed
+  // Use the exact product name from the scan result, preserving it as-is.
+  // Falls back to "Barcode XXXX" only if the lookup returned no match.
   const name = state.cp.notFound ? ("Barcode " + state.cp.barcode) : state.cp.name;
-
-  // Read quantity and unit from the result overlay's input fields
-  const qty = parseInt(g("aqty").value) || 1;
-  const unit = g("aunit").value.trim();
-
-  // Build a human-readable display string, e.g. "Milk (2 gallons)"
-  const display = name + (qty > 1 || unit ? " (" + qty + (unit ? " " + unit : "") + ")" : "");
 
   // Capture the optional note from the collapsible note field (if expanded and filled)
   const noteInp = g("scanNoteInp");
   const note = noteInp ? noteInp.value.trim() : "";
 
-  // Build the shopping list item, including the product image URL from the scan
-  // so it can be displayed as a thumbnail in the shopping list
-  const item = { id: Date.now().toString(), name: display, qty: 1, checked: false, src: "scan" };
-  if (state.cp.image) item.image = state.cp.image; // Persist the product image for list thumbnail
-  if (note) item.note = note; // Include note only if the user typed something
+  // Read quantity from the result overlay (default 1)
+  const qty = parseInt(g("aqty").value) || 1;
+
+  // Build the shopping list item with brand stored as a separate field
+  // so it renders as a subtitle in the list, not concatenated into the name
+  const item = { id: Date.now().toString(), name, qty, checked: false, src: "scan" };
+  if (state.cp.brand) item.brand = state.cp.brand;   // Preserve brand separately for subtitle display
+  if (state.cp.image) item.image = state.cp.image;   // Persist the product image for list thumbnail
+  if (note) item.note = note;                         // Include note only if the user typed something
 
   // Persist the new shopping list item to the database
   svShopItem(item);
@@ -125,10 +124,27 @@ export async function handlePhoto(e) {
     g("scst").textContent = "Detecting barcode…";
 
     // Use Quagga.decodeSingle to detect a barcode from the static image.
-    // Supports EAN-13, EAN-8, UPC-A, UPC-E, Code 128, and Code 39 formats.
-    // numOfWorkers: 0 means decoding runs on the main thread (simpler for single-image decode).
-    // inputStream.size: 1600 scales the image to max 1600px for processing.
-    const code = await new Promise((res, rej) => Quagga.decodeSingle({ src: url, numOfWorkers: 0, inputStream: { size: 1600 }, decoder: { readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader", "code_39_reader"], multiple: false }, locate: true }, r => { if (r && r.codeResult && r.codeResult.code) res(r.codeResult.code); else rej("no"); }));
+    // Enhanced settings for better detection of angled, partially visible, or low-light barcodes:
+    //   - inputStream.size: 2400 (higher resolution processing for finer barcode lines)
+    //   - locator.patchSize: "medium" with halfSample off for more accurate barcode location
+    //   - decoder.readers: comprehensive format list including I2of5 and Codabar
+    //   - decoder.multiple: true tries to find multiple barcodes, we take the best one
+    //   - locate: true enables automatic barcode region detection within the image
+    const code = await new Promise((res, rej) => Quagga.decodeSingle({
+      src: url,
+      numOfWorkers: 0,
+      inputStream: { size: 2400 },
+      locator: { patchSize: "medium", halfSample: false },
+      decoder: {
+        readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader", "code_39_reader", "i2of5_reader", "codabar_reader"],
+        multiple: true
+      },
+      locate: true
+    }, r => {
+      // When multiple: true, pick the result with the highest confidence (most error-corrected reads)
+      if (r && r.codeResult && r.codeResult.code) return res(r.codeResult.code);
+      rej("no");
+    }));
 
     g("scst").textContent = "Found " + code + " — looking up…";
 

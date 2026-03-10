@@ -172,6 +172,7 @@ export function sH(item) {
         ${thumb}                               <!-- Product thumbnail from barcode scan (if available) -->
         <div style="flex:1;min-width:0">
           <div class="shnm">${item.name}${qtyBadge}</div>
+          ${item.brand ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand subtitle from barcode scan -->
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
         </div>
         ${item.price ? `<div class="price-tag">~$${item.price}</div>` : ""}  <!-- Estimated price if available -->
@@ -546,9 +547,9 @@ export async function confirmAddToKitchen() {
       location: loc,
       category: existing ? existing.category : gcat({ name: item.name }), // gcat guesses category from name
       addedAt: existing ? existing.addedAt : today,  // Preserve original add date for existing items
-      brand: existing ? existing.brand : "",
+      brand: existing ? existing.brand : (item.brand || ""),  // Preserve brand from scanned shopping items
       expiry: existing ? existing.expiry : null,
-      image: existing ? existing.image : null,
+      image: existing ? existing.image : (item.image || null),  // Preserve product image from scanned items
       source: "shopping", // Track that this item came from the shopping list
     });
     await dlShopItem(item.id); // Remove from shopping list after adding to kitchen

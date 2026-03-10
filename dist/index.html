@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-_Fkh8v1v.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CHl9Lztn.css">
+  <script type="module" crossorigin src="/assets/index-B9kalOPr.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CbqrOv93.css">
 </head>
 <body>
 
@@ -331,8 +331,17 @@
     <div class="ovbody">
       <p id="scan-dest-hint" style="font-size:.78rem;color:var(--mt);padding:8px 0 4px;text-align:center">Scan a barcode to add to your pantry or shopping list.</p>
       <div id="scanbody">
+        <!-- Targeting reticle: visual guide showing users where to aim the camera -->
+        <div class="scan-reticle" aria-hidden="true">
+          <div class="reticle-corners">
+            <span class="rc rc-tl"></span><span class="rc rc-tr"></span>
+            <span class="rc rc-bl"></span><span class="rc rc-br"></span>
+          </div>
+          <div class="reticle-line"></div>
+          <div class="reticle-label">Align barcode here</div>
+        </div>
         <div class="sacts"><button class="btn bp bf" onclick="startScan()">📷 Take Photo of Barcode</button><button class="btn bs bf" onclick="togManual()">✏️ Enter Barcode Manually</button></div>
-        <p class="shint">Works on all phones including iPhone.<br/>Take a clear close-up photo of the barcode.</p>
+        <p class="shint">Works on all phones including iPhone.<br/>Fill the viewfinder with the barcode for best results.</p>
         <div id="mentry" style="display:none;margin-top:16px"><div style="display:flex;gap:8px"><input class="fi" id="meinp" placeholder="e.g. 013000006408" inputmode="numeric" onkeydown="if(event.key==='Enter')manLookup()" style="flex:1"/><button class="btn bp" onclick="manLookup()">Look Up</button></div></div>
         <div class="errmsg" id="scerr"></div>
       </div>
@@ -371,6 +380,11 @@
       <div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="chgAQ(-1)">−</button><input class="qinp" id="aqty" type="number" min="1" value="1"/><button class="qbtn" onclick="chgAQ(1)">+</button></div></div>
       <div class="qrow"><span class="qlbl">Unit</span><input class="fun" id="aunit" placeholder="oz, lb, unit…"/></div>
       <div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="aexp" type="date"/></div>
+      <!-- Collapsible note field for adding a note when adding scanned item to shopping list -->
+      <div style="margin-bottom:4px"><button class="sh-add-note-toggle" onclick="toggleScanNote()">+ Add a note</button></div>
+      <div class="sh-add-note-wrap" id="scanNoteWrap" style="display:none">
+        <textarea class="sh-note-inp" id="scanNoteInp" rows="2" placeholder="Add a note… (e.g. brand, size, store)"></textarea>
+      </div>
       <div id="scan-dest-btns">
         <div class="brow">
           <button class="btn bs" style="flex:1" onclick="hideOv('result');showOv('scan')">← Back</button>

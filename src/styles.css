@@ -314,6 +314,22 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .infomsg{background:var(--sf);border:1.5px solid var(--b2);border-radius:12px;padding:12px 16px;font-size:.84rem;color:var(--mt);margin-bottom:14px;line-height:1.55}
 .sacts{display:flex;flex-direction:column;gap:9px;margin-bottom:6px}
 .shint{font-size:.75rem;color:var(--mt);text-align:center;margin-top:8px;line-height:1.6}
+
+/* Scan targeting reticle — visual guide showing where to aim the camera */
+.scan-reticle{position:relative;width:220px;height:120px;margin:20px auto 18px}
+.reticle-corners{position:absolute;inset:0}
+.rc{position:absolute;width:28px;height:28px;border-color:var(--ac);border-style:solid}
+.rc-tl{top:0;left:0;border-width:3px 0 0 3px;border-radius:8px 0 0 0}
+.rc-tr{top:0;right:0;border-width:3px 3px 0 0;border-radius:0 8px 0 0}
+.rc-bl{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 8px}
+.rc-br{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 8px 0}
+/* Animated scan line that sweeps vertically inside the reticle */
+.reticle-line{position:absolute;left:16px;right:16px;height:2px;background:var(--ac);opacity:.7;top:50%;animation:scanLine 2s ease-in-out infinite}
+@keyframes scanLine{0%,100%{top:15%;opacity:.4}50%{top:80%;opacity:.9}}
+.reticle-label{text-align:center;font-size:.7rem;color:var(--mt);margin-top:130px;letter-spacing:.02em}
+
+/* Brand subtitle shown under item name in shopping list */
+.sh-brand{font-size:.72rem;color:var(--mt);margin-top:1px;font-weight:400}
 .sview{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;text-align:center;gap:18px;flex:1}
 
 /* ── MODALS ── */
