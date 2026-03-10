@@ -199,7 +199,12 @@
     </div>
     <div id="sh-list-body" style="flex:1;overflow-y:auto">
       <div class="shbody">
-        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp bsm" onclick="qadd()">Add</button><button class="btn bs bsm" onclick="openScanForList()" title="Scan to shopping list">📷</button><button class="btn bs bsm mic-btn" id="micbtn" onclick="toggleVoice()" title="Voice input" style="display:none">🎤</button></div>
+        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp bsm" onclick="qadd()">Add</button><button class="btn bs bsm" onclick="openScanForList()" title="Scan or enter barcode"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4h2v16H2M6 4h1v16H6M10 4h2v16h-2M15 4h1v16h-1M19 4h1v16h-1M22 4h0v16"/></svg></button><button class="btn bs bsm mic-btn" id="micbtn" onclick="toggleVoice()" title="Voice input" style="display:none">🎤</button></div>
+        <!-- Collapsible note field for adding a note at the time of item creation -->
+        <div class="sh-add-note-wrap" id="addNoteWrap" style="display:none">
+          <textarea class="sh-note-inp" id="addNoteInp" rows="2" placeholder="Add a note… (e.g. brand, size, store)"></textarea>
+        </div>
+        <div style="margin-bottom:4px"><button class="sh-add-note-toggle" id="addNoteToggle" onclick="toggleAddNote()">+ Note</button></div>
         <div class="mic-status" id="micstatus"><span class="mic-wave"><span class="bar"></span></span> Listening...</div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <button class="btn bsm bs" style="flex:1" onclick="buildList()">🤖 Build from meal plan</button>

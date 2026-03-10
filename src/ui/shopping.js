@@ -160,12 +160,16 @@ export function sH(item) {
   // Always show the qty badge so users can tap to edit; qty=1 gets a muted style via sh-qty-one
   const qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}" onclick="event.stopPropagation();openShQty('${item.id}')"> × ${qty}</span>`;
 
+  // Build optional product thumbnail if a scanned image URL is available
+  const thumb = item.image ? `<img src="${item.image}" class="sh-thumb" alt="" onerror="this.style.display='none'"/>` : "";
+
   return `<div class="swipe-wrap" id="sw-${item.id}" data-id="${item.id}" data-list="shop">
     <div class="swipe-inner">
       <!-- Main row: tap toggles checked state -->
       <div class="shit${item.checked ? " chk" : ""}" onclick="swipeRowTap('${item.id}','shop')">
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
         <div class="shck">${item.checked ? "✓" : ""}</div>  <!-- Checked indicator circle -->
+        ${thumb}                               <!-- Product thumbnail from barcode scan (if available) -->
         <div style="flex:1;min-width:0">
           <div class="shnm">${item.name}${qtyBadge}</div>
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
@@ -254,6 +258,9 @@ export function renderShop() {
  *   "apples x3"   → qty 3, name "apples"
  *   "apples ×3"   → qty 3, name "apples"
  *   "apples"      → qty 1, name "apples" (default)
+ *
+ * Also captures the optional note from the collapsible note field (#addNoteInp).
+ * The note is cleared and the field collapsed after adding.
  */
 export function qadd() {
   const i = g("shi"), v = i.value.trim(); // "shi" = shopping input text field
@@ -274,8 +281,36 @@ export function qadd() {
     qty = parseInt(leadMatch[1], 10) || 1;
   }
 
-  svShopItem({ id: Date.now().toString(), name, qty, checked: false, src: "manual" });
+  // Capture the optional note from the collapsible "Note" field (if expanded and filled)
+  const noteInp = g("addNoteInp");
+  const note = noteInp ? noteInp.value.trim() : "";
+
+  const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
+  if (note) item.note = note; // Only include note field if the user typed something
+
+  svShopItem(item);
   i.value = ""; // Clear the input after adding
+
+  // Reset and collapse the note field so it's clean for the next item
+  if (noteInp) noteInp.value = "";
+  const wrap = g("addNoteWrap");
+  if (wrap) wrap.style.display = "none";
+}
+
+/**
+ * toggleAddNote() — Toggles the optional note field below the quick-add input.
+ * When shown, focuses the textarea so the user can start typing immediately.
+ * Keeps the add flow clean: the note field is hidden by default to avoid clutter.
+ */
+export function toggleAddNote() {
+  const wrap = g("addNoteWrap");
+  if (!wrap) return;
+  const showing = wrap.style.display === "none";
+  wrap.style.display = showing ? "block" : "none";
+  if (showing) {
+    const inp = g("addNoteInp");
+    if (inp) inp.focus();
+  }
 }
 
 /**

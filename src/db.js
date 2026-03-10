@@ -456,6 +456,21 @@ export async function addWasteEntry(name) {
  */
 export async function loadFirestoreData() {
   try {
+    // ── BACKFILL: HOUSEHOLD INVITE CODE INDEX ──
+    // Older households may have an inviteCode in their doc but no matching entry
+    // in the top-level household_codes collection (needed for invite code lookups).
+    // Ensure the index entry exists so other users can join via the code.
+    try {
+      const hhDoc = await dbGet(`households/${state.hid}`);
+      if (hhDoc && hhDoc.inviteCode) {
+        const codeDoc = await dbGet(`household_codes/${hhDoc.inviteCode}`);
+        if (!codeDoc) {
+          await dbSet(`household_codes/${hhDoc.inviteCode}`, { householdId: state.hid });
+          console.log(`[backfill] Created household_codes/${hhDoc.inviteCode} for household ${state.hid}`);
+        }
+      }
+    } catch (e) { console.warn("[backfill] household_codes backfill skipped:", e.message); }
+
     // ── SETTINGS ──
     // Look for the config doc in Firestore; merge with defaults to fill any missing fields
     const cfgDocs = await dbList(`households/${state.hid}/settings`);

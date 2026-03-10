@@ -44,7 +44,7 @@ import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, a
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -160,6 +160,7 @@ window.setAtkLoc = setAtkLoc;                 // Set the storage location for th
 window.confirmAddToKitchen = confirmAddToKitchen; // Confirm moving checked items into inventory
 window.buildList = buildList;   // Build/generate a shopping list from recipes or meal plan
 window.toggleVoice = toggleVoice; // Start/stop voice input for shopping list quick-add
+window.toggleAddNote = toggleAddNote; // Toggle optional note field in shopping list quick-add
 window.bpTog = bpTog;           // Toggle a bulk-purchase item selection
 window.bpSelAll = bpSelAll;     // Select all items in the bulk-purchase overlay
 window.bpUpdBtn = function() { /* no-op: button state is handled internally by the shopping module */ };

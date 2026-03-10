@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-BpfgWxgL.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CTUx4v5Q.css">
+  <script type="module" crossorigin src="/assets/index-_Fkh8v1v.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CHl9Lztn.css">
 </head>
 <body>
 
@@ -201,7 +201,12 @@
     </div>
     <div id="sh-list-body" style="flex:1;overflow-y:auto">
       <div class="shbody">
-        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp bsm" onclick="qadd()">Add</button><button class="btn bs bsm" onclick="openScanForList()" title="Scan to shopping list">📷</button><button class="btn bs bsm mic-btn" id="micbtn" onclick="toggleVoice()" title="Voice input" style="display:none">🎤</button></div>
+        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp bsm" onclick="qadd()">Add</button><button class="btn bs bsm" onclick="openScanForList()" title="Scan or enter barcode"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4h2v16H2M6 4h1v16H6M10 4h2v16h-2M15 4h1v16h-1M19 4h1v16h-1M22 4h0v16"/></svg></button><button class="btn bs bsm mic-btn" id="micbtn" onclick="toggleVoice()" title="Voice input" style="display:none">🎤</button></div>
+        <!-- Collapsible note field for adding a note at the time of item creation -->
+        <div class="sh-add-note-wrap" id="addNoteWrap" style="display:none">
+          <textarea class="sh-note-inp" id="addNoteInp" rows="2" placeholder="Add a note… (e.g. brand, size, store)"></textarea>
+        </div>
+        <div style="margin-bottom:4px"><button class="sh-add-note-toggle" id="addNoteToggle" onclick="toggleAddNote()">+ Note</button></div>
         <div class="mic-status" id="micstatus"><span class="mic-wave"><span class="bar"></span></span> Listening...</div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <button class="btn bsm bs" style="flex:1" onclick="buildList()">🤖 Build from meal plan</button>
@@ -468,8 +473,13 @@
         <div style="font-size:.72rem;color:var(--mt);margin-top:8px;line-height:1.5">Enter an invite code to join another household. Tap a household to switch.</div>
       </div>
       <div class="sset"><div class="ssetttl">Local Deals</div>
-        <div class="frow"><label class="flbl">Your Zipcode</label><input class="fi" id="setZipcode" placeholder="e.g. 08817" maxlength="5" inputmode="numeric" style="letter-spacing:.08em"/></div>
-        <div style="font-size:.72rem;color:var(--mt);margin-top:4px;line-height:1.5">Used to find grocery deals near you via the Kroger API. Covers Kroger, Ralphs, Fred Meyer, Harris Teeter, and more.</div>
+        <div class="frow"><label class="flbl">Your Zipcode</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="fi" id="setZipcode" placeholder="e.g. 08817" maxlength="5" inputmode="numeric" style="letter-spacing:.08em;flex:1"/>
+            <button class="btn bp bsm" onclick="saveZipcode()">Save</button>
+          </div>
+        </div>
+        <div style="font-size:.72rem;color:var(--mt);margin-top:4px;line-height:1.5">Used to find local grocery deals via Flipp. Covers ShopRite, Stop &amp; Shop, Walmart, Target, Aldi, and hundreds more stores.</div>
       </div>
       <div class="sset"><div class="ssetttl">Notifications</div>
         <div class="srow"><span class="srlbl">Expiry alerts</span><div class="tog" id="tg-notif" onclick="toggleNotif(this)"></div></div>

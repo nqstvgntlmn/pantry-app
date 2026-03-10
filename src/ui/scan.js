@@ -46,7 +46,8 @@ export function openScanForInventory() {
 
 // Adds the currently scanned product to the shopping list (not inventory).
 // Called when the user taps "Add to List" from the scan result overlay.
-// Builds a display string with quantity/unit info, persists it, and navigates to the shopping screen.
+// Builds a display string with quantity/unit info, saves the product image URL
+// for thumbnail display in the list, persists it, and navigates to the shopping screen.
 export function addScannedToList() {
   if (!state.cp) return;                  // Guard: no scanned product available
 
@@ -60,8 +61,13 @@ export function addScannedToList() {
   // Build a human-readable display string, e.g. "Milk (2 gallons)"
   const display = name + (qty > 1 || unit ? " (" + qty + (unit ? " " + unit : "") + ")" : "");
 
+  // Build the shopping list item, including the product image URL from the scan
+  // so it can be displayed as a thumbnail in the shopping list
+  const item = { id: Date.now().toString(), name: display, qty: 1, checked: false, src: "scan" };
+  if (state.cp.image) item.image = state.cp.image; // Persist the product image for list thumbnail
+
   // Persist the new shopping list item to the database
-  svShopItem({ id: Date.now().toString(), name: display, qty: 1, checked: false, src: "scan" });
+  svShopItem(item);
 
   showNotif("Added to list: " + name);    // Toast confirmation
   hideOv("result"); hideOv("scan");       // Close both overlays (result and scan)
