@@ -176,7 +176,7 @@
     </div>
     <div id="sh-list-body" style="flex:1;overflow-y:auto">
       <div class="shbody">
-        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp bsm" onclick="qadd()">Add</button><button class="btn bs bsm" onclick="openScanForList()" title="Scan to shopping list">📷</button></div>
+        <div class="qarow"><input class="qainp" id="shi" placeholder="Add item…" onkeydown="if(event.key==='Enter')qadd()"/><button class="btn bp bsm" onclick="qadd()">Add</button><button class="btn bs bsm" onclick="openScanForList()" title="Scan to shopping list">📷</button><button class="btn bs bsm mic-btn" id="micbtn" onclick="toggleVoice()" title="Voice input" style="display:none">🎤</button></div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <button class="btn bsm bs" style="flex:1" onclick="buildList()">🤖 Build from meal plan</button>
           <button class="btn bsm bs" id="aislebtn" onclick="togAisle()">≡ By aisle</button>

@@ -14,6 +14,91 @@ import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR } f
 import { svi } from '../db.js';       // svi = save/upsert an inventory item to Firestore
 import { wDates } from '../helpers.js'; // wDates = returns array of Date objects for the current week (Mon–Sun)
 
+// ── VOICE INPUT (Web Speech API) ─────────────────────────────────────────────
+// Uses the SpeechRecognition API to let users speak items into the shopping list.
+// The mic button is hidden if the browser doesn't support the API (graceful fallback).
+// Recognized speech is placed into the quick-add input and automatically added.
+
+/** Module-level reference to the active SpeechRecognition instance (null when not listening) */
+let _recognition = null;
+/** Tracks whether we're currently listening for speech */
+let _listening = false;
+
+/**
+ * initVoice() — Called on page load to detect Web Speech API support.
+ * If supported, shows the mic button. If not, the button stays hidden (graceful fallback).
+ * Works across Chrome (webkitSpeechRecognition) and other browsers (SpeechRecognition).
+ */
+export function initVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return; // Browser doesn't support speech — button stays hidden
+
+  const btn = g("micbtn");
+  if (btn) btn.style.display = ""; // Show the mic button since API is available
+}
+
+/**
+ * toggleVoice() — Starts or stops voice recognition.
+ * Tap once to start listening (button pulses with animation).
+ * Tap again to stop. Also auto-stops after the speech engine detects silence.
+ *
+ * On result: populates the quick-add input (#shi) with recognized text, then
+ * calls qadd() to add the item to the shopping list automatically.
+ */
+export function toggleVoice() {
+  const btn = g("micbtn");
+
+  // If already listening, stop and clean up
+  if (_listening && _recognition) {
+    _recognition.stop();
+    return; // The 'onend' handler will clean up the UI state
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { showNotif("Voice input not supported"); return; }
+
+  _recognition = new SpeechRecognition();
+  _recognition.lang = "en-US";         // Default to English
+  _recognition.interimResults = false;  // Only fire on final results (not partial words)
+  _recognition.maxAlternatives = 1;     // Take the best guess only
+  _recognition.continuous = false;      // Auto-stop after one phrase (silence detection)
+
+  // Start listening — update UI to show active state
+  _listening = true;
+  if (btn) btn.classList.add("mic-active"); // CSS pulsing animation
+
+  /** onresult — Fired when the speech engine has a final transcript */
+  _recognition.onresult = (event) => {
+    // Extract the recognized text from the first result's best alternative
+    const transcript = event.results[0][0].transcript.trim();
+    if (transcript) {
+      const inp = g("shi"); // The quick-add text input
+      if (inp) {
+        inp.value = transcript;  // Populate the input field with spoken text
+        qadd();                  // Automatically add the item to the shopping list
+        showNotif(`Added "${transcript}" 🎤`);
+      }
+    }
+  };
+
+  /** onerror — Fired on recognition errors (e.g. no-speech, not-allowed, network) */
+  _recognition.onerror = (event) => {
+    // "no-speech" and "aborted" are normal (user was silent or stopped early) — don't notify
+    if (event.error !== "no-speech" && event.error !== "aborted") {
+      showNotif("Couldn't hear that — try again");
+    }
+  };
+
+  /** onend — Always fires when recognition stops (whether from result, error, or manual stop) */
+  _recognition.onend = () => {
+    _listening = false;
+    _recognition = null;
+    if (btn) btn.classList.remove("mic-active"); // Remove pulsing animation
+  };
+
+  _recognition.start();
+}
+
 /**
  * sH(item) — Renders a single shopping list item as an HTML string.
  *
