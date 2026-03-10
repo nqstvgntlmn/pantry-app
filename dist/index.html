@@ -7,7 +7,7 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-B0Grznmx.js"></script>
+  <script type="module" crossorigin src="/assets/index-ay92FtGN.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-CKFpcpTW.css">
 </head>
 <body>
@@ -69,6 +69,28 @@
     </div>
 
     <div id="signupError" class="auth-error" style="display:none"></div>
+  </div>
+
+  <!-- Join/Create household screen (shown to first-time users after sign-in) -->
+  <div id="auth-join" style="display:none;flex-direction:column;align-items:center;gap:0;width:100%">
+    <div class="ll">🧺</div>
+    <div class="lt">Welcome!</div>
+    <p class="ls">Start your own kitchen or join someone else's.</p>
+
+    <div class="auth-email-form" style="gap:12px">
+      <button class="btn bp bf" id="btnCreateKitchen" style="font-size:.95rem;padding:14px">🏠 Start my own kitchen</button>
+
+      <div style="display:flex;align-items:center;gap:10px;margin:4px 0">
+        <div style="flex:1;height:1px;background:var(--b1)"></div>
+        <span style="font-size:.7rem;color:var(--mt);text-transform:uppercase;letter-spacing:.08em">or</span>
+        <div style="flex:1;height:1px;background:var(--b1)"></div>
+      </div>
+
+      <div style="font-size:.88rem;color:var(--tx);font-weight:500;text-align:center">Join with invite code</div>
+      <input class="fi" id="joinCode" type="text" placeholder="e.g. AKL69K" maxlength="6" style="text-align:center;font-size:1.2rem;letter-spacing:.15em;text-transform:uppercase"/>
+      <button class="btn bs bf" id="btnJoinKitchen" style="font-size:.95rem;padding:14px">🔗 Join household</button>
+      <div id="joinError" class="auth-error" style="display:none"></div>
+    </div>
   </div>
 </div>
 
@@ -420,16 +442,36 @@
   <div class="ov" id="ov-settings">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('settings')">←</div><div class="ovttl">Settings</div></div>
     <div class="ovbody">
-      <div class="sset"><div class="ssetttl">My Households</div>
+      <div class="sset"><div class="ssetttl">Household</div>
+        <div class="frow"><label class="flbl">Household Name</label><input class="fi" id="setName" placeholder="e.g. The Bora Family"/></div>
+
+        <!-- Invite code display (populated dynamically) -->
+        <div id="hhInviteSection" style="margin-top:14px">
+          <label class="flbl">Invite Code</label>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+            <div id="hhInviteCode" style="font-family:monospace;font-size:1.3rem;letter-spacing:.15em;font-weight:600;color:var(--ac);background:var(--card);border:1px solid var(--b2);border-radius:10px;padding:10px 16px;flex:1;text-align:center"></div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn bs bsm" style="flex:1" onclick="copyInviteCode()">📋 Copy</button>
+            <button class="btn bs bsm" style="flex:1" onclick="shareInviteCode()">📤 Share</button>
+            <button class="btn bs bsm" id="regenCodeBtn" style="flex:1" onclick="regenInviteCode()">🔄 Regenerate</button>
+          </div>
+        </div>
+
+        <!-- Members list (populated dynamically) -->
+        <div style="margin-top:14px">
+          <label class="flbl">Members</label>
+          <div id="hhMembers" style="margin-top:6px"></div>
+        </div>
+      </div>
+
+      <div class="sset"><div class="ssetttl">Other Households</div>
         <div id="hhList"></div>
         <div style="display:flex;gap:8px;margin-top:10px">
-          <input class="fi" id="newHHCode" placeholder="e.g. parents-house" style="flex:1;font-size:.82rem"/>
-          <button class="btn bp bsm" onclick="addHousehold()">+ Add</button>
+          <input class="fi" id="newHHCode" placeholder="Enter invite code (e.g. AKL69K)" maxlength="6" style="flex:1;font-size:.82rem;text-transform:uppercase;letter-spacing:.08em"/>
+          <button class="btn bp bsm" onclick="addHousehold()">+ Join</button>
         </div>
-        <div style="font-size:.72rem;color:var(--mt);margin-top:8px;line-height:1.5">Tap a household to switch. Share a code with family to sync real-time.</div>
-      </div>
-      <div class="sset"><div class="ssetttl">Current Household</div>
-        <div class="frow"><label class="flbl">Household Name</label><input class="fi" id="setName" placeholder="e.g. The Bora Family"/></div>
+        <div style="font-size:.72rem;color:var(--mt);margin-top:8px;line-height:1.5">Enter an invite code to join another household. Tap a household to switch.</div>
       </div>
       <div class="sset"><div class="ssetttl">Notifications</div>
         <div class="srow"><span class="srlbl">Expiry alerts</span><div class="tog" id="tg-notif" onclick="toggleNotif(this)"></div></div>

@@ -135,6 +135,7 @@ export async function createUserProfile(user) {
 export async function createHousehold(uid, name) {
   const user = getCurrentUser();
   const hid = uid; // use uid as household ID for the user's default household
+  const inviteCode = _genInviteCode();
   const doc = {
     name: name || "My Kitchen",
     ownerUid: uid,
@@ -147,15 +148,115 @@ export async function createHousehold(uid, name) {
     // membership checks (`request.auth.uid in resource.data.memberUids`).
     // Maintained in sync with the `members` array above.
     memberUids: [uid],
-    inviteCode: _genInviteCode(),
+    inviteCode,
     createdAt: new Date().toISOString()
   };
   try {
     await dbSet(`households/${hid}`, doc);
+    // Write the invite code to the top-level index so new users can look it up
+    await dbSet(`household_codes/${inviteCode}`, { householdId: hid });
   } catch (e) {
     console.error(`[createHousehold] FAILED to write households/${hid}:`, e);
   }
   return { hid, ...doc };
+}
+
+/**
+ * lookupHouseholdByCode — looks up a household ID from a 6-char invite code.
+ * Reads from the top-level household_codes/{code} index document.
+ * Returns the householdId string, or null if the code doesn't exist.
+ */
+export async function lookupHouseholdByCode(code) {
+  const doc = await dbGet(`household_codes/${code.toUpperCase()}`);
+  return doc?.householdId || null;
+}
+
+/**
+ * joinHouseholdByCode — joins a household using a 6-char invite code.
+ * Looks up the household via the household_codes index, adds the user as a
+ * member to the household doc, and adds the household to the user's profile.
+ * Returns the household ID on success, or null if the code is invalid.
+ */
+export async function joinHouseholdByCode(code, user) {
+  // Look up the household ID from the invite code index
+  const hid = await lookupHouseholdByCode(code);
+  if (!hid) return null;
+
+  // Fetch the household doc to add the user as a member
+  const hhDoc = await dbGet(`households/${hid}`);
+  if (!hhDoc) return null;
+
+  // Add user to the household's members array (skip if already present)
+  const members = hhDoc.members || [];
+  const memberUids = hhDoc.memberUids || members.map(m => m.uid);
+  if (!members.find(m => m.uid === user.uid)) {
+    members.push({
+      uid: user.uid,
+      name: user.displayName || user.email?.split("@")[0] || "Member",
+      role: "member"
+    });
+    if (!memberUids.includes(user.uid)) memberUids.push(user.uid);
+    await dbSet(`households/${hid}`, { ...hhDoc, members, memberUids, id: undefined });
+  }
+
+  // Add household to the user's profile
+  const userDoc = await dbGet(`users/${user.uid}`);
+  if (userDoc) {
+    const hids = userDoc.householdIds || [];
+    if (!hids.includes(hid)) {
+      hids.push(hid);
+      await dbSet(`users/${user.uid}`, { ...userDoc, householdIds: hids, id: undefined });
+    }
+  }
+
+  return hid;
+}
+
+/**
+ * regenerateInviteCode — generates a new 6-char invite code for a household.
+ * Deletes the old code from household_codes, writes the new one, and updates
+ * the household doc. Only callable by the household owner (enforced by rules).
+ * Returns the new invite code string.
+ */
+export async function regenerateInviteCode(hid) {
+  const hhDoc = await dbGet(`households/${hid}`);
+  if (!hhDoc) return null;
+
+  // Delete old code from the index (if it exists)
+  if (hhDoc.inviteCode) {
+    try { await dbDelete(`household_codes/${hhDoc.inviteCode}`); } catch { /* ignore */ }
+  }
+
+  // Generate and write the new code
+  const newCode = _genInviteCode();
+  await dbSet(`household_codes/${newCode}`, { householdId: hid });
+  await dbSet(`households/${hid}`, { ...hhDoc, inviteCode: newCode, id: undefined });
+
+  return newCode;
+}
+
+/**
+ * removeMember — removes a member from a household (owner-only action).
+ * Removes the user from the household's members and memberUids arrays,
+ * and removes the household from the member's user profile.
+ */
+export async function removeMember(hid, memberUid) {
+  const hhDoc = await dbGet(`households/${hid}`);
+  if (!hhDoc) return;
+
+  // Remove from household doc
+  const members = (hhDoc.members || []).filter(m => m.uid !== memberUid);
+  const memberUids = (hhDoc.memberUids || []).filter(u => u !== memberUid);
+  await dbSet(`households/${hid}`, { ...hhDoc, members, memberUids, id: undefined });
+
+  // Remove household from the member's user profile
+  try {
+    const userDoc = await dbGet(`users/${memberUid}`);
+    if (userDoc) {
+      const hids = (userDoc.householdIds || []).filter(h => h !== hid);
+      await dbSet(`users/${memberUid}`, { ...userDoc, householdIds: hids, id: undefined });
+    }
+  } catch { /* member profile may not be accessible */ }
 }
 
 /**

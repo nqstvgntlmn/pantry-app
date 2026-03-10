@@ -8,7 +8,10 @@
 // J / Js: JSON parse from / JSON stringify to localStorage (shorthand helpers)
 import { state, J, Js } from '../state.js';
 // saveCfg: persists state.cfg to Firestore; dbGet/dbSet: read/write Firestore docs
-import { saveCfg, dbGet, dbSet, createHousehold } from '../db.js';
+// joinHouseholdByCode: join a household via invite code lookup
+// regenerateInviteCode: generate a new 6-char invite code (owner only)
+// removeMember: remove a member from a household (owner only)
+import { saveCfg, dbGet, dbSet, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
 import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
@@ -55,6 +58,9 @@ export function loadCfgUI() {
 
   // Render the list of households the user belongs to
   renderHHList();
+
+  // Populate the invite code and members list for the current household
+  renderHouseholdInfo();
 }
 
 /**
@@ -184,13 +190,144 @@ export function scheduleNotifCheck() {
 function getHouseholdIds() { return J("ks-hhs") || [state.hid]; }
 
 /**
- * addHousehold() — Joins an existing household by its ID.
- * Reads the ID from the "newHHCode" input, validates it exists in Firestore,
- * adds the current user as a member, and updates both sides of the relationship
- * (user doc and household doc).
+ * renderHouseholdInfo() — Populates the invite code display and members list
+ * for the current active household in the settings overlay.
+ * Fetches the household doc from Firestore to get up-to-date invite code and members.
+ */
+async function renderHouseholdInfo() {
+  const user = getCurrentUser();
+  if (!user) return;
+
+  try {
+    const hhDoc = await dbGet(`households/${state.hid}`);
+    if (!hhDoc) return;
+
+    const isOwner = hhDoc.ownerUid === user.uid;
+
+    // Display the invite code
+    const codeEl = g("hhInviteCode");
+    if (codeEl) codeEl.textContent = hhDoc.inviteCode || "—";
+
+    // Backfill: ensure the household_codes index entry exists for this code.
+    // Older households created before Phase 2.5 won't have one yet.
+    if (hhDoc.inviteCode && isOwner) {
+      try { await dbSet(`household_codes/${hhDoc.inviteCode}`, { householdId: state.hid }); } catch { /* ignore */ }
+    }
+
+    // Only owners can regenerate the invite code
+    const regenBtn = g("regenCodeBtn");
+    if (regenBtn) regenBtn.style.display = isOwner ? "" : "none";
+
+    // Render the members list
+    const membersEl = g("hhMembers");
+    if (membersEl && hhDoc.members) {
+      membersEl.innerHTML = hhDoc.members.map(m => {
+        const isMe = m.uid === user.uid;
+        const roleLabel = m.role === "owner" ? "Owner" : "Member";
+        // Owner can remove non-owner members; nobody can remove themselves here
+        const removeBtn = isOwner && !isMe
+          ? `<button onclick="event.stopPropagation();removeMemberFromHH('${m.uid}')" style="background:none;border:none;color:var(--rd);cursor:pointer;font-size:.78rem;padding:4px 8px">Remove</button>`
+          : "";
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border:1px solid var(--b2);border-radius:10px;margin-bottom:6px">
+          <div>
+            <div style="font-size:.86rem;font-weight:500;color:var(--tx)">${m.name}${isMe ? " (you)" : ""}</div>
+            <div style="font-size:.7rem;color:var(--mt);margin-top:2px">${roleLabel}</div>
+          </div>
+          ${removeBtn}
+        </div>`;
+      }).join("");
+    }
+  } catch (err) {
+    console.error("renderHouseholdInfo error:", err);
+  }
+}
+
+/**
+ * copyInviteCode() — Copies the current household's invite code to the clipboard.
+ */
+export async function copyInviteCode() {
+  const code = g("hhInviteCode")?.textContent;
+  if (!code || code === "—") return;
+  try {
+    await navigator.clipboard.writeText(code);
+    showNotif("Invite code copied!");
+  } catch {
+    showNotif("Couldn't copy — try manually");
+  }
+}
+
+/**
+ * shareInviteCode() — Shares the invite code using the Web Share API.
+ * Falls back to clipboard copy if Web Share is unavailable.
+ */
+export async function shareInviteCode() {
+  const code = g("hhInviteCode")?.textContent;
+  if (!code || code === "—") return;
+
+  const text = `Join my kitchen on Kitchen app! Use invite code: ${code} at https://pantry-app-zeta-six.vercel.app`;
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ text });
+    } catch { /* user cancelled share */ }
+  } else {
+    // Fallback: copy the share text to clipboard
+    try {
+      await navigator.clipboard.writeText(text);
+      showNotif("Share text copied to clipboard!");
+    } catch {
+      showNotif("Couldn't share — try manually");
+    }
+  }
+}
+
+/**
+ * regenInviteCode() — Regenerates the invite code for the current household.
+ * Only available to the household owner. Confirms before proceeding since
+ * the old code will stop working immediately.
+ */
+export async function regenInviteCode() {
+  if (!confirm("Regenerate invite code? The old code will stop working.")) return;
+
+  try {
+    const newCode = await regenerateInviteCode(state.hid);
+    if (newCode) {
+      const codeEl = g("hhInviteCode");
+      if (codeEl) codeEl.textContent = newCode;
+      showNotif("New invite code generated!");
+    }
+  } catch (err) {
+    console.error("regenInviteCode error:", err);
+    showNotif("Failed to regenerate code");
+  }
+}
+
+/**
+ * removeMemberFromHH() — Removes a member from the current household.
+ * Only available to the household owner. Confirms before proceeding.
+ * @param {string} memberUid — The UID of the member to remove.
+ */
+export async function removeMemberFromHH(memberUid) {
+  if (!confirm("Remove this member from the household?")) return;
+
+  try {
+    await removeMember(state.hid, memberUid);
+    showNotif("Member removed");
+    renderHouseholdInfo();
+  } catch (err) {
+    console.error("removeMemberFromHH error:", err);
+    showNotif("Failed to remove member");
+  }
+}
+
+/**
+ * addHousehold() — Joins an existing household by invite code.
+ * Reads the code from the "newHHCode" input, looks it up via the
+ * household_codes index, adds the current user as a member, and updates
+ * both sides of the relationship (user doc and household doc).
  */
 export async function addHousehold() {
-  const input = g("newHHCode")?.value?.trim();
+  const input = g("newHHCode")?.value?.trim()?.toUpperCase();
   if (!input) return;
 
   const user = getCurrentUser();
@@ -201,44 +338,17 @@ export async function addHousehold() {
   el.disabled = true;
 
   try {
-    // Verify the household exists in Firestore by fetching its document
-    // (Currently treats input as a direct household ID, not an invite code)
-    const hhDoc = await dbGet(`households/${input}`);
-    if (!hhDoc) {
-      showNotif("Household not found. Check the code and try again.");
+    // Use the invite code lookup to find and join the household
+    const hid = await joinHouseholdByCode(input, user);
+    if (!hid) {
+      showNotif("Invalid invite code. Check and try again.");
       el.disabled = false;
       return;
     }
 
-    // Add current user to the household's members array (if not already present)
-    const members = hhDoc.members || [];
-    // Also maintain the flat memberUids array used by Firestore security rules
-    const memberUids = hhDoc.memberUids || members.map(m => m.uid);
-    if (!members.find(m => m.uid === user.uid)) {
-      members.push({
-        uid: user.uid,
-        name: user.displayName || user.email?.split("@")[0] || "Member",
-        role: "member"
-      });
-      if (!memberUids.includes(user.uid)) memberUids.push(user.uid);
-      // Save updated household doc; `id: undefined` strips the doc ID from the payload
-      // since Firestore doc IDs are part of the path, not the document body
-      await dbSet(`households/${input}`, { ...hhDoc, members, memberUids, id: undefined });
-    }
-
-    // Also add this household to the user's own profile so they can find it on login
-    const userDoc = await dbGet(`users/${user.uid}`);
-    if (userDoc) {
-      const hids = userDoc.householdIds || [];
-      if (!hids.includes(input)) {
-        hids.push(input);
-        await dbSet(`users/${user.uid}`, { ...userDoc, householdIds: hids, id: undefined });
-      }
-    }
-
     // Update the localStorage cache of household IDs
     const arr = getHouseholdIds();
-    if (!arr.includes(input)) arr.push(input);
+    if (!arr.includes(hid)) arr.push(hid);
     Js("ks-hhs", arr);
 
     // Clear input and refresh the household list UI

@@ -17,7 +17,8 @@ import { state, CFG_DEFAULT, J, Js } from './state.js';
 // Database layer: Firestore CRUD, sync status indicator (ss), and data save/delete helpers
 // svi/dli = save/delete inventory item, svr/dlr = save/delete recipe,
 // svShopItem/dlShopItem = save/delete shopping item
-import { dbList, dbGet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold } from './db.js';
+// joinHouseholdByCode: join via invite code, createHousehold/createUserProfile: first-time setup
+import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile } from './db.js';
 
 // DOM/UI helpers: g = getElementById shorthand, showNotif = toast notifications,
 // showOv/hideOv = overlay open/close, renderStars = star rating HTML, tk = tracking util
@@ -65,7 +66,9 @@ import { initSwipe, swipeDelItem, swipeRowTap, togShopSelect, togInvSelect, canc
 import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCooked, saveCooked, scheduleRecipe, schedSet, initRecChips, toggleChip, filterRecs } from './ui/mealplan.js';
 
 // Settings: config UI, push notifications, household management, theme/dark mode
-import { loadCfgUI, saveSettings, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI } from './ui/settings.js';
+// copyInviteCode/shareInviteCode/regenInviteCode: invite code actions
+// removeMemberFromHH: owner removes a member
+import { loadCfgUI, saveSettings, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH } from './ui/settings.js';
 
 // ── REGISTER RENDER CALLBACKS ────────────────────────────────────────────────
 // db.js needs to re-render the UI after save/delete operations, but it can't
@@ -234,6 +237,10 @@ window.switchHousehold = switchHousehold;   // Switch to a different household
 window.removeHousehold = removeHousehold;   // Leave/remove a household
 window.setMode = setMode;                   // Set light/dark/auto theme mode
 window.showNotif = showNotif;               // Show a toast notification (used from settings HTML)
+window.copyInviteCode = copyInviteCode;     // Copy household invite code to clipboard
+window.shareInviteCode = shareInviteCode;   // Share invite code via Web Share API
+window.regenInviteCode = regenInviteCode;   // Regenerate a new invite code (owner only)
+window.removeMemberFromHH = removeMemberFromHH; // Remove a member from the household (owner only)
 // getIdToken is exposed on window at the top of this file (after import)
 
 // ── APP START ────────────────────────────────────────────────────────────────
@@ -389,12 +396,14 @@ renderShop();
 //   - User signs in  -> resolve their household -> call _appStart()
 //   - User signs out -> hide app, show auth screen
 
-// showAuthScreen(view) — switch between the "signin" and "signup" form views.
+// showAuthScreen(view) — switch between the "signin", "signup", and "join" form views.
+// "join" is the first-time user screen where they choose to create or join a household.
 // Hides the loading spinner and clears any previous error messages.
 function showAuthScreen(view) {
   g("auth-loading").style.display = "none";
   g("auth-signin").style.display = view === "signin" ? "flex" : "none";
   g("auth-signup").style.display = view === "signup" ? "flex" : "none";
+  g("auth-join").style.display = view === "join" ? "flex" : "none";
   g("authError").style.display = "none";
   g("signupError").style.display = "none";
 }
@@ -553,6 +562,86 @@ window.doSignOut = async function() {
 
 let appBooted = false;
 
+/**
+ * _bootWithHousehold — starts the app with a given household ID.
+ * Shared by all auth paths (returning user, create new, join existing).
+ */
+function _bootWithHousehold(hid) {
+  localStorage.setItem("ks-h", hid);
+  g("LS").style.display = "none";
+  g("APP").style.display = "flex";
+  window._appStart(hid);
+}
+
+/**
+ * _showJoinScreen — shows the join/create household screen for first-time users.
+ * Wires up the two buttons: "Start my own kitchen" and "Join with invite code".
+ */
+function _showJoinScreen(user) {
+  showAuthScreen("join");
+
+  // "Start my own kitchen" — creates a new household (same as original flow)
+  g("btnCreateKitchen").onclick = async () => {
+    disableBtn(g("btnCreateKitchen"), true);
+    try {
+      const cfgName = state.cfg?.name || "My Kitchen";
+      await createHousehold(user.uid, cfgName);
+      const profile = await createUserProfile(user);
+      profile.householdIds = [user.uid];
+      await dbSet(`users/${user.uid}`, profile);
+      localStorage.removeItem("ks-h");
+      const hhs = J("ks-hhs");
+      if (hhs) {
+        const updated = hhs.filter(h => h !== user.uid);
+        updated.push(user.uid);
+        localStorage.setItem("ks-hhs", JSON.stringify(updated));
+      }
+      _bootWithHousehold(user.uid);
+    } catch (err) {
+      console.error("Create kitchen error:", err);
+      showAuthError("joinError", "Something went wrong. Please try again.");
+      disableBtn(g("btnCreateKitchen"), false);
+    }
+  };
+
+  // "Join with invite code" — looks up invite code and joins that household
+  g("btnJoinKitchen").onclick = async () => {
+    const code = g("joinCode")?.value?.trim()?.toUpperCase();
+    if (!code) {
+      showAuthError("joinError", "Please enter an invite code.");
+      return;
+    }
+    disableBtn(g("btnJoinKitchen"), true);
+    g("joinError").style.display = "none";
+    try {
+      // First create the user profile if it doesn't exist yet
+      let userDoc = await dbGet(`users/${user.uid}`);
+      if (!userDoc) {
+        userDoc = await createUserProfile(user);
+      }
+
+      // Join the household via invite code
+      const hid = await joinHouseholdByCode(code, user);
+      if (!hid) {
+        showAuthError("joinError", "Invalid invite code. Check and try again.");
+        disableBtn(g("btnJoinKitchen"), false);
+        return;
+      }
+
+      // Update localStorage cache
+      const arr = J("ks-hhs") || [];
+      if (!arr.includes(hid)) arr.push(hid);
+      Js("ks-hhs", arr);
+
+      _bootWithHousehold(hid);
+    } catch (err) {
+      console.error("Join kitchen error:", err);
+      showAuthError("joinError", "Something went wrong. Please try again.");
+      disableBtn(g("btnJoinKitchen"), false);
+    }
+  };
+}
+
 onAuth(async (user) => {
   if (user) {
     // ── User is signed in ──
@@ -561,28 +650,28 @@ onAuth(async (user) => {
     // (used in the UI header, chat messages, etc.)
     localStorage.setItem("ks-who", user.displayName || user.email?.split("@")[0] || "You");
 
-    // Hide login screen, show app container
-    g("LS").style.display = "none";
-    g("APP").style.display = "flex";
-
     // Only boot the app once per session — ignore subsequent auth state events
     if (!appBooted) {
       appBooted = true;
       try {
-        // resolveHousehold: looks up or creates the user's household in Firestore.
-        // For first-time users, this creates a user profile and household doc.
-        // For returning users, it reads the existing household ID.
-        const hid = await resolveHousehold(user);
-        localStorage.setItem("ks-h", hid);
-        window._appStart(hid);
+        // Check if this is a first-time user (no profile in Firestore)
+        const userDoc = await dbGet(`users/${user.uid}`);
+
+        if (userDoc) {
+          // Returning user — resolve household and boot normally
+          g("LS").style.display = "none";
+          g("APP").style.display = "flex";
+          const hid = await resolveHousehold(user);
+          _bootWithHousehold(hid);
+        } else {
+          // First-time user — show join/create household screen
+          _showJoinScreen(user);
+        }
       } catch (err) {
         console.error("Failed to resolve household:", err);
-        // If household resolution fails (e.g. network error), fall back to
-        // using the user's UID as the household ID. This ensures the app
-        // still works, even if multi-household features may not.
+        // Fallback: use UID as household ID so the app still loads
         const hid = user.uid;
-        localStorage.setItem("ks-h", hid);
-        window._appStart(hid);
+        _bootWithHousehold(hid);
       }
     }
   } else {
