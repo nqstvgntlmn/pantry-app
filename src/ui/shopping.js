@@ -17,12 +17,15 @@ import { wDates } from '../helpers.js'; // wDates = returns array of Date object
 // ── VOICE INPUT (Web Speech API) ─────────────────────────────────────────────
 // Uses the SpeechRecognition API to let users speak items into the shopping list.
 // The mic button is hidden if the browser doesn't support the API (graceful fallback).
-// Recognized speech is placed into the quick-add input and automatically added.
+// Listens continuously until the user taps the mic button again to stop.
+// Shows a live interim transcript in the input field while speaking.
 
 /** Module-level reference to the active SpeechRecognition instance (null when not listening) */
 let _recognition = null;
 /** Tracks whether we're currently listening for speech */
 let _listening = false;
+/** Accumulates finalized transcript segments across multiple speech results */
+let _finalTranscript = "";
 
 /**
  * initVoice() — Called on page load to detect Web Speech API support.
@@ -38,47 +41,67 @@ export function initVoice() {
 }
 
 /**
+ * _setMicUI(active) — Toggles all mic-related visual indicators on or off.
+ * Controls the pulsing button animation, the "Listening..." status label,
+ * and clears the input field placeholder when entering/exiting voice mode.
+ */
+function _setMicUI(active) {
+  const btn = g("micbtn");
+  const status = g("micstatus");
+  if (btn) btn.classList.toggle("mic-active", active);
+  if (status) status.classList.toggle("visible", active);
+}
+
+/**
  * toggleVoice() — Starts or stops voice recognition.
- * Tap once to start listening (button pulses with animation).
- * Tap again to stop. Also auto-stops after the speech engine detects silence.
- *
- * On result: populates the quick-add input (#shi) with recognized text, then
- * calls qadd() to add the item to the shopping list automatically.
+ * Tap once to start listening — button pulses, "Listening..." label appears,
+ * and a live transcript is shown in the input field as the user speaks.
+ * Tap again to stop — whatever was recognized gets added to the shopping list.
+ * The user has full control over when to stop; there is no auto-stop on silence.
  */
 export function toggleVoice() {
-  const btn = g("micbtn");
-
-  // If already listening, stop and clean up
+  // If already listening, stop — the onend handler will finalize and add the item
   if (_listening && _recognition) {
     _recognition.stop();
-    return; // The 'onend' handler will clean up the UI state
+    return;
   }
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) { showNotif("Voice input not supported"); return; }
 
   _recognition = new SpeechRecognition();
-  _recognition.lang = "en-US";         // Default to English
-  _recognition.interimResults = false;  // Only fire on final results (not partial words)
-  _recognition.maxAlternatives = 1;     // Take the best guess only
-  _recognition.continuous = false;      // Auto-stop after one phrase (silence detection)
+  _recognition.lang = "en-US";
+  _recognition.interimResults = true;   // Show live transcript as the user speaks
+  _recognition.maxAlternatives = 1;
+  _recognition.continuous = true;       // Keep listening until user taps stop — no auto-stop
 
-  // Start listening — update UI to show active state
+  _finalTranscript = "";
   _listening = true;
-  if (btn) btn.classList.add("mic-active"); // CSS pulsing animation
+  _setMicUI(true);
 
-  /** onresult — Fired when the speech engine has a final transcript */
+  // Clear the input and set placeholder to guide the user
+  const inp = g("shi");
+  if (inp) { inp.value = ""; inp.placeholder = "Speak now..."; }
+
+  /**
+   * onresult — Fired each time the speech engine produces results.
+   * Builds a combined transcript from all finalized segments plus the current
+   * interim (in-progress) text, and displays it live in the input field.
+   */
   _recognition.onresult = (event) => {
-    // Extract the recognized text from the first result's best alternative
-    const transcript = event.results[0][0].transcript.trim();
-    if (transcript) {
-      const inp = g("shi"); // The quick-add text input
-      if (inp) {
-        inp.value = transcript;  // Populate the input field with spoken text
-        qadd();                  // Automatically add the item to the shopping list
-        showNotif(`Added "${transcript}" 🎤`);
+    let interim = "";
+    // Walk through all result segments — some are final, some are still interim
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        _finalTranscript += t;  // Append finalized text to our accumulator
+      } else {
+        interim += t;           // Collect in-progress text for live preview
       }
     }
+    // Show combined final + interim text in the input so user sees it in real time
+    const inp = g("shi");
+    if (inp) inp.value = (_finalTranscript + interim).trim();
   };
 
   /** onerror — Fired on recognition errors (e.g. no-speech, not-allowed, network) */
@@ -89,11 +112,27 @@ export function toggleVoice() {
     }
   };
 
-  /** onend — Always fires when recognition stops (whether from result, error, or manual stop) */
+  /**
+   * onend — Fires when recognition stops (user tapped stop or an error occurred).
+   * Takes whatever was recognized, adds it to the shopping list, and resets UI.
+   */
   _recognition.onend = () => {
+    const transcript = (_finalTranscript || "").trim();
     _listening = false;
     _recognition = null;
-    if (btn) btn.classList.remove("mic-active"); // Remove pulsing animation
+    _finalTranscript = "";
+    _setMicUI(false);
+
+    // Restore the default placeholder
+    const inp = g("shi");
+    if (inp) inp.placeholder = "Add item\u2026";
+
+    // If we got any recognized text, add it to the shopping list
+    if (transcript && inp) {
+      inp.value = transcript;
+      qadd();
+      showNotif(`Added "${transcript}" 🎤`);
+    }
   };
 
   _recognition.start();

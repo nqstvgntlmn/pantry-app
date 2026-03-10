@@ -1,56 +1,43 @@
-const FIREBASE_PROJECT = "family-pantry-c65d6";
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
-const BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT}/databases/(default)/documents`;
+// ──────────────────────────────────────────────────────────────────────
+// sync-reminders.js — Vercel serverless endpoint called by the iOS
+// Shortcuts automation to sync Apple Reminders → shopping list.
+//
+// Uses the Firebase Admin SDK (service account) to bypass Firestore
+// security rules, since this is a server-to-server call with no user
+// auth token. Authenticated by a shared secret (REMINDERS_SYNC_KEY).
+// ──────────────────────────────────────────────────────────────────────
 
-async function fsGet(path) {
-  const r = await fetch(`${BASE}/${path}?key=${FIREBASE_API_KEY}`);
-  const json = await r.json();
-  return json;
-}
+import admin from "firebase-admin";
 
-async function fsSet(path, fields) {
-  const body = { fields: toFsFields(fields) };
-  const r = await fetch(`${BASE}/${path}?key=${FIREBASE_API_KEY}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await r.json();
-  if (json.error) console.error("fsSet error:", JSON.stringify(json.error));
-  return json;
-}
-
-async function fsDelete(path) {
-  await fetch(`${BASE}/${path}?key=${FIREBASE_API_KEY}`, { method: "DELETE" });
-}
-
-function toFsFields(obj) {
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (typeof v === "string") out[k] = { stringValue: v };
-    else if (typeof v === "boolean") out[k] = { booleanValue: v };
-    else if (typeof v === "number") out[k] = { integerValue: String(v) };
+/**
+ * getDb() — Lazily initializes the Firebase Admin SDK and returns
+ * the Firestore instance. Uses the service account credentials from
+ * environment variables (FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY).
+ * The Admin SDK bypasses security rules entirely, which is exactly
+ * what we need for this server-side automation endpoint.
+ */
+function getDb() {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: "family-pantry-c65d6",
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        // Vercel stores the key with literal "\n" — convert to real newlines
+        privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+      }),
+    });
   }
-  return out;
+  return admin.firestore();
 }
 
-function fromFsDoc(doc) {
-  if (!doc || !doc.fields) return null;
-  const out = { id: doc.name.split("/").pop() };
-  for (const [k, v] of Object.entries(doc.fields)) {
-    out[k] = v.stringValue !== undefined ? v.stringValue
-           : v.booleanValue !== undefined ? v.booleanValue
-           : v.integerValue !== undefined ? v.integerValue
-           : null;
-  }
-  return out;
-}
-
-// Extract a plain string name from whatever Shortcuts sends
+/**
+ * extractName(item) — Pulls a plain string name from whatever shape
+ * the iOS Shortcuts automation sends. Handles raw strings, Reminder
+ * objects with various key names, and nested structures.
+ */
 function extractName(item) {
   if (typeof item === "string") return item.trim();
   if (typeof item !== "object" || item === null) return "";
-  // Shortcuts Reminder objects can have various shapes
   const val = item.title || item.name || item.Title || item.Name
            || item.text || item.Text || item.value || item.Value
            || Object.values(item).find(v => typeof v === "string") || "";
@@ -58,6 +45,7 @@ function extractName(item) {
 }
 
 export default async function handler(req, res) {
+  // --- CORS headers for preflight requests ---
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-api-key");
@@ -65,6 +53,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
+  // --- Shared secret check — the iOS Shortcut sends this header ---
   const apiKey = req.headers["x-api-key"];
   if (!apiKey || apiKey !== process.env.REMINDERS_SYNC_KEY) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -73,13 +62,16 @@ export default async function handler(req, res) {
   const { household, items } = req.body || {};
   if (!household) return res.status(400).json({ error: "household required" });
 
-  // Log what we received so we can debug
+  // Log what we received for debugging
   console.log("household:", household);
   console.log("items type:", typeof items, Array.isArray(items) ? "array" : "not array");
   console.log("items sample:", JSON.stringify(items && items[0]));
   console.log("items count:", items ? (Array.isArray(items) ? items.length : "not array") : "null");
 
-  // Flatten everything: handle nested arrays, then split on newlines
+  /**
+   * Flatten nested arrays and newline-delimited strings into a flat
+   * array of values. Shortcuts sometimes sends items in unexpected shapes.
+   */
   const flatten = (x) => {
     if (Array.isArray(x)) return x.flatMap(flatten);
     if (typeof x === "string") return x.split("\n").map(s => s.trim()).filter(Boolean);
@@ -88,9 +80,12 @@ export default async function handler(req, res) {
   const itemsArr = flatten(items);
 
   try {
-    const listPath = `households/${household}/shopping`;
-    const snap = await fsGet(listPath);
-    const existing = (snap.documents || []).map(fromFsDoc).filter(Boolean);
+    const db = getDb();
+    const shopRef = db.collection(`households/${household}/shopping`);
+
+    // Fetch all existing shopping items in one read
+    const snap = await shopRef.get();
+    const existing = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     console.log("existing items:", existing.length);
 
     const incomingNames = itemsArr.map(extractName).filter(Boolean);
@@ -98,7 +93,11 @@ export default async function handler(req, res) {
 
     const existingNames = existing.map(e => (e.name || "").toLowerCase());
 
+    // Items in Reminders that aren't already on the shopping list
     const toAdd = incomingNames.filter(name => !existingNames.includes(name.toLowerCase()));
+
+    // Items previously synced from Reminders (src === "reminders") that are
+    // no longer in the Reminders list — remove them to keep lists in sync
     const toRemove = existing.filter(
       e => e.src === "reminders" &&
         !incomingNames.map(n => n.toLowerCase()).includes((e.name || "").toLowerCase())
@@ -107,9 +106,12 @@ export default async function handler(req, res) {
     console.log("toAdd:", toAdd.length, JSON.stringify(toAdd));
     console.log("toRemove:", toRemove.length);
 
+    // Batch all writes into a single atomic Firestore operation
+    const batch = db.batch();
+
     for (const name of toAdd) {
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      await fsSet(`${listPath}/${id}`, {
+      batch.set(shopRef.doc(id), {
         name,
         checked: false,
         src: "reminders",
@@ -118,8 +120,10 @@ export default async function handler(req, res) {
     }
 
     for (const item of toRemove) {
-      await fsDelete(`${listPath}/${item.id}`);
+      batch.delete(shopRef.doc(item.id));
     }
+
+    await batch.commit();
 
     return res.status(200).json({
       ok: true,

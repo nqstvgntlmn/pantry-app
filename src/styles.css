@@ -193,6 +193,16 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .mic-btn{transition:all .2s}
 .mic-btn.mic-active{background:var(--rd);border-color:var(--rd);animation:mic-pulse 1.2s ease-in-out infinite}
 @keyframes mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
+/* "Listening..." status label shown below the quick-add row while mic is active */
+.mic-status{display:none;align-items:center;gap:6px;font-size:.75rem;color:var(--rd);font-weight:600;margin-bottom:10px;padding-left:2px}
+.mic-status.visible{display:flex}
+/* Animated waveform bars next to the "Listening..." text */
+.mic-wave{display:inline-flex;align-items:center;gap:2px;height:14px}
+.mic-wave::before,.mic-wave::after,.mic-wave .bar{content:'';display:block;width:3px;border-radius:2px;background:var(--rd);animation:mic-bars .8s ease-in-out infinite}
+.mic-wave::before{height:6px;animation-delay:0s}
+.mic-wave .bar{height:12px;animation-delay:.15s}
+.mic-wave::after{height:8px;animation-delay:.3s}
+@keyframes mic-bars{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
 .shsec{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mt);margin:18px 0 9px;font-weight:600}
 
 /* ── CHAT ── */
