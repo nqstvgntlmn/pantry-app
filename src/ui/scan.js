@@ -2,7 +2,9 @@
 // This module handles everything related to barcode scanning:
 //   1. Capturing a barcode image (camera photo or file picker)
 //   2. Decoding the barcode using Quagga.js (client-side barcode reader)
-//   3. Looking up the decoded barcode against three product databases (Edamam, OpenFoodFacts, UPCItemDB)
+//   3. Looking up the decoded barcode via the /api/barcode serverless endpoint
+//      which tries six product databases in waterfall order:
+//      Edamam → Open Food Facts → Open Beauty Facts → Open Pet Food Facts → UPC Item DB → Go UPC
 //   4. Displaying the product info and letting the user add it to inventory or shopping list
 //
 // The scan flow supports two destinations:
@@ -12,9 +14,6 @@
 import { state } from '../state.js';            // Global app state (holds current product, inventory, scan destination, etc.)
 import { svi, svShopItem } from '../db.js';      // svi = save inventory item, svShopItem = save shopping list item (both persist to Firebase)
 import { g, showNotif, showOv, hideOv } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels
-
-// Edamam API credentials for barcode-to-nutrition lookup (free tier)
-const EID = "2b6ecac2", EK = "8db76605e873aaf2fbdf41256cb24cb4";
 
 // Initiates a barcode scan by opening the device's file picker (or camera on mobile).
 // Hides any previous error message before prompting the user to select a photo.
@@ -108,7 +107,7 @@ export async function handlePhoto(e) {
 
     g("scst").textContent = "Found " + code + " — looking up…";
 
-    // Look up the barcode across product databases
+    // Look up the barcode via the serverless endpoint (tries 6 databases)
     const prod = await lkup(code);
     state.cp = prod;                       // Store the current product in global state for later use
 
@@ -157,71 +156,37 @@ export async function manLookup() {
   g("scspin").style.display = "none";
 }
 
-// Master product lookup — tries three databases in priority order:
-//   1. Edamam (best: includes nutrition data like calories, protein, fat, carbs)
-//   2. Open Food Facts (good: community-maintained, wide international coverage)
-//   3. UPC Item DB (fallback: US-centric, basic product info)
-// Returns the first successful match, or a "not found" placeholder if all fail.
-// Each tryX function returns null on failure, so the || chain moves to the next.
+// Master product lookup — calls the /api/barcode serverless endpoint which
+// tries six product databases in waterfall order:
+//   1. Edamam (food + nutrition data)
+//   2. Open Food Facts (community food DB)
+//   3. Open Beauty Facts (cosmetics, personal care)
+//   4. Open Pet Food Facts (pet food and treats)
+//   5. UPC Item DB (general US products)
+//   6. Go UPC (last resort fallback)
+// Returns the product object on success, or a "not found" placeholder if all fail.
 async function lkup(bc) {
-  return (await tryE(bc)) || (await tryO(bc)) || (await tryU(bc)) || { barcode: bc, name: "", brand: "", quantity: "", category: "General", image: null, source: null, notFound: true };
-}
-
-// Attempt 1: Edamam Food Database API.
-// This is the preferred source because it returns detailed nutrition info (calories, protein, fat, carbs).
-// Uses the UPC/barcode parser endpoint with app_id and app_key for authentication.
-// Returns a normalized product object on success, or null on failure.
-async function tryE(bc) {
   try {
-    const r = await fetch(`https://api.edamam.com/api/food-database/v2/parser?upc=${bc}&app_id=${EID}&app_key=${EK}`);
-    if (!r.ok) return null;                // API error (rate limit, invalid key, etc.)
-    const d = await r.json();
-
-    // Edamam returns matches in either "hints" or "parsed" arrays depending on confidence
-    const f = (d.hints && d.hints[0] && d.hints[0].food) || (d.parsed && d.parsed[0] && d.parsed[0].food);
-    if (!f) return null;                   // No matching food found for this barcode
-
-    // Extract nutrient values (Edamam uses standardized nutrient codes like ENERC_KCAL, PROCNT, etc.)
-    const n = f.nutrients || {};
-    return { barcode: bc, name: f.label || "", brand: f.brand || "", quantity: f.servingSize ? `${f.servingSize}${f.servingSizeUnit || "g"}` : "", category: f.category || "General", image: f.image || null, source: "Edamam", notFound: false, nutrition: { calories: n.ENERC_KCAL ? Math.round(n.ENERC_KCAL) : null, protein: n.PROCNT ? `${n.PROCNT.toFixed(1)}g` : null, fat: n.FAT ? `${n.FAT.toFixed(1)}g` : null, carbs: n.CHOCDF ? `${n.CHOCDF.toFixed(1)}g` : null } };
-  } catch {} return null;                  // Silently fail — the next database will be tried
-}
-
-// Attempt 2: Open Food Facts — a free, community-driven product database.
-// No API key required. Has wide international coverage but no structured nutrition
-// data is extracted here (could be added in the future from the nutriments field).
-// Returns null if the product isn't found or has no name.
-async function tryO(bc) {
-  try {
-    const r = await fetch("https://world.openfoodfacts.org/api/v0/product/" + bc + ".json");
-    const d = await r.json();
-    if (d.status === 1 && d.product) {     // status === 1 means the product exists in their database
-      const p = d.product, nm = p.product_name || p.product_name_en || "";
-      if (!nm) return null;                // Product exists but has no name — treat as not found
-
-      // Category tags are prefixed with language code (e.g. "en:dairy"), so strip it
-      return { barcode: bc, name: nm, brand: p.brands || "", quantity: p.quantity || "", category: ((p.categories_tags || [])[0] || '').replace('en:', '') || 'General', image: p.image_small_url || null, source: "Open Food Facts", notFound: false, nutrition: null };
+    const r = await fetch("/api/barcode?code=" + encodeURIComponent(bc));
+    if (r.ok) {
+      const d = await r.json();
+      if (d.found && d.product) {
+        // Server returned a match — add the notFound flag for the UI
+        return { ...d.product, notFound: false };
+      }
     }
-  } catch {} return null;                  // Silently fail — the next database will be tried
-}
+  } catch {
+    // Network error or server failure — fall through to "not found"
+  }
 
-// Attempt 3: UPC Item DB — last-resort lookup using their free trial endpoint.
-// Primarily covers US products. No nutrition data available.
-// Rate-limited on the trial tier, so this is our lowest-priority source.
-async function tryU(bc) {
-  try {
-    const r = await fetch("https://api.upcitemdb.com/prod/trial/lookup?upc=" + bc);
-    const d = await r.json();
-    if (d.code === "OK" && d.items && d.items.length > 0) {
-      const i = d.items[0];               // Take the first matching item
-      return { barcode: bc, name: i.title || "", brand: i.brand || "", quantity: i.size || "", category: i.category || "General", image: (i.images || [])[0] || null, source: "UPC Item DB", notFound: false, nutrition: null };
-    }
-  } catch {} return null;                  // Silently fail — lkup() will return the "not found" fallback
+  // No database had this barcode — return a placeholder so the user can enter the name manually
+  return { barcode: bc, name: "", brand: "", quantity: "", category: "General", image: null, source: null, description: "", notFound: true };
 }
 
 // Renders the scan result overlay with product details (or a "not found" form).
 // Two distinct UI states:
-//   - Product found: shows a product card with image, name, brand, barcode, category, and nutrition grid
+//   - Product found: shows a product card with image, name, brand, barcode, category,
+//     description, and nutrition grid (when available)
 //   - Product not found: shows the barcode and a text input so the user can manually name the item
 function showRes(prod) {
   hideOv("scan");                          // Close the scan overlay before showing the result
@@ -231,21 +196,24 @@ function showRes(prod) {
   let html = "";
   if (prod.notFound) {
     // Product not in any database — show a manual name input so the user can still add it
-    html = `<div class="nfb">⚠️ Barcode <code>${prod.barcode}</code> not found. Enter name:<input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:10px"/></div>`;
+    html = `<div class="nfb">⚠️ Barcode <code>${prod.barcode}</code> not found in any database. Enter name:<input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:10px"/></div>`;
     // Disable the add button until the user types a name (valAdd() re-enables it)
     setTimeout(() => g("addbtn").disabled = true, 0);
   } else {
     // Product found — build a product card with image (or placeholder icon), name, brand, etc.
     const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
 
-    // Build the nutrition grid (only shown if Edamam returned nutrition data)
+    // Build the nutrition grid (only shown if the database returned nutrition data)
     let nut = "";
     if (prod.nutrition && (prod.nutrition.calories || prod.nutrition.protein)) {
       nut = `<div class="ngrd">${[["Cal", prod.nutrition.calories], ["Protein", prod.nutrition.protein], ["Fat", prod.nutrition.fat], ["Carbs", prod.nutrition.carbs]].map(([l, v]) => `<div class="nb"><div class="nv">${v || "—"}</div><div class="nl">${l}</div></div>`).join("")}</div>`;
     }
 
-    // Assemble the full product card HTML
-    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand ? `<div class="pbr">${prod.brand}</div>` : ""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${prod.source ? `<span class="srcb">${prod.source}</span>` : ""}</div></div>${nut}</div>`;
+    // Build the description line if the API returned one
+    const desc = prod.description ? `<div class="pdsc">${prod.description}</div>` : "";
+
+    // Assemble the full product card HTML with image, name, brand, category, source, description, and nutrition
+    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand ? `<div class="pbr">${prod.brand}</div>` : ""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${prod.source ? `<span class="srcb">${prod.source}</span>` : ""}</div></div>${desc}${nut}</div>`;
 
     // Enable the add button immediately since we have a valid product name
     setTimeout(() => g("addbtn").disabled = false, 0);

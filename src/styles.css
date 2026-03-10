@@ -304,6 +304,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .pbc{font-size:.68rem;color:var(--b2);margin-top:3px;font-family:monospace}
 .bdg{display:inline-block;padding:3px 9px;border-radius:20px;font-size:.7rem;background:var(--sf);color:var(--mt);border:1px solid var(--b1);margin-top:4px}
 .srcb{display:inline-block;padding:3px 9px;border-radius:20px;font-size:.68rem;background:transparent;color:var(--ac);border:1px solid rgba(212,168,83,.35);margin-top:4px;margin-left:4px}
+.pdsc{font-size:.78rem;color:var(--mt);margin-top:10px;line-height:1.45;padding-top:10px;border-top:1px solid var(--b1)}
 .ngrd{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:14px}
 .nb{background:var(--sf);border-radius:10px;padding:9px 4px;text-align:center}
 .nv{font-family:"Fraunces",serif;font-size:1rem;font-weight:300}
