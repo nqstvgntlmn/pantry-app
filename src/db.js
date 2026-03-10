@@ -531,6 +531,16 @@ export async function loadFirestoreData() {
   }
 }
 
+// ── PENDING WRITE GUARDS ─────────────────────────────────────────────────────
+// Track in-flight writes so the polling loop doesn't overwrite optimistic
+// state updates with stale Firestore data before the write has landed.
+// Each counter is incremented before a write starts and decremented when it
+// completes (success or failure). The poll loop skips overwriting a collection
+// whenever its counter is > 0.
+export let _pendingInvWrites = 0;
+export let _pendingShopWrites = 0;
+export let _pendingRecWrites = 0;
+
 // ── DATA OPERATIONS ──────────────────────────────────────────────────────────
 // These are the primary CRUD functions used by UI code to modify inventory,
 // recipes, and shopping list items. They follow an optimistic-update pattern:
@@ -581,6 +591,7 @@ export function ss(s) {
  */
 export async function svi(item) {
   ss("syncing");
+  _pendingInvWrites++;
   try {
     // Replace existing item (by id) or append if new — spread creates a new array
     state.inv = [...state.inv.filter(i => i.id !== item.id), item];
@@ -589,6 +600,7 @@ export async function svi(item) {
     await dbSet(`households/${state.hid}/inventory/${item.id}`, item);
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
+  finally { _pendingInvWrites--; }
 }
 
 /**
@@ -598,6 +610,7 @@ export async function svi(item) {
  */
 export async function dli(id) {
   ss("syncing");
+  _pendingInvWrites++;
   try {
     state.inv = state.inv.filter(i => i.id !== id);
     renderCallbacks.renderAll?.();
@@ -605,6 +618,7 @@ export async function dli(id) {
     await dbDelete(`households/${state.hid}/inventory/${id}`);
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
+  finally { _pendingInvWrites--; }
 }
 
 /**
@@ -613,24 +627,28 @@ export async function dli(id) {
  * Replaces any existing recipe with the same ID, re-renders, and persists.
  */
 export async function svr(r) {
+  _pendingRecWrites++;
   try {
     state.recs = [...state.recs.filter(x => x.id !== r.id), r];
     renderCallbacks.renderRecs?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/recipes/${r.id}`, r);
   } catch (e) { console.error(e); }
+  finally { _pendingRecWrites--; }
 }
 
 /**
  * dlr (delete recipe) — remove a recipe by ID.
  */
 export async function dlr(id) {
+  _pendingRecWrites++;
   try {
     state.recs = state.recs.filter(r => r.id !== id);
     renderCallbacks.renderRecs?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/recipes/${id}`);
   } catch (e) { console.error(e); }
+  finally { _pendingRecWrites--; }
 }
 
 /**
@@ -639,24 +657,28 @@ export async function dlr(id) {
  * Replaces any existing item with the same ID, re-renders, and persists.
  */
 export async function svShopItem(item) {
+  _pendingShopWrites++;
   try {
     state.shop = [...state.shop.filter(s => s.id !== item.id), item];
     renderCallbacks.renderShop?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/shopping/${item.id}`, item);
   } catch (e) { console.error(e); }
+  finally { _pendingShopWrites--; }
 }
 
 /**
  * dlShopItem (delete shopping item) — remove a shopping list item by ID.
  */
 export async function dlShopItem(id) {
+  _pendingShopWrites++;
   try {
     state.shop = state.shop.filter(s => s.id !== id);
     renderCallbacks.renderShop?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/shopping/${id}`);
   } catch (e) { console.error(e); }
+  finally { _pendingShopWrites--; }
 }
 
 // ── PUBLIC RECIPES (COMMUNITY) ───────────────────────────────────────────────

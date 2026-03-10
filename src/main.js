@@ -18,7 +18,7 @@ import { state, CFG_DEFAULT, J, Js } from './state.js';
 // svi/dli = save/delete inventory item, svr/dlr = save/delete recipe,
 // svShopItem/dlShopItem = save/delete shopping item
 // joinHouseholdByCode: join via invite code, createHousehold/createUserProfile: first-time setup
-import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile } from './db.js';
+import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, _pendingInvWrites, _pendingShopWrites, _pendingRecWrites } from './db.js';
 
 // DOM/UI helpers: g = getElementById shorthand, showNotif = toast notifications,
 // showOv/hideOv = overlay open/close, renderStars = star rating HTML, tk = tracking util
@@ -343,10 +343,12 @@ window._appStart = async function(code) {
       // the previous state if the fetch failed
       const v = (r, fb) => r.status === "fulfilled" ? r.value : fb;
 
-      // Update global state with fresh data (or keep old data on failure)
-      state.inv = v(res[0], state.inv);
-      state.recs = v(res[1], state.recs);
-      state.shop = v(res[2], state.shop);
+      // Update global state with fresh data (or keep old data on failure).
+      // Skip overwriting collections that have in-flight writes — the
+      // optimistic local state is more recent than whatever Firestore returns.
+      if (!_pendingInvWrites)  state.inv  = v(res[0], state.inv);
+      if (!_pendingRecWrites)  state.recs = v(res[1], state.recs);
+      if (!_pendingShopWrites) state.shop = v(res[2], state.shop);
       const mpDocs = v(res[3], []);
       const cfgDocs = v(res[4], []);
       const clDocs = v(res[5], []);

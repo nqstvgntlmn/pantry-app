@@ -7,7 +7,8 @@
 // auth token. Authenticated by a shared secret (REMINDERS_SYNC_KEY).
 // ──────────────────────────────────────────────────────────────────────
 
-import admin from "firebase-admin";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
 /**
  * getDb() — Lazily initializes the Firebase Admin SDK and returns
@@ -17,7 +18,7 @@ import admin from "firebase-admin";
  * what we need for this server-side automation endpoint.
  */
 function getDb() {
-  if (!admin.apps.length) {
+  if (!getApps().length) {
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
 
@@ -34,8 +35,8 @@ function getDb() {
     const privateKey = privateKeyRaw.replace(/\\n/g, "\n");
 
     try {
-      admin.initializeApp({
-        credential: admin.credential.cert({
+      initializeApp({
+        credential: cert({
           projectId: "family-pantry-c65d6",
           clientEmail,
           privateKey,
@@ -46,7 +47,7 @@ function getDb() {
       throw initErr;
     }
   }
-  return admin.firestore();
+  return getFirestore();
 }
 
 /**
