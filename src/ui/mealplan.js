@@ -173,7 +173,7 @@ export async function saveMeal() {
       if (shopNames.some(n => n === cl)) continue;
 
       // Add the ingredient as a new shopping list item, tagged with src:"recipe"
-      await svShopItem({ id: Date.now().toString() + Math.random().toString(36).slice(2), name: clean, checked: false, src: "recipe" });
+      await svShopItem({ id: Date.now().toString() + Math.random().toString(36).slice(2), name: clean, qty: 1, checked: false, src: "recipe" });
       added++;
     }
 

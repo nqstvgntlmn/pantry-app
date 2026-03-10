@@ -13,11 +13,12 @@
 //   eid       = edit-target ID    cfg = user config/preferences
 
 import { state } from '../state.js';
-import { svr, dlr, svShopItem } from '../db.js';       // svr = save recipe, dlr = delete recipe, svShopItem = save shopping item
+import { svr, dlr, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen } from '../db.js';
 import { g, fmtR, showNotif, showOv, hideOv, renderStars } from '../helpers.js';
+import { getCurrentUser } from '../auth.js';
 // g = getElementById shorthand, fmtR = format AI response text to HTML,
 // showNotif = toast notification, showOv/hideOv = show/hide overlay panels,
-// renderStars = re-render a star-rating widget
+// renderStars = re-render a star-rating widget, getCurrentUser = Firebase user
 
 // ── TAG HELPERS ──────────────────────────────────────────────────────────────
 
@@ -79,7 +80,9 @@ export function setRT(t) {
   document.querySelectorAll(".rtab").forEach(x => x.classList.remove("active"));
   const el = g("rtab-" + t);
   if (el) el.classList.add("active");
-  renderRecs();
+
+  // Community tab loads public recipes; all other tabs render local recipes
+  if (t === "community") { loadCommunity(); } else { renderRecs(); }
 }
 
 // ── RECIPE LIST RENDERING ────────────────────────────────────────────────────
@@ -91,6 +94,10 @@ export function setRT(t) {
  * appropriate empty-state message when there are no matches.
  */
 export function renderRecs() {
+  // Skip rendering local recipes when the community tab is active —
+  // the poll loop calls renderRecs() which would overwrite the community feed
+  if (state.rt === "community") return;
+
   let f = [...state.recs]; // shallow copy so we can filter/sort without mutating state
 
   // Apply the currently selected tab filter
@@ -199,13 +206,14 @@ export async function saveRec() {
   const nm = g("rn").value.trim(); if (!nm) return; // name is required
   const desc = g("rd").value.trim();
   const srcUrl = (g("rsourceurl") ? g("rsourceurl").value.trim() : "");
+  const cuisine = g("rcuisine") ? g("rcuisine").value.trim() : "";
   const tags = getSelTags("rtags"); // read which tag pills are selected
 
   // Build the recipe object and persist it
-  await svr({ id: "rec-" + Date.now(), name: nm, rating: state.nr, favorited: false, notes: g("rnotes").value.trim(), description: desc, source: srcUrl ? "Web Import" : "Manual", sourceUrl: srcUrl || null, tags, cookCount: 0, savedAt: new Date().toLocaleDateString() });
+  await svr({ id: "rec-" + Date.now(), name: nm, rating: state.nr, favorited: false, notes: g("rnotes").value.trim(), description: desc, source: srcUrl ? "Web Import" : "Manual", sourceUrl: srcUrl || null, tags, cuisine, cookCount: 0, savedAt: new Date().toLocaleDateString(), isPublic: false });
 
   // Reset all form fields back to empty/default
-  g("rn").value = ""; g("rnotes").value = ""; g("rd").value = ""; g("rsourceurl").value = ""; g("rurl").value = "";
+  g("rn").value = ""; g("rnotes").value = ""; g("rd").value = ""; g("rsourceurl").value = ""; g("rurl").value = ""; if (g("rcuisine")) g("rcuisine").value = "";
   setTagsUI("rtags", []); // deselect all tags
   state.nr = 0;           // reset the star rating state
   g("savrecbtn").disabled = true;
@@ -267,7 +275,9 @@ export function openER(id) {
     <div class="frow"><label class="flbl">Description / Ingredients</label><textarea class="fta" id="erd" style="min-height:140px">${r.description || ""}</textarea></div>
     <div class="frow"><label class="flbl">Notes</label><input class="fi" id="erno" value="${r.notes || ""}"/></div>
     ${srcLink}
+    <div class="frow"><label class="flbl">Cuisine <span class="otag">optional</span></label><input class="fi" id="ecuis" value="${r.cuisine || ""}" placeholder="e.g. Mediterranean, Turkish, Asian…"/></div>
     <div style="display:flex;align-items:center;gap:10px;margin:12px 0"><span style="font-size:.88rem">Favorite</span><div class="tog${r.favorited ? " on" : ""}" id="etog" onclick="this.classList.toggle('on')"></div></div>
+    <div style="display:flex;align-items:center;gap:10px;margin:6px 0 14px"><span style="font-size:.88rem">Share publicly</span><div class="tog${r.isPublic ? " on" : ""}" id="epub" onclick="togglePublic('${r.id}');this.classList.toggle('on')"></div><span style="font-size:.72rem;color:var(--mt)">Visible to the community</span></div>
     <div class="brow"><button class="btn bd" style="flex:1" onclick="delER()">Delete</button><button class="btn bp" style="flex:2" onclick="updR()">Save</button></div>`;
 
   showOv("erec"); // display the Edit Recipe overlay
@@ -287,8 +297,11 @@ export async function updR() {
   const rt2 = [...document.querySelectorAll("#estars .star")].filter(s => s.classList.contains("on")).length;
   const tags = getSelTags("etags"); // read selected tags from the edit form
 
+  // Read the cuisine field from the edit form
+  const cuisine = g("ecuis") ? g("ecuis").value.trim() : (r.cuisine || "");
+
   // Spread the original recipe and override only the editable fields
-  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags });
+  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine });
   showNotif("Recipe updated!"); hideOv("erec");
 }
 
@@ -395,7 +408,7 @@ export async function addRecIngToShop(id) {
 
     // Save each missing ingredient as a new shopping list item
     for (const ing of toAdd) {
-      await svShopItem({ id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2), name: ing, checked: false, src: "recipe" });
+      await svShopItem({ id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2), name: ing, qty: 1, checked: false, src: "recipe" });
     }
 
     showNotif(`Added ${toAdd.length} ingredient${toAdd.length !== 1 ? "s" : ""} to shopping list 🛒`);
@@ -418,4 +431,337 @@ export function setStar(n, ctx) {
   if (ctx === "r") renderStars("rstars", n);
   else if (ctx === "c") renderStars("cstars", n);
   else if (ctx === "e") renderStars("estars", n);
+}
+
+// ── SHARE PUBLICLY TOGGLE ────────────────────────────────────────────────────
+
+/**
+ * togglePublic — publishes or unpublishes a recipe to the community feed.
+ * Called from the edit overlay's "Share publicly" toggle. When turned on,
+ * copies the recipe to public_recipes/{id}. When turned off, deletes it.
+ */
+export async function togglePublic(id) {
+  const r = state.recs.find(x => x.id === id);
+  if (!r) return;
+
+  const isPublic = !r.isPublic;
+  const user = getCurrentUser();
+  const authorName = user?.displayName || localStorage.getItem("ks-who") || "Anonymous";
+
+  if (isPublic) {
+    // Publish to the community collection
+    await publishRecipe(r, authorName, state.hid);
+    showNotif("Recipe shared with the community!");
+  } else {
+    // Remove from the community collection
+    await unpublishRecipe(r.id);
+    showNotif("Recipe removed from community");
+  }
+
+  // Update the local recipe's isPublic flag and persist
+  await svr({ ...r, isPublic });
+}
+
+// ── COMMUNITY TAB ────────────────────────────────────────────────────────────
+// The community tab lets users browse all public recipes, search/filter
+// by cuisine or tags, save recipes to their kitchen, like, and comment.
+
+/**
+ * loadCommunity — fetches all public recipes and renders the community feed.
+ * Called when the user taps the "Community" tab on the Recipes screen.
+ */
+export async function loadCommunity() {
+  const c = g("rbody");
+  if (!c) return;
+
+  // Show loading state
+  c.innerHTML = `<div class="es"><div class="ei">🌍</div><p>Loading community recipes…</p></div>`;
+
+  try {
+    state.comRecs = await listPublicRecipes();
+    renderCommunity();
+  } catch (e) {
+    console.error("loadCommunity:", e);
+    c.innerHTML = `<div class="es"><div class="ei">⚠️</div><p>Couldn't load community recipes.</p></div>`;
+  }
+}
+
+/**
+ * setComCuisine — updates the cuisine filter for the community tab and re-renders.
+ */
+export function setComCuisine(val) {
+  state.comCuisine = val;
+  renderCommunity();
+}
+
+/**
+ * setComSearch — updates the search text for the community tab and re-renders.
+ */
+export function setComSearch(val) {
+  state.comSearch = val;
+  renderCommunity();
+}
+
+/**
+ * renderCommunity — renders the community recipe feed into the rbody container.
+ * Applies cuisine and text search filters from state.
+ */
+export function renderCommunity() {
+  const c = g("rbody");
+  if (!c) return;
+
+  let recs = [...state.comRecs];
+
+  // Apply cuisine filter if not "all"
+  if (state.comCuisine && state.comCuisine !== "all") {
+    recs = recs.filter(r => (r.cuisine || "").toLowerCase().includes(state.comCuisine.toLowerCase()) || (r.tags || []).some(t => t.toLowerCase().includes(state.comCuisine.toLowerCase())));
+  }
+
+  // Apply text search filter
+  if (state.comSearch) {
+    const q = state.comSearch.toLowerCase();
+    recs = recs.filter(r => (r.title || "").toLowerCase().includes(q) || (r.tags || []).join(" ").toLowerCase().includes(q) || (r.cuisine || "").toLowerCase().includes(q) || (r.authorName || "").toLowerCase().includes(q));
+  }
+
+  // Sort by newest first
+  recs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  // Update subtitle count
+  const rsub = g("rsub");
+  if (rsub) rsub.textContent = recs.length + " community recipe" + (recs.length !== 1 ? "s" : "");
+
+  // Build search/filter bar
+  let html = `<div style="margin-bottom:14px">
+    <input class="fi" id="com-search" placeholder="Search recipes, tags, authors…" value="${state.comSearch}" oninput="setComSearch(this.value)" style="margin-bottom:8px"/>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <select class="fsel" id="com-cuisine" onchange="setComCuisine(this.value)" style="flex:1;font-size:.8rem;padding:8px 10px">
+        <option value="all"${state.comCuisine === "all" ? " selected" : ""}>All Cuisines</option>
+        <option value="mediterranean"${state.comCuisine === "mediterranean" ? " selected" : ""}>Mediterranean</option>
+        <option value="asian"${state.comCuisine === "asian" ? " selected" : ""}>Asian</option>
+        <option value="american"${state.comCuisine === "american" ? " selected" : ""}>American</option>
+        <option value="turkish"${state.comCuisine === "turkish" ? " selected" : ""}>Turkish</option>
+        <option value="indian"${state.comCuisine === "indian" ? " selected" : ""}>Indian</option>
+        <option value="mexican"${state.comCuisine === "mexican" ? " selected" : ""}>Mexican</option>
+        <option value="italian"${state.comCuisine === "italian" ? " selected" : ""}>Italian</option>
+      </select>
+    </div>
+  </div>`;
+
+  if (!recs.length) {
+    html += `<div class="es"><div class="ei">🌍</div><p>${state.comSearch || state.comCuisine !== "all" ? "No recipes match your filters." : "No community recipes yet. Be the first to share!"}</p></div>`;
+    c.innerHTML = html;
+    return;
+  }
+
+  // Render each public recipe card
+  recs.forEach(r => {
+    const tagsHtml = (r.tags || []).map(t => `<span class="com-tag">${t}</span>`).join("");
+    const date = r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "";
+
+    html += `<div class="rcd com-rcd" onclick="openComRecipe('${r.id}')">
+      <div class="rrow">
+        <div class="rnm">${r.title || "Untitled"}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <span style="font-size:.78rem;color:var(--rd)">❤️ ${r.likes || 0}</span>
+        </div>
+      </div>
+      ${r.cuisine ? `<div style="font-size:.72rem;color:var(--ac);font-weight:600;margin-top:4px">${r.cuisine}</div>` : ""}
+      ${r.ingredients ? `<div class="rnot" style="color:var(--tx2);margin-top:6px">${(r.ingredients || "").substring(0, 100)}${(r.ingredients || "").length > 100 ? "…" : ""}</div>` : ""}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:4px">
+        <div style="display:flex;gap:4px;flex-wrap:wrap">${tagsHtml}</div>
+        <div style="font-size:.7rem;color:var(--mt)">by ${r.authorName || "Anonymous"} · ${date}</div>
+      </div>
+    </div>`;
+  });
+
+  c.innerHTML = html;
+}
+
+/**
+ * openComRecipe — opens a detail overlay for a community recipe.
+ * Shows full recipe content, like/save/comment actions.
+ */
+export async function openComRecipe(id) {
+  const r = state.comRecs.find(x => x.id === id);
+  if (!r) return;
+
+  // Check if current user has liked this recipe
+  const liked = await checkMyLike(id);
+  if (liked) state.myLikes.add(id); else state.myLikes.delete(id);
+
+  // Fetch comments for this recipe
+  let comments = [];
+  try { comments = await listComments(id); } catch { /* empty */ }
+  comments.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+  // Build the share link URL
+  const shareUrl = `https://pantry-app-zeta-six.vercel.app/recipe/${id}`;
+
+  // Build comments HTML
+  let commentsHtml = comments.map(c => `<div style="padding:10px 0;border-bottom:1px solid var(--b1)">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:.78rem;font-weight:600">${c.authorName || "Anonymous"}</span>
+      <span style="font-size:.68rem;color:var(--mt)">${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ""}</span>
+    </div>
+    <div style="font-size:.84rem;color:var(--tx2);margin-top:4px;line-height:1.5">${(c.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+  </div>`).join("");
+
+  const tagsHtml = (r.tags || []).map(t => `<span class="com-tag">${t}</span>`).join("");
+  const isLiked = state.myLikes.has(id);
+
+  g("erecbody").innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:300;line-height:1.3;margin-bottom:6px">${r.title || "Untitled"}</div>
+      ${r.cuisine ? `<div style="font-size:.78rem;color:var(--ac);font-weight:600;margin-bottom:6px">${r.cuisine}</div>` : ""}
+      <div style="font-size:.76rem;color:var(--mt)">by ${r.authorName || "Anonymous"} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}</div>
+      ${tagsHtml ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px">${tagsHtml}</div>` : ""}
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn ${isLiked ? "bp" : "bs"} bsm" onclick="likeComRecipe('${id}')" id="com-like-btn">
+        ${isLiked ? "❤️" : "🤍"} ${r.likes || 0} Like${(r.likes || 0) !== 1 ? "s" : ""}
+      </button>
+      <button class="btn bs bsm" style="flex:1" onclick="saveComToKitchen('${id}')">📖 Save to my kitchen</button>
+      <button class="btn bs bsm" onclick="shareComRecipe('${id}')">📤 Share</button>
+    </div>
+
+    ${r.ingredients ? `<div class="frow"><label class="flbl">Ingredients</label><div style="font-size:.88rem;color:var(--tx2);line-height:1.7;white-space:pre-wrap">${(r.ingredients || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>` : ""}
+    ${r.steps ? `<div class="frow"><label class="flbl">Steps</label><div style="font-size:.88rem;color:var(--tx2);line-height:1.7;white-space:pre-wrap">${(r.steps || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>` : ""}
+
+    <div style="margin-top:16px">
+      <div class="flbl" style="margin-bottom:10px">Comments (${comments.length})</div>
+      <div id="com-comments">${commentsHtml || '<div style="font-size:.82rem;color:var(--mt);padding:8px 0">No comments yet.</div>'}</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <input class="fi" id="com-cmt-input" placeholder="Add a comment…" style="flex:1" onkeydown="if(event.key==='Enter')addComComment('${id}')"/>
+        <button class="btn bp bsm" onclick="addComComment('${id}')">Post</button>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;padding:12px;background:var(--card);border:1px solid var(--b1);border-radius:12px">
+      <div style="font-size:.72rem;color:var(--mt);margin-bottom:6px">Share link (viewable without sign-in)</div>
+      <div style="font-size:.8rem;color:var(--ac);word-break:break-all;cursor:pointer" onclick="navigator.clipboard.writeText('${shareUrl}');showNotif('Link copied!')">${shareUrl}</div>
+    </div>`;
+
+  showOv("erec");
+}
+
+/**
+ * likeComRecipe — toggles the current user's like on a community recipe.
+ * Updates the like count in the UI and persists to Firestore.
+ */
+export async function likeComRecipe(id) {
+  const user = getCurrentUser();
+  if (!user) { showNotif("Sign in to like recipes"); return; }
+
+  const wasLiked = state.myLikes.has(id);
+
+  try {
+    await toggleLike(id, wasLiked);
+
+    // Update local state
+    if (wasLiked) state.myLikes.delete(id); else state.myLikes.add(id);
+
+    // Update the like count in the cached community recipes
+    const r = state.comRecs.find(x => x.id === id);
+    if (r) r.likes = (r.likes || 0) + (wasLiked ? -1 : 1);
+
+    // Update the button in the detail overlay
+    const btn = g("com-like-btn");
+    if (btn) {
+      const isNowLiked = state.myLikes.has(id);
+      btn.className = `btn ${isNowLiked ? "bp" : "bs"} bsm`;
+      btn.innerHTML = `${isNowLiked ? "❤️" : "🤍"} ${r?.likes || 0} Like${(r?.likes || 0) !== 1 ? "s" : ""}`;
+    }
+
+    showNotif(wasLiked ? "Like removed" : "Liked!");
+  } catch (e) {
+    console.error("likeComRecipe:", e);
+    showNotif("Couldn't update like");
+  }
+}
+
+/**
+ * saveComToKitchen — saves a community recipe to the user's household recipes.
+ * Copies the public recipe data into households/{hid}/recipes/ with a new ID.
+ */
+export async function saveComToKitchen(id) {
+  const user = getCurrentUser();
+  if (!user) { showNotif("Sign in to save recipes"); return; }
+
+  const r = state.comRecs.find(x => x.id === id);
+  if (!r) return;
+
+  try {
+    await saveRecipeToKitchen(r);
+    showNotif("Recipe saved to your kitchen! 📖");
+    hideOv("erec");
+  } catch (e) {
+    console.error("saveComToKitchen:", e);
+    showNotif("Couldn't save recipe");
+  }
+}
+
+/**
+ * addComComment — posts a new comment on a community recipe.
+ * Reads the comment input field, persists to Firestore, and re-renders.
+ */
+export async function addComComment(id) {
+  const user = getCurrentUser();
+  if (!user) { showNotif("Sign in to comment"); return; }
+
+  const input = g("com-cmt-input");
+  const text = input?.value?.trim();
+  if (!text) return;
+
+  const authorName = user.displayName || localStorage.getItem("ks-who") || "Anonymous";
+
+  try {
+    const cmt = await addComment(id, text, authorName);
+    input.value = "";
+
+    // Append the new comment to the DOM without a full reload
+    const container = g("com-comments");
+    if (container && cmt) {
+      // Remove "no comments" placeholder if present
+      if (container.querySelector("div[style*='color:var(--mt)']") && !container.querySelector("div[style*='border-bottom']")) {
+        container.innerHTML = "";
+      }
+      container.innerHTML += `<div style="padding:10px 0;border-bottom:1px solid var(--b1)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:.78rem;font-weight:600">${cmt.authorName}</span>
+          <span style="font-size:.68rem;color:var(--mt)">${new Date().toLocaleDateString()}</span>
+        </div>
+        <div style="font-size:.84rem;color:var(--tx2);margin-top:4px;line-height:1.5">${cmt.text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+      </div>`;
+    }
+
+    showNotif("Comment posted!");
+  } catch (e) {
+    console.error("addComComment:", e);
+    showNotif("Couldn't post comment");
+  }
+}
+
+/**
+ * shareComRecipe — copies the public share link to the clipboard.
+ * Uses the Web Share API on mobile if available, falls back to clipboard.
+ */
+export async function shareComRecipe(id) {
+  const r = state.comRecs.find(x => x.id === id);
+  const url = `https://pantry-app-zeta-six.vercel.app/recipe/${id}`;
+  const title = r?.title || "Recipe";
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text: `Check out this recipe: ${title}`, url });
+      return;
+    } catch { /* user cancelled or share failed — fall through to clipboard */ }
+  }
+
+  try {
+    await navigator.clipboard.writeText(url);
+    showNotif("Link copied!");
+  } catch {
+    showNotif("Couldn't copy link");
+  }
 }

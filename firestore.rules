@@ -74,6 +74,39 @@ service cloud.firestore {
                     && request.auth.uid == get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.ownerUid;
     }
 
+    // ── PUBLIC RECIPES ──
+    // Community-shared recipes. Anyone (including unauthenticated users) can read.
+    // Authenticated users can create their own public recipes (authorUid must match).
+    // Only the original author can update or delete their public recipe.
+    // Likes and comments are handled via dedicated subcollection rules below.
+    match /public_recipes/{recipeId} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if request.auth != null
+                            && resource.data.authorUid == request.auth.uid;
+    }
+
+    // ── PUBLIC RECIPE LIKES ──
+    // Each like is stored as public_recipes/{recipeId}/likes/{uid}.
+    // Anyone can read likes; only the owning user can create/delete their own like.
+    match /public_recipes/{recipeId}/likes/{uid} {
+      allow read: if true;
+      allow create, delete: if request.auth != null
+                            && request.auth.uid == uid;
+    }
+
+    // ── PUBLIC RECIPE COMMENTS ──
+    // Anyone can read comments. Authenticated users can add comments
+    // (authorUid must match). Only the comment author can delete their own.
+    match /public_recipes/{recipeId}/comments/{commentId} {
+      allow read: if true;
+      allow create: if request.auth != null
+                    && request.resource.data.authorUid == request.auth.uid;
+      allow delete: if request.auth != null
+                    && resource.data.authorUid == request.auth.uid;
+    }
+
     // ── DEFAULT DENY ──
     // Any path not matched above is denied by default (Firestore's behavior).
     // This explicit match makes the intent clear.

@@ -659,6 +659,146 @@ export async function dlShopItem(id) {
   } catch (e) { console.error(e); }
 }
 
+// ── PUBLIC RECIPES (COMMUNITY) ───────────────────────────────────────────────
+// Public recipes live in a top-level `public_recipes` collection, readable
+// by anyone (even unauthenticated users for the share-link page).
+// Likes and comments use subcollections for proper security rule scoping.
+
+/**
+ * publishRecipe — copy a household recipe to the public_recipes collection.
+ * Builds the public document from the private recipe plus author metadata.
+ * Returns the public recipe doc that was written.
+ */
+export async function publishRecipe(recipe, authorName, householdId) {
+  const pubId = recipe.id; // reuse the same ID so we can link them
+  const doc = {
+    title: recipe.name,
+    ingredients: recipe.description || "",
+    steps: recipe.steps || "",
+    tags: recipe.tags || [],
+    cuisine: recipe.cuisine || "",
+    authorName: authorName || "Anonymous",
+    authorUid: getCurrentUser()?.uid || "",
+    householdId: householdId || state.hid,
+    createdAt: new Date().toISOString(),
+    likes: 0,
+  };
+  await dbSet(`public_recipes/${pubId}`, doc);
+  return { id: pubId, ...doc };
+}
+
+/**
+ * unpublishRecipe — remove a recipe from the public_recipes collection.
+ * Only the author should call this (enforced by Firestore rules).
+ */
+export async function unpublishRecipe(recipeId) {
+  await dbDelete(`public_recipes/${recipeId}`);
+}
+
+/**
+ * listPublicRecipes — fetch all public recipes for the community feed.
+ * Returns an array of plain objects with an `id` field.
+ */
+export async function listPublicRecipes() {
+  return dbList("public_recipes");
+}
+
+/**
+ * getPublicRecipe — fetch a single public recipe by ID.
+ * Used for the public share-link page and detail view.
+ */
+export async function getPublicRecipe(id) {
+  return dbGet(`public_recipes/${id}`);
+}
+
+/**
+ * toggleLike — add or remove the current user's like on a public recipe.
+ * Uses a subcollection doc (public_recipes/{id}/likes/{uid}) so each user
+ * can only have one like, and rules enforce ownership.
+ * Also increments/decrements the likes count on the parent doc.
+ */
+export async function toggleLike(recipeId, currentlyLiked) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return;
+  const likePath = `public_recipes/${recipeId}/likes/${uid}`;
+
+  if (currentlyLiked) {
+    // Remove the like doc
+    await dbDelete(likePath);
+  } else {
+    // Create a like doc
+    await dbSet(likePath, { likedAt: new Date().toISOString() });
+  }
+
+  // Re-count likes from the subcollection for accuracy
+  const likes = await dbList(`public_recipes/${recipeId}/likes`);
+  const pubDoc = await dbGet(`public_recipes/${recipeId}`);
+  if (pubDoc) {
+    await dbSet(`public_recipes/${recipeId}`, { ...pubDoc, likes: likes.length, id: undefined });
+  }
+}
+
+/**
+ * addComment — add a comment to a public recipe.
+ * Stored in a subcollection: public_recipes/{id}/comments/{commentId}.
+ */
+export async function addComment(recipeId, text, authorName) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid || !text.trim()) return;
+  const commentId = "cmt-" + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const doc = {
+    text: text.trim(),
+    authorName: authorName || "Anonymous",
+    authorUid: uid,
+    createdAt: new Date().toISOString(),
+  };
+  await dbSet(`public_recipes/${recipeId}/comments/${commentId}`, doc);
+  return { id: commentId, ...doc };
+}
+
+/**
+ * listComments — fetch all comments for a public recipe.
+ */
+export async function listComments(recipeId) {
+  return dbList(`public_recipes/${recipeId}/comments`);
+}
+
+/**
+ * listMyLikes — fetch all like docs the current user has across public recipes.
+ * Since likes are nested under each recipe, we can't query across all recipes
+ * in one call via REST. Instead, we check per-recipe when rendering.
+ * This function checks a single recipe.
+ */
+export async function checkMyLike(recipeId) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return false;
+  const doc = await dbGet(`public_recipes/${recipeId}/likes/${uid}`);
+  return !!doc;
+}
+
+/**
+ * saveRecipeToKitchen — copy a public recipe into the user's household recipes.
+ * Generates a new ID so it doesn't conflict with the original.
+ */
+export async function saveRecipeToKitchen(pubRecipe) {
+  const newId = "rec-" + Date.now();
+  const recipe = {
+    id: newId,
+    name: pubRecipe.title,
+    description: pubRecipe.ingredients || "",
+    notes: pubRecipe.steps || "",
+    tags: pubRecipe.tags || [],
+    rating: 0,
+    favorited: false,
+    source: "Community",
+    sourceUrl: null,
+    cookCount: 0,
+    savedAt: new Date().toLocaleDateString(),
+  };
+  await svr(recipe);
+  return recipe;
+}
+
 // ── HELPER ───────────────────────────────────────────────────────────────────
 
 /**

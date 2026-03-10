@@ -44,11 +44,11 @@ import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, a
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, testProxy, addDealToList, initVoice, toggleVoice } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, testProxy, addDealToList, initVoice, toggleVoice } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
-import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag } from './ui/recipes.js';
+import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe } from './ui/recipes.js';
 
 // Insights screen: usage analytics and charts
 import { renderInsights } from './ui/insights.js';
@@ -102,7 +102,7 @@ window.showScreen = function(n) {
   // Re-render the target screen's content so data is fresh on each visit
   if (n === "home") renderHome();
   if (n === "inventory") renderInv();
-  if (n === "recipes") renderRecs();
+  if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
   if (n === "shopping") renderShop();
   if (n === "insights") renderInsights();
 };
@@ -149,6 +149,9 @@ window.qadd = qadd;             // Quick-add an item to the shopping list
 window.togShop = togShop;       // Toggle a shopping item's checked state
 window.toggleShNote = toggleShNote; // Toggle note visibility on a shopping item
 window.saveShNote = saveShNote;     // Save a note on a shopping item
+window.openShQty = openShQty;   // Open inline quantity editor for a shopping item
+window.adjShQty = adjShQty;     // Adjust shopping item quantity by +1 or -1
+window.saveShQty = saveShQty;   // Persist edited shopping item quantity
 window.togAisle = togAisle;     // Toggle aisle grouping on/off
 window.setSHT = setSHT;         // Set the shopping list tab filter
 window.shareList = shareList;   // Share the shopping list (native share API or clipboard)
@@ -183,6 +186,15 @@ window.whatCanIMake = whatCanIMake;       // Find recipes you can make with curr
 window.addRecIngToShop = addRecIngToShop; // Add a recipe's missing ingredients to shopping list
 window.setStar = setStar;       // Set star rating on a recipe
 window.togTag = togTag;         // Toggle a tag filter on the recipes screen
+window.togglePublic = togglePublic;       // Toggle public sharing of a recipe
+window.loadCommunity = loadCommunity;     // Load and show community recipes
+window.setComCuisine = setComCuisine;     // Set cuisine filter for community tab
+window.setComSearch = setComSearch;       // Set search text for community tab
+window.openComRecipe = openComRecipe;     // Open a community recipe detail view
+window.likeComRecipe = likeComRecipe;     // Like/unlike a community recipe
+window.saveComToKitchen = saveComToKitchen; // Save a community recipe to user's kitchen
+window.addComComment = addComComment;     // Post a comment on a community recipe
+window.shareComRecipe = shareComRecipe;   // Share a community recipe link
 
 // ── Chat screen handlers ──
 window.sendChat = sendChat;     // Send a chat message to the AI assistant

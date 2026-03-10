@@ -144,12 +144,21 @@ export function toggleVoice() {
  *   - Tap to toggle checked state (via swipeRowTap, defined globally in swipe handler)
  *   - Swipe-to-delete (the hidden .swipe-del panel revealed on swipe)
  *   - Inline note editing (expandable textarea below the item)
+ *   - Inline quantity editing (tap the qty badge to show an input)
  *   - Multi-select mode (sel-cb checkbox shown when selectMode is active)
  *
  * The "shit" class name is short for "shopping item" row.
  * "chk" class applies strikethrough styling for checked-off items.
+ *
+ * Quantity display: shows "× N" next to the item name when qty > 1.
+ * Tapping the qty badge opens an inline number input for quick editing.
  */
 export function sH(item) {
+  // Default to qty 1 if the field is missing (backwards compat with old items)
+  const qty = item.qty || 1;
+  // Only show the qty badge when quantity is more than 1 (reduces visual noise)
+  const qtyBadge = qty > 1 ? `<span class="sh-qty" onclick="event.stopPropagation();openShQty('${item.id}')"> × ${qty}</span>` : `<span class="sh-qty sh-qty-one" onclick="event.stopPropagation();openShQty('${item.id}')"></span>`;
+
   return `<div class="swipe-wrap" id="sw-${item.id}" data-id="${item.id}" data-list="shop">
     <div class="swipe-inner">
       <!-- Main row: tap toggles checked state -->
@@ -157,11 +166,20 @@ export function sH(item) {
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
         <div class="shck">${item.checked ? "✓" : ""}</div>  <!-- Checked indicator circle -->
         <div style="flex:1;min-width:0">
-          <div class="shnm">${item.name}</div>
+          <div class="shnm">${item.name}${qtyBadge}</div>
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
         </div>
         ${item.price ? `<div class="price-tag">~$${item.price}</div>` : ""}  <!-- Estimated price if available -->
         <button class="sh-note-btn" onclick="toggleShNote(event,'${item.id}')" title="Add note">✏️</button>
+      </div>
+      <!-- Inline qty editor (hidden by default, toggled by openShQty) -->
+      <div class="sh-qty-edit" id="sqe-${item.id}">
+        <label class="sh-qty-lbl">Qty</label>
+        <div class="sh-qty-ctl">
+          <button class="qbtn" onclick="adjShQty('${item.id}',-1)">−</button>
+          <input class="sh-qty-inp" id="sqi-${item.id}" type="number" min="1" value="${qty}" onblur="saveShQty('${item.id}')"/>
+          <button class="qbtn" onclick="adjShQty('${item.id}',1)">+</button>
+        </div>
       </div>
       <!-- Expandable note editor (hidden by default, toggled by toggleShNote) -->
       <div class="sh-note-edit" id="sne-${item.id}">
@@ -229,11 +247,33 @@ export function renderShop() {
  * qadd() — Quick-add: reads the text input (#shi), creates a new shopping item,
  * saves it to Firestore, and clears the input. Uses timestamp as a unique ID.
  * Source is tagged "manual" to distinguish from AI-generated or meal-plan items.
+ *
+ * Supports optional inline quantity with these patterns:
+ *   "5 apples"    → qty 5, name "apples"
+ *   "apples x3"   → qty 3, name "apples"
+ *   "apples ×3"   → qty 3, name "apples"
+ *   "apples"      → qty 1, name "apples" (default)
  */
 export function qadd() {
   const i = g("shi"), v = i.value.trim(); // "shi" = shopping input text field
   if (!v) return; // Do nothing if input is empty
-  svShopItem({ id: Date.now().toString(), name: v, checked: false, src: "manual" });
+
+  // Try to parse a quantity from common patterns
+  let name = v, qty = 1;
+  // Pattern 1: leading number, e.g. "5 apples" or "12 eggs"
+  const leadMatch = v.match(/^(\d+)\s+(.+)/);
+  // Pattern 2: trailing multiplier, e.g. "apples x3" or "eggs ×12"
+  const trailMatch = v.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
+
+  if (trailMatch) {
+    name = trailMatch[1].trim();
+    qty = parseInt(trailMatch[2], 10) || 1;
+  } else if (leadMatch) {
+    name = leadMatch[2].trim();
+    qty = parseInt(leadMatch[1], 10) || 1;
+  }
+
+  svShopItem({ id: Date.now().toString(), name, qty, checked: false, src: "manual" });
   i.value = ""; // Clear the input after adding
 }
 
@@ -276,6 +316,53 @@ export function saveShNote(id) {
   svShopItem({ ...item, note });
 }
 
+// ── INLINE QUANTITY EDITING ──────────────────────────────────────────────────
+// Tapping the qty badge on a shopping item opens a small inline editor with
+// +/− buttons and a number input. Changes persist to Firestore on blur or
+// when +/− is tapped. The editor slides open/closed like the note editor.
+
+/**
+ * openShQty(id) — Toggles the inline quantity editor for a shopping item.
+ * If the editor is already open, closes it. Otherwise opens it and focuses
+ * the number input for quick editing.
+ */
+export function openShQty(id) {
+  const edit = g("sqe-" + id); // The qty editor container div
+  const inp = g("sqi-" + id);  // The number input inside it
+  if (!edit) return;
+  const open = edit.classList.toggle("open"); // CSS transition handles expand/collapse
+  if (open && inp) { inp.focus(); inp.select(); }
+}
+
+/**
+ * adjShQty(id, delta) — Adjusts a shopping item's quantity by +1 or −1.
+ * Called by the +/− buttons in the inline qty editor.
+ * Clamps to a minimum of 1 (can't have zero items on a shopping list).
+ */
+export function adjShQty(id, delta) {
+  const inp = g("sqi-" + id);
+  if (!inp) return;
+  const newVal = Math.max(1, (parseInt(inp.value, 10) || 1) + delta);
+  inp.value = newVal;
+  // Persist immediately so tapping +/− feels responsive without waiting for blur
+  saveShQty(id);
+}
+
+/**
+ * saveShQty(id) — Persists the quantity value from the inline editor to Firestore.
+ * Called on blur of the number input and after each +/− tap.
+ * Skips the write if the value hasn't actually changed.
+ */
+export function saveShQty(id) {
+  const inp = g("sqi-" + id);
+  if (!inp) return;
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+  const qty = Math.max(1, parseInt(inp.value, 10) || 1);
+  if (qty === (item.qty || 1)) return; // No change — skip the write
+  svShopItem({ ...item, qty });
+}
+
 /**
  * togAisle() — Toggles "aisle mode" on/off.
  * When active, unchecked items are grouped by guessed grocery aisle (Dairy, Produce, etc.)
@@ -313,7 +400,13 @@ export function setSHT(t) {
 export function shareList() {
   const items = state.shop.filter(i => !i.checked); // Only share items not yet bought
   if (!items.length) { showNotif("List is empty!"); return; }
-  const lines = items.map(i => i.price ? "• " + i.name + " (~$" + i.price + ")" : "• " + i.name);
+  // Include quantity in the shared text when > 1, e.g. "• Apples × 3"
+  const lines = items.map(i => {
+    let line = "• " + i.name;
+    if ((i.qty || 1) > 1) line += " × " + i.qty;
+    if (i.price) line += " (~$" + i.price + ")";
+    return line;
+  });
   const txt = "🛒 Shopping List\n\n" + lines.join("\n");
   // Prefer native share sheet (iOS/Android), fall back to clipboard copy
   if (navigator.share) { navigator.share({ title: "Shopping List", text: txt }).catch(() => {}); }
@@ -384,11 +477,13 @@ export async function confirmAddToKitchen() {
     const loc = row.dataset.loc || guessLocation(item.name); // Fall back to heuristic if DOM missing
     // Check if this item already exists in the kitchen inventory (by name, case-insensitive)
     const existing = state.inv.find(i => i.name.toLowerCase() === item.name.toLowerCase());
+    // Use the shopping item's quantity (default 1 for old items without qty field)
+    const shopQty = item.qty || 1;
     await svi({
       // If item exists, reuse its ID; otherwise generate a unique ID with timestamp + random suffix
       id: existing ? existing.id : "inv-" + Date.now() + "-" + Math.random().toString(36).slice(2),
       name: existing ? existing.name : item.name,
-      qty: existing ? (existing.qty + 1) : 1,       // Increment quantity if already in kitchen
+      qty: existing ? (existing.qty + shopQty) : shopQty, // Add shopping qty to existing kitchen qty
       unit: existing ? existing.unit : "unit",
       location: loc,
       category: existing ? existing.category : gcat({ name: item.name }), // gcat guesses category from name
@@ -507,7 +602,7 @@ function bpUpdBtn() {
 export async function bpConfirm() {
   const toAdd = window._bpItems.filter(i => i.sel);
   if (!toAdd.length) { g("buildPreviewM").classList.remove("active"); return; } // Nothing selected — just close
-  for (const it of toAdd) await svShopItem({ id: Date.now().toString() + Math.random().toString(36).slice(2), name: it.name, checked: false, src: "meal-plan" });
+  for (const it of toAdd) await svShopItem({ id: Date.now().toString() + Math.random().toString(36).slice(2), name: it.name, qty: 1, checked: false, src: "meal-plan" });
   g("buildPreviewM").classList.remove("active"); // Close the preview modal
   showNotif(`Added ${toAdd.length} item${toAdd.length !== 1 ? "s" : ""}! 🛒`);
 }
@@ -567,7 +662,7 @@ function renderDeals(deals, query) {
 export function addDealToList(name) {
   const decoded = (name || "").replace(/&#39;/g, "'"); // Fix HTML-encoded apostrophes
   if (!state.shop.find(i => i.name.toLowerCase() === decoded.toLowerCase())) {
-    svShopItem({ id: Date.now().toString(), name: decoded, checked: false });
+    svShopItem({ id: Date.now().toString(), name: decoded, qty: 1, checked: false });
     showNotif(decoded + " added!");
   } else { showNotif("Already on your list!"); }
 }

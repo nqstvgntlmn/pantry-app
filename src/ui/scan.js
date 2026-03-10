@@ -61,7 +61,7 @@ export function addScannedToList() {
   const display = name + (qty > 1 || unit ? " (" + qty + (unit ? " " + unit : "") + ")" : "");
 
   // Persist the new shopping list item to the database
-  svShopItem({ id: Date.now().toString(), name: display, checked: false, src: "scan" });
+  svShopItem({ id: Date.now().toString(), name: display, qty: 1, checked: false, src: "scan" });
 
   showNotif("Added to list: " + name);    // Toast confirmation
   hideOv("result"); hideOv("scan");       // Close both overlays (result and scan)

@@ -60,6 +60,13 @@ export const state = {
   aisleMode: false,       // when true, the shopping list view groups items by grocery-store aisle
   selectMode: null,       // multi-select mode: "shop" (shopping list), "inv" (inventory), or null (off)
   selectedIds: new Set(), // set of Firestore doc IDs currently checked in multi-select mode
+
+  // ── Community / public recipes ─────────────────────────────────────────
+  comRecs: [],           // community (public) recipes loaded from public_recipes collection
+  comTab: "browse",      // community sub-tab: "browse" or "mine"
+  comSearch: "",         // current search/filter text for community recipes
+  comCuisine: "all",     // cuisine filter for community browsing
+  myLikes: new Set(),    // set of public recipe IDs the current user has liked
 };
 
 // ── localStorage helpers (device-only keys) ──────────────────────────────────
