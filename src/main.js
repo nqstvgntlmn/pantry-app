@@ -27,6 +27,10 @@ import { g, showNotif, showOv, hideOv, renderStars, tk } from './helpers.js';
 // sign-in/sign-up/sign-out functions, getCurrentUser returns the Firebase user object
 import { onAuth, signInGoogle, signInApple, signInEmail, signUpEmail, signOut, getCurrentUser, getIdToken } from './auth.js';
 
+// Expose getIdToken on window immediately so it's available in the browser console
+// for migration scripts. Must be at top level, not inside any callback.
+window.getIdToken = getIdToken;
+
 // ── UI MODULE IMPORTS ────────────────────────────────────────────────────────
 // Each UI module owns one screen or feature area. Functions are imported here
 // so they can be attached to `window` for HTML onclick access.
@@ -229,7 +233,7 @@ window.switchHousehold = switchHousehold;   // Switch to a different household
 window.removeHousehold = removeHousehold;   // Leave/remove a household
 window.setMode = setMode;                   // Set light/dark/auto theme mode
 window.showNotif = showNotif;               // Show a toast notification (used from settings HTML)
-window.getIdToken = getIdToken;             // Expose for console migration scripts
+// getIdToken is exposed on window at the top of this file (after import)
 
 // ── APP START ────────────────────────────────────────────────────────────────
 // _appStart is called once after auth succeeds and a household ID is resolved.
