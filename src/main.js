@@ -18,7 +18,7 @@ import { state, CFG_DEFAULT, J, Js } from './state.js';
 // svi/dli = save/delete inventory item, svr/dlr = save/delete recipe,
 // svShopItem/dlShopItem = save/delete shopping item
 // joinHouseholdByCode: join via invite code, createHousehold/createUserProfile: first-time setup
-import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, _pendingInvWrites, _pendingShopWrites, _pendingRecWrites } from './db.js';
+import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, pausePoll, resumePoll } from './db.js';
 
 // DOM/UI helpers: g = getElementById shorthand, showNotif = toast notifications,
 // showOv/hideOv = overlay open/close, renderStars = star rating HTML, tk = tracking util
@@ -322,7 +322,9 @@ window._appStart = async function(code) {
   // ── Polling loop ──
   // poll() fetches ALL Firestore collections for the current household and
   // updates in-memory state. This is a simple "pull" sync strategy — the app
-  // does not use Firestore realtime listeners, so it polls every 6 seconds.
+  // does not use Firestore realtime listeners, so it polls every 30 seconds.
+  // The interval is paused while any write is in-flight (via pausePoll/resumePoll
+  // in db.js) to prevent stale Firestore reads from overwriting optimistic state.
   async function poll() {
     try {
       ss("syncing");
@@ -344,11 +346,11 @@ window._appStart = async function(code) {
       const v = (r, fb) => r.status === "fulfilled" ? r.value : fb;
 
       // Update global state with fresh data (or keep old data on failure).
-      // Skip overwriting collections that have in-flight writes — the
-      // optimistic local state is more recent than whatever Firestore returns.
-      if (!_pendingInvWrites)  state.inv  = v(res[0], state.inv);
-      if (!_pendingRecWrites)  state.recs = v(res[1], state.recs);
-      if (!_pendingShopWrites) state.shop = v(res[2], state.shop);
+      // No need to guard individual collections — the entire poll interval
+      // is paused while any write is in-flight, so stale reads can't land here.
+      state.inv  = v(res[0], state.inv);
+      state.recs = v(res[1], state.recs);
+      state.shop = v(res[2], state.shop);
       const mpDocs = v(res[3], []);
       const cfgDocs = v(res[4], []);
       const clDocs = v(res[5], []);
@@ -380,9 +382,14 @@ window._appStart = async function(code) {
   // Expose poll on window so it can be triggered manually (e.g. from dev tools)
   window._poll = poll;
 
-  // Run the first poll immediately, then repeat every 6 seconds
+  // Run the first poll immediately, then repeat every 30 seconds.
+  // The interval ID is stored in db.js so writes can pause/resume it.
   poll();
-  setInterval(poll, 6000);
+  const pollId = setInterval(poll, 30000);
+  // Register the interval with db.js so pausePoll/resumePoll can stop and
+  // restart it around write operations
+  window._pollFn = poll;
+  window._pollIntervalId = pollId;
 };
 
 // ── INITIALIZATION ───────────────────────────────────────────────────────────
@@ -668,10 +675,17 @@ onAuth(async (user) => {
     if (!appBooted) {
       appBooted = true;
       try {
-        // Check if this is a first-time user (no profile in Firestore)
+        // Determine if this is a returning user or a first-time login.
+        // Primary check: look for a user profile doc in Firestore.
+        // Fallback check: if Firestore returns null (network issue), also
+        // check localStorage "ks-h" — if present, the user has used the app
+        // before and should skip the join screen.
         const userDoc = await dbGet(`users/${user.uid}`);
+        const cachedHid = localStorage.getItem("ks-h");
+        const cachedHhs = J("ks-hhs");
+        const isReturningUser = !!userDoc || !!cachedHid || (cachedHhs && cachedHhs.length > 0);
 
-        if (userDoc) {
+        if (isReturningUser) {
           // Returning user — resolve household and boot normally
           g("LS").style.display = "none";
           g("APP").style.display = "flex";

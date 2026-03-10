@@ -531,15 +531,44 @@ export async function loadFirestoreData() {
   }
 }
 
-// ── PENDING WRITE GUARDS ─────────────────────────────────────────────────────
-// Track in-flight writes so the polling loop doesn't overwrite optimistic
-// state updates with stale Firestore data before the write has landed.
-// Each counter is incremented before a write starts and decremented when it
-// completes (success or failure). The poll loop skips overwriting a collection
-// whenever its counter is > 0.
-export let _pendingInvWrites = 0;
-export let _pendingShopWrites = 0;
-export let _pendingRecWrites = 0;
+// ── POLL PAUSE/RESUME ────────────────────────────────────────────────────────
+// Instead of per-collection pending-write counters, we stop the entire poll
+// interval while any write is in-flight. This prevents stale Firestore reads
+// from overwriting optimistic state. A simple counter tracks how many writes
+// are active — the interval is cleared when the first write starts and
+// re-created when the last write finishes.
+let _activeWrites = 0;
+
+/**
+ * pausePoll — called before every write operation begins.
+ * Increments the active-write counter and clears the poll interval on the
+ * first concurrent write so no polls can land while writes are in-flight.
+ */
+export function pausePoll() {
+  _activeWrites++;
+  if (_activeWrites === 1 && window._pollIntervalId) {
+    clearInterval(window._pollIntervalId);
+    window._pollIntervalId = null;
+  }
+}
+
+/**
+ * resumePoll — called in the `finally` block of every write operation.
+ * Decrements the active-write counter. When the last write completes,
+ * restarts the poll interval (30 seconds) so background sync resumes.
+ */
+export function resumePoll() {
+  _activeWrites--;
+  if (_activeWrites <= 0) {
+    _activeWrites = 0;
+    if (window._pollFn && !window._pollIntervalId) {
+      // Run one immediate poll to pick up the writes we just finished,
+      // then restart the 30-second interval
+      window._pollFn();
+      window._pollIntervalId = setInterval(window._pollFn, 30000);
+    }
+  }
+}
 
 // ── DATA OPERATIONS ──────────────────────────────────────────────────────────
 // These are the primary CRUD functions used by UI code to modify inventory,
@@ -591,7 +620,7 @@ export function ss(s) {
  */
 export async function svi(item) {
   ss("syncing");
-  _pendingInvWrites++;
+  pausePoll();
   try {
     // Replace existing item (by id) or append if new — spread creates a new array
     state.inv = [...state.inv.filter(i => i.id !== item.id), item];
@@ -600,7 +629,7 @@ export async function svi(item) {
     await dbSet(`households/${state.hid}/inventory/${item.id}`, item);
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
-  finally { _pendingInvWrites--; }
+  finally { resumePoll(); }
 }
 
 /**
@@ -610,7 +639,7 @@ export async function svi(item) {
  */
 export async function dli(id) {
   ss("syncing");
-  _pendingInvWrites++;
+  pausePoll();
   try {
     state.inv = state.inv.filter(i => i.id !== id);
     renderCallbacks.renderAll?.();
@@ -618,7 +647,7 @@ export async function dli(id) {
     await dbDelete(`households/${state.hid}/inventory/${id}`);
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
-  finally { _pendingInvWrites--; }
+  finally { resumePoll(); }
 }
 
 /**
@@ -627,28 +656,28 @@ export async function dli(id) {
  * Replaces any existing recipe with the same ID, re-renders, and persists.
  */
 export async function svr(r) {
-  _pendingRecWrites++;
+  pausePoll();
   try {
     state.recs = [...state.recs.filter(x => x.id !== r.id), r];
     renderCallbacks.renderRecs?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/recipes/${r.id}`, r);
   } catch (e) { console.error(e); }
-  finally { _pendingRecWrites--; }
+  finally { resumePoll(); }
 }
 
 /**
  * dlr (delete recipe) — remove a recipe by ID.
  */
 export async function dlr(id) {
-  _pendingRecWrites++;
+  pausePoll();
   try {
     state.recs = state.recs.filter(r => r.id !== id);
     renderCallbacks.renderRecs?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/recipes/${id}`);
   } catch (e) { console.error(e); }
-  finally { _pendingRecWrites--; }
+  finally { resumePoll(); }
 }
 
 /**
@@ -657,28 +686,28 @@ export async function dlr(id) {
  * Replaces any existing item with the same ID, re-renders, and persists.
  */
 export async function svShopItem(item) {
-  _pendingShopWrites++;
+  pausePoll();
   try {
     state.shop = [...state.shop.filter(s => s.id !== item.id), item];
     renderCallbacks.renderShop?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/shopping/${item.id}`, item);
   } catch (e) { console.error(e); }
-  finally { _pendingShopWrites--; }
+  finally { resumePoll(); }
 }
 
 /**
  * dlShopItem (delete shopping item) — remove a shopping list item by ID.
  */
 export async function dlShopItem(id) {
-  _pendingShopWrites++;
+  pausePoll();
   try {
     state.shop = state.shop.filter(s => s.id !== id);
     renderCallbacks.renderShop?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/shopping/${id}`);
   } catch (e) { console.error(e); }
-  finally { _pendingShopWrites--; }
+  finally { resumePoll(); }
 }
 
 // ── PUBLIC RECIPES (COMMUNITY) ───────────────────────────────────────────────
