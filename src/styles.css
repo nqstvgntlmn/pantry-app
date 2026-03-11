@@ -262,6 +262,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .atk-loc{display:flex;gap:6px;flex-shrink:0}
 .atk-loc button{padding:5px 9px;border-radius:10px;border:1.5px solid var(--b2);background:transparent;color:var(--mt);font-size:.72rem;cursor:pointer;transition:all .15s;font-family:"DM Sans",sans-serif}
 .atk-loc button.sel{background:var(--ac);border-color:var(--ac);color:var(--bg);font-weight:600}
+/* Subtle refresh button — small, muted, spins briefly on tap */
+.refresh-btn{font-size:1rem;color:var(--mt);padding:4px 8px;min-width:36px}
+.refresh-btn.spinning{animation:spin .6s ease}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .selbtn{font-size:.75rem}
 .selbtn.active{background:var(--ac);color:var(--bg);border-color:var(--ac)}
 .multi-bar{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(120px);visibility:hidden;width:calc(100% - 32px);max-width:460px;background:var(--card2);border:1.5px solid var(--b1);border-radius:16px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:150;transition:transform .3s cubic-bezier(.4,0,.2,1), visibility 0s .3s;box-shadow:0 -4px 24px rgba(0,0,0,.35)}

@@ -71,7 +71,7 @@ import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCook
 // Settings: config UI, push notifications, household management, theme/dark mode
 // copyInviteCode/shareInviteCode/regenInviteCode: invite code actions
 // removeMemberFromHH: owner removes a member
-import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH } from './ui/settings.js';
+import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, enrichExistingItems } from './ui/settings.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
@@ -275,6 +275,38 @@ window.copyInviteCode = copyInviteCode;     // Copy household invite code to cli
 window.shareInviteCode = shareInviteCode;   // Share invite code via Web Share API
 window.regenInviteCode = regenInviteCode;   // Regenerate a new invite code (owner only)
 window.removeMemberFromHH = removeMemberFromHH; // Remove a member from the household (owner only)
+window.enrichExistingItems = enrichExistingItems; // Retroactive product enrichment for all items
+
+// manualRefresh(target) — Safety valve to force re-fetch all items from Firestore.
+// Triggered by the subtle ↻ button on Shopping/Inventory screens when real-time
+// sync feels stuck. Re-lists the collection from Firestore and re-renders.
+window.manualRefresh = async function(target) {
+  // Add spinning animation to the clicked button for visual feedback
+  const btn = event?.target;
+  if (btn) { btn.classList.add("spinning"); setTimeout(() => btn.classList.remove("spinning"), 600); }
+
+  ss("syncing");
+  try {
+    if (target === "shop" || target === "both") {
+      // Re-fetch all shopping list items from Firestore
+      state.shop = await dbList(`households/${state.hid}/shopping`);
+      renderShop();
+    }
+    if (target === "inv" || target === "both") {
+      // Re-fetch all inventory items from Firestore
+      state.inv = await dbList(`households/${state.hid}/inventory`);
+      renderInv();
+      renderAll();
+    }
+    ss("synced");
+    showNotif("Refreshed ✓");
+  } catch (e) {
+    console.error("manualRefresh error:", e);
+    ss("error");
+    showNotif("Refresh failed");
+  }
+};
+
 // ── Onboarding handlers ──
 window.onboardNext = onboardNext;           // Advance to the next onboarding step
 window.finishOnboarding = finishOnboarding; // Complete onboarding and close overlay

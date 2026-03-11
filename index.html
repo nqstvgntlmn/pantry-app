@@ -158,7 +158,7 @@
   <!-- INVENTORY -->
   <div class="screen" id="screen-inventory" style="overflow-y:hidden">
     <div style="flex-shrink:0">
-      <div class="ihdr"><div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div><div class="iha"><button class="btn bs bsm selbtn" id="inv-selbtn" onclick="togInvSelect()">Select</button><button class="btn bs bsm" onclick="showOv('madd')">✏️</button><button class="btn bp bsm" onclick="showOv('scan')">📷 Scan</button></div></div>
+      <div class="ihdr"><div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div><div class="iha"><button class="btn bs bsm refresh-btn" onclick="manualRefresh('inv')" title="Refresh">↻</button><button class="btn bs bsm selbtn" id="inv-selbtn" onclick="togInvSelect()">Select</button><button class="btn bs bsm" onclick="showOv('madd')">✏️</button><button class="btn bp bsm" onclick="showOv('scan')">📷 Scan</button></div></div>
       <div class="itabs">
         <div class="itab active" id="itab-all" onclick="setIT('all')">All</div>
         <div class="itab" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
@@ -191,6 +191,7 @@
     <div style="flex-shrink:0">
       <div class="shdr"><div><div class="sttl">Shopping</div><div class="ssub" id="shsub">Your grocery list</div></div>
         <div style="display:flex;gap:6px">
+          <button class="btn bsm bs refresh-btn" onclick="manualRefresh('shop')" title="Refresh">↻</button>
           <button class="btn bsm bs selbtn" id="sh-selbtn" onclick="togShopSelect()">Select</button>
           <button class="btn bsm bs" onclick="shareList()">📤 Share</button>
           <button class="btn bsm bs" id="clrchk" onclick="openAddToKitchen()" style="display:none">🧺 Add to Kitchen</button>
@@ -591,6 +592,14 @@
         <div class="frow"><label class="flbl">Favourite cuisines</label><input class="fi" id="setCuisines" placeholder="e.g. Italian, Thai…"/></div>
         <div class="frow"><label class="flbl">Weeknight cook time</label>
           <select class="fsel" id="setCookTime"><option value="20-30 min">20–30 min</option><option value="30-45 min">30–45 min</option><option value="40-60 min" selected>40–60 min</option><option value="60+ min">60+ min</option></select>
+        </div>
+      </div>
+      <div class="sset"><div class="ssetttl">Utilities</div>
+        <button class="btn bs bf" id="enrichBtn" onclick="enrichExistingItems()" style="width:100%">🔍 Enrich existing items</button>
+        <div style="font-size:.72rem;color:var(--mt);margin-top:6px;line-height:1.5">Scans all shopping list and pantry items that lack an image or brand, and tries to match them against product databases (Edamam, Open Food Facts). Items with no match are left unchanged.</div>
+        <div id="enrichProgress" style="display:none;margin-top:10px">
+          <div style="font-size:.82rem;color:var(--tx);margin-bottom:6px" id="enrichStatus">Processing…</div>
+          <div style="height:6px;border-radius:3px;background:var(--b2);overflow:hidden"><div id="enrichBar" style="height:100%;background:var(--ac);width:0%;transition:width .3s;border-radius:3px"></div></div>
         </div>
       </div>
       <div class="brow"><button class="btn bp bf" onclick="saveSettings()">Save Settings</button></div>

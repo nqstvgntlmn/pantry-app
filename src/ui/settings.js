@@ -11,7 +11,7 @@ import { state, J, Js } from '../state.js';
 // joinHouseholdByCode: join a household via invite code lookup
 // regenerateInviteCode: generate a new 6-char invite code (owner only)
 // removeMember: remove a member from a household (owner only)
-import { saveCfg, dbGet, dbSet, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember } from '../db.js';
+import { saveCfg, dbGet, dbSet, dbList, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, svShopItem, svi } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
 import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
@@ -597,3 +597,119 @@ export function refreshSettingsUI() {
   _updateThemePicker(curTheme);
   _updateModeButtons(curMode);
 }
+
+// ── RETROACTIVE ENRICHMENT ───────────────────────────────────────────────────
+// One-time utility to scan all existing shopping list and inventory items that
+// lack an image or brand, and attempt to enrich them by searching the product
+// database waterfall (Edamam + Open Food Facts via /api/text-search).
+// Items where no match is found are left unchanged.
+
+/**
+ * enrichExistingItems() — Runs retroactive enrichment across both shopping
+ * and inventory items. Shows a progress bar in the Utilities settings section.
+ * Each item's name is searched via /api/text-search, and the best match
+ * (first result) is applied automatically. Throttled to avoid API rate limits.
+ */
+export async function enrichExistingItems() {
+  const btn = g("enrichBtn");
+  const progressEl = g("enrichProgress");
+  const statusEl = g("enrichStatus");
+  const barEl = g("enrichBar");
+
+  // Prevent double-tap while already running
+  if (btn) btn.disabled = true;
+
+  // Show the progress UI
+  if (progressEl) progressEl.style.display = "block";
+
+  // Collect items needing enrichment from both shopping list and inventory.
+  // An item "needs enrichment" if it has no image URL and no brand field.
+  const shopItems = state.shop.filter(i => _needsEnrich(i));
+  const invItems = state.inv.filter(i => _needsEnrich(i));
+  const allItems = [
+    ...shopItems.map(i => ({ item: i, list: "shop" })),
+    ...invItems.map(i => ({ item: i, list: "inv" }))
+  ];
+
+  if (!allItems.length) {
+    if (statusEl) statusEl.textContent = "All items already enriched!";
+    if (barEl) barEl.style.width = "100%";
+    if (btn) { btn.disabled = false; }
+    showNotif("Nothing to enrich — all items already have data.");
+    return;
+  }
+
+  let enriched = 0;
+  let skipped = 0;
+
+  for (let idx = 0; idx < allItems.length; idx++) {
+    const { item, list } = allItems[idx];
+    const pct = Math.round(((idx + 1) / allItems.length) * 100);
+
+    // Update progress UI
+    if (statusEl) statusEl.textContent = `Processing "${item.name}" (${idx + 1}/${allItems.length})…`;
+    if (barEl) barEl.style.width = pct + "%";
+
+    try {
+      // Search the text-search API for the item's name
+      const r = await fetch(`/api/text-search?q=${encodeURIComponent(item.name)}`);
+      const data = await r.json();
+      const results = data.results || [];
+
+      if (results.length) {
+        // Pick the best (first) result and merge enrichment data into the item
+        const best = results[0];
+        const enrichedItem = {
+          ...item,
+          image: best.image || item.image || null,
+          brand: best.brand || item.brand || "",
+          category: best.category || item.category || "",
+          nutrition: best.nutrition || item.nutrition || null,
+          source: best.source || item.source || "search",
+        };
+
+        // Save enriched item back to Firestore via the appropriate save function
+        if (list === "shop") {
+          await svShopItem(enrichedItem);
+        } else {
+          await svi(enrichedItem);
+        }
+        enriched++;
+      } else {
+        // No match found — leave item unchanged
+        skipped++;
+      }
+    } catch (e) {
+      // API error for this item — skip and continue with the rest
+      console.warn(`Enrich failed for "${item.name}":`, e);
+      skipped++;
+    }
+
+    // Brief throttle between API calls to avoid hitting rate limits
+    if (idx < allItems.length - 1) {
+      await _sleep(300);
+    }
+  }
+
+  // Show completion status
+  if (statusEl) statusEl.textContent = `Done! ${enriched} enriched, ${skipped} skipped.`;
+  if (barEl) barEl.style.width = "100%";
+  if (btn) btn.disabled = false;
+  showNotif(`Enrichment complete: ${enriched} updated, ${skipped} unchanged.`);
+}
+
+/**
+ * _needsEnrich(item) — Returns true if an item is missing enrichment data.
+ * An item needs enrichment if it has no image URL AND no brand field.
+ * Also requires a non-empty name to search for.
+ */
+function _needsEnrich(item) {
+  if (!item.name || item.name.length < 2) return false;
+  return !item.image && !item.brand;
+}
+
+/**
+ * _sleep(ms) — Simple delay helper for throttling API calls.
+ * Returns a promise that resolves after the given milliseconds.
+ */
+function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
