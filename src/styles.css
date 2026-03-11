@@ -214,6 +214,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* "Listening..." status label shown below the quick-add row while mic is active */
 .mic-status{display:none;align-items:center;gap:6px;font-size:.75rem;color:var(--rd);font-weight:600;margin-bottom:10px;padding-left:2px}
 .mic-status.visible{display:flex}
+/* Red stop button shown while voice recognition is active */
+.mic-stop-btn{margin-left:auto;padding:6px 18px;border-radius:20px;border:none;background:var(--rd);color:#fff;font-family:"DM Sans",sans-serif;font-size:.78rem;font-weight:700;cursor:pointer;letter-spacing:.03em;animation:mic-pulse 1.5s ease-in-out infinite}
 /* Animated waveform bars next to the "Listening..." text */
 .mic-wave{display:inline-flex;align-items:center;gap:2px;height:14px}
 .mic-wave::before,.mic-wave::after,.mic-wave .bar{content:'';display:block;width:3px;border-radius:2px;background:var(--rd);animation:mic-bars .8s ease-in-out infinite}
@@ -420,6 +422,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .bsheet-opt:active{border-color:var(--ac);background:var(--acd);transform:scale(.98)}
 .bsheet-opt-icon{font-size:1.3rem;flex-shrink:0;width:32px;text-align:center}
 .bsheet-opt-text{flex:1}
+/* Subtitle text shown below option label (e.g. barcode scan hint) */
+.bsheet-opt-sub{display:block;font-size:.73rem;color:var(--mt);font-weight:400;margin-top:2px}
+/* Larger scan button to make it more inviting and easy to tap */
+.bsheet-opt-scan{padding:18px 16px}
 /* "Add item" button at top of shopping list */
 .shop-add-btn{margin-bottom:12px;font-size:.92rem}
 

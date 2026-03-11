@@ -18,8 +18,9 @@ import { wDates } from '../helpers.js'; // wDates = returns array of Date object
 // ── VOICE INPUT (Web Speech API) ─────────────────────────────────────────────
 // Uses the SpeechRecognition API to let users speak items into the shopping list.
 // The mic button is hidden if the browser doesn't support the API (graceful fallback).
-// Auto-stops after detecting silence (no manual stop needed).
 // Shows a live interim transcript in the input field while speaking.
+// A red "Stop" button appears while listening so the user can end recording manually.
+// After capture, the item is saved and enrichment search runs (same dropdown as text input).
 
 /** Module-level reference to the active SpeechRecognition instance (null when not listening) */
 let _recognition = null;
@@ -327,24 +328,21 @@ export function toggleAddNote() {
 }
 
 // ── BOTTOM SHEET: ADD ITEM ───────────────────────────────────────────────────
-// The add-item bottom sheet replaces the old inline quick-add row. It slides up
-// from the bottom and presents three options: Type item, Scan barcode, Voice input.
-// Tapping "Type item" reveals an inline input form directly in the sheet.
+// The add-item bottom sheet slides up with the text input auto-focused and keyboard
+// open, so the user can start typing immediately. Barcode scan and voice input
+// options are visible below the input field for quick access.
 
 /**
  * openShopAddSheet() — Opens the add-item bottom sheet.
- * Resets to the options view (hides the type-item form if previously opened).
+ * Immediately shows the text input with keyboard focused, plus scan/voice options below.
  */
 export function openShopAddSheet() {
   const backdrop = g("shopAddBackdrop");
   const sheet = g("shopAddSheet");
-  const opts = g("shopAddOptions");
-  const form = g("shopAddTypeForm");
   if (backdrop) backdrop.classList.add("active");
   if (sheet) sheet.classList.add("active");
-  // Reset to options view in case the form was open from a previous use
-  if (opts) opts.style.display = "";
-  if (form) form.style.display = "none";
+  // Auto-focus the input so the keyboard pops up immediately
+  setTimeout(() => { const inp = g("shi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
 }
 
 /**
@@ -356,20 +354,6 @@ export function closeShopAddSheet() {
   const sheet = g("shopAddSheet");
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
-}
-
-/**
- * shopAddType() — Handles the "Type item" option in the bottom sheet.
- * Hides the three options and shows the inline text input form.
- * Auto-focuses the input so the user can start typing immediately.
- */
-export function shopAddType() {
-  const opts = g("shopAddOptions");
-  const form = g("shopAddTypeForm");
-  if (opts) opts.style.display = "none";
-  if (form) form.style.display = "block";
-  // Auto-focus the input field after a brief delay (lets CSS transition finish)
-  setTimeout(() => { const inp = g("shi"); if (inp) inp.focus(); }, 100);
 }
 
 /**
@@ -385,7 +369,7 @@ export function shopAddScan() {
 /**
  * shopAddVoice() — Handles the "Voice input" option in the bottom sheet.
  * Closes the bottom sheet and starts voice recognition.
- * The mic status indicator will appear on the shopping list screen.
+ * The mic status indicator (with stop button) will appear on the shopping list screen.
  */
 export function shopAddVoice() {
   closeShopAddSheet();

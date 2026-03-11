@@ -47,7 +47,7 @@ import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, a
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddType, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -172,7 +172,7 @@ window.toggleVoice = toggleVoice; // Start/stop voice input for shopping list qu
 window.toggleAddNote = toggleAddNote; // Toggle optional note field in shopping list quick-add
 window.openShopAddSheet = openShopAddSheet;   // Open the add-item bottom sheet
 window.closeShopAddSheet = closeShopAddSheet; // Close the add-item bottom sheet
-window.shopAddType = shopAddType;             // Show inline type-item form in bottom sheet
+// shopAddType removed — text input is shown directly when sheet opens
 window.shopAddScan = shopAddScan;             // Scan barcode from bottom sheet
 window.shopAddVoice = shopAddVoice;           // Start voice input from bottom sheet
 window.closeEnrichSheet = closeEnrichSheet;   // Close the product enrichment bottom sheet
