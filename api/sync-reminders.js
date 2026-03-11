@@ -10,6 +10,127 @@
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
+// ── Edamam credentials (same free tier keys used by text-search.js) ──
+const EID = "2b6ecac2";
+const EK = "8db76605e873aaf2fbdf41256cb24cb4";
+
+/**
+ * searchEdamam(query) — Searches the Edamam Food Database by text.
+ * Returns an array of normalized product objects (up to 5).
+ * Used for auto-enrichment of Reminders items.
+ */
+async function searchEdamam(query) {
+  try {
+    const url = `https://api.edamam.com/api/food-database/v2/parser?ingr=${encodeURIComponent(query)}&app_id=${EID}&app_key=${EK}`;
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const d = await r.json();
+    const hints = d.hints || [];
+    return hints.slice(0, 3).map(h => {
+      const f = h.food;
+      const n = f.nutrients || {};
+      return {
+        name: f.label || "",
+        brand: f.brand || "",
+        category: f.category || "General",
+        image: f.image || null,
+        source: "Edamam",
+        description: f.categoryLabel || "",
+        nutrition: {
+          calories: n.ENERC_KCAL ? Math.round(n.ENERC_KCAL) : null,
+          protein: n.PROCNT ? `${n.PROCNT.toFixed(1)}g` : null,
+          fat: n.FAT ? `${n.FAT.toFixed(1)}g` : null,
+          carbs: n.CHOCDF ? `${n.CHOCDF.toFixed(1)}g` : null,
+        },
+      };
+    }).filter(r => r.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * searchOpenFoodFacts(query) — Text search against Open Food Facts.
+ * No API key needed. Returns up to 3 normalized product objects.
+ * Used for auto-enrichment of Reminders items.
+ */
+async function searchOpenFoodFacts(query) {
+  try {
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=3&fields=product_name,brands,categories_tags,image_front_small_url,image_front_url,nutriments,generic_name`;
+    const r = await fetch(url, {
+      headers: { "User-Agent": "KitchenApp/1.0" }
+    });
+    if (!r.ok) return [];
+    const d = await r.json();
+    const products = d.products || [];
+    return products.slice(0, 3).map(p => {
+      const nm = p.product_name || "";
+      if (!nm) return null;
+      const nt = p.nutriments || {};
+      const hasNutrition = nt["energy-kcal_100g"] || nt["proteins_100g"];
+      return {
+        name: nm,
+        brand: p.brands || "",
+        category: ((p.categories_tags || [])[0] || "").replace("en:", "") || "General",
+        image: p.image_front_url || p.image_front_small_url || null,
+        source: "Open Food Facts",
+        description: p.generic_name || "",
+        nutrition: hasNutrition ? {
+          calories: nt["energy-kcal_100g"] ? Math.round(nt["energy-kcal_100g"]) : null,
+          protein: nt["proteins_100g"] ? `${nt["proteins_100g"].toFixed(1)}g` : null,
+          fat: nt["fat_100g"] ? `${nt["fat_100g"].toFixed(1)}g` : null,
+          carbs: nt["carbohydrates_100g"] ? `${nt["carbohydrates_100g"].toFixed(1)}g` : null,
+        } : null,
+      };
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * enrichItem(name) — Searches Edamam and Open Food Facts in parallel
+ * for the given item name. Auto-picks the best match: prefers results
+ * with an image, then Edamam over OFF. Returns enrichment fields to
+ * merge into the Firestore doc, or an empty object if no good match.
+ */
+async function enrichItem(name) {
+  try {
+    const [edamamResults, offResults] = await Promise.all([
+      searchEdamam(name),
+      searchOpenFoodFacts(name),
+    ]);
+
+    // Merge: Edamam first (better nutrition), then OFF
+    const all = [...edamamResults, ...offResults];
+    if (!all.length) return {};
+
+    // Prefer the first result that has an image; fall back to first overall
+    const best = all.find(r => r.image) || all[0];
+
+    // Only enrich if the result name reasonably matches the query
+    // (simple check: the query words appear somewhere in the result name)
+    const queryWords = name.toLowerCase().split(/\s+/);
+    const resultName = best.name.toLowerCase();
+    const matchCount = queryWords.filter(w => resultName.includes(w)).length;
+
+    // Require at least half the query words to match for confidence
+    if (matchCount < Math.ceil(queryWords.length / 2)) return {};
+
+    return {
+      brand: best.brand || "",
+      category: best.category || "",
+      image: best.image || null,
+      source: best.source || "",
+      nutrition: best.nutrition || null,
+      enrichedName: best.name || "",
+    };
+  } catch (err) {
+    console.warn("enrichItem failed for", name, err.message);
+    return {};
+  }
+}
+
 /**
  * getDb() — Lazily initializes the Firebase Admin SDK and returns
  * the Firestore instance. Uses the service account credentials from
@@ -132,17 +253,43 @@ export default async function handler(req, res) {
     console.log("toAdd:", toAdd.length, JSON.stringify(toAdd));
     console.log("toRemove:", toRemove.length);
 
+    // ── Auto-enrich new items via product database search ──
+    // Run all enrichment lookups in parallel. Each item is searched against
+    // Edamam and Open Food Facts; the best match (if any) provides image,
+    // brand, category, and nutrition data. If no match, item saves as plain text.
+    const enrichments = await Promise.all(
+      toAdd.map(name => enrichItem(name))
+    );
+    console.log("enrichment results:", enrichments.map((e, i) => `${toAdd[i]}: ${e.image ? "enriched" : "plain"}`));
+
     // Batch all writes into a single atomic Firestore operation
     const batch = db.batch();
 
-    for (const name of toAdd) {
+    for (let i = 0; i < toAdd.length; i++) {
+      const name = toAdd[i];
+      const enrich = enrichments[i];
       const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      batch.set(shopRef.doc(id), {
+
+      // Build the item doc — start with base fields, then merge any
+      // enrichment data found from the product databases
+      const doc = {
         name,
         checked: false,
         src: "reminders",
         addedAt: new Date().toISOString(),
-      });
+      };
+
+      // Only add enrichment fields when a good match was found
+      if (enrich.image || enrich.brand) {
+        if (enrich.brand) doc.brand = enrich.brand;
+        if (enrich.category) doc.category = enrich.category;
+        if (enrich.image) doc.image = enrich.image;
+        if (enrich.source) doc.source_db = enrich.source;
+        if (enrich.nutrition) doc.nutrition = enrich.nutrition;
+        if (enrich.enrichedName) doc.enrichedName = enrich.enrichedName;
+      }
+
+      batch.set(shopRef.doc(id), doc);
     }
 
     for (const item of toRemove) {
