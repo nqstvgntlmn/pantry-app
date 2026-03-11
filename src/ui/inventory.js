@@ -16,6 +16,8 @@ import { svi, dli, addWasteEntry } from '../db.js';
 import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 import { updExport } from './home.js';
+// searchAndEnrich — searches product databases for text matches and shows enrichment picker
+import { searchAndEnrich } from './shopping.js';
 
 // Renders a single inventory item as an HTML string.
 // Each item is wrapped in a swipe container so the user can swipe-to-delete.
@@ -265,6 +267,9 @@ export async function addManual() {
   g("man").value = ""; g("maq").value = 1; g("mae").value = "";
   g("mabtn").disabled = true;
   showNotif(`${nm} added!`); hideOv("madd");
+
+  // Trigger product enrichment search — lets user pick a richer match with image/brand/nutrition
+  searchAndEnrich(id, nm, "inv");
 }
 
 // Validates the manual-add form: enables the submit button only if a name is entered

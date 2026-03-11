@@ -30,26 +30,25 @@ let _finalTranscript = "";
 
 /**
  * initVoice() — Called on page load to detect Web Speech API support.
- * If supported, shows the mic button. If not, the button stays hidden (graceful fallback).
+ * If supported, shows the mic option in the add-item bottom sheet.
  * Works across Chrome (webkitSpeechRecognition) and other browsers (SpeechRecognition).
  */
 export function initVoice() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) return; // Browser doesn't support speech — button stays hidden
+  if (!SpeechRecognition) return; // Browser doesn't support speech — option stays hidden
 
-  const btn = g("micbtn");
-  if (btn) btn.style.display = ""; // Show the mic button since API is available
+  // Show the voice option in the add-item bottom sheet
+  const opt = g("shopAddMicOpt");
+  if (opt) opt.style.display = "";
 }
 
 /**
  * _setMicUI(active) — Toggles all mic-related visual indicators on or off.
- * Controls the pulsing button animation, the "Listening..." status label,
- * and clears the input field placeholder when entering/exiting voice mode.
+ * Controls the "Listening..." status label shown on the shopping list screen.
+ * Called when voice recognition starts/stops.
  */
 function _setMicUI(active) {
-  const btn = g("micbtn");
   const status = g("micstatus");
-  if (btn) btn.classList.toggle("mic-active", active);
   if (status) status.classList.toggle("visible", active);
 }
 
@@ -78,10 +77,6 @@ export function toggleVoice() {
   _finalTranscript = "";
   _listening = true;
   _setMicUI(true);
-
-  // Clear the input and set placeholder to guide the user
-  const inp = g("shi");
-  if (inp) { inp.value = ""; inp.placeholder = "Speak now..."; }
 
   /**
    * onresult — Fired each time the speech engine produces results.
@@ -123,15 +118,22 @@ export function toggleVoice() {
     _finalTranscript = "";
     _setMicUI(false);
 
-    // Restore the default placeholder
-    const inp = g("shi");
-    if (inp) inp.placeholder = "Add item\u2026";
+    // If we got recognized text, add it to the shopping list directly
+    // (bypasses the bottom sheet since voice already captured the text)
+    if (transcript) {
+      // Create the item directly — same logic as qadd() but without needing the input field
+      let name = transcript, qty = 1;
+      const leadMatch = transcript.match(/^(\d+)\s+(.+)/);
+      const trailMatch = transcript.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
+      if (trailMatch) { name = trailMatch[1].trim(); qty = parseInt(trailMatch[2], 10) || 1; }
+      else if (leadMatch) { name = leadMatch[2].trim(); qty = parseInt(leadMatch[1], 10) || 1; }
 
-    // If we got any recognized text, add it to the shopping list
-    if (transcript && inp) {
-      inp.value = transcript;
-      qadd();
+      const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
+      svShopItem(item);
       showNotif(`Added "${transcript}" 🎤`);
+
+      // Trigger enrichment search for the voice-added item
+      searchAndEnrich(item.id, name, "shop");
     }
   };
 
@@ -251,7 +253,7 @@ export function renderShop() {
 
 /**
  * qadd() — Quick-add: reads the text input (#shi), creates a new shopping item,
- * saves it to Firestore, and clears the input. Uses timestamp as a unique ID.
+ * and triggers product enrichment search. Uses timestamp as a unique ID.
  * Source is tagged "manual" to distinguish from AI-generated or meal-plan items.
  *
  * Supports optional inline quantity with these patterns:
@@ -262,6 +264,8 @@ export function renderShop() {
  *
  * Also captures the optional note from the collapsible note field (#addNoteInp).
  * The note is cleared and the field collapsed after adding.
+ * After adding, searches product databases for matching products so the user
+ * can enrich the item with an image, brand, and category.
  */
 export function qadd() {
   const i = g("shi"), v = i.value.trim(); // "shi" = shopping input text field
@@ -289,6 +293,7 @@ export function qadd() {
   const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
   if (note) item.note = note; // Only include note field if the user typed something
 
+  // Save immediately with plain text so the item appears right away
   svShopItem(item);
   i.value = ""; // Clear the input after adding
 
@@ -296,6 +301,13 @@ export function qadd() {
   if (noteInp) noteInp.value = "";
   const wrap = g("addNoteWrap");
   if (wrap) wrap.style.display = "none";
+
+  // Close the add-item bottom sheet after adding
+  closeShopAddSheet();
+
+  // Trigger product enrichment search in the background
+  // If matches are found, the user picks one to enrich the item with rich data
+  searchAndEnrich(item.id, name, "shop");
 }
 
 /**
@@ -312,6 +324,212 @@ export function toggleAddNote() {
     const inp = g("addNoteInp");
     if (inp) inp.focus();
   }
+}
+
+// ── BOTTOM SHEET: ADD ITEM ───────────────────────────────────────────────────
+// The add-item bottom sheet replaces the old inline quick-add row. It slides up
+// from the bottom and presents three options: Type item, Scan barcode, Voice input.
+// Tapping "Type item" reveals an inline input form directly in the sheet.
+
+/**
+ * openShopAddSheet() — Opens the add-item bottom sheet.
+ * Resets to the options view (hides the type-item form if previously opened).
+ */
+export function openShopAddSheet() {
+  const backdrop = g("shopAddBackdrop");
+  const sheet = g("shopAddSheet");
+  const opts = g("shopAddOptions");
+  const form = g("shopAddTypeForm");
+  if (backdrop) backdrop.classList.add("active");
+  if (sheet) sheet.classList.add("active");
+  // Reset to options view in case the form was open from a previous use
+  if (opts) opts.style.display = "";
+  if (form) form.style.display = "none";
+}
+
+/**
+ * closeShopAddSheet() — Dismisses the add-item bottom sheet.
+ * Called when tapping the backdrop or after an item is added.
+ */
+export function closeShopAddSheet() {
+  const backdrop = g("shopAddBackdrop");
+  const sheet = g("shopAddSheet");
+  if (backdrop) backdrop.classList.remove("active");
+  if (sheet) sheet.classList.remove("active");
+}
+
+/**
+ * shopAddType() — Handles the "Type item" option in the bottom sheet.
+ * Hides the three options and shows the inline text input form.
+ * Auto-focuses the input so the user can start typing immediately.
+ */
+export function shopAddType() {
+  const opts = g("shopAddOptions");
+  const form = g("shopAddTypeForm");
+  if (opts) opts.style.display = "none";
+  if (form) form.style.display = "block";
+  // Auto-focus the input field after a brief delay (lets CSS transition finish)
+  setTimeout(() => { const inp = g("shi"); if (inp) inp.focus(); }, 100);
+}
+
+/**
+ * shopAddScan() — Handles the "Scan barcode" option in the bottom sheet.
+ * Closes the bottom sheet and opens the barcode scanner in list mode.
+ */
+export function shopAddScan() {
+  closeShopAddSheet();
+  // openScanForList is on window (registered in main.js)
+  if (window.openScanForList) window.openScanForList();
+}
+
+/**
+ * shopAddVoice() — Handles the "Voice input" option in the bottom sheet.
+ * Closes the bottom sheet and starts voice recognition.
+ * The mic status indicator will appear on the shopping list screen.
+ */
+export function shopAddVoice() {
+  closeShopAddSheet();
+  toggleVoice();
+}
+
+// ── PRODUCT TEXT SEARCH & ENRICHMENT ────────────────────────────────────────
+// When a user manually types an item name, we search product databases
+// (Edamam + Open Food Facts) for matches. If found, we show a bottom sheet
+// with the top results so the user can pick one to enrich the item with
+// rich data (image, brand, category, nutrition) — just like a barcode scan.
+// This works for both shopping list AND pantry manual entries.
+
+/**
+ * searchAndEnrich(itemId, query, list) — Searches product databases for matches
+ * and shows an enrichment picker if results are found.
+ * @param {string} itemId — ID of the just-added item (to update if user picks a match)
+ * @param {string} query — The item name to search for
+ * @param {string} list — "shop" for shopping list, "inv" for inventory
+ */
+export async function searchAndEnrich(itemId, query, list) {
+  // Skip enrichment for very short queries (likely abbreviations, not product names)
+  if (!query || query.length < 2) return;
+
+  const resultsEl = g("enrichResults");
+  const titleEl = g("enrichTitle");
+  if (!resultsEl) return;
+
+  // Show loading state in the enrichment sheet
+  if (titleEl) titleEl.textContent = `Finding "${query}"…`;
+  resultsEl.innerHTML = '<div class="enrich-loading"><div class="spin" style="width:28px;height:28px;margin:0 auto 8px"></div>Searching products…</div>';
+
+  // Open the enrichment bottom sheet
+  const backdrop = g("enrichBackdrop");
+  const sheet = g("enrichSheet");
+  if (backdrop) backdrop.classList.add("active");
+  if (sheet) sheet.classList.add("active");
+
+  try {
+    // Call the text search API endpoint
+    const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
+    const data = await r.json();
+    const results = data.results || [];
+
+    // If no matches found, silently close the sheet — item is already saved as plain text
+    if (!results.length) {
+      closeEnrichSheet();
+      return;
+    }
+
+    // Update the title and render the results
+    if (titleEl) titleEl.textContent = "Choose a match";
+
+    // Build the results HTML with product thumbnails, names, brands, and categories
+    let html = results.map((p, i) => {
+      const img = p.image
+        ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'"/>`
+        : `<div class="enrich-img-ph">🛒</div>`;
+      const brand = p.brand ? `<div class="enrich-brand">${p.brand}</div>` : "";
+      const cat = p.category && p.category !== "General"
+        ? `<div class="enrich-cat">${p.category}</div>` : "";
+      return `<div class="enrich-row" onclick="pickEnrichResult(${i})">
+        ${img}
+        <div style="flex:1;min-width:0">
+          <div class="enrich-name">${p.name}</div>
+          ${brand}${cat}
+        </div>
+      </div>`;
+    }).join("");
+
+    // "Just add as typed" fallback option at the bottom
+    html += `<button class="enrich-fallback" onclick="closeEnrichSheet()">
+      <span style="font-size:1.1rem">📝</span>
+      Just add "${query}" as typed
+    </button>`;
+
+    resultsEl.innerHTML = html;
+
+    // Store results and context in a temporary global for the click handler
+    window._enrichCtx = { itemId, query, list, results };
+
+  } catch (e) {
+    // On error, silently close — the item is already saved as plain text
+    console.warn("Text search failed:", e);
+    closeEnrichSheet();
+  }
+}
+
+/**
+ * closeEnrichSheet() — Dismisses the product enrichment bottom sheet.
+ */
+export function closeEnrichSheet() {
+  const backdrop = g("enrichBackdrop");
+  const sheet = g("enrichSheet");
+  if (backdrop) backdrop.classList.remove("active");
+  if (sheet) sheet.classList.remove("active");
+  // Clean up the temporary enrichment context
+  window._enrichCtx = null;
+}
+
+/**
+ * pickEnrichResult(index) — Called when the user picks a product match from the
+ * enrichment bottom sheet. Updates the existing item with rich product data
+ * (image, brand, category, nutrition) from the selected search result.
+ */
+export function pickEnrichResult(index) {
+  const ctx = window._enrichCtx;
+  if (!ctx) return;
+
+  const product = ctx.results[index];
+  if (!product) return;
+
+  if (ctx.list === "shop") {
+    // Update the shopping list item with enriched product data
+    const item = state.shop.find(i => i.id === ctx.itemId);
+    if (item) {
+      svShopItem({
+        ...item,
+        name: product.name,
+        brand: product.brand || "",
+        image: product.image || null,
+        category: product.category || "",
+        nutrition: product.nutrition || null,
+        source: product.source || "search",
+      });
+    }
+  } else if (ctx.list === "inv") {
+    // Update the inventory item with enriched product data
+    const item = state.inv.find(i => i.id === ctx.itemId);
+    if (item) {
+      svi({
+        ...item,
+        name: product.name,
+        brand: product.brand || "",
+        image: product.image || null,
+        category: product.category || item.category,
+        nutrition: product.nutrition || null,
+        source: product.source || "search",
+      });
+    }
+  }
+
+  closeEnrichSheet();
+  showNotif(`Updated with "${product.name}" ✓`);
 }
 
 /**
