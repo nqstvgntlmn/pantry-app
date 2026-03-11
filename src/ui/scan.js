@@ -25,9 +25,14 @@ let scannerRunning = false;
 // Debounce flag: prevents multiple rapid detections from triggering concurrent lookups
 let processingBarcode = false;
 
+// Holds a manually acquired camera stream (used as a fallback on iOS Safari
+// when Quagga's built-in getUserMedia produces a black feed)
+let _manualStream = null;
+
 // Starts the live camera scanner inside the viewfinder element.
-// Initializes Quagga with the rear camera, begins streaming, and registers
-// the onDetected callback for automatic barcode recognition.
+// Uses a double-requestAnimationFrame to ensure the scan overlay is fully
+// laid out before Quagga measures container dimensions, then initializes
+// Quagga with the rear camera and applies iOS Safari video fixes.
 function startLiveScanner() {
   if (scannerRunning) return;  // Already running, skip re-init
 
@@ -38,8 +43,18 @@ function startLiveScanner() {
   const statusEl = g("scan-status");
   if (statusEl) { statusEl.textContent = "Starting camera…"; statusEl.style.display = "block"; }
 
-  // Initialize Quagga with live video from the rear camera.
-  // The video streams into #scanner-video and Quagga analyzes frames in real time.
+  // Double requestAnimationFrame: the first rAF fires after the current frame
+  // is committed, the second fires after the browser has actually painted.
+  // This ensures the scan overlay has non-zero dimensions when Quagga reads them.
+  requestAnimationFrame(() => { requestAnimationFrame(() => {
+    _initQuagga(target, statusEl);
+  }); });
+}
+
+// Initializes Quagga for barcode detection with the rear camera.
+// After init, applies iOS Safari fixes (playsinline attribute, forced play)
+// and schedules a fallback that re-acquires the camera if the feed is still black.
+function _initQuagga(target, statusEl) {
   Quagga.init({
     inputStream: {
       name: "Live",
@@ -74,15 +89,73 @@ function startLiveScanner() {
       return;
     }
 
+    // iOS Safari fix: ensure Quagga's video element has the playsinline attribute.
+    // Without it, iOS tries to play video fullscreen instead of inline, causing
+    // the camera feed to appear black inside the viewfinder container.
+    // Also set muted (required for autoplay on iOS) and force play().
+    _fixVideoForIOS(target);
+
     // Camera initialized successfully — start processing video frames
     Quagga.start();
     scannerRunning = true;
     if (statusEl) statusEl.textContent = "Scanning…";
+
+    // Fallback: if after 2 seconds the video has no visible frame (videoWidth === 0),
+    // manually acquire a new camera stream and attach it. This catches edge cases
+    // where Quagga's internal getUserMedia produced a valid stream that doesn't render.
+    setTimeout(() => _ensureCameraVisible(target), 2000);
   });
 
   // Register the detection callback — fires each time Quagga decodes a barcode.
   // We check confidence and debounce to avoid false positives and double-lookups.
   Quagga.onDetected(onBarcodeDetected);
+}
+
+// Finds all video elements inside the scanner container and ensures they have
+// the playsinline attribute required for inline video on iOS Safari.
+// Without playsinline, iOS opens video in fullscreen mode, which renders as
+// a black rectangle inside our viewfinder container.
+function _fixVideoForIOS(target) {
+  target.querySelectorAll('video').forEach(v => {
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
+    v.muted = true;
+    // Force play in case autoplay was blocked by the browser
+    v.play().catch(() => {});
+  });
+}
+
+// Checks if the camera feed is actually visible after Quagga started.
+// If the video element has zero videoWidth (black/no feed), manually acquires
+// a new camera stream via getUserMedia and replaces the video's srcObject.
+// Quagga's frame analysis reads from the video element, so replacing the
+// stream source will also update what Quagga sees for barcode detection.
+async function _ensureCameraVisible(target) {
+  if (!scannerRunning) return;  // Scanner was stopped before this timeout fired
+  const video = target.querySelector('video');
+  if (!video || video.videoWidth > 0) return;  // Camera is rendering fine, no action needed
+
+  console.warn("Camera feed appears black — retrying with manual getUserMedia");
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    _manualStream = stream;
+
+    // Stop Quagga's original (non-rendering) stream tracks
+    if (video.srcObject) {
+      video.srcObject.getTracks().forEach(t => t.stop());
+    }
+
+    // Attach our manually acquired stream with proper iOS attributes
+    video.srcObject = stream;
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+    video.muted = true;
+    await video.play();
+  } catch (e) {
+    console.error("Manual camera retry failed:", e);
+  }
 }
 
 // Stops the live scanner and releases the camera.
@@ -92,6 +165,14 @@ export function stopLiveScanner() {
   if (!scannerRunning) return;
   try { Quagga.stop(); } catch { /* ignore if already stopped */ }
   Quagga.offDetected(onBarcodeDetected);  // Remove the detection listener to prevent stale callbacks
+
+  // Stop the manually acquired fallback stream if it was activated,
+  // releasing the camera hardware back to the OS
+  if (_manualStream) {
+    _manualStream.getTracks().forEach(t => t.stop());
+    _manualStream = null;
+  }
+
   scannerRunning = false;
   processingBarcode = false;
 }

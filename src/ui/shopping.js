@@ -413,6 +413,13 @@ let _searchDebounceTimer = null;
 /** Stores the most recent inline search results so qadd() and pickInlineResult() can use them */
 let _inlineSearchResults = null;
 
+// ── SEARCH RESULT CACHE ─────────────────────────────────────────────────────
+// Caches recent API responses in memory so repeated/similar searches don't
+// re-hit the API waterfall. Entries expire after 5 minutes.
+const _searchCache = new Map();
+const _CACHE_TTL = 5 * 60 * 1000;  // 5 minutes
+const _CACHE_MAX = 30;             // Max cached queries
+
 /**
  * onShopInput() — Called on every keystroke in the add-item input (#shi).
  * Debounces the product search by 350ms so we don't fire API calls on every
@@ -438,9 +445,110 @@ export function onShopInput() {
 }
 
 /**
- * _runInlineSearch(query) — Fires the product search API and renders results
- * in the inline dropdown below the input. Filters results for relevance:
- * only products whose name contains at least one word from the search query.
+ * scoreSearchResult(name, query) — Scores how relevant a product name is
+ * to the user's search query. Higher scores = more relevant.
+ *
+ * Prioritizes results where the query is the primary word (e.g. "Mushrooms"
+ * for query "mushroom") over results where it's a secondary ingredient
+ * (e.g. "Chicken & Mushroom Flavour POT noodle").
+ *
+ * Scoring breakdown:
+ *   100  = exact match
+ *   50+  = name starts with query
+ *   40+  = first word of name matches
+ *   0-30 = query position bonus (earlier = higher)
+ *   0-15 = shorter names get a bonus (more specific products)
+ *   10   = word-boundary match bonus
+ *
+ * @param {string} name — The product name to score
+ * @param {string} query — The user's search query
+ * @returns {number} Relevance score (higher = more relevant)
+ */
+export function scoreSearchResult(name, query) {
+  const nameLower = (name || "").toLowerCase();
+  const queryLower = query.toLowerCase();
+  let score = 0;
+
+  // Exact match is highest priority
+  if (nameLower === queryLower) return 100;
+
+  // Name starts with the query (e.g. "Mushrooms 8oz" for "mushroom")
+  if (nameLower.startsWith(queryLower)) score += 50;
+
+  // First word of name matches the query (e.g. "Mushroom Soup" for "mushroom")
+  const firstWord = nameLower.split(/\s+/)[0];
+  if (firstWord.startsWith(queryLower) || queryLower.startsWith(firstWord)) score += 40;
+
+  // Position bonus: query appearing earlier in the name means higher relevance
+  const pos = nameLower.indexOf(queryLower);
+  if (pos >= 0) {
+    score += Math.max(0, 30 - pos);
+  }
+
+  // Shorter names tend to be more specific/relevant products
+  score += Math.max(0, 15 - Math.floor(name.length / 4));
+
+  // Word-boundary match: query appears as a whole word, not as a substring
+  // (e.g. "mushroom" in "Baby Bella Mushrooms" but not "mush" in "mushy peas")
+  const escaped = queryLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`\\b${escaped}`, 'i').test(name)) score += 10;
+
+  return score;
+}
+
+/**
+ * _fetchAndScoreResults(query) — Fetches product search results from the API
+ * (with in-memory caching) and scores/sorts them by relevance.
+ * Returns an array of scored, filtered, sorted results (top 5).
+ * @param {string} query — The search query
+ * @returns {Promise<Array>} Scored and sorted product results
+ */
+async function _fetchAndScoreResults(query) {
+  const cacheKey = query.toLowerCase();
+
+  // Check cache first — avoids re-hitting the API for repeated searches
+  const cached = _searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < _CACHE_TTL) {
+    return cached.scored;
+  }
+
+  // Fetch from the text search API
+  const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
+  const data = await r.json();
+  let results = data.results || [];
+
+  // Filter: at least one query word must appear in the product name
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+  results = results.filter(p => {
+    const nameLower = (p.name || "").toLowerCase();
+    return queryWords.some(w => nameLower.includes(w));
+  });
+
+  // Score by relevance and cut off low-scoring results.
+  // Minimum score of 15 eliminates products where the query is just a minor
+  // secondary ingredient (e.g. "Chicken & Mushroom Flavour POT noodle" for "mushroom").
+  const scored = results
+    .map(p => ({ ...p, _score: scoreSearchResult(p.name || "", query) }))
+    .filter(p => p._score >= 15)
+    .sort((a, b) => b._score - a._score)
+    .slice(0, 5);
+
+  // Cache the scored results
+  _searchCache.set(cacheKey, { scored, ts: Date.now() });
+  // Evict oldest entries if cache is full
+  if (_searchCache.size > _CACHE_MAX) {
+    const oldest = _searchCache.keys().next().value;
+    _searchCache.delete(oldest);
+  }
+
+  return scored;
+}
+
+/**
+ * _runInlineSearch(query) — Fires the product search API (with caching) and
+ * renders results in the inline dropdown below the input. Results are scored
+ * by how prominently the query term appears in the product name, so
+ * "Mushrooms" ranks above "Chicken & Mushroom Flavour POT noodle".
  * @param {string} query — The text to search for
  */
 async function _runInlineSearch(query) {
@@ -452,17 +560,7 @@ async function _runInlineSearch(query) {
   dropdown.classList.add("active");
 
   try {
-    const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
-    const data = await r.json();
-    let results = data.results || [];
-
-    // Filter for relevance: at least one word from the query must appear in the product name.
-    // This prevents "fiber" from matching "Chicken Breast" or unrelated products.
-    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
-    results = results.filter(p => {
-      const nameLower = (p.name || "").toLowerCase();
-      return queryWords.some(w => nameLower.includes(w));
-    });
+    const results = await _fetchAndScoreResults(query);
 
     // Bail if the input changed while we were fetching (stale response)
     const currentQuery = g("shi") ? g("shi").value.trim() : "";
@@ -475,8 +573,6 @@ async function _runInlineSearch(query) {
       return;
     }
 
-    // Cap at 5 results to keep the dropdown compact
-    results = results.slice(0, 5);
     _inlineSearchResults = results;
 
     // Render result rows inside the dropdown
@@ -586,17 +682,9 @@ export async function searchAndEnrich(itemId, query, list) {
   if (sheet) sheet.classList.add("active");
 
   try {
-    // Call the text search API endpoint
-    const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
-    const data = await r.json();
-    let results = data.results || [];
-
-    // Filter for relevance: at least one query word must appear in the product name
-    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
-    results = results.filter(p => {
-      const nameLower = (p.name || "").toLowerCase();
-      return queryWords.some(w => nameLower.includes(w));
-    });
+    // Use the shared fetch-and-score pipeline (with caching) for consistent
+    // relevance ranking across inline search and post-add enrichment
+    let results = await _fetchAndScoreResults(query);
 
     // If no relevant matches, silently close — item is already saved as plain text
     if (!results.length) {

@@ -325,8 +325,11 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 #scanner-viewport{position:relative;width:100%;aspect-ratio:4/3;background:#000;border-radius:14px;overflow:hidden;margin:12px auto 8px}
 /* Quagga injects a <video> and <canvas> inside #scanner-video; fill the viewport */
 /* position:relative required so Quagga's absolutely-positioned <video> and <canvas> render inside this container */
-#scanner-video{width:100%;height:100%;position:relative}
-#scanner-video video,#scanner-video canvas{width:100%!important;height:100%!important;object-fit:cover;position:absolute;top:0;left:0}
+#scanner-video{width:100%;height:100%;position:relative;min-height:200px}
+/* Video must be above canvases (z-index:1) so the live camera feed is visible.
+   On iOS Safari, Quagga's canvas can overlay the video causing a black screen. */
+#scanner-video video{width:100%!important;height:100%!important;object-fit:cover;position:absolute;top:0;left:0;z-index:1}
+#scanner-video canvas{width:100%!important;height:100%!important;object-fit:cover;position:absolute;top:0;left:0;z-index:0}
 /* Hide Quagga's internal debug canvas (drawingBuffer) so only the live video shows */
 #scanner-video canvas.drawingBuffer{display:none}
 
@@ -453,6 +456,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 #shopSearchDropdown.active{display:block}
 #shopSearchDropdown .enrich-row{margin-bottom:6px;padding:10px 12px}
 #shopSearchDropdown .search-hint{text-align:center;padding:12px;color:var(--mt);font-size:.78rem}
+
+/* ── INLINE SEARCH DROPDOWN (inside add-item bottom sheet for inventory) ── */
+/* Mirrors the shopping search dropdown — shows live product results below the text input */
+#invSearchDropdown{max-height:240px;overflow-y:auto;margin-top:6px;display:none}
+#invSearchDropdown.active{display:block}
+#invSearchDropdown .enrich-row{margin-bottom:6px;padding:10px 12px}
+#invSearchDropdown .search-hint{text-align:center;padding:12px;color:var(--mt);font-size:.78rem}
 
 /* ── COMMUNITY ── */
 .com-rcd{position:relative}

@@ -42,8 +42,9 @@ window.getIdToken = getIdToken;
 // Home screen: dashboard rendering, weekly/tonight views, export panel
 import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop } from './ui/home.js';
 
-// Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD } from './ui/inventory.js';
+// Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
+// bottom sheet add flow (mirrors shopping), voice input for inventory
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
@@ -152,6 +153,17 @@ window.remItem = remItem;       // Remove (delete) an inventory item
 window.importDoc = importDoc;   // Import inventory items from a document/file
 window.adjLowThresh = adjLowThresh;   // Adjust low-stock threshold by +/- 1
 window.adjLowThreshD = adjLowThreshD; // Handle direct input of low-stock threshold
+// Inventory add-to-pantry bottom sheet (mirrors shopping add-item sheet)
+window.openInvAddSheet = openInvAddSheet;     // Open the add-to-pantry bottom sheet
+window.closeInvAddSheet = closeInvAddSheet;   // Close the add-to-pantry bottom sheet
+window.invAddScan = invAddScan;               // Scan barcode from inventory bottom sheet
+window.invAddVoice = invAddVoice;             // Start voice input from inventory bottom sheet
+window.setInvAddLoc = setInvAddLoc;           // Set location in inventory add sheet
+window.toggleInvAddNote = toggleInvAddNote;   // Toggle note field in inventory add sheet
+window.qaddInv = qaddInv;                     // Quick-add item to inventory from text input
+window.onInvInput = onInvInput;               // Debounced live search as user types in inventory add input
+window.pickInvInlineResult = pickInvInlineResult; // Pick a product from the inventory search dropdown
+window.toggleInvVoice = toggleInvVoice;       // Start/stop voice input for inventory
 
 // ── Shopping screen handlers ──
 window.qadd = qadd;             // Quick-add an item to the shopping list
@@ -376,8 +388,9 @@ window._appStart = async function(code) {
   // Initialize the home screen (set up date display, greeting, etc.)
   initHome();
 
-  // Detect Web Speech API support and show mic button if available
+  // Detect Web Speech API support and show mic buttons if available
   initVoice();
+  initInvVoice();
 
   // ── Real-time sync ──
   // Instead of polling every 30 seconds, we use Firestore onSnapshot listeners

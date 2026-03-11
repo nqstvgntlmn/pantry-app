@@ -13,11 +13,12 @@ import { svi, dli, addWasteEntry } from '../db.js';
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 import { updExport } from './home.js';
 // searchAndEnrich — searches product databases for text matches and shows enrichment picker
-import { searchAndEnrich } from './shopping.js';
+// scoreSearchResult — relevance scoring for search results
+import { searchAndEnrich, scoreSearchResult } from './shopping.js';
 
 // Renders a single inventory item as an HTML string.
 // Each item is wrapped in a swipe container so the user can swipe-to-delete.
@@ -329,4 +330,435 @@ export async function importDoc() {
   g("imptxt").value = ""; // clear the textarea
   showNotif(`Imported ${imported} new, updated ${updated}`);
   hideOv("import");
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── INVENTORY BOTTOM SHEET (ADD TO PANTRY) ──────────────────────────────────
+// Mirrors the Shopping screen's bottom sheet add-item flow:
+//   - Text input with keyboard auto-focused
+//   - Live search dropdown with debounced product database lookup
+//   - Location picker (fridge / freezer / pantry)
+//   - Optional note field
+//   - "Scan barcode" and "Voice input" options
+// Items added here go to the pantry/inventory collection, not shopping list.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Module-level state for the inventory add flow ──
+/** Timer ID for debounced search in the inventory add sheet */
+let _invSearchTimer = null;
+/** Stores inline search results so pickInvInlineResult can reference them */
+let _invInlineResults = null;
+/** Currently selected storage location in the add sheet (default: fridge) */
+let _invAddLocation = "fridge";
+
+// ── Voice input state (mirrors shopping.js voice pattern) ──
+/** Active SpeechRecognition instance for inventory voice input */
+let _invRecognition = null;
+/** Whether inventory voice recognition is currently listening */
+let _invListening = false;
+/** Accumulated finalized transcript segments for inventory voice input */
+let _invFinalTranscript = "";
+/** Flag: true when user manually tapped Stop (commit speech) */
+let _invManualStop = false;
+
+// ── In-memory cache for inventory search results ──
+const _invSearchCache = new Map();
+const _INV_CACHE_TTL = 5 * 60 * 1000;  // 5 minutes
+const _INV_CACHE_MAX = 30;
+
+/**
+ * openInvAddSheet() — Opens the add-to-pantry bottom sheet.
+ * Shows the text input with keyboard focused, location picker, and scan/voice options.
+ * Resets the location to "fridge" and clears previous input on each open.
+ */
+export function openInvAddSheet() {
+  const backdrop = g("invAddBackdrop");
+  const sheet = g("invAddSheet");
+  if (backdrop) backdrop.classList.add("active");
+  if (sheet) sheet.classList.add("active");
+
+  // Reset location picker to default (fridge)
+  _invAddLocation = "fridge";
+  document.querySelectorAll("#invAddSheet .lbtn").forEach(b => b.classList.remove("sel"));
+  const fBtn = g("invAddLoc-fridge");
+  if (fBtn) fBtn.classList.add("sel");
+
+  // Auto-focus the input so the keyboard pops up immediately
+  setTimeout(() => { const inp = g("invi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
+}
+
+/**
+ * closeInvAddSheet() — Dismisses the add-to-pantry bottom sheet.
+ * Clears the search dropdown to avoid stale results on next open.
+ */
+export function closeInvAddSheet() {
+  const backdrop = g("invAddBackdrop");
+  const sheet = g("invAddSheet");
+  if (backdrop) backdrop.classList.remove("active");
+  if (sheet) sheet.classList.remove("active");
+  _clearInvSearch();
+}
+
+/**
+ * invAddScan() — Handles the "Scan barcode" option in the inventory bottom sheet.
+ * Closes the sheet and opens the barcode scanner in inventory mode.
+ */
+export function invAddScan() {
+  closeInvAddSheet();
+  if (window.openScanForInventory) window.openScanForInventory();
+}
+
+/**
+ * invAddVoice() — Handles the "Voice input" option in the inventory bottom sheet.
+ * Closes the sheet and starts voice recognition for inventory.
+ */
+export function invAddVoice() {
+  closeInvAddSheet();
+  toggleInvVoice();
+}
+
+/**
+ * setInvAddLoc(loc, btn) — Sets the storage location in the inventory add sheet.
+ * Updates the module state and highlights the selected location button.
+ */
+export function setInvAddLoc(loc, btn) {
+  _invAddLocation = loc;
+  document.querySelectorAll("#invAddSheet .lbtn").forEach(b => b.classList.remove("sel"));
+  if (btn) btn.classList.add("sel");
+}
+
+/**
+ * toggleInvAddNote() — Toggles the optional note field in the inventory add sheet.
+ * When shown, focuses the textarea so the user can start typing immediately.
+ */
+export function toggleInvAddNote() {
+  const wrap = g("invAddNoteWrap");
+  if (!wrap) return;
+  const showing = wrap.style.display === "none";
+  wrap.style.display = showing ? "block" : "none";
+  if (showing) {
+    const inp = g("invAddNoteInp");
+    if (inp) inp.focus();
+  }
+}
+
+/**
+ * qaddInv() — Quick-add an item to inventory from the bottom sheet text input.
+ * Parses optional quantity from common patterns (e.g. "5 apples", "eggs x3"),
+ * saves the item to the selected location, and triggers product enrichment
+ * so the user can pick a richer match with image/brand/nutrition.
+ */
+export function qaddInv() {
+  const inp = g("invi"), v = inp ? inp.value.trim() : "";
+  if (!v) return;
+
+  // Parse optional quantity from the input text
+  let name = v, qty = 1;
+  const leadMatch = v.match(/^(\d+)\s+(.+)/);
+  const trailMatch = v.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
+  if (trailMatch) { name = trailMatch[1].trim(); qty = parseInt(trailMatch[2], 10) || 1; }
+  else if (leadMatch) { name = leadMatch[2].trim(); qty = parseInt(leadMatch[1], 10) || 1; }
+
+  // Capture the optional note from the collapsible note field
+  const noteInp = g("invAddNoteInp");
+  const note = noteInp ? noteInp.value.trim() : "";
+
+  // Generate a unique ID for the new inventory item
+  const id = "itm-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
+
+  // Save the item to inventory with the selected location
+  const item = {
+    id, barcode: id, name, brand: "", unit: "unit", qty,
+    location: _invAddLocation, category: gcat({ name }),
+    image: null, source: "Manual", nutrition: null,
+    expiry: null, addedAt: new Date().toLocaleDateString()
+  };
+  if (note) item.note = note;
+  svi(item);
+
+  showNotif(`${name} added!`);
+
+  // Reset form fields for next use
+  if (inp) inp.value = "";
+  if (noteInp) noteInp.value = "";
+  const wrap = g("invAddNoteWrap");
+  if (wrap) wrap.style.display = "none";
+  _clearInvSearch();
+  closeInvAddSheet();
+
+  // Trigger product enrichment search — lets user pick a richer match
+  searchAndEnrich(id, name, "inv");
+}
+
+// ── LIVE INLINE SEARCH FOR INVENTORY ─────────────────────────────────────────
+// As the user types in the inventory add input (#invi), we debounce and search
+// product databases. Results appear in a dropdown below the input (inside the
+// bottom sheet) so the user can pick a match BEFORE the item is added.
+// Mirrors the shopping inline search pattern.
+
+/**
+ * onInvInput() — Called on every keystroke in the inventory add input (#invi).
+ * Debounces the product search by 350ms to avoid excessive API calls.
+ */
+export function onInvInput() {
+  if (_invSearchTimer) clearTimeout(_invSearchTimer);
+
+  const inp = g("invi");
+  const query = inp ? inp.value.trim() : "";
+  const dropdown = g("invSearchDropdown");
+
+  // If input is too short, hide the dropdown
+  if (!query || query.length < 2) {
+    if (dropdown) { dropdown.classList.remove("active"); dropdown.innerHTML = ""; }
+    _invInlineResults = null;
+    return;
+  }
+
+  // Wait 350ms after the user stops typing before searching
+  _invSearchTimer = setTimeout(() => _runInvSearch(query), 350);
+}
+
+/**
+ * _runInvSearch(query) — Fetches and renders product search results in the
+ * inventory add sheet dropdown. Uses relevance scoring and in-memory caching.
+ */
+async function _runInvSearch(query) {
+  const dropdown = g("invSearchDropdown");
+  if (!dropdown) return;
+
+  dropdown.innerHTML = '<div class="search-hint">Searching…</div>';
+  dropdown.classList.add("active");
+
+  try {
+    // Check cache first
+    const cacheKey = query.toLowerCase();
+    let results;
+    const cached = _invSearchCache.get(cacheKey);
+
+    if (cached && Date.now() - cached.ts < _INV_CACHE_TTL) {
+      results = cached.scored;
+    } else {
+      // Fetch from API
+      const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
+      const data = await r.json();
+      let raw = data.results || [];
+
+      // Filter: at least one query word must appear in the product name
+      const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+      raw = raw.filter(p => {
+        const nameLower = (p.name || "").toLowerCase();
+        return queryWords.some(w => nameLower.includes(w));
+      });
+
+      // Score, filter low-relevance, sort, and cap at 5
+      results = raw
+        .map(p => ({ ...p, _score: scoreSearchResult(p.name || "", query) }))
+        .filter(p => p._score >= 15)
+        .sort((a, b) => b._score - a._score)
+        .slice(0, 5);
+
+      // Cache the scored results
+      _invSearchCache.set(cacheKey, { scored: results, ts: Date.now() });
+      if (_invSearchCache.size > _INV_CACHE_MAX) {
+        _invSearchCache.delete(_invSearchCache.keys().next().value);
+      }
+    }
+
+    // Bail if input changed during fetch (stale response)
+    const currentQuery = g("invi") ? g("invi").value.trim() : "";
+    if (currentQuery.toLowerCase() !== query.toLowerCase()) return;
+
+    if (!results.length) {
+      dropdown.classList.remove("active");
+      dropdown.innerHTML = "";
+      _invInlineResults = null;
+      return;
+    }
+
+    _invInlineResults = results;
+
+    // Render result rows
+    dropdown.innerHTML = results.map((p, i) => {
+      const img = p.image
+        ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'"/>`
+        : `<div class="enrich-img-ph">🛒</div>`;
+      const brand = p.brand ? `<div class="enrich-brand">${p.brand}</div>` : "";
+      const cat = p.category && p.category !== "General"
+        ? `<div class="enrich-cat">${p.category}</div>` : "";
+      return `<div class="enrich-row" onclick="pickInvInlineResult(${i})">
+        ${img}
+        <div style="flex:1;min-width:0">
+          <div class="enrich-name">${p.name}</div>
+          ${brand}${cat}
+        </div>
+      </div>`;
+    }).join("");
+
+  } catch (e) {
+    console.warn("Inventory inline search failed:", e);
+    dropdown.classList.remove("active");
+    dropdown.innerHTML = "";
+    _invInlineResults = null;
+  }
+}
+
+/**
+ * pickInvInlineResult(index) — Called when the user taps a product in the
+ * inventory search dropdown. Creates a new inventory item enriched with
+ * the product's rich data (name, brand, image, category, nutrition).
+ */
+export function pickInvInlineResult(index) {
+  if (!_invInlineResults || !_invInlineResults[index]) return;
+  const product = _invInlineResults[index];
+
+  // Capture the optional note
+  const noteInp = g("invAddNoteInp");
+  const note = noteInp ? noteInp.value.trim() : "";
+
+  // Generate a unique ID
+  const id = "itm-" + (product.name || "item").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
+
+  // Save the enriched item to inventory
+  const item = {
+    id, barcode: id,
+    name: product.name,
+    brand: product.brand || "",
+    unit: "unit", qty: 1,
+    location: _invAddLocation,
+    category: product.category || gcat({ name: product.name }),
+    image: product.image || null,
+    source: product.source || "search",
+    nutrition: product.nutrition || null,
+    expiry: null,
+    addedAt: new Date().toLocaleDateString()
+  };
+  if (note) item.note = note;
+  svi(item);
+
+  showNotif(`Added "${product.name}" ✓`);
+
+  // Clean up: clear input, collapse note, close sheet
+  const inp = g("invi"); if (inp) inp.value = "";
+  if (noteInp) noteInp.value = "";
+  const wrap = g("invAddNoteWrap"); if (wrap) wrap.style.display = "none";
+  _clearInvSearch();
+  closeInvAddSheet();
+}
+
+/**
+ * _clearInvSearch() — Hides the inventory search dropdown and clears stored results.
+ */
+function _clearInvSearch() {
+  if (_invSearchTimer) clearTimeout(_invSearchTimer);
+  _invInlineResults = null;
+  const dropdown = g("invSearchDropdown");
+  if (dropdown) { dropdown.classList.remove("active"); dropdown.innerHTML = ""; }
+}
+
+// ── VOICE INPUT FOR INVENTORY ───────────────────────────────────────────────
+// Mirrors the shopping voice input pattern but routes items to inventory.
+// Uses the Web Speech API to capture spoken item names.
+
+/**
+ * initInvVoice() — Detects Web Speech API support and shows the mic option
+ * in the inventory add sheet if supported.
+ */
+export function initInvVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return;
+  const opt = g("invAddMicOpt");
+  if (opt) opt.style.display = "";
+}
+
+/**
+ * _setInvMicUI(active) — Toggles the inventory voice listening indicator.
+ */
+function _setInvMicUI(active) {
+  const status = g("inv-micstatus");
+  if (status) status.classList.toggle("visible", active);
+}
+
+/**
+ * toggleInvVoice() — Starts or stops voice recognition for inventory.
+ * When speech is committed, the recognized text is added as an inventory item
+ * and product enrichment is triggered.
+ */
+export function toggleInvVoice() {
+  // If already listening, stop and commit the speech
+  if (_invListening && _invRecognition) {
+    _invManualStop = true;
+    _invRecognition.stop();
+    return;
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { showNotif("Voice input not supported"); return; }
+
+  _invRecognition = new SpeechRecognition();
+  _invRecognition.lang = "en-US";
+  _invRecognition.interimResults = true;
+  _invRecognition.maxAlternatives = 1;
+  _invRecognition.continuous = false;
+
+  _invFinalTranscript = "";
+  _invListening = true;
+  _setInvMicUI(true);
+
+  // Show live transcript in the input field as the user speaks
+  _invRecognition.onresult = (event) => {
+    let interim = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        _invFinalTranscript += t;
+      } else {
+        interim += t;
+      }
+    }
+    const inp = g("invi");
+    if (inp) inp.value = (_invFinalTranscript + interim).trim();
+  };
+
+  _invRecognition.onerror = (event) => {
+    if (event.error !== "no-speech" && event.error !== "aborted") {
+      showNotif("Couldn't hear that — try again");
+    }
+  };
+
+  // When recognition ends, commit the item to inventory
+  _invRecognition.onend = () => {
+    _invListening = false;
+    _setInvMicUI(false);
+    _invRecognition = null;
+
+    // Use finalized transcript, or fall back to whatever is in the input field
+    let text = _invFinalTranscript.trim();
+    if (!text && _invManualStop) {
+      const inp = g("invi");
+      text = inp ? inp.value.trim() : "";
+    }
+    _invManualStop = false;
+
+    if (!text) return;
+
+    // Add to inventory with a guessed storage location
+    const id = "itm-" + text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
+    const loc = guessLocation(text);
+    svi({
+      id, barcode: id, name: text, brand: "", unit: "unit", qty: 1,
+      location: loc, category: gcat({ name: text }),
+      image: null, source: "Voice", nutrition: null,
+      expiry: null, addedAt: new Date().toLocaleDateString()
+    });
+    showNotif(`Added "${text}" to ${loc}`);
+
+    // Clear the input field
+    const inp = g("invi");
+    if (inp) inp.value = "";
+
+    // Trigger enrichment search so user can pick a richer product match
+    searchAndEnrich(id, text, "inv");
+  };
+
+  _invRecognition.start();
 }

@@ -158,7 +158,20 @@
   <!-- INVENTORY -->
   <div class="screen" id="screen-inventory" style="overflow-y:hidden">
     <div style="flex-shrink:0">
-      <div class="ihdr"><div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div><div class="iha"><button class="btn bs bsm refresh-btn" onclick="manualRefresh('inv')" title="Refresh">↻</button><button class="btn bs bsm selbtn" id="inv-selbtn" onclick="togInvSelect()">Select</button><button class="btn bs bsm" onclick="showOv('madd')">✏️</button><button class="btn bp bsm" onclick="showOv('scan')">📷 Scan</button></div></div>
+      <!-- Clean header: title + subtitle on left, Refresh + Select on right (matches Shopping) -->
+      <div class="shdr">
+        <div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn bsm bs refresh-btn" onclick="manualRefresh('inv')" title="Refresh">↻</button>
+          <button class="btn bsm bs selbtn" id="inv-selbtn" onclick="togInvSelect()">Select</button>
+        </div>
+      </div>
+      <!-- Prominent add button (mirrors Shopping's "+ Add item") -->
+      <div style="padding:12px 16px 0">
+        <button class="btn bp bf shop-add-btn" onclick="openInvAddSheet()">+ Add to pantry</button>
+        <!-- Voice listening status (shown when voice input is active) -->
+        <div class="mic-status" id="inv-micstatus"><span class="mic-wave"><span class="bar"></span></span> Listening...<button class="mic-stop-btn" onclick="toggleInvVoice()">Stop</button></div>
+      </div>
       <div class="itabs">
         <div class="itab active" id="itab-all" onclick="setIT('all')">All</div>
         <div class="itab" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
@@ -340,6 +353,47 @@
         </div>
       </button>
       <button class="bsheet-opt" id="shopAddMicOpt" onclick="shopAddVoice()" style="display:none">
+        <span class="bsheet-opt-icon">🎤</span>
+        <span class="bsheet-opt-text">Voice input</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- BOTTOM SHEET: ADD ITEM TO INVENTORY (mirrors shopping add sheet) -->
+  <div class="bsheet-backdrop" id="invAddBackdrop" onclick="closeInvAddSheet()"></div>
+  <div class="bsheet" id="invAddSheet">
+    <div class="bsheet-handle"></div>
+    <div class="bsheet-title">Add to pantry</div>
+    <!-- Text input with live search dropdown (same UX as shopping) -->
+    <div id="invAddTypeForm">
+      <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>
+      <!-- Live search results dropdown: populated as user types (debounced) -->
+      <div id="invSearchDropdown"></div>
+      <!-- Storage location picker -->
+      <div class="frow" style="margin-top:10px;margin-bottom:0">
+        <label class="flbl">Location</label>
+        <div class="lpick">
+          <button class="lbtn sel" id="invAddLoc-fridge" onclick="setInvAddLoc('fridge',this)">🌡 Fridge</button>
+          <button class="lbtn" id="invAddLoc-freezer" onclick="setInvAddLoc('freezer',this)">🧊 Freezer</button>
+          <button class="lbtn" id="invAddLoc-pantry" onclick="setInvAddLoc('pantry',this)">🥫 Pantry</button>
+        </div>
+      </div>
+      <div style="margin-top:6px;margin-bottom:10px"><button class="sh-add-note-toggle" onclick="toggleInvAddNote()">+ Note</button></div>
+      <div class="sh-add-note-wrap" id="invAddNoteWrap" style="display:none">
+        <textarea class="sh-note-inp" id="invAddNoteInp" rows="2" placeholder="Add a note… (e.g. brand, store, expiry)"></textarea>
+      </div>
+      <button class="btn bp bf" onclick="qaddInv()">Add to Pantry</button>
+    </div>
+    <!-- Scan and voice options below the input (same as shopping) -->
+    <div class="bsheet-options" style="margin-top:12px">
+      <button class="bsheet-opt bsheet-opt-scan" onclick="invAddScan()">
+        <span class="bsheet-opt-icon" style="font-size:1.8rem">📷</span>
+        <div style="flex:1">
+          <span class="bsheet-opt-text">Scan barcode</span>
+          <span class="bsheet-opt-sub">Point your camera at any product barcode</span>
+        </div>
+      </button>
+      <button class="bsheet-opt" id="invAddMicOpt" onclick="invAddVoice()" style="display:none">
         <span class="bsheet-opt-icon">🎤</span>
         <span class="bsheet-opt-text">Voice input</span>
       </button>
