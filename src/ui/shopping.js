@@ -28,6 +28,8 @@ let _recognition = null;
 let _listening = false;
 /** Accumulates finalized transcript segments across multiple speech results */
 let _finalTranscript = "";
+/** Flag: true when the user manually tapped "Stop" (commit speech), false when cancelled/auto-stopped */
+let _manualStop = false;
 
 /**
  * initVoice() — Called on page load to detect Web Speech API support.
@@ -60,8 +62,12 @@ function _setMicUI(active) {
  * Recognition auto-stops when the user pauses speaking (silence detection).
  */
 export function toggleVoice() {
-  // If already listening, stop — the onend handler will finalize and add the item
+  // If already listening, stop and COMMIT the speech — the onend handler will
+  // finalize and trigger the enrichment search (same as auto-stop on silence).
+  // Setting _manualStop = true tells onend to use the input field value as a
+  // fallback if _finalTranscript is empty (interim text hasn't been finalized yet).
   if (_listening && _recognition) {
+    _manualStop = true;
     _recognition.stop();
     return;
   }
@@ -109,20 +115,33 @@ export function toggleVoice() {
   };
 
   /**
-   * onend — Fires when recognition stops (silence detected or an error occurred).
-   * Takes whatever was recognized, adds it to the shopping list, and resets UI.
+   * onend — Fires when recognition stops (silence detected, manual stop, or error).
+   * Takes whatever was recognized, adds it to the shopping list, and triggers enrichment.
+   *
+   * When the user taps "Stop" (_manualStop = true), the speech engine may not have
+   * finalized the interim transcript yet. In that case, we fall back to whatever
+   * text is visible in the input field (which includes interim text shown live).
+   * This ensures Stop = commit + search, not discard.
    */
   _recognition.onend = () => {
-    const transcript = (_finalTranscript || "").trim();
+    // Use finalized transcript, or fall back to the input field value when manually stopped.
+    // The input field contains the live preview (final + interim) so it captures partial speech.
+    let transcript = (_finalTranscript || "").trim();
+    if (!transcript && _manualStop) {
+      const inp = g("shi");
+      transcript = inp ? inp.value.trim() : "";
+    }
+
     _listening = false;
     _recognition = null;
     _finalTranscript = "";
+    _manualStop = false;
     _setMicUI(false);
 
     // If we got recognized text, add it to the shopping list directly
     // (bypasses the bottom sheet since voice already captured the text)
     if (transcript) {
-      // Create the item directly — same logic as qadd() but without needing the input field
+      // Parse optional quantity from common patterns (e.g. "5 apples", "eggs x3")
       let name = transcript, qty = 1;
       const leadMatch = transcript.match(/^(\d+)\s+(.+)/);
       const trailMatch = transcript.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
@@ -132,6 +151,10 @@ export function toggleVoice() {
       const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
       svShopItem(item);
       showNotif(`Added "${transcript}" 🎤`);
+
+      // Clear the input field since the item has been committed
+      const inp = g("shi");
+      if (inp) inp.value = "";
 
       // Trigger enrichment search for the voice-added item
       searchAndEnrich(item.id, name, "shop");
@@ -294,7 +317,8 @@ export function qadd() {
   const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
   if (note) item.note = note; // Only include note field if the user typed something
 
-  // Save immediately with plain text so the item appears right away
+  // Save the item as plain text — user explicitly pressed Enter or tapped Add
+  // (enrichment via the inline dropdown already happened if they picked a result)
   svShopItem(item);
   i.value = ""; // Clear the input after adding
 
@@ -303,12 +327,11 @@ export function qadd() {
   const wrap = g("addNoteWrap");
   if (wrap) wrap.style.display = "none";
 
+  // Clear the inline search dropdown so stale results don't linger
+  _clearInlineSearch();
+
   // Close the add-item bottom sheet after adding
   closeShopAddSheet();
-
-  // Trigger product enrichment search in the background
-  // If matches are found, the user picks one to enrich the item with rich data
-  searchAndEnrich(item.id, name, "shop");
 }
 
 /**
@@ -348,12 +371,14 @@ export function openShopAddSheet() {
 /**
  * closeShopAddSheet() — Dismisses the add-item bottom sheet.
  * Called when tapping the backdrop or after an item is added.
+ * Also clears the inline search dropdown to avoid stale results on next open.
  */
 export function closeShopAddSheet() {
   const backdrop = g("shopAddBackdrop");
   const sheet = g("shopAddSheet");
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
+  _clearInlineSearch();
 }
 
 /**
@@ -376,16 +401,168 @@ export function shopAddVoice() {
   toggleVoice();
 }
 
-// ── PRODUCT TEXT SEARCH & ENRICHMENT ────────────────────────────────────────
-// When a user manually types an item name, we search product databases
-// (Edamam + Open Food Facts) for matches. If found, we show a bottom sheet
-// with the top results so the user can pick one to enrich the item with
-// rich data (image, brand, category, nutrition) — just like a barcode scan.
-// This works for both shopping list AND pantry manual entries.
+// ── LIVE INLINE SEARCH (DEBOUNCED) ──────────────────────────────────────────
+// As the user types in the add-item input (#shi), we debounce and search product
+// databases. Results appear in an inline dropdown below the input (inside the
+// bottom sheet) so the user can pick a match BEFORE the item is added.
+// This avoids the old flow where the item was auto-added as plain text and
+// then enriched after-the-fact.
+
+/** Timer ID for the debounced search — cleared on each keystroke to restart the wait */
+let _searchDebounceTimer = null;
+/** Stores the most recent inline search results so qadd() and pickInlineResult() can use them */
+let _inlineSearchResults = null;
+
+/**
+ * onShopInput() — Called on every keystroke in the add-item input (#shi).
+ * Debounces the product search by 350ms so we don't fire API calls on every
+ * character. Clears the dropdown if the input is too short (< 2 chars).
+ */
+export function onShopInput() {
+  // Clear any pending search timer so only the last keystroke triggers a search
+  if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+
+  const inp = g("shi");
+  const query = inp ? inp.value.trim() : "";
+  const dropdown = g("shopSearchDropdown");
+
+  // If input is too short, hide the dropdown and bail
+  if (!query || query.length < 2) {
+    if (dropdown) { dropdown.classList.remove("active"); dropdown.innerHTML = ""; }
+    _inlineSearchResults = null;
+    return;
+  }
+
+  // Wait 350ms after the user stops typing before searching (debounce)
+  _searchDebounceTimer = setTimeout(() => _runInlineSearch(query), 350);
+}
+
+/**
+ * _runInlineSearch(query) — Fires the product search API and renders results
+ * in the inline dropdown below the input. Filters results for relevance:
+ * only products whose name contains at least one word from the search query.
+ * @param {string} query — The text to search for
+ */
+async function _runInlineSearch(query) {
+  const dropdown = g("shopSearchDropdown");
+  if (!dropdown) return;
+
+  // Show a subtle loading indicator
+  dropdown.innerHTML = '<div class="search-hint">Searching…</div>';
+  dropdown.classList.add("active");
+
+  try {
+    const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
+    const data = await r.json();
+    let results = data.results || [];
+
+    // Filter for relevance: at least one word from the query must appear in the product name.
+    // This prevents "fiber" from matching "Chicken Breast" or unrelated products.
+    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+    results = results.filter(p => {
+      const nameLower = (p.name || "").toLowerCase();
+      return queryWords.some(w => nameLower.includes(w));
+    });
+
+    // Bail if the input changed while we were fetching (stale response)
+    const currentQuery = g("shi") ? g("shi").value.trim() : "";
+    if (currentQuery.toLowerCase() !== query.toLowerCase()) return;
+
+    if (!results.length) {
+      dropdown.classList.remove("active");
+      dropdown.innerHTML = "";
+      _inlineSearchResults = null;
+      return;
+    }
+
+    // Cap at 5 results to keep the dropdown compact
+    results = results.slice(0, 5);
+    _inlineSearchResults = results;
+
+    // Render result rows inside the dropdown
+    dropdown.innerHTML = results.map((p, i) => {
+      const img = p.image
+        ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'"/>`
+        : `<div class="enrich-img-ph">🛒</div>`;
+      const brand = p.brand ? `<div class="enrich-brand">${p.brand}</div>` : "";
+      const cat = p.category && p.category !== "General"
+        ? `<div class="enrich-cat">${p.category}</div>` : "";
+      return `<div class="enrich-row" onclick="pickInlineResult(${i})">
+        ${img}
+        <div style="flex:1;min-width:0">
+          <div class="enrich-name">${p.name}</div>
+          ${brand}${cat}
+        </div>
+      </div>`;
+    }).join("");
+
+  } catch (e) {
+    // Search failed silently — user can still add as plain text via Enter
+    console.warn("Inline search failed:", e);
+    dropdown.classList.remove("active");
+    dropdown.innerHTML = "";
+    _inlineSearchResults = null;
+  }
+}
+
+/**
+ * pickInlineResult(index) — Called when the user taps a product in the inline
+ * search dropdown. Creates a new shopping item enriched with the product's
+ * rich data (name, brand, image, category, nutrition) and closes the sheet.
+ */
+export function pickInlineResult(index) {
+  if (!_inlineSearchResults || !_inlineSearchResults[index]) return;
+  const product = _inlineSearchResults[index];
+
+  // Capture the optional note from the collapsible note field
+  const noteInp = g("addNoteInp");
+  const note = noteInp ? noteInp.value.trim() : "";
+
+  // Build an enriched shopping item with full product data from the search result
+  const item = {
+    id: Date.now().toString(),
+    name: product.name,
+    qty: 1,
+    checked: false,
+    src: "search",
+    brand: product.brand || "",
+    image: product.image || null,
+    category: product.category || "",
+    nutrition: product.nutrition || null,
+    source: product.source || "search",
+  };
+  if (note) item.note = note;
+
+  svShopItem(item);
+  showNotif(`Added "${product.name}" ✓`);
+
+  // Clean up: clear input, collapse note, close sheet, reset dropdown
+  const inp = g("shi"); if (inp) inp.value = "";
+  if (noteInp) noteInp.value = "";
+  const wrap = g("addNoteWrap"); if (wrap) wrap.style.display = "none";
+  _clearInlineSearch();
+  closeShopAddSheet();
+}
+
+/**
+ * _clearInlineSearch() — Hides the inline search dropdown and clears stored results.
+ * Called when the sheet closes, an item is picked, or the input is cleared.
+ */
+function _clearInlineSearch() {
+  if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+  _inlineSearchResults = null;
+  const dropdown = g("shopSearchDropdown");
+  if (dropdown) { dropdown.classList.remove("active"); dropdown.innerHTML = ""; }
+}
+
+// ── PRODUCT TEXT SEARCH & ENRICHMENT (BOTTOM SHEET) ─────────────────────────
+// Used for enrichment AFTER an item is already added (e.g. voice input, inventory).
+// For shopping list text input, the inline dropdown (above) is used instead.
 
 /**
  * searchAndEnrich(itemId, query, list) — Searches product databases for matches
- * and shows an enrichment picker if results are found.
+ * and shows an enrichment bottom sheet if results are found.
+ * Called after voice input commits an item or when manually adding to inventory.
  * @param {string} itemId — ID of the just-added item (to update if user picks a match)
  * @param {string} query — The item name to search for
  * @param {string} list — "shop" for shopping list, "inv" for inventory
@@ -412,9 +589,16 @@ export async function searchAndEnrich(itemId, query, list) {
     // Call the text search API endpoint
     const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
     const data = await r.json();
-    const results = data.results || [];
+    let results = data.results || [];
 
-    // If no matches found, silently close the sheet — item is already saved as plain text
+    // Filter for relevance: at least one query word must appear in the product name
+    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+    results = results.filter(p => {
+      const nameLower = (p.name || "").toLowerCase();
+      return queryWords.some(w => nameLower.includes(w));
+    });
+
+    // If no relevant matches, silently close — item is already saved as plain text
     if (!results.length) {
       closeEnrichSheet();
       return;

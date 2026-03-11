@@ -47,7 +47,7 @@ import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, a
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -177,6 +177,8 @@ window.shopAddScan = shopAddScan;             // Scan barcode from bottom sheet
 window.shopAddVoice = shopAddVoice;           // Start voice input from bottom sheet
 window.closeEnrichSheet = closeEnrichSheet;   // Close the product enrichment bottom sheet
 window.pickEnrichResult = pickEnrichResult;   // Pick a product match from enrichment results
+window.onShopInput = onShopInput;             // Debounced live search as user types in add-item input
+window.pickInlineResult = pickInlineResult;   // Pick a product from the inline search dropdown
 window.bpTog = bpTog;           // Toggle a bulk-purchase item selection
 window.bpSelAll = bpSelAll;     // Select all items in the bulk-purchase overlay
 window.bpUpdBtn = function() { /* no-op: button state is handled internally by the shopping module */ };

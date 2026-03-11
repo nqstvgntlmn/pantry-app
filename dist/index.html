@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-CVbiNbzY.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-i6IHb5uy.css">
+  <script type="module" crossorigin src="/assets/index-CMOjrITh.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CpporeLT.css">
 </head>
 <body>
 
@@ -323,7 +323,9 @@
     <div class="bsheet-title">Add to list</div>
     <!-- Text input shown immediately when sheet opens -->
     <div id="shopAddTypeForm">
-      <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" onkeydown="if(event.key==='Enter')qadd()"/>
+      <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
+      <!-- Live search results dropdown: populated as user types (debounced) -->
+      <div id="shopSearchDropdown"></div>
       <div class="sh-add-note-wrap" id="addNoteWrap" style="display:none;margin-top:8px">
         <textarea class="sh-note-inp" id="addNoteInp" rows="2" placeholder="Add a note… (e.g. brand, size, store)"></textarea>
       </div>

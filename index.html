@@ -321,7 +321,9 @@
     <div class="bsheet-title">Add to list</div>
     <!-- Text input shown immediately when sheet opens -->
     <div id="shopAddTypeForm">
-      <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" onkeydown="if(event.key==='Enter')qadd()"/>
+      <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
+      <!-- Live search results dropdown: populated as user types (debounced) -->
+      <div id="shopSearchDropdown"></div>
       <div class="sh-add-note-wrap" id="addNoteWrap" style="display:none;margin-top:8px">
         <textarea class="sh-note-inp" id="addNoteInp" rows="2" placeholder="Add a note… (e.g. brand, size, store)"></textarea>
       </div>
