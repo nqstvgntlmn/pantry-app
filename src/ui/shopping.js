@@ -506,10 +506,11 @@ function _isStrictlyRelevant(name, query) {
 }
 
 /**
- * scoreSearchResult(name, query) — Strictly scores how relevant a product name
- * is to the user's search query. Two-layer check:
- *   1. Position check: query must match one of the first 3 words
- *   2. Majority check: most meaningful words must relate to the query
+ * scoreSearchResult(name, query) — Scores how relevant a product name is to
+ * the user's search query. Skips stop words (descriptors like "organic", "whole",
+ * "low") when determining position so "Organic Milk" scores as high as "Milk"
+ * for a "milk" search. Penalizes heavily modified product names so generic/plain
+ * versions always rank above flavored, diet, or specialty variants.
  *
  * Returns a score > 0 for relevant results, 0 for rejected ones.
  * @param {string} name — The product name to score
@@ -520,40 +521,37 @@ export function scoreSearchResult(name, query) {
   const nameLower = (name || "").toLowerCase().trim();
   const queryLower = query.toLowerCase().trim();
 
-  // Exact match is highest priority
+  // Exact match is the best possible result
   if (nameLower === queryLower) return 100;
 
-  // Name starts with the query (e.g. "Mushrooms 8oz" for "mushroom")
-  if (nameLower.startsWith(queryLower)) return 90;
+  // Name starts with the query (e.g. "Milk 2% Fat" for "milk")
+  if (nameLower.startsWith(queryLower + " ") || nameLower.startsWith(queryLower)) return 95;
 
-  // Split name into words, stripping common brand/flavor noise
+  // Split name into all words and meaningful-only words (skip stop words).
+  // Stop words like "organic", "whole", "low", "fat" are descriptors that shouldn't
+  // affect position ranking — "Organic Milk" should rank the same as "Milk".
   const nameWords = nameLower.split(/[\s,&+\-–—/]+/).filter(w => w.length >= 2);
+  const meaningful = nameWords.filter(w => !_STOP_WORDS.has(w) && !/^\d+$/.test(w));
 
-  // First word of product name starts with query (e.g. "Mushroom Soup" for "mushroom")
-  if (nameWords.length && nameWords[0].startsWith(queryLower)) return 80;
+  // First meaningful word matches query (e.g. "Organic Milk" → "milk" is first meaningful)
+  if (meaningful.length && (meaningful[0].startsWith(queryLower) || queryLower.startsWith(meaningful[0]))) {
+    // Fewer extra meaningful words = more relevant to user's simple search.
+    // "Whole Milk" (1 extra) beats "Hershey's Chocolate Milk" (2 extras).
+    const extras = meaningful.filter(w => !w.startsWith(queryLower) && !queryLower.startsWith(w)).length;
+    const score = 85 - Math.min(extras * 8, 30);
+    return _isStrictlyRelevant(name, query) ? score : 0;
+  }
 
-  // Query starts with the first word (e.g. searching "mushrooms" matches "Mushroom")
-  if (nameWords.length && queryLower.startsWith(nameWords[0])) return 75;
-
-  // Query matches one of the first 3 words as a word-boundary match
-  // This catches "Organic Mushrooms" but NOT "Chicken Mushroom Flavour POT noodle"
-  const earlyWords = nameWords.slice(0, 3);
-  let positionScore = 0;
-  for (let i = 0; i < earlyWords.length; i++) {
-    if (earlyWords[i].startsWith(queryLower) || queryLower.startsWith(earlyWords[i])) {
-      positionScore = 60 - (i * 10); // Position penalty: 1st word = 60, 2nd = 50, 3rd = 40
-      break;
+  // Query matches one of the first 3 meaningful words (2nd or 3rd position)
+  for (let i = 1; i < Math.min(3, meaningful.length); i++) {
+    if (meaningful[i].startsWith(queryLower) || queryLower.startsWith(meaningful[i])) {
+      const extras = meaningful.filter(w => !w.startsWith(queryLower) && !queryLower.startsWith(w)).length;
+      const score = 60 - (i * 10) - Math.min(extras * 8, 20);
+      return _isStrictlyRelevant(name, query) ? Math.max(score, 5) : 0;
     }
   }
 
-  // If the query matched by position, also check that the product name is
-  // actually ABOUT the query (majority of words must relate).
-  // This kills "Formula Mixer Milk Powder Blender Stirrer" for "milk".
-  if (positionScore > 0) {
-    return _isStrictlyRelevant(name, query) ? positionScore : 0;
-  }
-
-  // STRICT: if the query doesn't match any of the first 3 words, reject entirely
+  // STRICT: if the query doesn't match any of the first 3 meaningful words, reject
   return 0;
 }
 
@@ -588,11 +586,12 @@ async function _fetchAndScoreResults(query) {
 
   // Score by relevance and STRICTLY filter: only results where the query is
   // a primary/leading word in the product name pass (score > 0).
-  // scoreSearchResult returns 0 for anything where the query is buried deep
-  // in the name (e.g. "Chicken & Mushroom Flavour POT noodle" for "mushroom").
+  // Score each result by relevance. Drop anything scoring below 20 — these are
+  // heavily modified variants (e.g. "Hershey's Chocolate Milk" for "milk") that
+  // clutter the dropdown. Keep only the top 5 best matches.
   const scored = results
     .map(p => ({ ...p, _score: scoreSearchResult(p.name || "", query) }))
-    .filter(p => p._score > 0)
+    .filter(p => p._score >= 20)
     .sort((a, b) => b._score - a._score)
     .slice(0, 5);
 

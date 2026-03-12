@@ -1678,6 +1678,45 @@ function isStrictlyRelevant(name, query) {
   return ratio >= 0.5;
 }
 
+/**
+ * scoreResult(name, query) — Server-side relevance score for sorting results
+ * before returning to the client. Higher score = better match.
+ * Skips stop words in position matching so "Organic Milk" scores as high as "Milk"
+ * when searching for "milk". Penalizes names with many extra non-query words
+ * (e.g. "Hershey's Special Dark Chocolate Milk" scores lower than "Whole Milk").
+ */
+function scoreResult(name, query) {
+  const nameLower = (name || "").toLowerCase().trim();
+  const queryLower = query.toLowerCase().trim();
+
+  // Exact match is the best possible result
+  if (nameLower === queryLower) return 100;
+
+  // Name starts with the query (e.g. "Milk 2% Fat" for "milk")
+  if (nameLower.startsWith(queryLower + " ") || nameLower === queryLower) return 95;
+
+  // Split into all words and meaningful-only words (skip stop words)
+  const nameWords = nameLower.split(/[\s,&+\-–—/]+/).filter(w => w.length >= 2);
+  const meaningful = nameWords.filter(w => !STOP_WORDS.has(w) && !/^\d+$/.test(w));
+
+  // First meaningful word matches query (e.g. "Organic Milk" → "milk" is first meaningful)
+  if (meaningful.length && (meaningful[0].startsWith(queryLower) || queryLower.startsWith(meaningful[0]))) {
+    // Fewer extra words = more relevant (plain product vs heavily modified variant)
+    const extras = meaningful.filter(w => !w.startsWith(queryLower) && !queryLower.startsWith(w)).length;
+    return 85 - Math.min(extras * 5, 25);
+  }
+
+  // Query matches one of the first 3 meaningful words
+  for (let i = 1; i < Math.min(3, meaningful.length); i++) {
+    if (meaningful[i].startsWith(queryLower) || queryLower.startsWith(meaningful[i])) {
+      const extras = meaningful.filter(w => !w.startsWith(queryLower) && !queryLower.startsWith(w)).length;
+      return 60 - (i * 10) - Math.min(extras * 5, 20);
+    }
+  }
+
+  return 10; // Passed relevance filters but query isn't a leading word — low rank
+}
+
 // ── IMAGE URL VALIDATION ─────────────────────────────────────────────────────
 // Filters out placeholder images, SVG icons, and broken/relative URLs before
 // they reach the client. If a URL fails validation, it's treated as "no image"
@@ -1768,9 +1807,14 @@ async function searchSpoonacular(query) {
       // Spoonacular may return a bare filename — normalize to full CDN URL, then validate
       const rawImg = p.image || p.imageType || null;
       const fullImg = spoonacularImageUrl(rawImg);
-      const validImg = isValidImageUrl(fullImg) ? fullImg : null;
+      let validImg = isValidImageUrl(fullImg) ? fullImg : null;
+      // Spoonacular product images at img.spoonacular.com require the API key
+      // appended as a query parameter — without it browsers get 401 and onerror hides them
+      if (validImg && validImg.includes('img.spoonacular.com')) {
+        validImg = `${validImg}?apiKey=${key}`;
+      }
       // Log what Spoonacular returns so we can verify image extraction in Vercel logs
-      console.log(`[Spoonacular] "${p.title}" — raw image: ${rawImg}, resolved: ${fullImg}, valid: ${!!validImg}`);
+      console.log(`[Spoonacular] "${p.title}" — raw image: ${rawImg}, resolved: ${fullImg}, authed: ${!!validImg}`);
       return {
         name: p.title || "",
         brand: "",
@@ -2154,9 +2198,10 @@ export default async function handler(req, res) {
   // Minimum relevant results to short-circuit (stop searching more databases)
   const ENOUGH = 3;
 
-  // Maximum time (ms) any single Tier 2 database gets before we move on.
-  // Prevents slow external APIs from blocking the entire response.
-  const TIER2_TIMEOUT_MS = 3000;
+  // Maximum time (ms) Tier 2 gets before we move on.
+  // Reduced from 3s → 1.5s because Edamam/OFF consistently hit the old timeout.
+  // Target total search time is under 2 seconds for common items.
+  const TIER2_TIMEOUT_MS = 1500;
 
   /**
    * withTimeout(promise, ms) — Races a promise against a timeout.
@@ -2187,17 +2232,18 @@ export default async function handler(req, res) {
   console.log(`[TextSearch] Tier 1 done in ${Date.now() - t1Start}ms — ${allResults.length} result(s)`);
 
   if (allResults.length >= ENOUGH) {
+    // Sort by relevance so the best matches appear first in the dropdown
+    allResults.sort((a, b) => scoreResult(b.name, query) - scoreResult(a.name, query));
     return res.status(200).json({ results: allResults.slice(0, 5) });
   }
 
-  // ── Tier 2: Edamam + Open Food Facts (broader coverage, 3s timeout) ────
+  // ── Tier 2: Open Food Facts only (1.5s timeout) ─────────────────────
+  // Edamam removed — consistently slow (3s+ response times) and doesn't add
+  // unique value over Spoonacular/Kroger/USDA which already cover grocery items well.
   // Only reached if Tier 1 returned fewer than 3 relevant results.
-  // Both run in parallel with a 3s timeout each to prevent slow APIs from
-  // blocking the response (previously took 8+ seconds with Google included).
-  console.log(`[TextSearch] Starting Tier 2 (Edamam + Open Food Facts) in parallel, ${TIER2_TIMEOUT_MS}ms timeout each`);
+  console.log(`[TextSearch] Starting Tier 2 (Open Food Facts) with ${TIER2_TIMEOUT_MS}ms timeout`);
   const t2Start = Date.now();
   const tier2 = await Promise.allSettled([
-    withTimeout(searchEdamam(query), TIER2_TIMEOUT_MS),
     withTimeout(searchOpenFoodFacts(query), TIER2_TIMEOUT_MS),
   ]);
   tier2.forEach(r => {
@@ -2206,6 +2252,7 @@ export default async function handler(req, res) {
   console.log(`[TextSearch] Tier 2 done in ${Date.now() - t2Start}ms — ${allResults.length} total result(s)`);
 
   if (allResults.length >= ENOUGH) {
+    allResults.sort((a, b) => scoreResult(b.name, query) - scoreResult(a.name, query));
     return res.status(200).json({ results: allResults.slice(0, 5) });
   }
 
@@ -2223,8 +2270,8 @@ export default async function handler(req, res) {
   });
   console.log(`[TextSearch] Tier 3 done in ${Date.now() - t3Start}ms — ${allResults.length} total result(s)`);
 
-  // Return whatever we found (may be 0-5 results) — no image backfill needed
-  // since all remaining sources provide their own images natively
+  // Sort by relevance score so the best matches appear first, then take top 5
+  allResults.sort((a, b) => scoreResult(b.name, query) - scoreResult(a.name, query));
   const final = allResults.slice(0, 5);
   const totalMs = Date.now() - t1Start;
   console.log(`[TextSearch] ── Complete: ${final.length} result(s) in ${totalMs}ms`);
