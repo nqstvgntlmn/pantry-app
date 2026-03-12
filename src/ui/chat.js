@@ -48,7 +48,15 @@ export function kitCtx() {
 
   // Assemble the final system prompt. Template literals build a structured
   // prompt with labeled sections. Empty sections are conditionally omitted.
-  return `You are a helpful kitchen assistant for a family in Edison NJ.
+  return `You are a kitchen and household assistant for a family in Edison NJ. You ONLY help with kitchen, food, cooking, grocery, and household topics. This includes:
+- Recipe suggestions and "what can I make?" based on inventory
+- Meal planning advice and weekly menu ideas
+- Grocery shopping tips and list building
+- Food storage, shelf life, and expiry guidance
+- Cooking techniques, substitutions, and conversions
+- Food waste reduction tips
+If the user asks about something unrelated to kitchen, food, or household topics, politely let them know you're focused on kitchen help and redirect them back to what you can assist with.
+
 INVENTORY:\n${sec || "Empty."}
 ${ex ? "EXPIRING SOON: " + ex : ""}
 ${ms ? "MEAL PLAN: " + ms : ""}
@@ -277,7 +285,7 @@ export function sendPill(el) {
 export function clrChat() {
   state.chat = [];
   const msgs = g("chmsgs");
-  if (msgs) msgs.innerHTML = '<div class="cb asst">Hey! 👋 I know your full inventory, meal plan, and saved recipes. What do you need?</div>';
+  if (msgs) msgs.innerHTML = '<div class="cb asst">Hey! 👋 I\'m your kitchen assistant — I can help with recipes, meal planning, grocery tips, and cooking questions. What\'s on your mind?</div>';
 }
 
 // ─── ar (auto-resize) ───────────────────────────────────────────────────────

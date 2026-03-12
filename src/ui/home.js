@@ -306,7 +306,8 @@ function updatePantryBadge(count) {
 // Shows recent household actions (e.g. "Bushra added Milk to shopping list")
 // on the home screen so members can see what's changed.
 
-// renderActivityFeed() — loads and displays the last 5 activity entries.
+// renderActivityFeed() — loads and displays the last 3 activity entries.
+// Kept compact for small households (2 people) to avoid clutter on the home screen.
 // Runs asynchronously since it fetches from Firestore.
 async function renderActivityFeed() {
   const el = g("activityfeed");
@@ -335,8 +336,8 @@ async function renderActivityFeed() {
     return days + "d ago";
   };
 
-  // Show up to 5 most recent entries
-  el.innerHTML = entries.slice(0, 5).map(e =>
+  // Show only the 3 most recent entries — keeps the feed compact for small households
+  el.innerHTML = entries.slice(0, 3).map(e =>
     `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
       <div style="width:28px;height:28px;border-radius:50%;background:var(--acd);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;color:var(--ac);font-weight:700">${(e.memberName || "?")[0].toUpperCase()}</div>
       <div style="flex:1;font-size:.82rem;color:var(--tx2);line-height:1.4"><strong style="color:var(--tx)">${(e.memberName || "Someone").replace(/</g, "&lt;")}</strong> ${(e.action || "").replace(/</g, "&lt;")} <strong>${(e.itemName || "").replace(/</g, "&lt;")}</strong></div>

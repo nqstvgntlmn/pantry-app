@@ -180,6 +180,35 @@ export function toggleVoice() {
  * Quantity display: shows "× N" next to the item name when qty > 1.
  * Tapping the qty badge opens an inline number input for quick editing.
  */
+
+/**
+ * _shouldShowBrand(item) — Determines whether to display the brand name on a shopping list item.
+ * Rules:
+ *   - Barcode scans (src === "scan"): always show brand — user explicitly scanned that product.
+ *   - Text search (src === "search"): only show brand if at least one word from the user's
+ *     original search query matches a word in the brand name (case-insensitive).
+ *     e.g. search "Monster Energy" → show "Monster" brand ✅
+ *         search "milk" → hide "Great Value" brand ✅
+ *   - All other sources (manual, meal-plan, etc.): hide brand — no enrichment context.
+ */
+function _shouldShowBrand(item) {
+  if (!item.brand) return false;
+
+  // Barcode scans always show brand — user intentionally scanned that exact product
+  if (item.src === "scan") return true;
+
+  // Text search: compare search query words against brand name words
+  if (item.src === "search" && item.searchQuery) {
+    const queryWords = item.searchQuery.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+    const brandLower = item.brand.toLowerCase();
+    // Show brand if any query word appears in the brand name
+    return queryWords.some(w => brandLower.includes(w));
+  }
+
+  // For manual adds, meal-plan items, etc. — no brand display
+  return false;
+}
+
 export function sH(item) {
   // Default to qty 1 if the field is missing (backwards compat with old items)
   const qty = item.qty || 1;
@@ -198,7 +227,7 @@ export function sH(item) {
         ${thumb}                               <!-- Product thumbnail from barcode scan (if available) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
           <div class="shnm">${item.name}${qtyBadge}</div>
-          ${item.brand && item.src === "scan" ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand subtitle only for barcode scans — text search brands are generic/irrelevant -->
+          ${_shouldShowBrand(item) ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand shown for barcode scans always; for text search only if the user's query matches the brand name -->
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
         </div>
         ${item.price ? `<div class="price-tag">~$${item.price}</div>` : ""}  <!-- Estimated price if available -->
@@ -230,8 +259,8 @@ export function sH(item) {
  * sorts each alphabetically, and renders them as HTML.
  *
  * Two display modes:
- *   1. Aisle mode (state.aisleMode) — groups unchecked items by guessed aisle
- *      (e.g. "Dairy", "Produce") so the user can shop aisle-by-aisle.
+ *   1. Category mode (state.aisleMode) — groups unchecked items by product category
+ *      (e.g. "Dairy", "Produce") so the user can browse by category.
  *   2. Flat mode — simple "To buy" / "Done" sections.
  *
  * Also handles multi-select mode styling when the user is bulk-selecting items.
@@ -256,10 +285,10 @@ export function renderShop() {
   if (!state.shop.length) { c.innerHTML = `<div class="es"><div class="ei">🛒</div><p>Your list is empty!<br/>Add items or use "Build from meal plan".</p></div>`; return; }
 
   if (state.aisleMode && un.length) {
-    // Aisle-grouped mode: bucket unchecked items by their guessed aisle name
+    // Category-grouped mode: bucket unchecked items by their guessed product category
     const grps = {};
     un.forEach(i => { const a = guessAisle(i.name); if (!grps[a]) grps[a] = []; grps[a].push(i); });
-    // Render each aisle group with a section header, followed by checked ("Done") items at the bottom
+    // Render each category group with a section header, followed by checked ("Done") items at the bottom
     c.innerHTML = Object.entries(grps).sort().map(([aisle, its]) => `<div class="shsec">${aisle}</div>${its.map(sH).join("")}`).join("") + (ch.length ? `<div class="shsec">Done</div>${ch.map(sH).join("")}` : "");
   } else {
     // Flat mode: "To buy" section, then "Done" section
@@ -739,6 +768,11 @@ export function pickInlineResult(index) {
   const noteInp = g("addNoteInp");
   const note = noteInp ? noteInp.value.trim() : "";
 
+  // Capture the original search query so we can decide later whether to show the brand.
+  // The brand is only displayed if the user's search terms match it (avoids showing
+  // irrelevant brands like "Great Value" when the user just searched "milk").
+  const searchQuery = g("shi") ? g("shi").value.trim() : "";
+
   // Build an enriched shopping item with full product data from the search result
   const item = {
     id: Date.now().toString(),
@@ -751,6 +785,7 @@ export function pickInlineResult(index) {
     category: product.category || "",
     nutrition: product.nutrition || null,
     source: product.source || "search",
+    searchQuery,  // Original search text — used by _shouldShowBrand() to decide brand visibility
   };
   if (note) item.note = note;
 
@@ -896,8 +931,8 @@ export function openItemDetail(id) {
     : `<div class="item-detail-img-ph">🛒</div>`;
 
   // Build the header section (image + name + brand).
-  // Brand only shows for barcode-scanned items — text search brands are generic/irrelevant.
-  const showBrand = item.brand && item.src === "scan";
+  // Brand visibility uses same logic as the list row: scan → always, search → only if query matches brand.
+  const showBrand = _shouldShowBrand(item);
   let html = `<div class="item-detail-header">
     ${img}
     <div style="flex:1;min-width:0">
@@ -1130,8 +1165,8 @@ export function saveShQty(id) {
 }
 
 /**
- * togAisle() — Toggles "aisle mode" on/off.
- * When active, unchecked items are grouped by guessed grocery aisle (Dairy, Produce, etc.)
+ * togAisle() — Toggles "category mode" on/off.
+ * When active, unchecked items are grouped by product category (Dairy, Produce, etc.)
  * instead of a flat list. The button is visually highlighted when active.
  */
 export function togAisle() {

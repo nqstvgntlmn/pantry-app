@@ -223,7 +223,7 @@
         <div class="mic-status" id="micstatus"><span class="mic-wave"><span class="bar"></span></span> Listening...<button class="mic-stop-btn" onclick="toggleVoice()">Stop</button></div>
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <button class="btn bsm bs" style="flex:1" onclick="buildList()">🤖 Build from meal plan</button>
-          <button class="btn bsm bs" id="aislebtn" onclick="togAisle()">≡ By aisle</button>
+          <button class="btn bsm bs" id="aislebtn" onclick="togAisle()">≡ By category</button>
         </div>
         <div id="shlist"></div>
       </div>
@@ -251,7 +251,7 @@
 
   <!-- CHAT -->
   <div class="screen" id="screen-chat">
-    <div class="chhdr"><div><div class="sttl">Ask Claude</div><div class="ssub">Your kitchen-aware AI assistant</div></div><button class="btn bsm bs" onclick="clrChat()">Clear</button></div>
+    <div class="chhdr"><div><div class="sttl">Ask Claude</div><div class="ssub">Your kitchen & meal planning assistant</div></div><button class="btn bsm bs" onclick="clrChat()">Clear</button></div>
     <div class="pills">
       <div class="pill" onclick="sendPill(this)">What should I make tonight?</div>
       <div class="pill" onclick="sendPill(this)">Plan my week of dinners</div>
@@ -261,8 +261,8 @@
       <div class="pill" onclick="sendPill(this)">Toddler-friendly meals</div>
       <div class="pill" onclick="sendPill(this)">Suggest recipes from my pantry</div>
     </div>
-    <div class="chmsgs" id="chmsgs"><div class="cb asst">Hey Bora! 👋 I know your full inventory, meal plan, and saved recipes. What do you need?</div></div>
-    <div class="chia"><textarea class="chta" id="chi" placeholder="Ask anything about your kitchen…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="ar(this)"></textarea><button class="chsb" id="csb" onclick="sendChat()">↑</button></div>
+    <div class="chmsgs" id="chmsgs"><div class="cb asst">Hey! 👋 I'm your kitchen assistant — I can help with recipes, meal planning, grocery tips, and cooking questions. What's on your mind?</div></div>
+    <div class="chia"><textarea class="chta" id="chi" placeholder="Ask about recipes, meals, groceries…" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}" oninput="ar(this)"></textarea><button class="chsb" id="csb" onclick="sendChat()">↑</button></div>
   </div>
 
   <!-- INSIGHTS -->
