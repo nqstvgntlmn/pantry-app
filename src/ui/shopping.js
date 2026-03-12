@@ -14,7 +14,7 @@ import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR } f
 // showOv/hideOv = show/hide overlay modals, fmtR = format helper
 import { svi } from '../db.js';       // svi = save/upsert an inventory item to Firestore
 import { wDates } from '../helpers.js'; // wDates = returns array of Date objects for the current week (Mon–Sun)
-import { uploadProductImage } from '../storage.js'; // Upload custom product photos to Firebase Storage
+import { uploadProductImage, normalizeProductName } from '../storage.js'; // Upload custom product photos to Firebase Storage, normalizeProductName for customProducts collection keys
 
 // ── VOICE INPUT (Web Speech API) ─────────────────────────────────────────────
 // Uses the SpeechRecognition API to let users speak items into the shopping list.
@@ -1118,10 +1118,23 @@ export async function deleteItemImage(id) {
 
   // Clear the image and set imageDismissed flag so enrichment pipelines
   // (Reminders auto-enrich, retroactive enrich, etc.) won't re-apply the same image.
-  // The flag persists in Firestore and is only cleared when the user explicitly
-  // uploads a new photo or picks a new product match.
   const updated = { ...item, image: null, imageDismissed: true };
   await svShopItem(updated);
+
+  // Persist imageDismissed to the customProducts collection so it survives item deletion.
+  // When the user deletes a shopping item and later re-adds the same product,
+  // the text-search API checks this flag and skips all image enrichment.
+  if (state.hid && item.name) {
+    const normalized = normalizeProductName(item.name);
+    if (normalized) {
+      dbSet(`customProducts/${state.hid}/items/${normalized}`, {
+        name: item.name.trim(),
+        imageDismissed: true,
+        imageUrl: null,
+        updatedAt: new Date().toISOString()
+      }).catch(e => console.warn("Failed to save imageDismissed to customProducts:", e));
+    }
+  }
 
   // Re-open the detail sheet to reflect the removed image (shows placeholder)
   openItemDetail(id);
@@ -1222,6 +1235,19 @@ export function pickEnrichResult(index) {
         source: product.source || "search",
         imageDismissed: false,
       });
+
+      // Also clear imageDismissed in customProducts so the image persists
+      // if the item is later deleted and re-added to the shopping list.
+      if (state.hid && product.name) {
+        const normalized = normalizeProductName(product.name);
+        if (normalized) {
+          dbSet(`customProducts/${state.hid}/items/${normalized}`, {
+            name: product.name.trim(),
+            imageDismissed: false,
+            updatedAt: new Date().toISOString()
+          }).catch(e => console.warn("Failed to clear imageDismissed in customProducts:", e));
+        }
+      }
     }
   } else if (ctx.list === "inv") {
     // Update the inventory item with enriched product data.

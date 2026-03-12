@@ -67,13 +67,22 @@ async function lookupCustomProduct(householdId, query) {
     const doc = await r.json();
     if (doc.error || !doc.fields) return null;
 
+    // Check imageDismissed flag — if the user explicitly deleted the image for
+    // this product, skip ALL image enrichment. This flag lives on the customProducts
+    // record (not the shopping item) so it persists across item deletions.
+    const imageDismissed = doc.fields?.imageDismissed?.booleanValue === true;
+    if (imageDismissed) {
+      console.log(`[TextSearch] Custom product DISMISSED for "${query}" (household: ${householdId}) — skipping all images`);
+      return { name: query, imageUrl: null, imageDismissed: true };
+    }
+
     // Extract imageUrl from the Firestore REST response (typed value format)
     const imageUrl = doc.fields?.imageUrl?.stringValue || null;
     const name = doc.fields?.name?.stringValue || query;
     if (!imageUrl) return null;
 
     console.log(`[TextSearch] Custom product HIT for "${query}" (household: ${householdId}) → ${imageUrl}`);
-    return { name, imageUrl };
+    return { name, imageUrl, imageDismissed: false };
   } catch (e) {
     // Non-blocking — if the lookup fails, fall through to external APIs
     console.warn(`[TextSearch] Custom product lookup failed for "${query}":`, e.message);
@@ -2335,6 +2344,19 @@ export default async function handler(req, res) {
   if (householdId) {
     const customProduct = await lookupCustomProduct(householdId, query);
     if (customProduct) {
+      // If the user previously dismissed (deleted) the image for this product,
+      // return empty results so no image is applied — respects user's choice
+      // even after the item is deleted and re-added to the shopping list.
+      if (customProduct.imageDismissed) {
+        console.log(`[TextSearch] ── Image dismissed for "${query}" — returning imageDismissed flag`);
+        return res.status(200).json({
+          results: [],
+          imageDismissed: true
+        });
+      }
+
+      // Custom photo exists — return it as the sole result, skipping all external APIs.
+      // User-uploaded photos are always the highest priority image source.
       console.log(`[TextSearch] ── Returning custom product image for "${query}" — skipping external APIs`);
       return res.status(200).json({
         results: [{

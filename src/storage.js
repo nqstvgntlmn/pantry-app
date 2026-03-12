@@ -162,6 +162,7 @@ export async function uploadProductImage(file, productName) {
     await dbSet(`customProducts/${state.hid}/items/${normalized}`, {
       name: productName.trim(),
       imageUrl: downloadUrl,
+      imageDismissed: false,  // Clear any prior dismissal — user is uploading a new photo
       updatedAt: new Date().toISOString(),
       updatedBy: user?.displayName || user?.email?.split("@")[0] || "Unknown"
     });
