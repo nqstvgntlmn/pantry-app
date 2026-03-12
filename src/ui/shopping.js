@@ -760,18 +760,18 @@ function _renderShopDropdown(results) {
     console.log(`[ShopDropdown] #${i} "${p.name}" → image: ${imgSrc} | url: ${p.image || "(none)"} | score: ${p._score}`);
   });
 
-  // Render result rows. Brand is intentionally hidden in text search results —
-  // it's often generic/irrelevant (e.g. "Boulart" for "Bread"). Brand only
-  // shows for barcode scans where the user scanned that exact product.
+  // Render result rows with consistent layout: image LEFT, text RIGHT.
+  // Brand is intentionally hidden — often generic/irrelevant in text search.
+  // On image error, swap to placeholder so the row layout stays aligned.
   dropdown.innerHTML = results.map((p, i) => {
     const img = p.image
-      ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'; console.warn('[ShopDropdown] Image failed to load:', '${(p.image || "").replace(/'/g, "\\'")}')"`
+      ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.outerHTML='<div class=\\'enrich-img-ph\\'>🛒</div>'">`
       : `<div class="enrich-img-ph">🛒</div>`;
     const cat = p.category && p.category !== "General"
       ? `<div class="enrich-cat">${p.category}</div>` : "";
     return `<div class="enrich-row" onclick="pickInlineResult(${i})">
       ${img}
-      <div style="flex:1;min-width:0">
+      <div class="enrich-text">
         <div class="enrich-name">${p.name}</div>
         ${cat}
       </div>
@@ -1048,17 +1048,17 @@ export async function searchAndEnrich(itemId, query, list) {
     // Update the title and render the results
     if (titleEl) titleEl.textContent = "Choose a match";
 
-    // Build the results HTML with product thumbnails, names, and categories.
-    // Brand hidden in text search context — only relevant for barcode scans.
+    // Build results HTML with consistent layout: image LEFT, text RIGHT.
+    // On image error, swap to placeholder so alignment never breaks.
     let html = results.map((p, i) => {
       const img = p.image
-        ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'"/>`
+        ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.outerHTML='<div class=\\'enrich-img-ph\\'>🛒</div>'">`
         : `<div class="enrich-img-ph">🛒</div>`;
       const cat = p.category && p.category !== "General"
         ? `<div class="enrich-cat">${p.category}</div>` : "";
       return `<div class="enrich-row" onclick="pickEnrichResult(${i})">
         ${img}
-        <div style="flex:1;min-width:0">
+        <div class="enrich-text">
           <div class="enrich-name">${p.name}</div>
           ${cat}
         </div>

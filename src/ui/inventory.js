@@ -1001,19 +1001,20 @@ function _renderInvDropdown(results) {
     console.log(`[InvDropdown] #${i} "${p.name}" → image: ${imgSrc} | url: ${p.image || "(none)"} | score: ${p._score}`);
   });
 
-  // Render result rows
+  // Render result rows with consistent layout: image LEFT, text RIGHT.
+  // Matches shopping dropdown layout — no brand shown (often irrelevant in text search).
+  // On image error, swap to placeholder so the row layout stays aligned.
   dropdown.innerHTML = results.map((p, i) => {
     const img = p.image
-      ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'"/>`
+      ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.outerHTML='<div class=\\'enrich-img-ph\\'>🛒</div>'">`
       : `<div class="enrich-img-ph">🛒</div>`;
-    const brand = p.brand ? `<div class="enrich-brand">${p.brand}</div>` : "";
     const cat = p.category && p.category !== "General"
       ? `<div class="enrich-cat">${p.category}</div>` : "";
     return `<div class="enrich-row" onclick="pickInvInlineResult(${i})">
       ${img}
-      <div style="flex:1;min-width:0">
+      <div class="enrich-text">
         <div class="enrich-name">${p.name}</div>
-        ${brand}${cat}
+        ${cat}
       </div>
     </div>`;
   }).join("");
