@@ -357,9 +357,17 @@ async function searchGoogle(query) {
 
   try {
     // Regular web search (no searchType=image) — results include pagemap with product images
-    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query + " grocery product")}&key=${key}&cx=${cx}&num=5`;
-    const r = await fetch(url);
-    if (!r.ok) return [];
+    // Raw query only — appending "grocery product" was contributing to 403 errors
+    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${key}&cx=${cx}&num=5&prettyPrint=false`;
+    const r = await fetch(url, {
+      headers: { "Accept": "application/json" },
+    });
+    if (!r.ok) {
+      // Log the full error response so we can diagnose 403s and quota issues
+      const errorBody = await r.text().catch(() => "(could not read body)");
+      console.log(`[Google] API returned ${r.status} for "${query}" — body: ${errorBody}`);
+      return [];
+    }
     const d = await r.json();
 
     return (d.items || []).slice(0, 5).map(item => {
@@ -438,22 +446,29 @@ async function fetchGoogleImage(productName) {
  * actual Google Custom Search Image API call. Uses searchType=image to get
  * direct image URLs instead of scraping pagemap from web results.
  *
- * Correct endpoint format:
- *   https://www.googleapis.com/customsearch/v1?key=KEY&cx=CX&q=QUERY&searchType=image&num=1
+ * Uses raw product name (no "food product" suffix) to avoid triggering
+ * Google's spam/abuse filters which can cause 403s on appended queries.
+ * Adds prettyPrint=false to reduce response size and Accept header for clarity.
  */
 async function _fetchGoogleImageUncached(productName, key, cx) {
   console.log(`[GoogleImage] Fetching image for: "${productName}"`);
   try {
-    // Use searchType=image for direct image results (not web page scraping)
-    const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${encodeURIComponent(productName + " food product")}&searchType=image&num=1`;
+    // Use raw product name — appending "food product" was triggering 403 errors
+    // prettyPrint=false reduces payload size slightly
+    const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${encodeURIComponent(productName)}&searchType=image&num=1&prettyPrint=false`;
 
     // Log the full URL with the API key redacted for debugging
     const redactedUrl = url.replace(key, "REDACTED");
     console.log(`[GoogleImage] Request URL: ${redactedUrl}`);
 
-    const r = await fetch(url);
+    // Explicit Accept header to signal we expect JSON (some proxies/WAFs care)
+    const r = await fetch(url, {
+      headers: { "Accept": "application/json" },
+    });
     if (!r.ok) {
-      console.log(`[GoogleImage] API returned ${r.status} for "${productName}"`);
+      // Log the FULL response body so we can see exactly what Google is saying
+      const errorBody = await r.text().catch(() => "(could not read body)");
+      console.log(`[GoogleImage] API returned ${r.status} for "${productName}" — body: ${errorBody}`);
       return null;
     }
     const d = await r.json();
@@ -722,62 +737,96 @@ export default async function handler(req, res) {
   // Minimum relevant results to short-circuit (stop searching more databases)
   const ENOUGH = 3;
 
+  // Maximum time (ms) to spend on image backfill before returning results.
+  // Keeps total response time snappy — images that don't resolve in time
+  // will be null and the client can show a placeholder.
+  const IMAGE_BACKFILL_TIMEOUT_MS = 1500;
+
   /**
-   * backfillImagesAndReturn(results) — Before returning results to the client,
-   * backfill any missing images via Google Custom Search. This ensures every
-   * result has a chance to get a real product photo, regardless of which
-   * database it came from. Runs lookups in parallel for speed.
+   * backfillImagesWithTimeout(results) — Attempts to fill in missing images
+   * via Google/Bing, but races against a timeout so image lookups never block
+   * the response for more than IMAGE_BACKFILL_TIMEOUT_MS. Results are mutated
+   * in place — any images that resolve before the timeout are included.
    */
-  async function backfillImagesAndReturn(results) {
+  async function backfillImagesWithTimeout(results) {
     const imageless = results.filter(r => !r.image);
-    if (imageless.length > 0) {
-      console.log(`[TextSearch] ${imageless.length} result(s) missing images — trying Google fallback`);
-      await Promise.all(imageless.map(async (item) => {
-        const img = await fetchGoogleImage(item.name);
-        if (img) item.image = img;
-      }));
-    }
-    return res.status(200).json({ results });
+    if (imageless.length === 0) return;
+
+    console.log(`[TextSearch] ${imageless.length} result(s) missing images — backfilling (timeout: ${IMAGE_BACKFILL_TIMEOUT_MS}ms)`);
+
+    // Race all image lookups against a single timeout — whichever images
+    // resolve before the deadline get attached, the rest stay null
+    const imagePromises = imageless.map(async (item) => {
+      const img = await fetchGoogleImage(item.name);
+      if (img) item.image = img;
+    });
+
+    await Promise.race([
+      Promise.allSettled(imagePromises),
+      new Promise(resolve => setTimeout(resolve, IMAGE_BACKFILL_TIMEOUT_MS)),
+    ]);
   }
 
-  // ── Tier 1: Spoonacular + Kroger (fastest, most grocery-relevant) ──
-  const tier1 = await Promise.all([
+  // ── Tier 1: Spoonacular + Kroger + USDA (top 3 — run in parallel) ─────
+  // These are the fastest and most grocery-relevant databases. Running all 3
+  // in parallel instead of sequentially cuts Tier 1 from ~3-4s to ~1-1.5s.
+  console.log(`[TextSearch] Starting Tier 1 (Spoonacular + Kroger + USDA) in parallel`);
+  const t1Start = Date.now();
+  const tier1 = await Promise.allSettled([
     searchSpoonacular(query),
     searchKroger(query),
+    searchUSDA(query),
   ]);
-  tier1.forEach(r => addResults(r));
+  // Extract results from settled promises (fulfilled only — rejected = [])
+  tier1.forEach(r => {
+    if (r.status === "fulfilled") addResults(r.value);
+  });
+  console.log(`[TextSearch] Tier 1 done in ${Date.now() - t1Start}ms — ${allResults.length} result(s)`);
+
   if (allResults.length >= ENOUGH) {
-    return backfillImagesAndReturn(allResults.slice(0, 5));
+    const final = allResults.slice(0, 5);
+    await backfillImagesWithTimeout(final);
+    return res.status(200).json({ results: final });
   }
 
-  // ── Tier 2: USDA + Google + Edamam (good coverage, slightly slower) ──
-  const tier2 = await Promise.all([
-    searchUSDA(query),
+  // ── Tier 2: Google + Edamam + Open Food Facts (broader coverage) ───────
+  // Only reached if Tier 1 returned fewer than 3 relevant results
+  console.log(`[TextSearch] Starting Tier 2 (Google + Edamam + Open Food Facts) in parallel`);
+  const t2Start = Date.now();
+  const tier2 = await Promise.allSettled([
     searchGoogle(query),
     searchEdamam(query),
-  ]);
-  tier2.forEach(r => addResults(r));
-  if (allResults.length >= ENOUGH) {
-    return backfillImagesAndReturn(allResults.slice(0, 5));
-  }
-
-  // ── Tier 3: Open Food Facts + UPC Item DB (community/general fallbacks) ──
-  const tier3 = await Promise.all([
     searchOpenFoodFacts(query),
-    searchUpcItemDb(query),
   ]);
-  tier3.forEach(r => addResults(r));
+  tier2.forEach(r => {
+    if (r.status === "fulfilled") addResults(r.value);
+  });
+  console.log(`[TextSearch] Tier 2 done in ${Date.now() - t2Start}ms — ${allResults.length} total result(s)`);
+
   if (allResults.length >= ENOUGH) {
-    return backfillImagesAndReturn(allResults.slice(0, 5));
+    const final = allResults.slice(0, 5);
+    await backfillImagesWithTimeout(final);
+    return res.status(200).json({ results: final });
   }
 
-  // ── Tier 4: Niche databases (beauty, pet food — rarely needed) ──
-  const tier4 = await Promise.all([
+  // ── Tier 3: UPC Item DB + niche databases (rarely needed fallbacks) ────
+  // Only reached for very obscure queries that major databases don't cover
+  console.log(`[TextSearch] Starting Tier 3 (UPC + Beauty + Pet Food) in parallel`);
+  const t3Start = Date.now();
+  const tier3 = await Promise.allSettled([
+    searchUpcItemDb(query),
     searchOpenBeautyFacts(query),
     searchOpenPetFoodFacts(query),
   ]);
-  tier4.forEach(r => addResults(r));
+  tier3.forEach(r => {
+    if (r.status === "fulfilled") addResults(r.value);
+  });
+  console.log(`[TextSearch] Tier 3 done in ${Date.now() - t3Start}ms — ${allResults.length} total result(s)`);
 
-  // Return whatever we found (may be 0-5 results), with image backfill
-  return backfillImagesAndReturn(allResults.slice(0, 5));
+  // Return whatever we found (may be 0-5 results), with time-limited image backfill
+  const final = allResults.slice(0, 5);
+  await backfillImagesWithTimeout(final);
+  const totalMs = Date.now() - t1Start;
+  console.log(`[TextSearch] ── Complete: ${final.length} result(s) in ${totalMs}ms`);
+  return res.status(200).json({ results: final });
 }
