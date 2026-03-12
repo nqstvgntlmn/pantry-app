@@ -33,25 +33,45 @@ const googleImageCache = new Map();
  * Returns the image URL string, or null if not found / not configured.
  */
 async function fetchGoogleImage(productName) {
-  if (!productName) return null;
+  if (!productName) {
+    console.log("[GoogleImage] Skipped — no product name provided");
+    return null;
+  }
 
   // Check in-memory cache first to preserve daily quota
   const cacheKey = productName.toLowerCase().trim();
-  if (googleImageCache.has(cacheKey)) return googleImageCache.get(cacheKey);
+  if (googleImageCache.has(cacheKey)) {
+    console.log(`[GoogleImage] Cache hit for "${cacheKey}" → ${googleImageCache.get(cacheKey) || "null (cached miss)"}`);
+    return googleImageCache.get(cacheKey);
+  }
 
+  // Confirm env vars are present without exposing actual keys
   const key = process.env.GOOGLE_SEARCH_API_KEY;
   const cx = process.env.GOOGLE_SEARCH_ENGINE_ID;
-  if (!key || !cx) return null;
+  console.log(`[GoogleImage] Env check — GOOGLE_SEARCH_API_KEY present: ${!!key}, GOOGLE_SEARCH_ENGINE_ID present: ${!!cx}`);
+  if (!key || !cx) {
+    console.log("[GoogleImage] Aborting — missing env var(s)");
+    return null;
+  }
 
   try {
-    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(productName + " product")}&key=${key}&cx=${cx}&num=1`;
+    const query = productName + " product";
+    console.log(`[GoogleImage] Querying Google Custom Search for: "${query}"`);
+    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${key}&cx=${cx}&num=1`;
     const r = await fetch(url);
-    if (!r.ok) return null;
+    console.log(`[GoogleImage] Google API response status: ${r.status}`);
+    if (!r.ok) {
+      const errBody = await r.text().catch(() => "(unreadable)");
+      console.log(`[GoogleImage] Google API error body: ${errBody.slice(0, 300)}`);
+      return null;
+    }
     const d = await r.json();
+    console.log(`[GoogleImage] Google returned ${(d.items || []).length} item(s)`);
 
     const item = (d.items || [])[0];
     if (!item) {
       // Cache the miss too so we don't re-query Google for the same product
+      console.log("[GoogleImage] No items returned — caching miss");
       googleImageCache.set(cacheKey, null);
       return null;
     }
@@ -62,9 +82,11 @@ async function fetchGoogleImage(productName) {
       || pagemap.cse_thumbnail?.[0]?.src
       || null;
 
+    console.log(`[GoogleImage] Extracted image URL: ${imgUrl || "null (no image in pagemap)"}`);
     googleImageCache.set(cacheKey, imgUrl);
     return imgUrl;
-  } catch {
+  } catch (err) {
+    console.log(`[GoogleImage] Exception: ${err.message}`);
     return null;
   }
 }
@@ -324,22 +346,35 @@ export default async function handler(req, res) {
   const code = (req.query.code || "").trim();
   if (!code) return res.status(400).json({ error: "Missing 'code' query parameter" });
 
+  console.log(`[Barcode] ── Lookup started for barcode: ${code}`);
+
   // Run the waterfall: try each database in order.
   // If a result has a truncated or low-quality name (e.g. ends with "imp", cut off mid-word),
   // keep it as a fallback but continue trying other databases for a better match.
   // This ensures we return the most complete product info available.
   const fns = [tryEdamam, tryOpenFoodFacts, tryOpenBeautyFacts, tryOpenPetFoodFacts, tryUpcItemDb];
+  const fnNames = ["Edamam", "Open Food Facts", "Open Beauty Facts", "Open Pet Food Facts", "UPC Item DB"];
   let bestFallback = null;
 
-  for (const fn of fns) {
-    const result = await fn(code);
-    if (!result) continue;
+  for (let i = 0; i < fns.length; i++) {
+    const result = await fns[i](code);
+    if (!result) {
+      console.log(`[Barcode] ${fnNames[i]}: no result`);
+      continue;
+    }
+
+    console.log(`[Barcode] ${fnNames[i]}: found "${result.name}" | image: ${result.image ? "YES" : "NONE"} | source: ${result.source}`);
 
     // If the name looks complete and good, use it immediately
     if (!isLowQualityName(result.name)) {
+      console.log(`[Barcode] Name quality OK — using ${fnNames[i]} as primary result`);
+
       // Merge in any missing fields from the fallback (e.g. image, description)
       if (bestFallback) {
-        if (!result.image && bestFallback.image) result.image = bestFallback.image;
+        if (!result.image && bestFallback.image) {
+          console.log(`[Barcode] Merging image from fallback (${bestFallback.source})`);
+          result.image = bestFallback.image;
+        }
         if (!result.description && bestFallback.description) result.description = bestFallback.description;
       }
       // Clean the product name: strip artifacts and prepend brand if missing
@@ -347,28 +382,41 @@ export default async function handler(req, res) {
 
       // If no image from any database, try Google Custom Search as a universal fallback
       if (!result.image) {
+        console.log(`[Barcode] No image from any DB — invoking Google Custom Search fallback for "${result.name}"`);
         result.image = await fetchGoogleImage(result.name);
+        console.log(`[Barcode] Google fallback result: ${result.image ? result.image : "null (no image found)"}`);
+      } else {
+        console.log(`[Barcode] Image present from DB — skipping Google fallback`);
       }
 
+      console.log(`[Barcode] ── Returning product: "${result.name}" | image: ${result.image ? "YES" : "NONE"} | source: ${result.source}`);
       return res.status(200).json({ found: true, product: result });
     }
 
     // Low-quality name — save as fallback and keep trying other databases
+    console.log(`[Barcode] ${fnNames[i]}: low-quality name "${result.name}" — saving as fallback, continuing waterfall`);
     if (!bestFallback) bestFallback = result;
   }
 
   // No high-quality result found; return the best fallback we have (with cleaned name)
   if (bestFallback) {
+    console.log(`[Barcode] No high-quality match — using fallback from ${bestFallback.source}: "${bestFallback.name}"`);
     bestFallback.name = cleanProductName(bestFallback.name, bestFallback.brand);
 
     // If no image from any database, try Google Custom Search as a universal fallback
     if (!bestFallback.image) {
+      console.log(`[Barcode] Fallback has no image — invoking Google Custom Search for "${bestFallback.name}"`);
       bestFallback.image = await fetchGoogleImage(bestFallback.name);
+      console.log(`[Barcode] Google fallback result: ${bestFallback.image ? bestFallback.image : "null (no image found)"}`);
+    } else {
+      console.log(`[Barcode] Fallback has image — skipping Google fallback`);
     }
 
+    console.log(`[Barcode] ── Returning fallback: "${bestFallback.name}" | image: ${bestFallback.image ? "YES" : "NONE"} | source: ${bestFallback.source}`);
     return res.status(200).json({ found: true, product: bestFallback });
   }
 
   // All five databases returned nothing for this barcode
+  console.log(`[Barcode] ── All databases returned nothing for ${code}`);
   return res.status(200).json({ found: false });
 }
