@@ -6,7 +6,7 @@
 // dli = delete inventory item).
 
 import { state } from '../state.js';
-import { svi, dli, addWasteEntry, dbSet } from '../db.js';
+import { svi, dli, addWasteEntry, dbSet, dbGet } from '../db.js';
 // g        – getElementById shorthand
 // xSt      – returns expiry status object { c: class, l: label } for a date
 // ll       – location label (e.g. "fridge" → "🌡 Fridge")
@@ -213,8 +213,14 @@ export function openAdj(id) {
  * brand (if barcode scan or brand-matched search), quantity, location, expiry,
  * note, and buttons for Adjust (full overlay) and Remove.
  * In multi-select mode, delegates to the parent row tap handler instead.
+ *
+ * Custom product image lookup: before rendering, checks the shared
+ * households/{hid}/customProducts/{normalizedName} collection for a custom image.
+ * This ensures images uploaded from the shopping list detail sheet are also
+ * visible here in the pantry, and vice versa — one image per product across the app.
+ * Respects imageDismissed: if the user deleted the image, shows placeholder instead.
  */
-export function openInvItemDetail(id) {
+export async function openInvItemDetail(id) {
   // In multi-select mode, let the parent swipeRowTap handle the tap for selection toggle
   if (state.selectMode) return;
 
@@ -224,12 +230,38 @@ export function openInvItemDetail(id) {
   const content = g("invItemDetailContent");
   if (!content) return;
 
+  // ── Custom product image lookup ──
+  // Check the shared customProducts collection for a household-wide image.
+  // This is the source of truth for product images across shopping and pantry.
+  // If the item already has an image on it, we still check customProducts in case
+  // the user uploaded a newer image from the other screen.
+  let displayImage = item.image;
+  let dismissed = item.imageDismissed || false;
+
+  if (state.hid && item.name) {
+    const normalized = normalizeProductName(item.name);
+    if (normalized) {
+      const cpDoc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
+      if (cpDoc) {
+        // If imageDismissed is set in customProducts, respect it — show placeholder
+        if (cpDoc.imageDismissed) {
+          displayImage = null;
+          dismissed = true;
+        } else if (cpDoc.imageUrl) {
+          // Custom image exists and is not dismissed — use it
+          displayImage = cpDoc.imageUrl;
+          dismissed = false;
+        }
+      }
+    }
+  }
+
   // Build the product image or placeholder. Both serve as drag-and-drop zones.
   // If item has image: show it with a small "×" delete button overlaid.
   // If no image: show camera icon + "Add photo" hint as tap target and drop zone.
-  const img = item.image
+  const img = displayImage
     ? `<div class="item-detail-img-wrap drop-zone" data-item-id="${item.id}" data-list="inv">
-        <img src="${item.image}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
+        <img src="${displayImage}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
         <button class="item-detail-img-del" onclick="deleteInvItemImage('${item.id}')" title="Remove image">×</button>
       </div>`
     : `<div class="item-detail-img-ph drop-zone" data-item-id="${item.id}" data-list="inv" onclick="triggerInvPhotoUpload('${item.id}')" style="cursor:pointer">
@@ -240,7 +272,7 @@ export function openInvItemDetail(id) {
       </div>`;
 
   // "Change photo" link when item already has an image
-  const changePhotoLink = item.image
+  const changePhotoLink = displayImage
     ? `<div class="item-detail-change-photo" onclick="triggerInvPhotoUpload('${item.id}')">Change photo</div>`
     : "";
 
@@ -419,6 +451,10 @@ async function _processInvDroppedImage(file, item) {
     // Save image and clear imageDismissed — user is explicitly adding a new photo
     const updated = { ...item, image: downloadUrl, imageDismissed: false };
     await svi(updated);
+
+    // Persist to customProducts so the image is shared across shopping and pantry
+    _saveCustomProductImage(item.name, downloadUrl);
+
     showNotif("Photo saved ✓");
     openInvItemDetail(item.id);
   } catch (e) {
@@ -458,6 +494,24 @@ async function _fetchAndUploadInvImageUrl(url, item) {
     showNotif("Couldn't load that image — try saving it first");
     openInvItemDetail(item.id);
   }
+}
+
+/**
+ * _saveCustomProductImage(name, downloadUrl) — Writes a custom product image to the
+ * shared customProducts collection so it's visible across both shopping and pantry.
+ * Clears imageDismissed since the user is explicitly uploading a new photo.
+ * Fire-and-forget — errors are logged but don't block the UI.
+ */
+function _saveCustomProductImage(name, downloadUrl) {
+  if (!state.hid || !name) return;
+  const normalized = normalizeProductName(name);
+  if (!normalized) return;
+  dbSet(`households/${state.hid}/customProducts/${normalized}`, {
+    name: name.trim(),
+    imageUrl: downloadUrl,
+    imageDismissed: false,
+    updatedAt: new Date().toISOString()
+  }).catch(e => console.warn("Failed to save custom product image:", e));
 }
 
 /**
@@ -532,6 +586,10 @@ export async function handleInvPhotoSelected(id) {
     // Save the new image URL and clear imageDismissed
     const updated = { ...item, image: downloadUrl, imageDismissed: false };
     await svi(updated);
+
+    // Persist to customProducts so the image is shared across shopping and pantry
+    _saveCustomProductImage(item.name, downloadUrl);
+
     showNotif("Photo saved ✓");
     openInvItemDetail(id);
   } catch (e) {

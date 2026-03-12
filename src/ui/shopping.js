@@ -6,7 +6,7 @@
 // and bidirectional Reminders sync (records completed items for iOS Shortcut polling).
 
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
-import { svShopItem, dlShopItem, dbSet } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write
+import { svShopItem, dlShopItem, dbSet, dbGet } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc
 import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
@@ -1028,8 +1028,12 @@ export function closeEnrichSheet() {
  * openItemDetail(id) — Opens the product detail bottom sheet for a shopping item.
  * Reads all stored fields from the item and renders them into the sheet.
  * In multi-select mode, delegates to the parent row tap handler instead.
+ *
+ * Custom product image lookup: checks the shared customProducts collection
+ * for a household-wide image so photos uploaded from pantry show here too.
+ * Respects imageDismissed: if the user deleted the image, shows placeholder.
  */
-export function openItemDetail(id) {
+export async function openItemDetail(id) {
   // In multi-select mode, let the parent swipeRowTap handle the tap for selection toggle
   if (state.selectMode) return;
 
@@ -1042,15 +1046,39 @@ export function openItemDetail(id) {
   const content = g("itemDetailContent");
   if (!content) return;
 
+  // ── Custom product image lookup ──
+  // Check the shared customProducts collection for a household-wide image.
+  // This ensures images uploaded from the pantry detail sheet also appear here.
+  let displayImage = item.image;
+  let dismissed = item.imageDismissed || false;
+
+  if (state.hid && item.name) {
+    const normalized = normalizeProductName(item.name);
+    if (normalized) {
+      const cpDoc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
+      if (cpDoc) {
+        // If imageDismissed is set in customProducts, respect it — show placeholder
+        if (cpDoc.imageDismissed) {
+          displayImage = null;
+          dismissed = true;
+        } else if (cpDoc.imageUrl) {
+          // Custom image exists and is not dismissed — use it
+          displayImage = cpDoc.imageUrl;
+          dismissed = false;
+        }
+      }
+    }
+  }
+
   // Build the product image or placeholder. Both states serve as a drag-and-drop
   // zone — users can drag image files from desktop or Photos app onto the area.
   // If the item has an image, show it with a small "×" delete button overlaid.
   // If no image exists, show a clean camera icon + "Add photo" hint that doubles
   // as a tap target for the file picker and a visible drop zone.
   // The drop-zone class enables drag-and-drop event handling (see setupDropZone below).
-  const img = item.image
+  const img = displayImage
     ? `<div class="item-detail-img-wrap drop-zone" data-item-id="${item.id}">
-        <img src="${item.image}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
+        <img src="${displayImage}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
         <button class="item-detail-img-del" onclick="deleteItemImage('${item.id}')" title="Remove image">×</button>
       </div>`
     : `<div class="item-detail-img-ph drop-zone" data-item-id="${item.id}" onclick="triggerProductPhotoUpload('${item.id}')" style="cursor:pointer">
@@ -1065,7 +1093,7 @@ export function openItemDetail(id) {
   // Includes a "Change photo" link when the item already has an image, so users can
   // replace external/auto-enriched images with their own photos.
   const showBrand = _shouldShowBrand(item);
-  const changePhotoLink = item.image
+  const changePhotoLink = displayImage
     ? `<div class="item-detail-change-photo" onclick="triggerProductPhotoUpload('${item.id}')">Change photo</div>`
     : "";
   let html = `<div class="item-detail-header">
@@ -1246,6 +1274,10 @@ async function _processDroppedImage(file, item) {
     // Save image and clear imageDismissed — user is explicitly adding a new photo
     const updated = { ...item, image: downloadUrl, imageDismissed: false };
     await svShopItem(updated);
+
+    // Persist to customProducts so the image is shared across shopping and pantry
+    _saveCustomProductImage(item.name, downloadUrl);
+
     showNotif("Photo saved ✓");
     openItemDetail(item.id);
   } catch (e) {
@@ -1291,6 +1323,24 @@ async function _fetchAndUploadImageUrl(url, item) {
     showNotif("Couldn't load that image — try saving it first");
     openItemDetail(item.id);
   }
+}
+
+/**
+ * _saveCustomProductImage(name, downloadUrl) — Writes a custom product image to the
+ * shared customProducts collection so it's visible across both shopping and pantry.
+ * Clears imageDismissed since the user is explicitly uploading a new photo.
+ * Fire-and-forget — errors are logged but don't block the UI.
+ */
+function _saveCustomProductImage(name, downloadUrl) {
+  if (!state.hid || !name) return;
+  const normalized = normalizeProductName(name);
+  if (!normalized) return;
+  dbSet(`households/${state.hid}/customProducts/${normalized}`, {
+    name: name.trim(),
+    imageUrl: downloadUrl,
+    imageDismissed: false,
+    updatedAt: new Date().toISOString()
+  }).catch(e => console.warn("Failed to save custom product image:", e));
 }
 
 /**
@@ -1382,6 +1432,9 @@ export async function handleProductPhotoSelected(id) {
     // so future enrichment should be allowed again if they later delete this one too.
     const updated = { ...item, image: downloadUrl, imageDismissed: false };
     await svShopItem(updated);
+
+    // Persist to customProducts so the image is shared across shopping and pantry
+    _saveCustomProductImage(item.name, downloadUrl);
 
     showNotif("Photo saved ✓");
 
