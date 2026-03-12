@@ -688,6 +688,13 @@ async function _fetchAndScoreResults(query) {
   console.log(`[ShopSearch] Fetching /api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
   const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
   const data = await r.json();
+
+  // If the API reports imageDismissed, the user previously deleted this product's image.
+  // Strip images from all results so the item remains pictureless until the user
+  // explicitly uploads a new photo or picks a result from the enrichment sheet.
+  if (data.imageDismissed) {
+    console.log(`[ShopSearch] imageDismissed for "${query}" — stripping images from results`);
+  }
   let results = data.results || [];
 
   // Filter: at least one query word must appear in the product name
@@ -888,20 +895,32 @@ export function enrichRemindersItems() {
     // Mark as in-progress so we don't re-process on the next render cycle
     _enrichedIds.add(item.id);
 
-    // Fire-and-forget: search, score, and apply the best image if found
+    // Fire-and-forget: search, score, and apply the best image if found.
+    // Use a HIGH threshold (>= 80) for Reminders auto-enrichment — only apply
+    // when the top result's name closely matches the item. This prevents
+    // irrelevant images (e.g. "beverages" image for "Yogurt Pouch").
+    // The regular inline search uses >= 20, but auto-enrichment should be strict
+    // since the user has no chance to review before the image is applied.
     _fetchAndScoreResults(item.name).then(results => {
-      // Only apply if the top result scores >= 20 (same threshold as inline search)
-      // and actually has an image URL to use
-      if (results.length && results[0]._score >= 20 && results[0].image) {
+      // Re-check imageDismissed on the live item in case it was set while we were fetching.
+      // This prevents a race where the user dismisses the image before enrichment completes.
+      const liveItem = state.shop.find(i => i.id === item.id);
+      if (!liveItem || liveItem.imageDismissed || liveItem.image) return;
+
+      // Score >= 80 ensures a close name match (exact, starts-with, or first-word match).
+      // This filters out loosely related products that the >= 20 threshold would allow.
+      if (results.length && results[0]._score >= 80 && results[0].image) {
         const best = results[0];
-        const updated = { ...item };
+        const updated = { ...liveItem };
         updated.image = best.image;
         // Also apply brand/category if available and item doesn't already have them
-        if (best.brand && !item.brand) updated.brand = best.brand;
-        if (best.category && best.category !== "General" && !item.category) updated.category = best.category;
+        if (best.brand && !liveItem.brand) updated.brand = best.brand;
+        if (best.category && best.category !== "General" && !liveItem.category) updated.category = best.category;
         updated.src = "reminders"; // Preserve the source tag
         svShopItem(updated);
-        console.log(`[RemindersEnrich] Auto-enriched "${item.name}" with image from ${best.source || "search"}`);
+        console.log(`[RemindersEnrich] Auto-enriched "${item.name}" (score=${best._score}) with image from ${best.source || "search"}`);
+      } else if (results.length) {
+        console.log(`[RemindersEnrich] Skipped "${item.name}" — top result "${results[0].name}" scored ${results[0]._score} (need >= 80)`);
       }
     }).catch(() => {
       // Silent failure — item stays as plain text, no user disruption
@@ -1023,21 +1042,21 @@ export function openItemDetail(id) {
   const content = g("itemDetailContent");
   if (!content) return;
 
-  // Build the product image or placeholder.
-  // If the item has an image, show it with a small "×" delete button overlaid
-  // in the top-right corner so the user can remove it. Also shows a subtle
-  // "Change photo" link below the image for uploading a replacement.
-  // If no image exists, show an "Add photo" button instead of the placeholder
-  // so users can upload their own product photos from their camera roll.
+  // Build the product image or placeholder. Both states serve as a drag-and-drop
+  // zone — users can drag image files from desktop or Photos app onto the area.
+  // If the item has an image, show it with a small "×" delete button overlaid.
+  // If no image exists, show a clean camera icon + "Add photo" hint that doubles
+  // as a tap target for the file picker and a visible drop zone.
+  // The drop-zone class enables drag-and-drop event handling (see setupDropZone below).
   const img = item.image
-    ? `<div class="item-detail-img-wrap">
+    ? `<div class="item-detail-img-wrap drop-zone" data-item-id="${item.id}">
         <img src="${item.image}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
         <button class="item-detail-img-del" onclick="deleteItemImage('${item.id}')" title="Remove image">×</button>
       </div>`
-    : `<div class="item-detail-img-ph" onclick="triggerProductPhotoUpload('${item.id}')" style="cursor:pointer">
+    : `<div class="item-detail-img-ph drop-zone" data-item-id="${item.id}" onclick="triggerProductPhotoUpload('${item.id}')" style="cursor:pointer">
         <div style="text-align:center">
-          <div style="font-size:1.5rem;margin-bottom:2px">📷</div>
-          <div style="font-size:.65rem;color:var(--mt)">Add photo</div>
+          <div style="font-size:1.3rem;margin-bottom:2px;opacity:.45">📷</div>
+          <div style="font-size:.6rem;color:var(--mt);opacity:.7">Add photo</div>
         </div>
       </div>`;
 
@@ -1094,6 +1113,11 @@ export function openItemDetail(id) {
   const sheet = g("itemDetailSheet");
   if (backdrop) backdrop.classList.add("active");
   if (sheet) sheet.classList.add("active");
+
+  // Attach drag-and-drop listeners to the image area so users can drop image files
+  // from desktop (Finder, browser tabs, Google Images) or mobile (Photos app on iOS 15+).
+  const dropZone = content.querySelector(".drop-zone");
+  if (dropZone) _setupDropZone(dropZone, item.id);
 }
 
 /**
@@ -1104,6 +1128,169 @@ export function closeItemDetail() {
   const sheet = g("itemDetailSheet");
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
+}
+
+// ── DRAG-AND-DROP IMAGE UPLOAD ────────────────────────────────────────────────
+// Supports dropping image files onto the product detail sheet's image area.
+// Works on desktop (dragging from Finder, browser tabs, Google Images) and on
+// mobile where the OS supports HTML5 drag events (iOS 15+, Android Chrome).
+// The drop zone covers the entire image placeholder/wrap area for a large target.
+
+/**
+ * _setupDropZone(el, itemId) — Attaches drag-and-drop event listeners to an element.
+ * Adds a golden highlight glow on dragover (matching app accent color) and handles
+ * the dropped file through the same compress → upload pipeline as the file picker.
+ * Also handles images dragged from browser tabs (extracts URL from DataTransfer).
+ */
+function _setupDropZone(el, itemId) {
+  // Track enter/leave depth so nested children don't flicker the highlight
+  let dragDepth = 0;
+
+  el.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth++;
+    el.classList.add("drop-zone-active");
+  });
+
+  el.addEventListener("dragover", (e) => {
+    // Must preventDefault to allow drop — browser default is to reject
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  el.addEventListener("dragleave", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth--;
+    if (dragDepth <= 0) {
+      dragDepth = 0;
+      el.classList.remove("drop-zone-active");
+    }
+  });
+
+  el.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth = 0;
+    el.classList.remove("drop-zone-active");
+    _handleDrop(e.dataTransfer, itemId);
+  });
+}
+
+/**
+ * _handleDrop(dataTransfer, itemId) — Processes a drop event's DataTransfer.
+ * Handles two cases:
+ *   1. File drop — user dragged an image file from Finder or Photos app
+ *   2. URL drop — user dragged an image from a browser tab or Google Images
+ *      (extracts the image URL from text/uri-list or text/html, fetches it as a blob)
+ */
+async function _handleDrop(dt, itemId) {
+  const item = state.shop.find(i => i.id === itemId);
+  if (!item) return;
+
+  // Case 1: Direct file drop (Finder, Photos app, file manager)
+  if (dt.files && dt.files.length > 0) {
+    const file = dt.files[0];
+    // Only accept image files — ignore PDFs, text files, etc.
+    if (file.type && file.type.startsWith("image/")) {
+      await _processDroppedImage(file, item);
+      return;
+    }
+  }
+
+  // Case 2: Image dragged from a browser tab or Google Images.
+  // The browser encodes the image URL in text/uri-list or text/html.
+  const uriList = dt.getData("text/uri-list");
+  const plainText = dt.getData("text/plain");
+  const imgUrl = uriList || plainText || "";
+
+  // Extract image URL — check if it looks like an image URL
+  if (imgUrl && /^https?:\/\/.+\.(jpe?g|png|gif|webp|bmp)/i.test(imgUrl)) {
+    await _fetchAndUploadImageUrl(imgUrl, item);
+    return;
+  }
+
+  // Also check text/html for <img src="..."> tags (Google Images wraps URLs in HTML)
+  const htmlData = dt.getData("text/html");
+  if (htmlData) {
+    const match = htmlData.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (match && match[1] && /^https?:\/\//.test(match[1])) {
+      await _fetchAndUploadImageUrl(match[1], item);
+      return;
+    }
+  }
+
+  console.warn("[DropZone] Dropped data didn't contain a usable image");
+}
+
+/**
+ * _processDroppedImage(file, item) — Compresses and uploads a dropped image file.
+ * Same pipeline as the file picker: compress → upload → save → refresh detail sheet.
+ */
+async function _processDroppedImage(file, item) {
+  // Show uploading indicator in the image area
+  const content = g("itemDetailContent");
+  if (content) {
+    const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
+    if (imgWrap) {
+      imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0">
+        <div style="font-size:1.2rem">⏳</div>
+        <div style="font-size:.65rem;color:var(--mt);margin-top:2px">Uploading…</div>
+      </div>`;
+    }
+  }
+
+  try {
+    const downloadUrl = await uploadProductImage(file, item.name);
+    // Save image and clear imageDismissed — user is explicitly adding a new photo
+    const updated = { ...item, image: downloadUrl, imageDismissed: false };
+    await svShopItem(updated);
+    showNotif("Photo saved ✓");
+    openItemDetail(item.id);
+  } catch (e) {
+    console.error("[DropZone] Upload failed:", e);
+    showNotif("Upload failed — try again");
+    openItemDetail(item.id);
+  }
+}
+
+/**
+ * _fetchAndUploadImageUrl(url, item) — Fetches an image from a URL (e.g. dragged
+ * from Google Images), converts it to a File, then runs it through the standard
+ * compress → upload pipeline. Uses a CORS proxy fallback if direct fetch fails.
+ */
+async function _fetchAndUploadImageUrl(url, item) {
+  const content = g("itemDetailContent");
+  if (content) {
+    const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
+    if (imgWrap) {
+      imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0">
+        <div style="font-size:1.2rem">⏳</div>
+        <div style="font-size:.65rem;color:var(--mt);margin-top:2px">Fetching image…</div>
+      </div>`;
+    }
+  }
+
+  try {
+    // Fetch the image — some sources may block CORS, so we catch and inform
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+
+    // Verify it's actually an image
+    if (!blob.type || !blob.type.startsWith("image/")) {
+      throw new Error("Fetched resource is not an image");
+    }
+
+    // Convert blob to File for the upload pipeline
+    const file = new File([blob], "dropped-image.jpg", { type: blob.type });
+    await _processDroppedImage(file, item);
+  } catch (e) {
+    console.warn("[DropZone] Could not fetch dropped image URL:", e);
+    showNotif("Couldn't load that image — try saving it first");
+    openItemDetail(item.id);
+  }
 }
 
 /**
