@@ -510,7 +510,8 @@ async function _fetchAndScoreResults(query) {
     return cached.scored;
   }
 
-  // Fetch from the text search API
+  // Fetch from the text search API (product enrichment waterfall)
+  console.log(`[ShopSearch] Fetching /api/text-search?q=${encodeURIComponent(query)}`);
   const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
   const data = await r.json();
   let results = data.results || [];

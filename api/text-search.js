@@ -473,6 +473,7 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   const query = (req.query.q || "").trim();
+  console.log(`[TextSearch] ── Incoming query: "${query}" | method: ${req.method}`);
   if (!query) return res.status(400).json({ error: "Missing 'q' query parameter" });
 
   // Track all unique results across tiers — deduped by lowercase name
