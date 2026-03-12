@@ -30,10 +30,9 @@ let _hapticFired = false; // Whether haptic feedback was already triggered this 
 
 // ── Constants for swipe behavior ──
 const DELETE_ZONE_WIDTH = 80;    // Width of the red delete zone in pixels (Apple-standard)
-const SNAP_THRESHOLD = 0.40;     // 40% of row width = snap/lock open
-const AUTO_DELETE_THRESHOLD = 0.80; // 80% of row width = auto-complete delete
+const SNAP_THRESHOLD = 0.10;     // 10% of row width = snap/lock open (show delete zone on release)
+const AUTO_DELETE_THRESHOLD = 0.70; // 70% of row width = auto-complete delete (no confirmation needed)
 const DIRECTION_LOCK_PX = 8;     // Pixels of movement before locking to horizontal/vertical
-const RUBBER_BAND_FACTOR = 0.3;  // Resistance factor when swiping past the delete zone
 
 // Spring easing for snap animations — mimics Apple's bounce
 const SPRING_EASE = 'cubic-bezier(0.25, 1.5, 0.5, 1)';
@@ -97,49 +96,33 @@ export function initSwipe() {
     // Prevent vertical scrolling when we're committed to a horizontal swipe
     e.preventDefault();
 
-    // Calculate translation with rubber band resistance past the delete zone.
-    // Within the delete zone (0 to -80px): 1:1 finger tracking.
-    // Past the delete zone: diminishing returns via rubber band formula.
-    // Never allow swiping right past 0 (closed position).
-    let tx;
-    if (dx >= 0) {
-      // Don't allow swiping right past the starting position
-      tx = 0;
-    } else {
-      const absDx = Math.abs(dx);
-      if (absDx <= DELETE_ZONE_WIDTH) {
-        // Within the delete zone: 1:1 tracking
-        tx = dx;
-      } else {
-        // Past the delete zone: apply rubber band resistance.
-        // The further past, the more resistance — mimics iOS elastic overscroll.
-        const overscroll = absDx - DELETE_ZONE_WIDTH;
-        const dampened = overscroll * RUBBER_BAND_FACTOR;
-        tx = -(DELETE_ZONE_WIDTH + dampened);
-      }
-    }
+    // 1:1 finger tracking — row follows the finger exactly with no rubber band.
+    // Clamped at 0 on the right (can't swipe the row rightward past its resting position).
+    const tx = dx >= 0 ? 0 : dx;
 
     _swipeEl.style.transform = `translateX(${tx}px)`;
 
-    // Immediately reveal the full delete zone on any left swipe — no progressive
-    // clip-path reveal. The red zone + trashcan icon appear as soon as the user
-    // starts dragging left, giving clear visual feedback of the delete affordance.
+    // Progressive delete zone reveal — the red zone grows as the user swipes.
+    // clip-path inset reveals from right-to-left proportional to the swipe distance.
+    // Fully revealed once the swipe reaches DELETE_ZONE_WIDTH (80px).
     const wrap = _swipeEl.closest(".swipe-wrap");
     const del = wrap?.querySelector(".swipe-del");
     if (del && tx < 0) {
-      del.style.clipPath = "inset(0 0 0 0%)";
+      const revealPct = Math.min(100, (Math.abs(tx) / DELETE_ZONE_WIDTH) * 100);
+      del.style.clipPath = `inset(0 0 0 ${100 - revealPct}%)`;
     }
 
-    // Trigger haptic feedback and trash lid animation at the snap threshold
+    // Trigger haptic feedback and trash lid animation at the auto-delete threshold.
+    // The haptic signals "if you release now, the item will be deleted automatically."
     const swipePct = Math.abs(tx) / _rowWidth;
-    if (swipePct >= SNAP_THRESHOLD && !_hapticFired) {
+    if (swipePct >= AUTO_DELETE_THRESHOLD && !_hapticFired) {
       _hapticFired = true;
       // Haptic feedback (10ms vibration) — available on Android, silently fails on iOS
       if (navigator.vibrate) navigator.vibrate(10);
-      // Open the trash can lid to signal "ready to delete"
+      // Open the trash can lid to signal "ready to auto-delete"
       wrap?.classList.add("swipe-threshold");
-    } else if (swipePct < SNAP_THRESHOLD && _hapticFired) {
-      // User pulled back below threshold — close the lid and allow re-fire
+    } else if (swipePct < AUTO_DELETE_THRESHOLD && _hapticFired) {
+      // User pulled back below auto-delete threshold — close the lid and allow re-fire
       _hapticFired = false;
       wrap?.classList.remove("swipe-threshold");
     }
@@ -199,6 +182,38 @@ export function initSwipe() {
 
     _swipeEl = null;
   });
+
+  // ── DISMISS INLINE EDITORS: close open note/qty editors on outside tap ──
+  // When the user taps anywhere outside an open inline editor (note textarea or
+  // qty stepper), close it. This mimics iOS behavior where tapping outside any
+  // input field dismisses it. Uses "click" so it fires after focus/blur.
+  document.addEventListener("click", e => {
+    // Check for open note editors (.sh-note-edit.open)
+    document.querySelectorAll(".sh-note-edit.open").forEach(edit => {
+      // Don't close if the tap was inside the editor itself or on the pencil toggle button
+      if (edit.contains(e.target)) return;
+      const itemRow = edit.closest(".swipe-inner");
+      const pencilBtn = itemRow?.querySelector(".sh-note-btn");
+      if (pencilBtn && pencilBtn.contains(e.target)) return;
+      // Tap was outside — close the editor (blur will trigger save via onblur handler)
+      const textarea = edit.querySelector("textarea");
+      if (textarea) textarea.blur();
+      edit.classList.remove("open");
+    });
+
+    // Check for open qty editors (.sh-qty-edit.open)
+    document.querySelectorAll(".sh-qty-edit.open").forEach(edit => {
+      // Don't close if the tap was inside the editor itself or on the qty badge toggle
+      if (edit.contains(e.target)) return;
+      const itemRow = edit.closest(".swipe-inner");
+      const qtyBadge = itemRow?.querySelector(".sh-qty");
+      if (qtyBadge && qtyBadge.contains(e.target)) return;
+      // Tap was outside — close the editor (blur will trigger save via onblur handler)
+      const input = edit.querySelector("input");
+      if (input) input.blur();
+      edit.classList.remove("open");
+    });
+  }, true); // useCapture = true so this fires before other click handlers
 
   // ── DISMISS: close any open swipe row when the user taps elsewhere ──
   document.addEventListener("touchstart", e => {

@@ -119,27 +119,58 @@ export async function uploadProductImage(file, productName) {
   const normalized = normalizeProductName(productName);
   if (!normalized) throw new Error("Invalid product name for upload");
 
-  // Step 1: Compress the image to a small JPEG
-  const compressed = await compressImage(file);
+  // Step 1: Compress the image to a small JPEG via Canvas API.
+  // Logs the resulting blob size so we can verify compression is working.
+  let compressed;
+  try {
+    compressed = await compressImage(file);
+    console.log(`[uploadProductImage] Compressed: ${(compressed.size / 1024).toFixed(1)}KB, type=${compressed.type}`);
+  } catch (compressErr) {
+    console.error("[uploadProductImage] Compression failed:", compressErr);
+    throw new Error("Image compression failed — " + compressErr.message);
+  }
 
-  // Step 2: Upload to Firebase Storage at the household-scoped path
+  // Step 2: Upload the compressed JPEG to Firebase Storage at the household-scoped path.
+  // Requires Firebase Storage security rules to allow writes to this path.
   const storagePath = `households/${state.hid}/customProducts/${normalized}.jpg`;
   const storageRef = ref(storage, storagePath);
-  await uploadBytes(storageRef, compressed, { contentType: "image/jpeg" });
+  try {
+    console.log(`[uploadProductImage] Uploading to: ${storagePath}`);
+    await uploadBytes(storageRef, compressed, { contentType: "image/jpeg" });
+    console.log("[uploadProductImage] Upload succeeded");
+  } catch (uploadErr) {
+    console.error("[uploadProductImage] Storage upload failed:", uploadErr.code, uploadErr.message);
+    throw new Error("Storage upload failed — " + (uploadErr.code || uploadErr.message));
+  }
 
-  // Step 3: Get the public download URL (includes an access token)
-  const downloadUrl = await getDownloadURL(storageRef);
+  // Step 3: Get the public download URL (includes a Firebase access token).
+  // This URL is what gets displayed as the product image in the UI.
+  let downloadUrl;
+  try {
+    downloadUrl = await getDownloadURL(storageRef);
+    console.log("[uploadProductImage] Download URL obtained");
+  } catch (urlErr) {
+    console.error("[uploadProductImage] getDownloadURL failed:", urlErr.code, urlErr.message);
+    throw new Error("Could not get download URL — " + (urlErr.code || urlErr.message));
+  }
 
   // Step 4: Save to the customProducts Firestore collection for household-wide lookup.
   // This collection is queried by the text search API to provide custom images
   // before falling back to external product databases.
-  const user = getCurrentUser();
-  await dbSet(`customProducts/${state.hid}/items/${normalized}`, {
-    name: productName.trim(),
-    imageUrl: downloadUrl,
-    updatedAt: new Date().toISOString(),
-    updatedBy: user?.displayName || user?.email?.split("@")[0] || "Unknown"
-  });
+  try {
+    const user = getCurrentUser();
+    await dbSet(`customProducts/${state.hid}/items/${normalized}`, {
+      name: productName.trim(),
+      imageUrl: downloadUrl,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user?.displayName || user?.email?.split("@")[0] || "Unknown"
+    });
+    console.log(`[uploadProductImage] Saved to customProducts collection: ${normalized}`);
+  } catch (dbErr) {
+    console.error("[uploadProductImage] Firestore save failed:", dbErr);
+    // Don't throw here — the image IS uploaded to Storage, so return the URL
+    // even if the Firestore index entry failed. The user still gets their photo.
+  }
 
   return downloadUrl;
 }
