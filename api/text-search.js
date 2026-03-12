@@ -2379,32 +2379,35 @@ export default async function handler(req, res) {
   // If the household has uploaded a custom photo for this product, use it
   // immediately and skip all external API lookups. This makes user-uploaded
   // images the absolute highest priority source.
+  //
+  // imageDismissed flag: when true, the user previously deleted the image
+  // for this product. We still run the full search pipeline so product name
+  // suggestions appear in the dropdown — we just strip all images from
+  // results before returning so no image is applied until the user adds one.
+  let imageDismissedFlag = false;
   if (householdId) {
     const customProduct = await lookupCustomProduct(householdId, query);
     if (customProduct) {
-      // If the user previously dismissed (deleted) the image for this product,
-      // return empty results so no image is applied — respects user's choice
-      // even after the item is deleted and re-added to the shopping list.
       if (customProduct.imageDismissed) {
-        console.log(`[TextSearch] ── Image dismissed for "${query}" — returning imageDismissed flag`);
+        // Don't return early — let the search pipeline run so the user
+        // still sees product name suggestions. Images will be nulled out
+        // in the final response below.
+        console.log(`[TextSearch] ── Image dismissed for "${query}" — will strip images from results`);
+        imageDismissedFlag = true;
+      } else {
+        // Custom photo exists — return it as the sole result, skipping all external APIs.
+        // User-uploaded photos are always the highest priority image source.
+        console.log(`[TextSearch] ── Returning custom product image for "${query}" — skipping external APIs`);
         return res.status(200).json({
-          results: [],
-          imageDismissed: true
+          results: [{
+            name: customProduct.name,
+            brand: "",
+            category: "",
+            image: customProduct.imageUrl,
+            source: "custom",
+          }]
         });
       }
-
-      // Custom photo exists — return it as the sole result, skipping all external APIs.
-      // User-uploaded photos are always the highest priority image source.
-      console.log(`[TextSearch] ── Returning custom product image for "${query}" — skipping external APIs`);
-      return res.status(200).json({
-        results: [{
-          name: customProduct.name,
-          brand: "",
-          category: "",
-          image: customProduct.imageUrl,
-          source: "custom",
-        }]
-      });
     }
   }
 
@@ -2568,7 +2571,12 @@ export default async function handler(req, res) {
     const slice1 = allResults.slice(0, 5);
     // Apply illustration/lookup fallbacks to results that have no real product photo
     applyFallbackImages(slice1);
-    return res.status(200).json({ results: slice1 });
+    // If imageDismissed, null out all images — user deleted the photo so we
+    // return product names only until they explicitly upload a new one.
+    if (imageDismissedFlag) {
+      slice1.forEach(r => { r.image = null; });
+    }
+    return res.status(200).json({ results: slice1, ...(imageDismissedFlag && { imageDismissed: true }) });
   }
 
   // ── Tier 2: UPC Item DB (fallback for obscure queries) ──────────────────
@@ -2607,7 +2615,12 @@ export default async function handler(req, res) {
   const final = allResults.slice(0, 5);
   // Last step: fill in illustration/lookup fallbacks for results with no real photo
   applyFallbackImages(final);
+  // If imageDismissed, null out all images — user deleted the photo so we
+  // return product names only until they explicitly upload a new one.
+  if (imageDismissedFlag) {
+    final.forEach(r => { r.image = null; });
+  }
   const totalMs = Date.now() - t1Start;
   console.log(`[TextSearch] ── Complete: ${final.length} result(s) in ${totalMs}ms`);
-  return res.status(200).json({ results: final });
+  return res.status(200).json({ results: final, ...(imageDismissedFlag && { imageDismissed: true }) });
 }
