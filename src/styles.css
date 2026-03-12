@@ -175,8 +175,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .shbody{padding:16px;flex:1}
 .shit{background:var(--card);border:1.5px solid var(--b1);border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:7px;cursor:pointer;transition:all .15s}
 .shit:active{transform:scale(.99)}.shit.chk{opacity:.45}
-.shck{width:24px;height:24px;border-radius:50%;border:2px solid var(--b2);display:none;align-items:center;justify-content:center;flex-shrink:0;font-size:.8rem;transition:all .2s}
-.shit.chk .shck{background:var(--gn);border-color:var(--gn);color:#0c0c0a}
+.shck{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--b2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.7rem;transition:all .2s;opacity:.55}
+.shit.chk .shck{background:var(--gn);border-color:var(--gn);color:#0c0c0a;opacity:1}
 .shnm{font-size:.9rem;font-weight:500;flex:1}.shit.chk .shnm{text-decoration:line-through;color:var(--mt)}
 .shnote{font-size:.75rem;color:var(--mt);margin-top:2px;line-height:1.3;word-break:break-word}
 .sh-note-btn{background:none;border:none;color:var(--mt);font-size:.85rem;padding:4px;cursor:pointer;opacity:.5;flex-shrink:0;line-height:1}

@@ -236,7 +236,7 @@ export function sH(item) {
       <!-- Main row: swipeRowTap handles multi-select; checkbox toggles checked; content area opens detail -->
       <div class="shit${item.checked ? " chk" : ""}" onclick="swipeRowTap('${item.id}','shop')">
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
-        <div class="shck" onclick="event.stopPropagation();swipeRowTap('${item.id}','shop')">${item.checked ? "✓" : ""}</div>  <!-- Tap to toggle checked (or toggle selection in multi-select) -->
+        <div class="shck" onclick="event.stopPropagation();togShop('${item.id}')">${item.checked ? "✓" : ""}</div>  <!-- Slim ring: tap to mark as bought; hidden in select mode (replaced by sel-cb) -->
         ${thumb}                               <!-- Product thumbnail from barcode scan (if available) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
           <div class="shnm">${toTitleCase(item.name)}${qtyBadge}</div>

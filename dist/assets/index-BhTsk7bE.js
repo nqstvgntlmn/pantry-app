@@ -3246,7 +3246,7 @@ This typically indicates that your device does not have a healthy Internet conne
       <!-- Main row: swipeRowTap handles multi-select; checkbox toggles checked; content area opens detail -->
       <div class="shit${n.checked?" chk":""}" onclick="swipeRowTap('${n.id}','shop')">
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
-        <div class="shck" onclick="event.stopPropagation();swipeRowTap('${n.id}','shop')">${n.checked?"✓":""}</div>  <!-- Tap to toggle checked (or toggle selection in multi-select) -->
+        <div class="shck" onclick="event.stopPropagation();togShop('${n.id}')">${n.checked?"✓":""}</div>  <!-- Slim ring: tap to mark as bought; hidden in select mode (replaced by sel-cb) -->
         ${i}                               <!-- Product thumbnail from barcode scan (if available) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${n.id}')">
           <div class="shnm">${Tf(n.name)}${t}</div>

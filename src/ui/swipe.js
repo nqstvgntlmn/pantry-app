@@ -151,7 +151,7 @@ export function swipeRowTap(id, list) {
   }
 
   // ── Normal mode: perform the default tap action for this list type ──
-  // Shopping: open product detail sheet (circles are hidden, so taps always open detail)
+  // Shopping: open product detail sheet (circle handles checked toggle separately via togShop)
   // Inventory: open quantity adjustment overlay
   if (list === "shop") window.openItemDetail(id);
   else window.openAdj(id);
