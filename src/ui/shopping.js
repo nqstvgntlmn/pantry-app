@@ -792,7 +792,7 @@ async function _runInlineSearch(query) {
 /**
  * pickInlineResult(index) — Called when the user taps a product in the inline
  * search dropdown. Creates a new shopping item enriched with the product's
- * rich data (name, brand, image, category, nutrition) and closes the sheet.
+ * rich data (name, brand, image, category) and closes the sheet.
  */
 export function pickInlineResult(index) {
   if (!_inlineSearchResults || !_inlineSearchResults[index]) return;
@@ -817,7 +817,6 @@ export function pickInlineResult(index) {
     brand: product.brand || "",
     image: product.image || null,
     category: product.category || "",
-    nutrition: product.nutrition || null,
     source: product.source || "search",
     searchQuery,  // Original search text — used by _shouldShowBrand() to decide brand visibility
   };
@@ -990,7 +989,7 @@ export function closeEnrichSheet() {
 // ── PRODUCT DETAIL BOTTOM SHEET ──────────────────────────────────────────────
 // Shows full product info when a user taps a shopping list item's name/content area.
 // Displays whatever data is stored on the item: name, brand, image, category,
-// quantity, note, source badge, and nutrition (if available from enrichment).
+// quantity, note, and source badge.
 
 /**
  * openItemDetail(id) — Opens the product detail bottom sheet for a shopping item.
@@ -1060,27 +1059,8 @@ export function openItemDetail(id) {
     </div>`;
   }
 
-  // Nutrition section (if enriched with product data)
-  if (item.nutrition) {
-    const n = item.nutrition;
-    const nutrItems = [];
-    if (n.calories != null) nutrItems.push({ val: n.calories, lbl: "Calories" });
-    if (n.protein) nutrItems.push({ val: n.protein, lbl: "Protein" });
-    if (n.fat) nutrItems.push({ val: n.fat, lbl: "Fat" });
-    if (n.carbs) nutrItems.push({ val: n.carbs, lbl: "Carbs" });
-
-    if (nutrItems.length) {
-      html += `<div class="item-detail-section">
-        <div class="item-detail-label">Nutrition</div>
-        <div class="item-detail-nutr-grid">
-          ${nutrItems.map(ni => `<div class="item-detail-nutr-item">
-            <div class="item-detail-nutr-val">${ni.val}</div>
-            <div class="item-detail-nutr-lbl">${ni.lbl}</div>
-          </div>`).join("")}
-        </div>
-      </div>`;
-    }
-  }
+  // Nutrition section removed — text search enrichment often matches the wrong
+  // product, making calorie/protein/fat/carb data unreliable and misleading.
 
   // Close button at the bottom
   html += `<button class="btn bs bf" onclick="closeItemDetail()" style="margin-top:8px">Close</button>`;
@@ -1125,7 +1105,7 @@ export async function deleteItemImage(id) {
 /**
  * pickEnrichResult(index) — Called when the user picks a product match from the
  * enrichment bottom sheet. Updates the existing item with rich product data
- * (image, brand, category, nutrition) from the selected search result.
+ * (image, brand, category) from the selected search result.
  */
 export function pickEnrichResult(index) {
   const ctx = window._enrichCtx;
@@ -1144,7 +1124,6 @@ export function pickEnrichResult(index) {
         brand: product.brand || "",
         image: product.image || null,
         category: product.category || "",
-        nutrition: product.nutrition || null,
         source: product.source || "search",
       });
     }
@@ -1158,7 +1137,6 @@ export function pickEnrichResult(index) {
         brand: product.brand || "",
         image: product.image || null,
         category: product.category || item.category,
-        nutrition: product.nutrition || null,
         source: product.source || "search",
       });
     }

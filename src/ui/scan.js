@@ -418,7 +418,7 @@ function srcUrl(source, barcode) {
 // Renders the scan result overlay with product details (or a "not found" form).
 // Two distinct UI states:
 //   - Product found: shows a product card with image, name, brand, barcode, category,
-//     description, and nutrition grid (when available)
+//     and description
 //   - Product not found: shows the barcode and a text input so the user can manually name the item
 function showRes(prod) {
   hideOv("scan");                          // Close the scan overlay before showing the result
@@ -434,20 +434,14 @@ function showRes(prod) {
     // Product found — build a product card with image (or placeholder icon), name, brand, etc.
     const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
 
-    // Build the nutrition grid (only shown if the database returned nutrition data)
-    let nut = "";
-    if (prod.nutrition && (prod.nutrition.calories || prod.nutrition.protein)) {
-      nut = `<div class="ngrd">${[["Cal", prod.nutrition.calories], ["Protein", prod.nutrition.protein], ["Fat", prod.nutrition.fat], ["Carbs", prod.nutrition.carbs]].map(([l, v]) => `<div class="nb"><div class="nv">${v || "—"}</div><div class="nl">${l}</div></div>`).join("")}</div>`;
-    }
-
     // Build the description line if the API returned one
     const desc = prod.description ? `<div class="pdsc">${prod.description}</div>` : "";
 
     // Build the source badge — if we can link to the product's page on the source database, make it tappable
     const srcHtml = prod.source ? `<a href="${srcUrl(prod.source, prod.barcode)}" target="_blank" rel="noopener" class="srcb" style="text-decoration:none">${prod.source} ↗</a>` : "";
 
-    // Assemble the full product card HTML with image, name, brand, category, source link, description, and nutrition
-    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand ? `<div class="pbr">${prod.brand}</div>` : ""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}</div></div>${desc}${nut}</div>`;
+    // Assemble the full product card HTML with image, name, brand, category, source link, and description
+    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand ? `<div class="pbr">${prod.brand}</div>` : ""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}</div></div>${desc}</div>`;
 
   }
 
@@ -533,7 +527,8 @@ export async function addToInv() {
   const id = "item-" + state.cp.barcode.replace(/\W/g, "-"), ex = state.inv.find(i => i.id === id);
 
   // Save to database — if the item already exists, add to its quantity and keep its original addedAt date
-  await svi({ id, barcode: state.cp.barcode, name: nm, brand: state.cp.brand || "", unit, qty: ex ? ex.qty + qty : qty, location: state.selR, category: state.cp.category || "General", image: state.cp.image || null, source: state.cp.source || null, nutrition: state.cp.nutrition || null, expiry: exp, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() });
+  // Save to Firestore — nutrition intentionally omitted (unreliable from text/barcode matching)
+  await svi({ id, barcode: state.cp.barcode, name: nm, brand: state.cp.brand || "", unit, qty: ex ? ex.qty + qty : qty, location: state.selR, category: state.cp.category || "General", image: state.cp.image || null, source: state.cp.source || null, expiry: exp, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() });
 
   // Show appropriate toast: "+2 added to Milk" for existing items, "Milk added!" for new items
   showNotif(ex ? `+${qty} added to ${nm}` : `${nm} added!`);

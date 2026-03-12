@@ -664,7 +664,6 @@ export async function enrichExistingItems() {
           image: best.image || item.image || null,
           brand: best.brand || item.brand || "",
           category: best.category || item.category || "",
-          nutrition: best.nutrition || item.nutrition || null,
           source: best.source || item.source || "search",
         };
 

@@ -133,16 +133,10 @@ export function openAdj(id) {
   const ic = CATS[gcat(item)] || "🛒",
     img = item.image ? `<img src="${item.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">${ic}</div>`;
 
-  // Build the nutrition grid (only shown if we have calorie or protein data)
-  let nut = "";
-  if (item.nutrition && (item.nutrition.calories || item.nutrition.protein)) {
-    nut = `<div class="ngrd">${[["Cal", item.nutrition.calories], ["Protein", item.nutrition.protein], ["Fat", item.nutrition.fat], ["Carbs", item.nutrition.carbs]].map(([l, v]) => `<div class="nb"><div class="nv">${v || "—"}</div><div class="nl">${l}</div></div>`).join("")}</div>`;
-  }
-
-  // Inject the full overlay body: header card, nutrition, location picker,
+  // Inject the full overlay body: header card, location picker,
   // quantity stepper, expiry date picker, and notes textarea.
   // Each control calls its own global handler on change (e.g. updL, adjQ).
-  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${item.name}</div>${item.brand ? `<div class="pbr">${item.brand}</div>` : ""}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div>${item.source ? `<span class="srcb" style="display:inline-block;margin-top:4px">${item.source}</span>` : ""}</div></div>${nut}<div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Low stock alert at</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${item.lowStockThreshold || 1}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div></div>`;
+  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${item.name}</div>${item.brand ? `<div class="pbr">${item.brand}</div>` : ""}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div>${item.source ? `<span class="srcb" style="display:inline-block;margin-top:4px">${item.source}</span>` : ""}</div></div><div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Low stock alert at</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${item.lowStockThreshold || 1}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div></div>`;
 
   // Wire the "Remove" button at the bottom of the overlay
   g("rembtn").onclick = () => remItem(id);
@@ -262,14 +256,14 @@ export async function addManual() {
     id = "itm-" + nm.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
 
   // Persist the new item (state.maL holds the location chosen in the overlay)
-  await svi({ id, barcode: id, name: nm, brand: "", unit, qty, location: state.maL, category: cat, image: null, source: "Manual", nutrition: null, expiry: exp, addedAt: new Date().toLocaleDateString() });
+  await svi({ id, barcode: id, name: nm, brand: "", unit, qty, location: state.maL, category: cat, image: null, source: "Manual", expiry: exp, addedAt: new Date().toLocaleDateString() });
 
   // Reset the form fields for next use
   g("man").value = ""; g("maq").value = 1; g("mae").value = "";
   g("mabtn").disabled = true;
   showNotif(`${nm} added!`); hideOv("madd");
 
-  // Trigger product enrichment search — lets user pick a richer match with image/brand/nutrition
+  // Trigger product enrichment search — lets user pick a richer match with image/brand/category
   searchAndEnrich(id, nm, "inv");
 }
 
@@ -322,7 +316,7 @@ export async function importDoc() {
       // Deterministic ID from name so re-importing the same doc updates instead of duplicating
       const id = "item-imp-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
       const ex = state.inv.find(i => i.id === id); // check if item already exists
-      await svi({ id, barcode: id, name, brand: "", unit: unit || "unit", qty, location: curL, category: "Imported", image: null, source: "Imported", nutrition: null, expiry: null, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() });
+      await svi({ id, barcode: id, name, brand: "", unit: unit || "unit", qty, location: curL, category: "Imported", image: null, source: "Imported", expiry: null, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() });
       ex ? updated++ : imported++;
     }
   }
@@ -446,7 +440,7 @@ export function toggleInvAddNote() {
  * qaddInv() — Quick-add an item to inventory from the bottom sheet text input.
  * Parses optional quantity from common patterns (e.g. "5 apples", "eggs x3"),
  * saves the item to the selected location, and triggers product enrichment
- * so the user can pick a richer match with image/brand/nutrition.
+ * so the user can pick a richer match with image/brand/category.
  */
 export function qaddInv() {
   const inp = g("invi"), v = inp ? inp.value.trim() : "";
@@ -470,7 +464,7 @@ export function qaddInv() {
   const item = {
     id, barcode: id, name, brand: "", unit: "unit", qty,
     location: _invAddLocation, category: gcat({ name }),
-    image: null, source: "Manual", nutrition: null,
+    image: null, source: "Manual",
     expiry: null, addedAt: new Date().toLocaleDateString()
   };
   if (note) item.note = note;
@@ -626,7 +620,7 @@ async function _runInvSearch(query) {
 /**
  * pickInvInlineResult(index) — Called when the user taps a product in the
  * inventory search dropdown. Creates a new inventory item enriched with
- * the product's rich data (name, brand, image, category, nutrition).
+ * the product's rich data (name, brand, image, category).
  */
 export function pickInvInlineResult(index) {
   if (!_invInlineResults || !_invInlineResults[index]) return;
@@ -649,7 +643,6 @@ export function pickInvInlineResult(index) {
     category: product.category || gcat({ name: product.name }),
     image: product.image || null,
     source: product.source || "search",
-    nutrition: product.nutrition || null,
     expiry: null,
     addedAt: new Date().toLocaleDateString()
   };
@@ -768,7 +761,7 @@ export function toggleInvVoice() {
     svi({
       id, barcode: id, name: text, brand: "", unit: "unit", qty: 1,
       location: loc, category: gcat({ name: text }),
-      image: null, source: "Voice", nutrition: null,
+      image: null, source: "Voice",
       expiry: null, addedAt: new Date().toLocaleDateString()
     });
     showNotif(`Added "${text}" to ${loc}`);
