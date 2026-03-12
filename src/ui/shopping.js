@@ -444,19 +444,74 @@ export function onShopInput() {
   _searchDebounceTimer = setTimeout(() => _runInlineSearch(query), 350);
 }
 
+// Stop words for client-side relevance scoring — words that carry no product-category
+// meaning. Must match the server-side STOP_WORDS list in api/text-search.js.
+const _STOP_WORDS = new Set([
+  // Articles, prepositions, conjunctions
+  "a", "an", "the", "and", "or", "with", "for", "of", "in", "to", "by",
+  "is", "it", "at", "on", "no", "not", "all", "each", "per", "from",
+  // Marketing / quality descriptors (don't indicate product category)
+  "free", "style", "natural", "original", "premium", "organic", "fresh",
+  "whole", "pure", "real", "lite", "light", "low", "high", "extra",
+  "reduced", "fat", "nonfat", "skim", "raw", "roasted", "unsweetened",
+  "sweetened", "flavored", "smoked", "dried", "frozen", "canned",
+  // Packaging / measurement units
+  "pack", "ct", "oz", "lb", "ml", "kg", "fl", "count", "size",
+  "gallon", "quart", "pint", "liter", "bag", "box", "can", "jar",
+  "bottle", "container", "pouch", "tub", "carton",
+  // Food preparation / flavor descriptors
+  "plain", "creamy", "chunky", "crispy", "crunchy", "spicy", "mild",
+  "hot", "cold", "classic", "homestyle", "traditional", "artisan",
+  "greek", "italian", "mexican", "asian", "indian",
+  // Product descriptor noise (common in long product names)
+  "mini", "small", "medium", "large", "jumbo", "giant", "big",
+  "handheld", "electric", "portable", "automatic", "manual",
+  "new", "best", "top", "value", "brand",
+]);
+
+/**
+ * _isStrictlyRelevant(name, query) — Client-side strict relevance check.
+ * Ensures that at least half the meaningful words in the product name relate
+ * to the search query. Prevents kitchen appliances (blenders, mixers) from
+ * appearing in food searches just because one ingredient word matches.
+ * E.g., "Formula Mixer Milk Powder Blender Stirrer" fails for "milk" because
+ * only 2 of 8 meaningful words relate to milk.
+ */
+function _isStrictlyRelevant(name, query) {
+  const nameLower = (name || "").toLowerCase().trim();
+  const queryLower = query.toLowerCase().trim();
+
+  // Exact or starts-with always passes
+  if (nameLower === queryLower || nameLower.startsWith(queryLower + " ")) return true;
+
+  const queryTerms = queryLower.split(/\s+/).filter(w => w.length >= 2);
+  const nameWords = nameLower
+    .split(/[\s,&+\-–—/()[\]]+/)
+    .filter(w => w.length >= 2 && !_STOP_WORDS.has(w) && !/^\d+$/.test(w));
+
+  // Very short names — rely on the position-based scoring below
+  if (nameWords.length <= 2) return true;
+
+  let matched = 0;
+  for (const nw of nameWords) {
+    const relates = queryTerms.some(qt => {
+      if (nw.startsWith(qt) || qt.startsWith(nw)) return true;
+      const minLen = Math.min(nw.length, qt.length, 3);
+      return minLen >= 3 && nw.slice(0, minLen) === qt.slice(0, minLen);
+    });
+    if (relates) matched++;
+  }
+
+  return (matched / nameWords.length) >= 0.5;
+}
+
 /**
  * scoreSearchResult(name, query) — Strictly scores how relevant a product name
- * is to the user's search query. Enforces that the query must be a PRIMARY word
- * in the product name — not a secondary ingredient or flavor descriptor.
+ * is to the user's search query. Two-layer check:
+ *   1. Position check: query must match one of the first 3 words
+ *   2. Majority check: most meaningful words must relate to the query
  *
- * STRICT RULES (to prevent irrelevant results like "Chicken & Mushroom POT noodle"
- * showing up for a search of "mushroom"):
- *   - Product name must START with the query, OR
- *   - The FIRST meaningful word of the name must match the query, OR
- *   - The query must match a standalone word at the beginning of the name
- *     (within the first 3 words)
- *   - Anything else gets score 0 and is filtered out
- *
+ * Returns a score > 0 for relevant results, 0 for rejected ones.
  * @param {string} name — The product name to score
  * @param {string} query — The user's search query
  * @returns {number} Relevance score (higher = more relevant, 0 = rejected)
@@ -483,14 +538,22 @@ export function scoreSearchResult(name, query) {
   // Query matches one of the first 3 words as a word-boundary match
   // This catches "Organic Mushrooms" but NOT "Chicken Mushroom Flavour POT noodle"
   const earlyWords = nameWords.slice(0, 3);
+  let positionScore = 0;
   for (let i = 0; i < earlyWords.length; i++) {
     if (earlyWords[i].startsWith(queryLower) || queryLower.startsWith(earlyWords[i])) {
-      return 60 - (i * 10); // Position penalty: 1st word = 60, 2nd = 50, 3rd = 40
+      positionScore = 60 - (i * 10); // Position penalty: 1st word = 60, 2nd = 50, 3rd = 40
+      break;
     }
   }
 
-  // STRICT: if the query doesn't match any of the first 3 words, reject it entirely.
-  // This eliminates results like "Chicken & Mushroom Flavour POT noodle" for "mushroom"
+  // If the query matched by position, also check that the product name is
+  // actually ABOUT the query (majority of words must relate).
+  // This kills "Formula Mixer Milk Powder Blender Stirrer" for "milk".
+  if (positionScore > 0) {
+    return _isStrictlyRelevant(name, query) ? positionScore : 0;
+  }
+
+  // STRICT: if the query doesn't match any of the first 3 words, reject entirely
   return 0;
 }
 

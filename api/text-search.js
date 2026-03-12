@@ -23,14 +23,43 @@ const EID = "2b6ecac2";
 const EK = "8db76605e873aaf2fbdf41256cb24cb4";
 
 // ── RELEVANCE SCORING ────────────────────────────────────────────────────────
-// Server-side relevance filter applied to ALL database results. Ensures only
-// products where the query is a primary/leading word pass through.
-// This prevents irrelevant matches like "Chicken & Mushroom POT noodle" for "mushroom".
+// Server-side relevance filter applied to ALL database results.
+// Two-layer approach:
+//   1. isRelevant() — gate check: query must match a primary word in the name
+//   2. isStrictlyRelevant() — majority check: most meaningful words in the name
+//      must relate to the query. Catches products like
+//      "Formula Mixer Milk Powder Blender Stirrer" for a "milk" search — the word
+//      "milk" appears but the product is clearly a kitchen appliance, not food.
+
+// Common stop words ignored when checking product name relevance.
+// These carry no product-category meaning (articles, prepositions, conjunctions).
+const STOP_WORDS = new Set([
+  // Articles, prepositions, conjunctions
+  "a", "an", "the", "and", "or", "with", "for", "of", "in", "to", "by",
+  "is", "it", "at", "on", "no", "not", "all", "each", "per", "from",
+  // Marketing / quality descriptors (don't indicate product category)
+  "free", "style", "natural", "original", "premium", "organic", "fresh",
+  "whole", "pure", "real", "lite", "light", "low", "high", "extra",
+  "reduced", "fat", "nonfat", "skim", "raw", "roasted", "unsweetened",
+  "sweetened", "flavored", "smoked", "dried", "frozen", "canned",
+  // Packaging / measurement units
+  "pack", "ct", "oz", "lb", "ml", "kg", "fl", "count", "size",
+  "gallon", "quart", "pint", "liter", "bag", "box", "can", "jar",
+  "bottle", "container", "pouch", "tub", "carton",
+  // Food preparation / flavor descriptors
+  "plain", "creamy", "chunky", "crispy", "crunchy", "spicy", "mild",
+  "hot", "cold", "classic", "homestyle", "traditional", "artisan",
+  "greek", "italian", "mexican", "asian", "indian",
+  // Product descriptor noise (common in long product names)
+  "mini", "small", "medium", "large", "jumbo", "giant", "big",
+  "handheld", "electric", "portable", "automatic", "manual",
+  "new", "best", "top", "value", "brand",
+]);
 
 /**
  * isRelevant(name, query) — Returns true only if the query is a primary word
  * in the product name (starts with query, or one of the first 3 words matches).
- * Strict filter: anything else is rejected before results reach the client.
+ * First-pass gate filter: anything that fails this is immediately rejected.
  */
 function isRelevant(name, query) {
   const nameLower = (name || "").toLowerCase().trim();
@@ -49,6 +78,108 @@ function isRelevant(name, query) {
     if (w.startsWith(queryLower) || queryLower.startsWith(w)) return true;
   }
 
+  return false;
+}
+
+/**
+ * isStrictlyRelevant(name, query) — Stricter second-pass filter.
+ * Splits the product name into meaningful words (excluding stop words),
+ * then checks that at least half of those words relate to the query terms.
+ * A word "relates" if it shares a stem/prefix with any query term (≥3 chars match).
+ *
+ * This kills results like "Formula Mixer Milk Powder Blender Stirrer Handheld
+ * Mini Electric Mixer" for "milk" — only 2 of 8 meaningful words match,
+ * so the product is clearly not about milk.
+ */
+function isStrictlyRelevant(name, query) {
+  const nameLower = (name || "").toLowerCase().trim();
+  const queryLower = query.toLowerCase().trim();
+
+  // Exact or starts-with always passes
+  if (nameLower === queryLower || nameLower.startsWith(queryLower + " ")) return true;
+
+  // Split query into individual search terms
+  const queryTerms = queryLower.split(/\s+/).filter(w => w.length >= 2);
+
+  // Split product name into meaningful words (strip stop words, short words, numbers)
+  const nameWords = nameLower
+    .split(/[\s,&+\-–—/()[\]]+/)
+    .filter(w => w.length >= 2 && !STOP_WORDS.has(w) && !/^\d+$/.test(w));
+
+  // If the name has very few meaningful words (≤2), just rely on isRelevant
+  if (nameWords.length <= 2) return true;
+
+  // Count how many meaningful name words relate to at least one query term.
+  // "Relate" = the name word starts with a query term, or vice versa,
+  // or they share a common prefix of ≥3 characters.
+  let matched = 0;
+  for (const nw of nameWords) {
+    const relates = queryTerms.some(qt => {
+      if (nw.startsWith(qt) || qt.startsWith(nw)) return true;
+      // Shared prefix ≥3 chars (catches plurals, verb forms, etc.)
+      const minLen = Math.min(nw.length, qt.length, 3);
+      return minLen >= 3 && nw.slice(0, minLen) === qt.slice(0, minLen);
+    });
+    if (relates) matched++;
+  }
+
+  // At least half the meaningful words must relate to the query.
+  // For products with many words (like the mixer example), this is a strong filter.
+  const ratio = matched / nameWords.length;
+  return ratio >= 0.5;
+}
+
+// ── IMAGE URL VALIDATION ─────────────────────────────────────────────────────
+// Filters out placeholder images, SVG icons, and broken/relative URLs before
+// they reach the client. If a URL fails validation, it's treated as "no image"
+// so the Google fallback can provide a real product photo instead.
+
+/**
+ * isValidImageUrl(url) — Returns true only if the URL looks like a real product
+ * photo (not a placeholder icon, SVG, or relative path).
+ * Checks:
+ *   - Must be absolute (http/https)
+ *   - Must not be an SVG (usually icons/logos, not product photos)
+ *   - Must not match known placeholder/cart-icon patterns
+ *   - Must have a real image extension OR come from a known CDN
+ */
+function isValidImageUrl(url) {
+  if (!url || typeof url !== "string") return false;
+
+  // Must be an absolute URL
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return false;
+
+  const lower = url.toLowerCase();
+
+  // Reject SVGs — almost always icons/logos, not product photos
+  if (lower.endsWith(".svg") || lower.includes(".svg?")) return false;
+
+  // Reject known placeholder/icon patterns
+  const placeholderPatterns = [
+    "placeholder", "no-image", "noimage", "no_image", "default-image",
+    "cart-icon", "cart_icon", "shopping-cart", "generic-product",
+    "missing", "fallback", "dummy", "blank", "empty",
+    "1x1", "pixel", "spacer", "transparent",
+  ];
+  if (placeholderPatterns.some(pat => lower.includes(pat))) return false;
+
+  // Known CDNs that serve real product images — always valid
+  const trustedCdns = [
+    "spoonacular.com", "kroger.com", "edamam.com",
+    "openfoodfacts.org", "openbeautyfacts.org", "openpetfoodfacts.org",
+    "googleapis.com", "gstatic.com", "ggpht.com",
+    "walmart.com", "target.com", "amazon.com", "cloudinary.com",
+    "shopify.com", "walmartimages.com",
+  ];
+  if (trustedCdns.some(cdn => lower.includes(cdn))) return true;
+
+  // For other URLs, must end with a real image extension
+  const imageExts = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"];
+  const pathPart = lower.split("?")[0]; // strip query params
+  if (imageExts.some(ext => pathPart.endsWith(ext))) return true;
+
+  // URLs with no recognizable image extension and not from a known CDN —
+  // could be anything (HTML page, API endpoint, etc.), so reject
   return false;
 }
 
@@ -88,8 +219,8 @@ async function searchSpoonacular(query) {
       name: p.title || "",
       brand: "",
       category: "Grocery",
-      // Spoonacular may return a bare filename — normalize to full CDN URL
-      image: spoonacularImageUrl(p.image),
+      // Spoonacular may return a bare filename — normalize to full CDN URL, then validate
+      image: isValidImageUrl(spoonacularImageUrl(p.image)) ? spoonacularImageUrl(p.image) : null,
       source: "Spoonacular",
       description: "",
       nutrition: null,
@@ -135,14 +266,21 @@ async function searchKroger(query) {
 
     return (d.data || []).slice(0, 5).map(p => {
       // Kroger images are in p.images array — pick the front-facing perspective,
-      // preferring "large" or "medium" size for good quality without being huge
+      // preferring "large" or "medium" size for good quality without being huge.
+      // Validate that the URL is absolute and a real image (not a placeholder).
       const images = p.images || [];
       const frontImg = images.find(img => img.perspective === "front");
       const anyImg = frontImg || images[0]; // fall back to any available perspective
-      const imgUrl = anyImg?.sizes?.find(s => s.size === "large")?.url
+      let imgUrl = anyImg?.sizes?.find(s => s.size === "large")?.url
         || anyImg?.sizes?.find(s => s.size === "medium")?.url
         || anyImg?.sizes?.[0]?.url
         || null;
+      // Kroger sometimes returns relative paths — ensure it's absolute
+      if (imgUrl && !imgUrl.startsWith("http")) {
+        imgUrl = `https://www.kroger.com${imgUrl.startsWith("/") ? "" : "/"}${imgUrl}`;
+      }
+      // Validate the image URL is real (not a placeholder/icon)
+      if (!isValidImageUrl(imgUrl)) imgUrl = null;
 
       return {
         name: p.description || "",
@@ -234,11 +372,13 @@ async function searchGoogle(query) {
     const d = await r.json();
 
     return (d.items || []).slice(0, 5).map(item => {
-      // Extract image from pagemap: prefer cse_image (full size), fall back to cse_thumbnail
+      // Extract image from pagemap: prefer cse_image (full size), fall back to cse_thumbnail.
+      // Validate the URL to reject placeholders/icons/SVGs.
       const pagemap = item.pagemap || {};
-      const imgUrl = pagemap.cse_image?.[0]?.src
+      const rawImg = pagemap.cse_image?.[0]?.src
         || pagemap.cse_thumbnail?.[0]?.src
         || null;
+      const imgUrl = isValidImageUrl(rawImg) ? rawImg : null;
 
       return {
         name: (item.title || "").replace(/ - .*$/, "").replace(/\|.*$/, "").trim(),
@@ -257,29 +397,51 @@ async function searchGoogle(query) {
 
 /**
  * fetchGoogleImage(productName) — Fetches a single product image from Google Custom Search.
- * Used to backfill images for sources that don't provide them (e.g. USDA).
+ * Used to backfill images for sources that don't provide them (e.g. USDA)
+ * or for results that ended up with no valid image after the waterfall.
  * Returns the image URL string, or null if not found.
+ * Logs every call so we can confirm in Vercel logs that it's actually firing.
  */
 async function fetchGoogleImage(productName) {
   const key = process.env.GOOGLE_SEARCH_API_KEY;
   const cx = process.env.GOOGLE_SEARCH_ENGINE_ID;
-  if (!key || !cx) return null;
+  if (!key || !cx) {
+    console.log(`[GoogleImage] SKIPPED "${productName}" — API key or CX not configured`);
+    return null;
+  }
 
+  console.log(`[GoogleImage] Fetching image for: "${productName}"`);
   try {
     const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(productName + " food product")}&key=${key}&cx=${cx}&num=1`;
     const r = await fetch(url);
-    if (!r.ok) return null;
+    if (!r.ok) {
+      console.log(`[GoogleImage] API returned ${r.status} for "${productName}"`);
+      return null;
+    }
     const d = await r.json();
 
     const item = (d.items || [])[0];
-    if (!item) return null;
+    if (!item) {
+      console.log(`[GoogleImage] No results for "${productName}"`);
+      return null;
+    }
 
     // Extract image from pagemap — same logic as searchGoogle
     const pagemap = item.pagemap || {};
-    return pagemap.cse_image?.[0]?.src
+    const imgUrl = pagemap.cse_image?.[0]?.src
       || pagemap.cse_thumbnail?.[0]?.src
       || null;
-  } catch {
+
+    // Validate the image URL before returning it
+    if (imgUrl && !isValidImageUrl(imgUrl)) {
+      console.log(`[GoogleImage] Rejected invalid image for "${productName}": ${imgUrl}`);
+      return null;
+    }
+
+    console.log(`[GoogleImage] ${imgUrl ? "Found" : "No image in"} result for "${productName}"${imgUrl ? ": " + imgUrl : ""}`);
+    return imgUrl;
+  } catch (e) {
+    console.log(`[GoogleImage] Error for "${productName}": ${e.message}`);
     return null;
   }
 }
@@ -304,7 +466,7 @@ async function searchEdamam(query) {
         name: f.label || "",
         brand: f.brand || "",
         category: f.category || "General",
-        image: f.image || null,
+        image: isValidImageUrl(f.image) ? f.image : null,
         source: "Edamam",
         description: f.categoryLabel || "",
         nutrition: {
@@ -346,7 +508,9 @@ async function searchOpenFoodFacts(query) {
         name: nm,
         brand: p.brands || "",
         category: ((p.categories_tags || [])[0] || "").replace("en:", "") || "General",
-        image: p.image_front_url || p.image_front_small_url || null,
+        image: isValidImageUrl(p.image_front_url) ? p.image_front_url
+             : isValidImageUrl(p.image_front_small_url) ? p.image_front_small_url
+             : null,
         source: "Open Food Facts",
         description: p.generic_name || "",
         nutrition: hasNutrition ? {
@@ -380,7 +544,7 @@ async function searchUpcItemDb(query) {
       name: i.title || "",
       brand: i.brand || "",
       category: i.category || "General",
-      image: (i.images || []).length > 0 ? i.images[0] : null,
+      image: (i.images || []).find(img => isValidImageUrl(img)) || null,
       source: "UPC Item DB",
       description: i.description || "",
       nutrition: null,
@@ -464,10 +628,13 @@ async function searchOpenPetFoodFacts(query) {
  * we stop and return — no need to hit slower/less-relevant sources.
  */
 export default async function handler(req, res) {
-  // --- CORS headers for browser frontend ---
+  // --- CORS + cache-control headers for browser frontend ---
+  // no-store prevents 304 responses — every request gets fresh results
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
@@ -482,15 +649,27 @@ export default async function handler(req, res) {
 
   /**
    * addResults(results) — Merges new results into allResults, deduplicating
-   * by name and applying strict relevance filtering. Returns the count of
-   * new results added (for short-circuit decision).
+   * by name and applying TWO relevance filters:
+   *   1. isRelevant() — query must match a primary/leading word
+   *   2. isStrictlyRelevant() — majority of product name words must relate to query
+   * This double filter prevents kitchen appliances/gadgets from appearing in food searches.
    */
   function addResults(results) {
     let added = 0;
     for (const r of results) {
       if (!r || !r.name) continue;
-      // Strict relevance: query must be a primary word in the product name
+      // First gate: query must be a primary word in the product name
       if (!isRelevant(r.name, query)) continue;
+      // Second gate: majority of name words must relate to query terms
+      if (!isStrictlyRelevant(r.name, query)) {
+        console.log(`[TextSearch] Rejected (strict): "${r.name}" for query "${query}"`);
+        continue;
+      }
+      // Validate image URL — reject placeholders/icons before they reach the client
+      if (r.image && !isValidImageUrl(r.image)) {
+        console.log(`[TextSearch] Rejected bad image for "${r.name}": ${r.image}`);
+        r.image = null;
+      }
       const key = r.name.toLowerCase().trim();
       if (seen.has(key)) continue;
       seen.add(key);
@@ -503,6 +682,24 @@ export default async function handler(req, res) {
   // Minimum relevant results to short-circuit (stop searching more databases)
   const ENOUGH = 3;
 
+  /**
+   * backfillImagesAndReturn(results) — Before returning results to the client,
+   * backfill any missing images via Google Custom Search. This ensures every
+   * result has a chance to get a real product photo, regardless of which
+   * database it came from. Runs lookups in parallel for speed.
+   */
+  async function backfillImagesAndReturn(results) {
+    const imageless = results.filter(r => !r.image);
+    if (imageless.length > 0) {
+      console.log(`[TextSearch] ${imageless.length} result(s) missing images — trying Google fallback`);
+      await Promise.all(imageless.map(async (item) => {
+        const img = await fetchGoogleImage(item.name);
+        if (img) item.image = img;
+      }));
+    }
+    return res.status(200).json({ results });
+  }
+
   // ── Tier 1: Spoonacular + Kroger (fastest, most grocery-relevant) ──
   const tier1 = await Promise.all([
     searchSpoonacular(query),
@@ -510,7 +707,7 @@ export default async function handler(req, res) {
   ]);
   tier1.forEach(r => addResults(r));
   if (allResults.length >= ENOUGH) {
-    return res.status(200).json({ results: allResults.slice(0, 5) });
+    return backfillImagesAndReturn(allResults.slice(0, 5));
   }
 
   // ── Tier 2: USDA + Google + Edamam (good coverage, slightly slower) ──
@@ -521,7 +718,7 @@ export default async function handler(req, res) {
   ]);
   tier2.forEach(r => addResults(r));
   if (allResults.length >= ENOUGH) {
-    return res.status(200).json({ results: allResults.slice(0, 5) });
+    return backfillImagesAndReturn(allResults.slice(0, 5));
   }
 
   // ── Tier 3: Open Food Facts + UPC Item DB (community/general fallbacks) ──
@@ -531,7 +728,7 @@ export default async function handler(req, res) {
   ]);
   tier3.forEach(r => addResults(r));
   if (allResults.length >= ENOUGH) {
-    return res.status(200).json({ results: allResults.slice(0, 5) });
+    return backfillImagesAndReturn(allResults.slice(0, 5));
   }
 
   // ── Tier 4: Niche databases (beauty, pet food — rarely needed) ──
@@ -541,6 +738,6 @@ export default async function handler(req, res) {
   ]);
   tier4.forEach(r => addResults(r));
 
-  // Return whatever we found (may be 0-5 results)
-  return res.status(200).json({ results: allResults.slice(0, 5) });
+  // Return whatever we found (may be 0-5 results), with image backfill
+  return backfillImagesAndReturn(allResults.slice(0, 5));
 }
