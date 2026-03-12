@@ -361,8 +361,9 @@ export function swipeRowTap(id, list) {
   }
 
   // ── Normal mode: perform the default tap action for this list type ──
+  // Shopping taps open the shopping detail sheet; inventory taps open the inventory detail sheet
   if (list === "shop") window.openItemDetail(id);
-  else window.openAdj(id);
+  else window.openInvItemDetail(id);
 }
 
 // ── MULTI-SELECT MODE ────────────────────────────────────────────────────────

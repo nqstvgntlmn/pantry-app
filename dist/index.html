@@ -7,7 +7,7 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-B4pYavBf.js"></script>
+  <script type="module" crossorigin src="/assets/index-DaACu4Hj.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-CQptKvsb.css">
 </head>
 <body>
@@ -407,6 +407,13 @@
   <div class="bsheet" id="itemDetailSheet">
     <div class="bsheet-handle"></div>
     <div id="itemDetailContent"></div>
+  </div>
+
+  <!-- BOTTOM SHEET: INVENTORY ITEM DETAIL (tap an inventory item to see info) -->
+  <div class="bsheet-backdrop" id="invItemDetailBackdrop" onclick="closeInvItemDetail()"></div>
+  <div class="bsheet" id="invItemDetailSheet">
+    <div class="bsheet-handle"></div>
+    <div id="invItemDetailContent"></div>
   </div>
 
   <!-- BOTTOM SHEET: PRODUCT SEARCH RESULTS (enrichment picker) -->

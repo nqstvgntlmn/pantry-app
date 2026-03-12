@@ -44,7 +44,7 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
@@ -164,6 +164,12 @@ window.qaddInv = qaddInv;                     // Quick-add item to inventory fro
 window.onInvInput = onInvInput;               // Debounced live search as user types in inventory add input
 window.pickInvInlineResult = pickInvInlineResult; // Pick a product from the inventory search dropdown
 window.toggleInvVoice = toggleInvVoice;       // Start/stop voice input for inventory
+// Inventory item detail bottom sheet (mirrors shopping item detail sheet)
+window.openInvItemDetail = openInvItemDetail;           // Open product detail bottom sheet for an inventory item
+window.closeInvItemDetail = closeInvItemDetail;         // Close inventory item detail bottom sheet
+window.deleteInvItemImage = deleteInvItemImage;         // Remove product image from an inventory item
+window.triggerInvPhotoUpload = triggerInvPhotoUpload;   // Open file picker to upload a custom product photo for inventory
+window.handleInvPhotoSelected = handleInvPhotoSelected; // Process the selected product photo file for inventory
 
 // ── Shopping screen handlers ──
 window.qadd = qadd;             // Quick-add an item to the shopping list

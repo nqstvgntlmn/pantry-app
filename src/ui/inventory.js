@@ -6,7 +6,7 @@
 // dli = delete inventory item).
 
 import { state } from '../state.js';
-import { svi, dli, addWasteEntry } from '../db.js';
+import { svi, dli, addWasteEntry, dbSet } from '../db.js';
 // g        – getElementById shorthand
 // xSt      – returns expiry status object { c: class, l: label } for a date
 // ll       – location label (e.g. "fridge" → "🌡 Fridge")
@@ -19,15 +19,55 @@ import { updExport } from './home.js';
 // searchAndEnrich — searches product databases for text matches and shows enrichment picker
 // scoreSearchResult — relevance scoring for search results
 import { searchAndEnrich, scoreSearchResult } from './shopping.js';
+// Upload custom product photos to Firebase Storage, normalizeProductName for customProducts collection keys
+import { uploadProductImage, normalizeProductName } from '../storage.js';
 
-// Renders a single inventory item as an HTML string.
-// Each item is wrapped in a swipe container so the user can swipe-to-delete.
-// The row also supports tap (opens adjust overlay) and multi-select mode.
+/**
+ * toTitleCase(str) — Normalizes a product name to Title Case for uniform display.
+ * Capitalizes the first letter of each word, lowercases the rest.
+ * Applied at render time so it works for existing items and newly added ones.
+ */
+function toTitleCase(str) {
+  if (!str) return "";
+  return str.replace(/\S+/g, word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  );
+}
+
+/**
+ * _shouldShowInvBrand(item) — Determines whether to display the brand on an inventory item.
+ * Rules mirror shopping: barcode scans always show brand; text search only if the user's
+ * query matched the brand; all other sources (manual, meal-plan, etc.) hide brand.
+ */
+function _shouldShowInvBrand(item) {
+  if (!item.brand) return false;
+  // Barcode scans always show brand — user intentionally scanned that exact product
+  if (item.source === "scan" || item.source === "Barcode") return true;
+  // Text search: compare search query words against brand name words
+  if (item.source === "search" && item.searchQuery) {
+    const queryWords = item.searchQuery.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+    const brandLower = item.brand.toLowerCase();
+    return queryWords.some(w => brandLower.includes(w));
+  }
+  // For manual adds, imported items, etc. — no brand display
+  return false;
+}
+
+/**
+ * iH(item) — Renders a single inventory item as an HTML string.
+ * Mirrors the shopping list sH() layout:
+ *   - Slim outlined circle for marking/selecting (shck equivalent)
+ *   - Tapping circle opens detail sheet; tapping anywhere else also opens detail sheet
+ *   - In Select mode, circles become multi-select checkboxes
+ *   - Swipe-to-delete with Apple-style animation
+ *   - Title Case product names, uniform font size/weight
+ *   - Brand shown only for barcode scans or brand-matched searches
+ */
 export function iH(item) {
   // Resolve the category emoji; fall back to a shopping-cart icon
-  const ic = CATS[gcat(item)] || "🛒",
-    // If the item has a product image, show it; otherwise show the category emoji
-    img = item.image ? `<img src="${item.image}" class="iimg" onerror="this.style.display='none'"/>` : `<div class="iph">${ic}</div>`;
+  const ic = CATS[gcat(item)] || "🛒";
+  // Build product thumbnail or emoji fallback
+  const thumb = item.image ? `<img src="${item.image}" class="sh-thumb" alt="" onerror="this.style.display='none'"/>` : "";
 
   // Determine expiry status (expired / expiring-soon / OK)
   const ex = xSt(item.expiry),
@@ -36,7 +76,10 @@ export function iH(item) {
     // et = small expiry tag badge shown below the item name
     et = ex ? `<div class="etag ${ex.c}">${ex.l}</div>` : "";
 
-  // Build the full row HTML:
+  // Brand line — only shown for barcode scans or brand-matched text searches
+  const brandHtml = _shouldShowInvBrand(item) ? `<div class="sh-brand">${item.brand}</div>` : "";
+
+  // Build the full row HTML mirroring shopping list structure:
   //   .swipe-wrap  – outermost container, carries the item id for JS lookups
   //   .swipe-inner – the visible card (moves on swipe)
   //   .swipe-del   – the red delete button revealed behind the card on swipe
@@ -44,12 +87,15 @@ export function iH(item) {
     <div class="swipe-inner">
       <div class="iit${bc}" onclick="swipeRowTap('${item.id}','inv')">
         <div class="sel-cb">✓</div>
-        <div class="iileft">${img}<div>
-          <div class="inm">${item.name}</div>
-          <div class="isb">${item.brand || gcat(item)}</div>
+        <!-- Slim outlined circle: tapping opens detail sheet -->
+        <div class="shck" onclick="event.stopPropagation();openInvItemDetail('${item.id}')"></div>
+        ${thumb}
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="event.stopPropagation();openInvItemDetail('${item.id}')">
+          <div class="inm">${toTitleCase(item.name)}</div>
+          ${brandHtml}
           ${item.note ? `<div class="shnote" style="margin-top:2px">📝 ${item.note}</div>` : ""}
           ${et}
-        </div></div>
+        </div>
         <div style="text-align:right">
           <div class="iqt">${item.qty}</div>
           <div class="iun">${item.unit}</div>
@@ -142,14 +188,357 @@ export function openAdj(id) {
   const ic = CATS[gcat(item)] || "🛒",
     img = item.image ? `<img src="${item.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">${ic}</div>`;
 
+  // Brand line — only show for barcode scans or brand-matched searches (same as list row)
+  const brandHtml = _shouldShowInvBrand(item) ? `<div class="pbr">${item.brand}</div>` : "";
+
   // Inject the full overlay body: header card, location picker,
   // quantity stepper, expiry date picker, and notes textarea.
+  // Category/source tags removed — they added no user value.
   // Each control calls its own global handler on change (e.g. updL, adjQ).
-  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${item.name}</div>${item.brand ? `<div class="pbr">${item.brand}</div>` : ""}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div>${item.source ? `<span class="srcb" style="display:inline-block;margin-top:4px">${item.source}</span>` : ""}</div></div><div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Low stock alert at</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${item.lowStockThreshold || 1}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div></div>`;
+  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${toTitleCase(item.name)}</div>${brandHtml}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div></div></div><div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Low stock alert at</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${item.lowStockThreshold || 1}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div></div>`;
 
   // Wire the "Remove" button at the bottom of the overlay
   g("rembtn").onclick = () => remItem(id);
   showOv("adj");
+}
+
+// ── INVENTORY ITEM DETAIL BOTTOM SHEET ──────────────────────────────────────
+// Mirrors the shopping list's openItemDetail() — shows product info with
+// Add photo / Change photo / Delete photo, drag-and-drop image upload,
+// imageDismissed flag respected, no category/source tags.
+
+/**
+ * openInvItemDetail(id) — Opens the product detail bottom sheet for an inventory item.
+ * Shows the product image (with Add/Change/Delete photo), name in Title Case,
+ * brand (if barcode scan or brand-matched search), quantity, location, expiry,
+ * note, and buttons for Adjust (full overlay) and Remove.
+ * In multi-select mode, delegates to the parent row tap handler instead.
+ */
+export function openInvItemDetail(id) {
+  // In multi-select mode, let the parent swipeRowTap handle the tap for selection toggle
+  if (state.selectMode) return;
+
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+
+  const content = g("invItemDetailContent");
+  if (!content) return;
+
+  // Build the product image or placeholder. Both serve as drag-and-drop zones.
+  // If item has image: show it with a small "×" delete button overlaid.
+  // If no image: show camera icon + "Add photo" hint as tap target and drop zone.
+  const img = item.image
+    ? `<div class="item-detail-img-wrap drop-zone" data-item-id="${item.id}" data-list="inv">
+        <img src="${item.image}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
+        <button class="item-detail-img-del" onclick="deleteInvItemImage('${item.id}')" title="Remove image">×</button>
+      </div>`
+    : `<div class="item-detail-img-ph drop-zone" data-item-id="${item.id}" data-list="inv" onclick="triggerInvPhotoUpload('${item.id}')" style="cursor:pointer">
+        <div style="text-align:center">
+          <div style="font-size:1.3rem;margin-bottom:2px;opacity:.45">📷</div>
+          <div style="font-size:.6rem;color:var(--mt);opacity:.7">Add photo</div>
+        </div>
+      </div>`;
+
+  // "Change photo" link when item already has an image
+  const changePhotoLink = item.image
+    ? `<div class="item-detail-change-photo" onclick="triggerInvPhotoUpload('${item.id}')">Change photo</div>`
+    : "";
+
+  // Brand visibility — same rules as the list row
+  const showBrand = _shouldShowInvBrand(item);
+
+  // Build the detail sheet content — no category/source tags
+  let html = `<div class="item-detail-header">
+    <div>${img}${changePhotoLink}</div>
+    <div style="flex:1;min-width:0">
+      <div class="item-detail-name">${toTitleCase(item.name)}</div>
+      ${showBrand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
+      <div style="font-size:.7rem;color:var(--mt);margin-top:4px">${ll(item.location)}</div>
+    </div>
+  </div>
+  <!-- Hidden file input for product photo uploads — triggered by Add/Change photo buttons -->
+  <input type="file" id="invProductPhotoInput" accept="image/*" style="display:none"
+    onchange="handleInvPhotoSelected('${item.id}')" />`;
+
+  // Quantity & unit section
+  html += `<div class="item-detail-section">
+    <div class="item-detail-label">Quantity</div>
+    <div class="item-detail-value">${item.qty} ${item.unit || "unit"}</div>
+  </div>`;
+
+  // Expiry section (if present)
+  if (item.expiry) {
+    const ex = xSt(item.expiry);
+    html += `<div class="item-detail-section">
+      <div class="item-detail-label">Expiry</div>
+      <div class="item-detail-value">${item.expiry}${ex ? ` <span class="etag ${ex.c}" style="margin-left:6px">${ex.l}</span>` : ""}</div>
+    </div>`;
+  }
+
+  // Note section (if present)
+  if (item.note) {
+    html += `<div class="item-detail-section">
+      <div class="item-detail-label">Note</div>
+      <div class="item-detail-value">${item.note}</div>
+    </div>`;
+  }
+
+  // Action buttons: Adjust (opens full overlay) and Close
+  html += `<div style="display:flex;gap:8px;margin-top:12px">
+    <button class="btn bs bf" onclick="closeInvItemDetail();openAdj('${item.id}')" style="flex:1">⚙️ Adjust</button>
+    <button class="btn bd bf" onclick="closeInvItemDetail();remItem('${item.id}')" style="flex:1">Remove</button>
+  </div>
+  <button class="btn bs bf" onclick="closeInvItemDetail()" style="margin-top:8px">Close</button>`;
+
+  content.innerHTML = html;
+
+  // Show the bottom sheet
+  const backdrop = g("invItemDetailBackdrop");
+  const sheet = g("invItemDetailSheet");
+  if (backdrop) backdrop.classList.add("active");
+  if (sheet) sheet.classList.add("active");
+
+  // Attach drag-and-drop listeners to the image area for desktop/mobile image drops
+  const dropZone = content.querySelector(".drop-zone");
+  if (dropZone) _setupInvDropZone(dropZone, item.id);
+}
+
+/**
+ * closeInvItemDetail() — Dismisses the inventory item detail bottom sheet.
+ */
+export function closeInvItemDetail() {
+  const backdrop = g("invItemDetailBackdrop");
+  const sheet = g("invItemDetailSheet");
+  if (backdrop) backdrop.classList.remove("active");
+  if (sheet) sheet.classList.remove("active");
+}
+
+// ── DRAG-AND-DROP IMAGE UPLOAD FOR INVENTORY ──────────────────────────────────
+// Mirrors the shopping list's drop zone handling for inventory items.
+
+/**
+ * _setupInvDropZone(el, itemId) — Attaches drag-and-drop event listeners to an element.
+ * Adds a golden highlight glow on dragover and handles the dropped file through
+ * the same compress → upload pipeline as the file picker.
+ */
+function _setupInvDropZone(el, itemId) {
+  // Track enter/leave depth so nested children don't flicker the highlight
+  let dragDepth = 0;
+
+  el.addEventListener("dragenter", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth++;
+    el.classList.add("drop-zone-active");
+  });
+
+  el.addEventListener("dragover", (e) => {
+    // Must preventDefault to allow drop — browser default is to reject
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  el.addEventListener("dragleave", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth--;
+    if (dragDepth <= 0) {
+      dragDepth = 0;
+      el.classList.remove("drop-zone-active");
+    }
+  });
+
+  el.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth = 0;
+    el.classList.remove("drop-zone-active");
+    _handleInvDrop(e.dataTransfer, itemId);
+  });
+}
+
+/**
+ * _handleInvDrop(dataTransfer, itemId) — Processes a drop event's DataTransfer for inventory.
+ * Handles file drops and URL drops (dragged from browser tabs).
+ */
+async function _handleInvDrop(dt, itemId) {
+  const item = state.inv.find(i => i.id === itemId);
+  if (!item) return;
+
+  // Case 1: Direct file drop (Finder, Photos app, file manager)
+  if (dt.files && dt.files.length > 0) {
+    const file = dt.files[0];
+    if (file.type && file.type.startsWith("image/")) {
+      await _processInvDroppedImage(file, item);
+      return;
+    }
+  }
+
+  // Case 2: Image dragged from a browser tab or Google Images
+  const uriList = dt.getData("text/uri-list");
+  const plainText = dt.getData("text/plain");
+  const imgUrl = uriList || plainText || "";
+
+  if (imgUrl && /^https?:\/\/.+\.(jpe?g|png|gif|webp|bmp)/i.test(imgUrl)) {
+    await _fetchAndUploadInvImageUrl(imgUrl, item);
+    return;
+  }
+
+  // Also check text/html for <img src="..."> tags (Google Images wraps URLs in HTML)
+  const htmlData = dt.getData("text/html");
+  if (htmlData) {
+    const match = htmlData.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (match && match[1] && /^https?:\/\//.test(match[1])) {
+      await _fetchAndUploadInvImageUrl(match[1], item);
+      return;
+    }
+  }
+
+  console.warn("[InvDropZone] Dropped data didn't contain a usable image");
+}
+
+/**
+ * _processInvDroppedImage(file, item) — Compresses and uploads a dropped image file for inventory.
+ * Same pipeline as the file picker: compress → upload → save → refresh detail sheet.
+ */
+async function _processInvDroppedImage(file, item) {
+  // Show uploading indicator in the image area
+  const content = g("invItemDetailContent");
+  if (content) {
+    const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
+    if (imgWrap) {
+      imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0">
+        <div style="font-size:1.2rem">⏳</div>
+        <div style="font-size:.65rem;color:var(--mt);margin-top:2px">Uploading…</div>
+      </div>`;
+    }
+  }
+
+  try {
+    const downloadUrl = await uploadProductImage(file, item.name);
+    // Save image and clear imageDismissed — user is explicitly adding a new photo
+    const updated = { ...item, image: downloadUrl, imageDismissed: false };
+    await svi(updated);
+    showNotif("Photo saved ✓");
+    openInvItemDetail(item.id);
+  } catch (e) {
+    console.error("[InvDropZone] Upload failed:", e);
+    showNotif("Upload failed — try again");
+    openInvItemDetail(item.id);
+  }
+}
+
+/**
+ * _fetchAndUploadInvImageUrl(url, item) — Fetches an image from a URL (e.g. dragged from
+ * Google Images), converts to File, then uploads through the standard pipeline.
+ */
+async function _fetchAndUploadInvImageUrl(url, item) {
+  const content = g("invItemDetailContent");
+  if (content) {
+    const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
+    if (imgWrap) {
+      imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0">
+        <div style="font-size:1.2rem">⏳</div>
+        <div style="font-size:.65rem;color:var(--mt);margin-top:2px">Fetching image…</div>
+      </div>`;
+    }
+  }
+
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    if (!blob.type || !blob.type.startsWith("image/")) {
+      throw new Error("Fetched resource is not an image");
+    }
+    const file = new File([blob], "dropped-image.jpg", { type: blob.type });
+    await _processInvDroppedImage(file, item);
+  } catch (e) {
+    console.warn("[InvDropZone] Could not fetch dropped image URL:", e);
+    showNotif("Couldn't load that image — try saving it first");
+    openInvItemDetail(item.id);
+  }
+}
+
+/**
+ * deleteInvItemImage(id) — Removes the product image from an inventory item.
+ * Sets imageDismissed flag so enrichment pipelines won't re-apply the same image.
+ * Persists imageDismissed to customProducts collection for cross-item persistence.
+ */
+export async function deleteInvItemImage(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+
+  // Clear image and set imageDismissed flag
+  const updated = { ...item, image: null, imageDismissed: true };
+  await svi(updated);
+
+  // Persist imageDismissed to customProducts so it survives item deletion/re-add
+  if (state.hid && item.name) {
+    const normalized = normalizeProductName(item.name);
+    if (normalized) {
+      dbSet(`households/${state.hid}/customProducts/${normalized}`, {
+        name: item.name.trim(),
+        imageDismissed: true,
+        imageUrl: null,
+        updatedAt: new Date().toISOString()
+      }).catch(e => console.warn("Failed to save imageDismissed to customProducts:", e));
+    }
+  }
+
+  // Re-open detail sheet to show the placeholder
+  openInvItemDetail(id);
+}
+
+/**
+ * triggerInvPhotoUpload(id) — Opens the device file picker / camera roll for inventory.
+ * Stores the target item ID so the onchange handler knows which item to update.
+ */
+export function triggerInvPhotoUpload(id) {
+  window._invUploadTargetId = id;
+  const input = document.getElementById("invProductPhotoInput");
+  if (input) {
+    input.value = "";
+    input.click();
+  }
+}
+
+/**
+ * handleInvPhotoSelected(id) — Called when user picks a file from camera roll for inventory.
+ * Compresses the image, uploads to Firebase Storage, saves URL to item, refreshes sheet.
+ */
+export async function handleInvPhotoSelected(id) {
+  const input = document.getElementById("invProductPhotoInput");
+  if (!input || !input.files || !input.files[0]) return;
+
+  const file = input.files[0];
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+
+  // Show uploading indicator
+  const content = g("invItemDetailContent");
+  if (content) {
+    const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
+    if (imgWrap) {
+      imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0">
+        <div style="font-size:1.2rem">⏳</div>
+        <div style="font-size:.65rem;color:var(--mt);margin-top:2px">Uploading…</div>
+      </div>`;
+    }
+  }
+
+  try {
+    const downloadUrl = await uploadProductImage(file, item.name);
+    // Save the new image URL and clear imageDismissed
+    const updated = { ...item, image: downloadUrl, imageDismissed: false };
+    await svi(updated);
+    showNotif("Photo saved ✓");
+    openInvItemDetail(id);
+  } catch (e) {
+    console.error("Inventory photo upload failed:", e);
+    showNotif("Upload failed — try again");
+    openInvItemDetail(id);
+  }
 }
 
 // Removes an inventory item from the database and closes the adjust overlay.
