@@ -743,61 +743,132 @@ function _classifyImageSource(url) {
 }
 
 /**
- * _runInlineSearch(query) — Fires the product search API (with caching) and
- * renders results in the inline dropdown below the input. Results are scored
- * by how prominently the query term appears in the product name, so
- * "Mushrooms" ranks above "Chicken & Mushroom Flavour POT noodle".
+ * _renderShopDropdown(results) — Renders an array of product results into
+ * the shopping search dropdown. Extracted so both the instant custom-product
+ * path and the full API path can share the same rendering logic.
+ * @param {Array} results — Scored product results to render
+ */
+function _renderShopDropdown(results) {
+  const dropdown = g("shopSearchDropdown");
+  if (!dropdown || !results.length) return;
+
+  _inlineSearchResults = results;
+
+  // Log each result's image source for debugging in DevTools
+  results.forEach((p, i) => {
+    const imgSrc = _classifyImageSource(p.image);
+    console.log(`[ShopDropdown] #${i} "${p.name}" → image: ${imgSrc} | url: ${p.image || "(none)"} | score: ${p._score}`);
+  });
+
+  // Render result rows. Brand is intentionally hidden in text search results —
+  // it's often generic/irrelevant (e.g. "Boulart" for "Bread"). Brand only
+  // shows for barcode scans where the user scanned that exact product.
+  dropdown.innerHTML = results.map((p, i) => {
+    const img = p.image
+      ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'; console.warn('[ShopDropdown] Image failed to load:', '${(p.image || "").replace(/'/g, "\\'")}')"`
+      : `<div class="enrich-img-ph">🛒</div>`;
+    const cat = p.category && p.category !== "General"
+      ? `<div class="enrich-cat">${p.category}</div>` : "";
+    return `<div class="enrich-row" onclick="pickInlineResult(${i})">
+      ${img}
+      <div style="flex:1;min-width:0">
+        <div class="enrich-name">${p.name}</div>
+        ${cat}
+      </div>
+    </div>`;
+  }).join("");
+
+  dropdown.classList.add("active");
+}
+
+/**
+ * _checkCustomProductLocal(query) — Client-side instant lookup of the household's
+ * customProducts collection in Firestore. Returns a search-result-shaped object
+ * if a matching custom product exists with a non-dismissed image, or null.
+ *
+ * This avoids the round-trip through api/text-search.js for items the user has
+ * already uploaded photos for, giving sub-100ms dropdown results.
+ */
+async function _checkCustomProductLocal(query) {
+  if (!state.hid || !query) return null;
+  const normalized = normalizeProductName(query);
+  if (!normalized) return null;
+
+  const cpDoc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
+  if (!cpDoc || cpDoc.imageDismissed || !cpDoc.imageUrl) return null;
+
+  // Build a result object matching the shape returned by _fetchAndScoreResults
+  // so it can be rendered by the same dropdown renderer.
+  const displayName = query.trim().replace(/\b\w/g, c => c.toUpperCase());
+  return {
+    name: displayName,
+    image: cpDoc.imageUrl,
+    brand: "",
+    category: cpDoc.category || "",
+    source: "customProduct",
+    _score: 100, // Exact match — highest priority
+  };
+}
+
+/**
+ * _runInlineSearch(query) — Two-phase search: instantly checks the local
+ * customProducts collection for a match (sub-100ms), then fires the API
+ * in parallel for external database results. If a custom product is found,
+ * it appears immediately in the dropdown while the API call completes.
+ * API results are merged in when they arrive, with the custom product
+ * deduplicated to avoid showing it twice.
  * @param {string} query — The text to search for
  */
 async function _runInlineSearch(query) {
   const dropdown = g("shopSearchDropdown");
   if (!dropdown) return;
 
-  // Show a subtle loading indicator
+  // Show loading indicator
   dropdown.innerHTML = '<div class="search-hint">Searching…</div>';
   dropdown.classList.add("active");
 
   try {
-    const results = await _fetchAndScoreResults(query);
+    // Phase 1: Instant client-side customProduct lookup (no API round-trip).
+    // Fire this AND the API call in parallel — custom result renders immediately
+    // if found, API results merge in when they arrive.
+    const customPromise = _checkCustomProductLocal(query);
+    const apiPromise = _fetchAndScoreResults(query);
+
+    // Show custom product result instantly if available
+    const customResult = await customPromise;
+    if (customResult) {
+      // Bail if user changed the input while we were checking
+      const curQuery = g("shi") ? g("shi").value.trim() : "";
+      if (curQuery.toLowerCase() === query.toLowerCase()) {
+        console.log(`[ShopSearch] Instant custom product match for "${query}"`);
+        _renderShopDropdown([customResult]);
+      }
+    }
+
+    // Phase 2: Wait for the full API results from external databases
+    const apiResults = await apiPromise;
 
     // Bail if the input changed while we were fetching (stale response)
     const currentQuery = g("shi") ? g("shi").value.trim() : "";
     if (currentQuery.toLowerCase() !== query.toLowerCase()) return;
 
-    if (!results.length) {
+    // Merge: prepend the custom product (if found) ahead of API results,
+    // deduplicating by normalized name so it doesn't appear twice.
+    let merged = apiResults;
+    if (customResult) {
+      const customNorm = normalizeProductName(customResult.name);
+      const deduped = apiResults.filter(r => normalizeProductName(r.name) !== customNorm);
+      merged = [customResult, ...deduped].slice(0, 5);
+    }
+
+    if (!merged.length) {
       dropdown.classList.remove("active");
       dropdown.innerHTML = "";
       _inlineSearchResults = null;
       return;
     }
 
-    _inlineSearchResults = results;
-
-    // Log each result's image URL and detected source so we can verify
-    // image priority order in DevTools (real product photos should beat illustrations)
-    results.forEach((p, i) => {
-      const imgSrc = _classifyImageSource(p.image);
-      console.log(`[ShopDropdown] #${i} "${p.name}" → image: ${imgSrc} | url: ${p.image || "(none)"} | score: ${p._score}`);
-    });
-
-    // Render result rows inside the dropdown.
-    // Brand is intentionally hidden in text search results — it's often a generic/irrelevant
-    // brand name (e.g. "Boulart" for a "Bread" search). Brand only shows for barcode scans
-    // where the user specifically scanned that exact product.
-    dropdown.innerHTML = results.map((p, i) => {
-      const img = p.image
-        ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'; console.warn('[ShopDropdown] Image failed to load:', '${(p.image || "").replace(/'/g, "\\'")}')"`
-        : `<div class="enrich-img-ph">🛒</div>`;
-      const cat = p.category && p.category !== "General"
-        ? `<div class="enrich-cat">${p.category}</div>` : "";
-      return `<div class="enrich-row" onclick="pickInlineResult(${i})">
-        ${img}
-        <div style="flex:1;min-width:0">
-          <div class="enrich-name">${p.name}</div>
-          ${cat}
-        </div>
-      </div>`;
-    }).join("");
+    _renderShopDropdown(merged);
 
   } catch (e) {
     // Search failed silently — user can still add as plain text via Enter

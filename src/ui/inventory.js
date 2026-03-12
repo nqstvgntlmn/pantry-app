@@ -984,10 +984,118 @@ function _classifyInvImageSource(url) {
 }
 
 /**
- * _runInvSearch(query) — Fetches and renders product search results in the
- * inventory add sheet dropdown. Uses relevance scoring and in-memory caching.
- * Passes the household ID so the API checks customProducts first — user-uploaded
- * photos take priority over all external sources (Kroger, Spoonacular, OFF, etc.).
+ * _renderInvDropdown(results) — Renders an array of product results into
+ * the inventory search dropdown. Extracted so both the instant custom-product
+ * path and the full API path can share the same rendering logic.
+ * @param {Array} results — Scored product results to render
+ */
+function _renderInvDropdown(results) {
+  const dropdown = g("invSearchDropdown");
+  if (!dropdown || !results.length) return;
+
+  _invInlineResults = results;
+
+  // Log each result's image source for debugging image priority in DevTools
+  results.forEach((p, i) => {
+    const imgSrc = _classifyInvImageSource(p.image);
+    console.log(`[InvDropdown] #${i} "${p.name}" → image: ${imgSrc} | url: ${p.image || "(none)"} | score: ${p._score}`);
+  });
+
+  // Render result rows
+  dropdown.innerHTML = results.map((p, i) => {
+    const img = p.image
+      ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'"/>`
+      : `<div class="enrich-img-ph">🛒</div>`;
+    const brand = p.brand ? `<div class="enrich-brand">${p.brand}</div>` : "";
+    const cat = p.category && p.category !== "General"
+      ? `<div class="enrich-cat">${p.category}</div>` : "";
+    return `<div class="enrich-row" onclick="pickInvInlineResult(${i})">
+      ${img}
+      <div style="flex:1;min-width:0">
+        <div class="enrich-name">${p.name}</div>
+        ${brand}${cat}
+      </div>
+    </div>`;
+  }).join("");
+
+  dropdown.classList.add("active");
+}
+
+/**
+ * _checkInvCustomProductLocal(query) — Client-side instant lookup of the
+ * household's customProducts collection in Firestore. Returns a search-result-
+ * shaped object if a matching custom product exists with a non-dismissed image,
+ * or null. Avoids the api/text-search.js round-trip for known custom products.
+ */
+async function _checkInvCustomProductLocal(query) {
+  if (!state.hid || !query) return null;
+  const normalized = normalizeProductName(query);
+  if (!normalized) return null;
+
+  const cpDoc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
+  if (!cpDoc || cpDoc.imageDismissed || !cpDoc.imageUrl) return null;
+
+  // Build a result matching the shape expected by _renderInvDropdown
+  const displayName = query.trim().replace(/\b\w/g, c => c.toUpperCase());
+  return {
+    name: displayName,
+    image: cpDoc.imageUrl,
+    brand: "",
+    category: cpDoc.category || "",
+    source: "customProduct",
+    _score: 100,
+  };
+}
+
+/**
+ * _fetchInvApiResults(query) — Fetches product search results from the API
+ * (with in-memory caching), scores/filters them, and returns the top 5.
+ * Extracted from _runInvSearch so the API call can run in parallel with
+ * the instant customProduct lookup.
+ */
+async function _fetchInvApiResults(query) {
+  const cacheKey = query.toLowerCase();
+  const cached = _invSearchCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.ts < _INV_CACHE_TTL) {
+    return cached.scored;
+  }
+
+  // Fetch from API — include household ID so the API can also check
+  // customProducts server-side as a fallback
+  const hidParam = state.hid ? `&hid=${encodeURIComponent(state.hid)}` : "";
+  const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
+  const data = await r.json();
+  let raw = data.results || [];
+
+  // Filter: at least one query word must appear in the product name
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+  raw = raw.filter(p => {
+    const nameLower = (p.name || "").toLowerCase();
+    return queryWords.some(w => nameLower.includes(w));
+  });
+
+  // Score, filter low-relevance, sort, and cap at 5
+  const results = raw
+    .map(p => ({ ...p, _score: scoreSearchResult(p.name || "", query) }))
+    .filter(p => p._score >= 15)
+    .sort((a, b) => b._score - a._score)
+    .slice(0, 5);
+
+  // Cache the scored results
+  _invSearchCache.set(cacheKey, { scored: results, ts: Date.now() });
+  if (_invSearchCache.size > _INV_CACHE_MAX) {
+    _invSearchCache.delete(_invSearchCache.keys().next().value);
+  }
+
+  return results;
+}
+
+/**
+ * _runInvSearch(query) — Two-phase search for inventory: instantly checks
+ * the local customProducts collection (sub-100ms), then fires the API in
+ * parallel for external database results. Custom product appears immediately;
+ * API results merge in when they arrive, deduplicated.
  */
 async function _runInvSearch(query) {
   const dropdown = g("invSearchDropdown");
@@ -997,78 +1105,44 @@ async function _runInvSearch(query) {
   dropdown.classList.add("active");
 
   try {
-    // Check cache first
-    const cacheKey = query.toLowerCase();
-    let results;
-    const cached = _invSearchCache.get(cacheKey);
+    // Phase 1: Instant client-side customProduct lookup.
+    // Fire both in parallel — custom result renders immediately if found.
+    const customPromise = _checkInvCustomProductLocal(query);
+    const apiPromise = _fetchInvApiResults(query);
 
-    if (cached && Date.now() - cached.ts < _INV_CACHE_TTL) {
-      results = cached.scored;
-    } else {
-      // Fetch from API — include household ID so the API can check the
-      // customProducts collection first. Without hid, custom product images
-      // are skipped and the search goes straight to external databases.
-      const hidParam = state.hid ? `&hid=${encodeURIComponent(state.hid)}` : "";
-      const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
-      const data = await r.json();
-      let raw = data.results || [];
-
-      // Filter: at least one query word must appear in the product name
-      const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
-      raw = raw.filter(p => {
-        const nameLower = (p.name || "").toLowerCase();
-        return queryWords.some(w => nameLower.includes(w));
-      });
-
-      // Score, filter low-relevance, sort, and cap at 5
-      results = raw
-        .map(p => ({ ...p, _score: scoreSearchResult(p.name || "", query) }))
-        .filter(p => p._score >= 15)
-        .sort((a, b) => b._score - a._score)
-        .slice(0, 5);
-
-      // Cache the scored results
-      _invSearchCache.set(cacheKey, { scored: results, ts: Date.now() });
-      if (_invSearchCache.size > _INV_CACHE_MAX) {
-        _invSearchCache.delete(_invSearchCache.keys().next().value);
+    // Show custom product result instantly if available
+    const customResult = await customPromise;
+    if (customResult) {
+      const curQuery = g("invi") ? g("invi").value.trim() : "";
+      if (curQuery.toLowerCase() === query.toLowerCase()) {
+        console.log(`[InvSearch] Instant custom product match for "${query}"`);
+        _renderInvDropdown([customResult]);
       }
     }
+
+    // Phase 2: Wait for full API results from external databases
+    const apiResults = await apiPromise;
 
     // Bail if input changed during fetch (stale response)
     const currentQuery = g("invi") ? g("invi").value.trim() : "";
     if (currentQuery.toLowerCase() !== query.toLowerCase()) return;
 
-    if (!results.length) {
+    // Merge: prepend custom product ahead of API results, dedup by normalized name
+    let merged = apiResults;
+    if (customResult) {
+      const customNorm = normalizeProductName(customResult.name);
+      const deduped = apiResults.filter(r => normalizeProductName(r.name) !== customNorm);
+      merged = [customResult, ...deduped].slice(0, 5);
+    }
+
+    if (!merged.length) {
       dropdown.classList.remove("active");
       dropdown.innerHTML = "";
       _invInlineResults = null;
       return;
     }
 
-    _invInlineResults = results;
-
-    // Log each result's image source for debugging image priority in DevTools
-    results.forEach((p, i) => {
-      const imgSrc = _classifyInvImageSource(p.image);
-      console.log(`[InvDropdown] #${i} "${p.name}" → image: ${imgSrc} | url: ${p.image || "(none)"} | score: ${p._score}`);
-    });
-
-    // Render result rows
-    dropdown.innerHTML = results.map((p, i) => {
-      const img = p.image
-        ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'"/>`
-        : `<div class="enrich-img-ph">🛒</div>`;
-      const brand = p.brand ? `<div class="enrich-brand">${p.brand}</div>` : "";
-      const cat = p.category && p.category !== "General"
-        ? `<div class="enrich-cat">${p.category}</div>` : "";
-      return `<div class="enrich-row" onclick="pickInvInlineResult(${i})">
-        ${img}
-        <div style="flex:1;min-width:0">
-          <div class="enrich-name">${p.name}</div>
-          ${brand}${cat}
-        </div>
-      </div>`;
-    }).join("");
+    _renderInvDropdown(merged);
 
   } catch (e) {
     console.warn("Inventory inline search failed:", e);
