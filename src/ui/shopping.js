@@ -14,6 +14,7 @@ import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR } f
 // showOv/hideOv = show/hide overlay modals, fmtR = format helper
 import { svi } from '../db.js';       // svi = save/upsert an inventory item to Firestore
 import { wDates } from '../helpers.js'; // wDates = returns array of Date objects for the current week (Mon–Sun)
+import { uploadProductImage } from '../storage.js'; // Upload custom product photos to Firebase Storage
 
 // ── VOICE INPUT (Web Speech API) ─────────────────────────────────────────────
 // Uses the SpeechRecognition API to let users speak items into the shopping list.
@@ -672,9 +673,12 @@ async function _fetchAndScoreResults(query) {
     return cached.scored;
   }
 
-  // Fetch from the text search API (product enrichment waterfall)
-  console.log(`[ShopSearch] Fetching /api/text-search?q=${encodeURIComponent(query)}`);
-  const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
+  // Fetch from the text search API (product enrichment waterfall).
+  // Pass the household ID so the API can check the custom product image database
+  // first — user-uploaded photos take priority over all external sources.
+  const hidParam = state.hid ? `&hid=${encodeURIComponent(state.hid)}` : "";
+  console.log(`[ShopSearch] Fetching /api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
+  const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
   const data = await r.json();
   let results = data.results || [];
 
@@ -1011,26 +1015,41 @@ export function openItemDetail(id) {
 
   // Build the product image or placeholder.
   // If the item has an image, show it with a small "×" delete button overlaid
-  // in the top-right corner so the user can remove it. Positioned relative
-  // to a wrapper div so the button sits on the image itself.
+  // in the top-right corner so the user can remove it. Also shows a subtle
+  // "Change photo" link below the image for uploading a replacement.
+  // If no image exists, show an "Add photo" button instead of the placeholder
+  // so users can upload their own product photos from their camera roll.
   const img = item.image
     ? `<div class="item-detail-img-wrap">
         <img src="${item.image}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
         <button class="item-detail-img-del" onclick="deleteItemImage('${item.id}')" title="Remove image">×</button>
       </div>`
-    : `<div class="item-detail-img-ph">🛒</div>`;
+    : `<div class="item-detail-img-ph" onclick="triggerProductPhotoUpload('${item.id}')" style="cursor:pointer">
+        <div style="text-align:center">
+          <div style="font-size:1.5rem;margin-bottom:2px">📷</div>
+          <div style="font-size:.65rem;color:var(--mt)">Add photo</div>
+        </div>
+      </div>`;
 
   // Build the header section (image + name + brand).
   // Brand visibility uses same logic as the list row: scan → always, search → only if query matches brand.
+  // Includes a "Change photo" link when the item already has an image, so users can
+  // replace external/auto-enriched images with their own photos.
   const showBrand = _shouldShowBrand(item);
+  const changePhotoLink = item.image
+    ? `<div class="item-detail-change-photo" onclick="triggerProductPhotoUpload('${item.id}')">Change photo</div>`
+    : "";
   let html = `<div class="item-detail-header">
-    ${img}
+    <div>${img}${changePhotoLink}</div>
     <div style="flex:1;min-width:0">
       <div class="item-detail-name">${toTitleCase(item.name)}</div>
       ${showBrand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
       ${item.checked ? `<div style="margin-top:4px"><span class="item-detail-badge" style="background:var(--gnd);color:var(--gn)">✓ Purchased</span></div>` : ""}
     </div>
-  </div>`;
+  </div>
+  <!-- Hidden file input for product photo uploads — triggered by Add/Change photo buttons -->
+  <input type="file" id="productPhotoInput" accept="image/*" style="display:none"
+    onchange="handleProductPhotoSelected('${item.id}')" />`;
 
   // Info badges row: category, source, quantity
   const badges = [];
@@ -1100,6 +1119,72 @@ export async function deleteItemImage(id) {
 
   // Re-open the detail sheet to reflect the removed image (shows placeholder)
   openItemDetail(id);
+}
+
+// ── CUSTOM PRODUCT PHOTO UPLOAD ──────────────────────────────────────────────
+// Lets users upload their own product photos directly from the product detail sheet.
+// Photos are compressed client-side (max 400×400px, 150KB) and uploaded to Firebase
+// Storage, then saved to a household-wide customProducts collection so both users
+// benefit. This is the highest-priority image source — checked before external APIs.
+
+/**
+ * triggerProductPhotoUpload(id) — Opens the device file picker / camera roll.
+ * Stores the target item ID so the onchange handler knows which item to update.
+ */
+export function triggerProductPhotoUpload(id) {
+  // Store which item we're uploading for — the hidden input's onchange reads this
+  window._uploadTargetItemId = id;
+  const input = document.getElementById("productPhotoInput");
+  if (input) {
+    // Reset the input value so re-selecting the same file still triggers onchange
+    input.value = "";
+    input.click();
+  }
+}
+
+/**
+ * handleProductPhotoSelected(id) — Called when the user picks a file from the camera roll.
+ * Compresses the image, uploads to Firebase Storage, saves the URL to the item in
+ * Firestore, updates the customProducts collection, and refreshes the detail sheet.
+ */
+export async function handleProductPhotoSelected(id) {
+  const input = document.getElementById("productPhotoInput");
+  if (!input || !input.files || !input.files[0]) return;
+
+  const file = input.files[0];
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+
+  // Show a brief uploading indicator in the detail sheet image area
+  const content = g("itemDetailContent");
+  if (content) {
+    const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
+    if (imgWrap) {
+      imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0">
+        <div style="font-size:1.2rem">⏳</div>
+        <div style="font-size:.65rem;color:var(--mt);margin-top:2px">Uploading…</div>
+      </div>`;
+    }
+  }
+
+  try {
+    // Compress and upload — returns the Firebase Storage download URL
+    const downloadUrl = await uploadProductImage(file, item.name);
+
+    // Save the new image URL back to the shopping item in Firestore
+    const updated = { ...item, image: downloadUrl };
+    await svShopItem(updated);
+
+    showNotif("Photo saved ✓");
+
+    // Re-open the detail sheet to show the new image
+    openItemDetail(id);
+  } catch (e) {
+    console.error("Product photo upload failed:", e);
+    showNotif("Upload failed — try again");
+    // Re-open detail sheet to restore the previous state
+    openItemDetail(id);
+  }
 }
 
 /**

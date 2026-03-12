@@ -25,6 +25,61 @@
 const EID = "2b6ecac2";
 const EK = "8db76605e873aaf2fbdf41256cb24cb4";
 
+// ── CUSTOM PRODUCTS DB LOOKUP ───────────────────────────────────────────────
+// Before checking any external database, we check the household's own custom
+// product image database in Firestore. This lets user-uploaded photos take
+// priority over all external sources (Kroger, Spoonacular, OFF, etc.).
+//
+// Firestore path: customProducts/{householdId}/items/{normalizedProductName}
+// The normalized name is: lowercase, trimmed, spaces → underscores, stripped of special chars.
+
+const FS_PROJECT = "family-pantry-c65d6";
+const FS_BASE = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
+const FS_API_KEY = process.env.FIREBASE_API_KEY;
+
+/**
+ * normalizeForLookup(name) — Normalizes a product name the same way the client does,
+ * so we can look up the exact document path in the customProducts collection.
+ */
+function normalizeForLookup(name) {
+  return (name || "").trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+}
+
+/**
+ * lookupCustomProduct(householdId, query) — Checks the household's customProducts
+ * Firestore collection for a matching image. Returns the imageUrl string if found,
+ * or null if no custom image exists for this product.
+ *
+ * This is called at the very top of the handler, before any external API tiers.
+ * If a match is found, we inject it as a top-priority result so the household's
+ * own photos always win.
+ */
+async function lookupCustomProduct(householdId, query) {
+  if (!householdId || !query) return null;
+  const normalized = normalizeForLookup(query);
+  if (!normalized) return null;
+
+  try {
+    const url = `${FS_BASE}/customProducts/${householdId}/items/${normalized}?key=${FS_API_KEY}`;
+    const r = await fetch(url);
+    if (r.status === 404) return null;
+    const doc = await r.json();
+    if (doc.error || !doc.fields) return null;
+
+    // Extract imageUrl from the Firestore REST response (typed value format)
+    const imageUrl = doc.fields?.imageUrl?.stringValue || null;
+    const name = doc.fields?.name?.stringValue || query;
+    if (!imageUrl) return null;
+
+    console.log(`[TextSearch] Custom product HIT for "${query}" (household: ${householdId}) → ${imageUrl}`);
+    return { name, imageUrl };
+  } catch (e) {
+    // Non-blocking — if the lookup fails, fall through to external APIs
+    console.warn(`[TextSearch] Custom product lookup failed for "${query}":`, e.message);
+    return null;
+  }
+}
+
 // ── PREBUILT IMAGE LOOKUP TABLE ─────────────────────────────────────────────
 // Maps ~1000 common grocery and household item names to their Spoonacular CDN
 // image filenames. Used as a LAST-RESORT fallback — only applied after all API
@@ -2268,8 +2323,29 @@ export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
   const query = (req.query.q || "").trim();
-  console.log(`[TextSearch] ── Incoming query: "${query}" | method: ${req.method}`);
+  const householdId = (req.query.hid || "").trim(); // Optional household ID for custom product lookup
+  console.log(`[TextSearch] ── Incoming query: "${query}" | hid: "${householdId}" | method: ${req.method}`);
   if (!query) return res.status(400).json({ error: "Missing 'q' query parameter" });
+
+  // ── Priority 0: Check household's custom product database ─────────
+  // If the household has uploaded a custom photo for this product, use it
+  // immediately and skip all external API lookups. This makes user-uploaded
+  // images the absolute highest priority source.
+  if (householdId) {
+    const customProduct = await lookupCustomProduct(householdId, query);
+    if (customProduct) {
+      console.log(`[TextSearch] ── Returning custom product image for "${query}" — skipping external APIs`);
+      return res.status(200).json({
+        results: [{
+          name: customProduct.name,
+          brand: "",
+          category: "",
+          image: customProduct.imageUrl,
+          source: "custom",
+        }]
+      });
+    }
+  }
 
   // ── Pre-check: look up the query in our prebuilt image table ────────
   // Pre-compute the lookup table match so it's ready if needed as a last-resort
