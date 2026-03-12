@@ -7,8 +7,9 @@
 //   Tier 1 (parallel): Spoonacular + Kroger + USDA
 //   Tier 2 (1.5s timeout): Open Food Facts
 //   Tier 3: UPC Item DB
-// Note: Open Beauty Facts + Open Pet Food Facts are excluded from text search
-// (they return cosmetics/pet products for food queries). Barcode-only.
+//   Tier 4 (deprioritized): Open Beauty Facts + Open Pet Food Facts
+// Note: Beauty/Pet results are kept but score-penalized so food results always
+// rank above them. Users may legitimately search for shampoo, lotion, pet food, etc.
 //
 // Image priority: Spoonacular CDN > Kroger > Open Food Facts > Edamam > others
 // (Google Custom Search removed — API closed to new customers)
@@ -28,7 +29,8 @@ const EK = "8db76605e873aaf2fbdf41256cb24cb4";
 // burning API quota or adding latency.
 //
 // Base URL: https://img.spoonacular.com/ingredients_100x100/{filename}
-// (spoonacular.com/cdn/ redirects to img.spoonacular.com but only .jpg works)
+// IMPORTANT: Only .jpg works on this CDN — .png files return 404.
+// spoonacular.com/cdn/ 301-redirects to img.spoonacular.com.
 //
 // Keys are lowercase. Lookup function does case-insensitive partial matching.
 const SPOON_CDN = "https://img.spoonacular.com/ingredients_100x100";
@@ -1731,14 +1733,22 @@ function isStrictlyRelevant(name, query) {
   return ratio >= 0.5;
 }
 
+// Non-food sources that should be ranked below food results when food sources
+// already returned matches. These are legitimate grocery items (shampoo, pet food)
+// but shouldn't outrank actual food when the query is ambiguous (e.g. "cucumber").
+const NON_FOOD_SOURCES = new Set(["Open Beauty Facts", "Open Pet Food Facts"]);
+
 /**
- * scoreResult(name, query) — Server-side relevance score for sorting results
+ * scoreResult(name, query, source) — Server-side relevance score for sorting results
  * before returning to the client. Higher score = better match.
  * Skips stop words in position matching so "Organic Milk" scores as high as "Milk"
  * when searching for "milk". Penalizes names with many extra non-query words
  * (e.g. "Hershey's Special Dark Chocolate Milk" scores lower than "Whole Milk").
+ *
+ * Non-food sources (beauty, pet) get a -50 penalty when food results exist,
+ * ensuring food always ranks above cosmetics/pet products for food queries.
  */
-function scoreResult(name, query) {
+function scoreResult(name, query, source) {
   const nameLower = (name || "").toLowerCase().trim();
   const queryLower = query.toLowerCase().trim();
 
@@ -1746,32 +1756,47 @@ function scoreResult(name, query) {
   // "Cucumber salad made with cucumber and vinegar" should never outrank "Cucumber"
   if (isRecipeName(name, query)) return 2;
 
+  // Compute base relevance score from name-vs-query matching
+  let base;
+
   // Exact match is the best possible result
-  if (nameLower === queryLower) return 100;
-
+  if (nameLower === queryLower) {
+    base = 100;
   // Name starts with the query (e.g. "Milk 2% Fat" for "milk")
-  if (nameLower.startsWith(queryLower + " ") || nameLower === queryLower) return 95;
+  } else if (nameLower.startsWith(queryLower + " ")) {
+    base = 95;
+  } else {
+    // Split into all words and meaningful-only words (skip stop words)
+    const nameWords = nameLower.split(/[\s,&+\-–—/]+/).filter(w => w.length >= 2);
+    const meaningful = nameWords.filter(w => !STOP_WORDS.has(w) && !/^\d+$/.test(w));
 
-  // Split into all words and meaningful-only words (skip stop words)
-  const nameWords = nameLower.split(/[\s,&+\-–—/]+/).filter(w => w.length >= 2);
-  const meaningful = nameWords.filter(w => !STOP_WORDS.has(w) && !/^\d+$/.test(w));
-
-  // First meaningful word matches query (e.g. "Organic Milk" → "milk" is first meaningful)
-  if (meaningful.length && (meaningful[0].startsWith(queryLower) || queryLower.startsWith(meaningful[0]))) {
-    // Fewer extra words = more relevant (plain product vs heavily modified variant)
-    const extras = meaningful.filter(w => !w.startsWith(queryLower) && !queryLower.startsWith(w)).length;
-    return 85 - Math.min(extras * 5, 25);
-  }
-
-  // Query matches one of the first 3 meaningful words
-  for (let i = 1; i < Math.min(3, meaningful.length); i++) {
-    if (meaningful[i].startsWith(queryLower) || queryLower.startsWith(meaningful[i])) {
+    // First meaningful word matches query (e.g. "Organic Milk" → "milk" is first meaningful)
+    if (meaningful.length && (meaningful[0].startsWith(queryLower) || queryLower.startsWith(meaningful[0]))) {
       const extras = meaningful.filter(w => !w.startsWith(queryLower) && !queryLower.startsWith(w)).length;
-      return 60 - (i * 10) - Math.min(extras * 5, 20);
+      base = 85 - Math.min(extras * 5, 25);
+    // Query matches one of the first 3 meaningful words
+    } else {
+      base = 10; // default: passed filters but query isn't a leading word
+      for (let i = 1; i < Math.min(3, meaningful.length); i++) {
+        if (meaningful[i].startsWith(queryLower) || queryLower.startsWith(meaningful[i])) {
+          const extras = meaningful.filter(w => !w.startsWith(queryLower) && !queryLower.startsWith(w)).length;
+          base = 60 - (i * 10) - Math.min(extras * 5, 20);
+          break;
+        }
+      }
     }
   }
 
-  return 10; // Passed relevance filters but query isn't a leading word — low rank
+  // Non-food sources (beauty, pet food) get a heavy penalty so food results
+  // always rank above them. The penalty is large enough (-50) that even a
+  // perfect beauty match (100 - 50 = 50) ranks below a decent food match (60+).
+  // This keeps them in results for legitimate non-food searches (e.g. "shampoo")
+  // while preventing "Cucumber Mint Lip Balm" from outranking actual cucumbers.
+  if (source && NON_FOOD_SOURCES.has(source)) {
+    base -= 50;
+  }
+
+  return Math.max(base, 1); // floor at 1 — never go negative
 }
 
 // ── IMAGE URL VALIDATION ─────────────────────────────────────────────────────
@@ -1836,14 +1861,23 @@ function isValidImageUrl(url) {
  * spoonacularImageUrl(raw) — Normalizes a Spoonacular image field into a full URL.
  * Spoonacular returns either a full URL or just a filename (e.g. "apple.jpg") that
  * needs the CDN base URL prepended. Returns null if no image is available.
+ *
+ * IMPORTANT: The Spoonacular CDN (img.spoonacular.com) only serves .jpg files.
+ * Their API sometimes returns .png filenames, but .png URLs 404 on the CDN.
+ * We convert any .png extension to .jpg before building the URL.
  */
 function spoonacularImageUrl(raw) {
   if (!raw) return null;
   // Already a full URL — use as-is
   if (raw.startsWith("http")) return raw;
+  // Spoonacular CDN only serves .jpg — their API sometimes returns .png filenames
+  // that 404 on the CDN. Convert .png → .jpg to avoid broken images in the browser.
+  let filename = raw;
+  if (filename.toLowerCase().endsWith(".png")) {
+    filename = filename.slice(0, -4) + ".jpg";
+  }
   // Bare filename — prepend Spoonacular's ingredient image CDN
-  // Use img.spoonacular.com (spoonacular.com/cdn redirects but .png 404s)
-  return `https://img.spoonacular.com/ingredients_250x250/${raw}`;
+  return `https://img.spoonacular.com/ingredients_250x250/${filename}`;
 }
 
 /**
@@ -2297,7 +2331,7 @@ export default async function handler(req, res) {
 
   if (allResults.length >= ENOUGH) {
     // Sort by relevance so the best matches appear first in the dropdown
-    allResults.sort((a, b) => scoreResult(b.name, query) - scoreResult(a.name, query));
+    allResults.sort((a, b) => scoreResult(b.name, query, b.source) - scoreResult(a.name, query, a.source));
     return res.status(200).json({ results: allResults.slice(0, 5) });
   }
 
@@ -2316,16 +2350,12 @@ export default async function handler(req, res) {
   console.log(`[TextSearch] Tier 2 done in ${Date.now() - t2Start}ms — ${allResults.length} total result(s)`);
 
   if (allResults.length >= ENOUGH) {
-    allResults.sort((a, b) => scoreResult(b.name, query) - scoreResult(a.name, query));
+    allResults.sort((a, b) => scoreResult(b.name, query, b.source) - scoreResult(a.name, query, a.source));
     return res.status(200).json({ results: allResults.slice(0, 5) });
   }
 
   // ── Tier 3: UPC Item DB (last-resort fallback) ─────────────────────────
   // Only reached for very obscure queries that major databases don't cover.
-  // Open Beauty Facts and Open Pet Food Facts are intentionally excluded from
-  // text search — they pollute food results with cosmetics/pet products
-  // (e.g. "Cucumber Mint Lip Balm" for a "cucumber" search). Those databases
-  // are still used for barcode lookups where the UPC identifies the exact product.
   console.log(`[TextSearch] Starting Tier 3 (UPC Item DB only)`);
   const t3Start = Date.now();
   const tier3 = await Promise.allSettled([
@@ -2336,8 +2366,27 @@ export default async function handler(req, res) {
   });
   console.log(`[TextSearch] Tier 3 done in ${Date.now() - t3Start}ms — ${allResults.length} total result(s)`);
 
-  // Sort by relevance score so the best matches appear first, then take top 5
-  allResults.sort((a, b) => scoreResult(b.name, query) - scoreResult(a.name, query));
+  // ── Tier 4: Open Beauty Facts + Open Pet Food Facts (deprioritized) ────
+  // These databases cover non-food grocery items like shampoo, lotion, pet food,
+  // and treats. We always include them so users can find legitimate non-food items,
+  // but scoreResult() applies a -50 penalty to their results so food always ranks
+  // higher. This prevents "Cucumber Mint Lip Balm" from outranking "Cucumber"
+  // while still allowing "Dog Food" to appear when that's what the user wants.
+  console.log(`[TextSearch] Starting Tier 4 (Open Beauty Facts + Open Pet Food Facts — deprioritized)`);
+  const t4Start = Date.now();
+  const tier4 = await Promise.allSettled([
+    withTimeout(searchOpenBeautyFacts(query), TIER2_TIMEOUT_MS),
+    withTimeout(searchOpenPetFoodFacts(query), TIER2_TIMEOUT_MS),
+  ]);
+  tier4.forEach(r => {
+    if (r.status === "fulfilled") addResults(r.value);
+  });
+  console.log(`[TextSearch] Tier 4 done in ${Date.now() - t4Start}ms — ${allResults.length} total result(s)`);
+
+  // Sort by relevance score so the best matches appear first, then take top 5.
+  // Non-food sources get a -50 penalty in scoreResult(), so food results will
+  // always appear above beauty/pet results when both are present.
+  allResults.sort((a, b) => scoreResult(b.name, query, b.source) - scoreResult(a.name, query, a.source));
   const final = allResults.slice(0, 5);
   const totalMs = Date.now() - t1Start;
   console.log(`[TextSearch] ── Complete: ${final.length} result(s) in ${totalMs}ms`);
