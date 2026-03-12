@@ -1002,8 +1002,8 @@ export function closeEnrichSheet() {
 
 // ── PRODUCT DETAIL BOTTOM SHEET ──────────────────────────────────────────────
 // Shows full product info when a user taps a shopping list item's name/content area.
-// Displays whatever data is stored on the item: name, brand, image, category,
-// quantity, note, and source badge.
+// Displays whatever data is stored on the item: name, brand, image,
+// quantity, and note.
 
 /**
  * openItemDetail(id) — Opens the product detail bottom sheet for a shopping item.
@@ -1061,15 +1061,8 @@ export function openItemDetail(id) {
   <input type="file" id="productPhotoInput" accept="image/*" style="display:none"
     onchange="handleProductPhotoSelected('${item.id}')" />`;
 
-  // Info badges row: category, source, quantity
-  const badges = [];
-  if (item.category && item.category !== "General") badges.push(item.category);
-  if (item.source) badges.push(`via ${item.source}`);
-  if (item.src) badges.push(item.src === "manual" ? "Added manually" : item.src === "meal-plan" ? "From meal plan" : item.src === "deal" ? "From deals" : item.src === "search" ? "Product search" : item.src);
-
-  if (badges.length) {
-    html += `<div style="margin-bottom:10px">${badges.map(b => `<span class="item-detail-badge">${b}</span>`).join("")}</div>`;
-  }
+  // Category/source tags removed — hyphenated category names (e.g. "plant-based-foods-and-beverages")
+  // and source labels ("via reminders") added no user value and looked ugly/technical.
 
   // Quantity section
   const qty = item.qty || 1;
