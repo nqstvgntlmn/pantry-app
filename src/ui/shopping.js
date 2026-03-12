@@ -198,7 +198,7 @@ export function sH(item) {
         ${thumb}                               <!-- Product thumbnail from barcode scan (if available) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
           <div class="shnm">${item.name}${qtyBadge}</div>
-          ${item.brand ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand subtitle from barcode scan -->
+          ${item.brand && item.src === "scan" ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand subtitle only for barcode scans — text search brands are generic/irrelevant -->
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
         </div>
         ${item.price ? `<div class="price-tag">~$${item.price}</div>` : ""}  <!-- Estimated price if available -->
@@ -276,9 +276,13 @@ export function renderShop() {
 }
 
 /**
- * qadd() — Quick-add: reads the text input (#shi), creates a new shopping item,
- * and triggers product enrichment search. Uses timestamp as a unique ID.
- * Source is tagged "manual" to distinguish from AI-generated or meal-plan items.
+ * qadd() — Quick-add: reads the text input (#shi), creates a new shopping item.
+ *
+ * Add button behavior depends on the dropdown state:
+ *   - Exactly 1 result showing → auto-grabs that result (enriched with image/brand/category)
+ *   - Multiple results or no results → adds as plain text (user must tap a row to get enriched)
+ * This makes the Add button a reliable plain-text escape hatch when multiple options exist,
+ * while still being smart when there's an obvious single match.
  *
  * Supports optional inline quantity with these patterns:
  *   "5 apples"    → qty 5, name "apples"
@@ -288,12 +292,20 @@ export function renderShop() {
  *
  * Also captures the optional note from the collapsible note field (#addNoteInp).
  * The note is cleared and the field collapsed after adding.
- * After adding, searches product databases for matching products so the user
- * can enrich the item with an image, brand, and category.
  */
 export function qadd() {
   const i = g("shi"), v = i.value.trim(); // "shi" = shopping input text field
   if (!v) return; // Do nothing if input is empty
+
+  // If exactly 1 result in the dropdown, auto-pick it (enriched data with image/brand)
+  // This gives the user the best match automatically without needing to tap the row.
+  if (_inlineSearchResults && _inlineSearchResults.length === 1) {
+    pickInlineResult(0);
+    return;
+  }
+
+  // Multiple results or no results: add as plain text.
+  // User must tap a specific dropdown row to get enriched data when there are choices.
 
   // Try to parse a quantity from common patterns
   let name = v, qty = 1;
@@ -317,8 +329,7 @@ export function qadd() {
   const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
   if (note) item.note = note; // Only include note field if the user typed something
 
-  // Save the item as plain text — user explicitly pressed Enter or tapped Add
-  // (enrichment via the inline dropdown already happened if they picked a result)
+  // Save the item as plain text — no enriched data since user didn't pick a specific result
   svShopItem(item);
   i.value = ""; // Clear the input after adding
 
@@ -687,19 +698,21 @@ async function _runInlineSearch(query) {
       console.log(`[ShopDropdown] #${i} "${p.name}" → image: ${p.image || "(none)"} | score: ${p._score}`);
     });
 
-    // Render result rows inside the dropdown
+    // Render result rows inside the dropdown.
+    // Brand is intentionally hidden in text search results — it's often a generic/irrelevant
+    // brand name (e.g. "Boulart" for a "Bread" search). Brand only shows for barcode scans
+    // where the user specifically scanned that exact product.
     dropdown.innerHTML = results.map((p, i) => {
       const img = p.image
         ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'; console.warn('[ShopDropdown] Image failed to load:', '${(p.image || "").replace(/'/g, "\\'")}')"`
         : `<div class="enrich-img-ph">🛒</div>`;
-      const brand = p.brand ? `<div class="enrich-brand">${p.brand}</div>` : "";
       const cat = p.category && p.category !== "General"
         ? `<div class="enrich-cat">${p.category}</div>` : "";
       return `<div class="enrich-row" onclick="pickInlineResult(${i})">
         ${img}
         <div style="flex:1;min-width:0">
           <div class="enrich-name">${p.name}</div>
-          ${brand}${cat}
+          ${cat}
         </div>
       </div>`;
     }).join("");
@@ -807,19 +820,19 @@ export async function searchAndEnrich(itemId, query, list) {
     // Update the title and render the results
     if (titleEl) titleEl.textContent = "Choose a match";
 
-    // Build the results HTML with product thumbnails, names, brands, and categories
+    // Build the results HTML with product thumbnails, names, and categories.
+    // Brand hidden in text search context — only relevant for barcode scans.
     let html = results.map((p, i) => {
       const img = p.image
         ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'"/>`
         : `<div class="enrich-img-ph">🛒</div>`;
-      const brand = p.brand ? `<div class="enrich-brand">${p.brand}</div>` : "";
       const cat = p.category && p.category !== "General"
         ? `<div class="enrich-cat">${p.category}</div>` : "";
       return `<div class="enrich-row" onclick="pickEnrichResult(${i})">
         ${img}
         <div style="flex:1;min-width:0">
           <div class="enrich-name">${p.name}</div>
-          ${brand}${cat}
+          ${cat}
         </div>
       </div>`;
     }).join("");
@@ -882,12 +895,14 @@ export function openItemDetail(id) {
     ? `<img src="${item.image}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>`
     : `<div class="item-detail-img-ph">🛒</div>`;
 
-  // Build the header section (image + name + brand)
+  // Build the header section (image + name + brand).
+  // Brand only shows for barcode-scanned items — text search brands are generic/irrelevant.
+  const showBrand = item.brand && item.src === "scan";
   let html = `<div class="item-detail-header">
     ${img}
     <div style="flex:1;min-width:0">
       <div class="item-detail-name">${item.name}</div>
-      ${item.brand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
+      ${showBrand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
       ${item.checked ? `<div style="margin-top:4px"><span class="item-detail-badge" style="background:var(--gnd);color:var(--gn)">✓ Purchased</span></div>` : ""}
     </div>
   </div>`;
