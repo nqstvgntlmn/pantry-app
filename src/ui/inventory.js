@@ -519,6 +519,21 @@ export function onInvInput() {
 }
 
 /**
+ * _classifyInvImageSource(url) — Identifies the origin of an image URL for debug logging.
+ * Helps verify that real product photos beat generic illustrations in search results.
+ */
+function _classifyInvImageSource(url) {
+  if (!url) return "NONE";
+  const lower = url.toLowerCase();
+  if (lower.includes("kroger.com")) return "Kroger (real product)";
+  if (lower.includes("img.spoonacular.com/products")) return "Spoonacular product (real photo)";
+  if (lower.includes("img.spoonacular.com/ingredients")) return "Spoonacular ingredient (illustration)";
+  if (lower.includes("openfoodfacts.org")) return "Open Food Facts (real photo)";
+  if (lower.includes("edamam")) return "Edamam";
+  return "Other: " + new URL(url).hostname;
+}
+
+/**
  * _runInvSearch(query) — Fetches and renders product search results in the
  * inventory add sheet dropdown. Uses relevance scoring and in-memory caching.
  */
@@ -576,6 +591,12 @@ async function _runInvSearch(query) {
     }
 
     _invInlineResults = results;
+
+    // Log each result's image source for debugging image priority in DevTools
+    results.forEach((p, i) => {
+      const imgSrc = _classifyInvImageSource(p.image);
+      console.log(`[InvDropdown] #${i} "${p.name}" → image: ${imgSrc} | url: ${p.image || "(none)"} | score: ${p._score}`);
+    });
 
     // Render result rows
     dropdown.innerHTML = results.map((p, i) => {

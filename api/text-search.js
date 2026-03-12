@@ -1892,17 +1892,27 @@ function isValidImageUrl(url) {
  * Their API sometimes returns .png filenames, but .png URLs 404 on the CDN.
  * We convert any .png extension to .jpg before building the URL.
  */
+/**
+ * spoonacularImageUrl(raw) — Normalizes a Spoonacular image reference to a full URL.
+ * Full URLs are returned as-is. Bare filenames (rare — usually from the ingredients
+ * API, not the products API) are resolved to the ingredients CDN as a last resort.
+ * The products API almost always returns full URLs like
+ * https://img.spoonacular.com/products/12345-312x231.jpg — those pass through unchanged.
+ */
 function spoonacularImageUrl(raw) {
   if (!raw) return null;
-  // Already a full URL — use as-is
+  // Already a full URL — use as-is (most common path for products API)
   if (raw.startsWith("http")) return raw;
-  // Spoonacular CDN only serves .jpg — their API sometimes returns .png filenames
-  // that 404 on the CDN. Convert .png → .jpg to avoid broken images in the browser.
+  // If the raw value is just an image type like "jpg" (no actual filename),
+  // it's unusable — return null instead of constructing a broken URL
+  if (raw.length <= 4 && /^\w+$/.test(raw)) return null;
+  // Spoonacular CDN only serves .jpg — convert .png → .jpg to avoid 404s
   let filename = raw;
   if (filename.toLowerCase().endsWith(".png")) {
     filename = filename.slice(0, -4) + ".jpg";
   }
-  // Bare filename — prepend Spoonacular's ingredient image CDN
+  // Bare filename — resolve to ingredients CDN (will be caught by isIngredientIllustration
+  // and downgraded to fallback status in addResults)
   return `https://img.spoonacular.com/ingredients_250x250/${filename}`;
 }
 
@@ -2314,8 +2324,23 @@ export default async function handler(req, res) {
         r.image = null;
       }
       const key = r.name.toLowerCase().trim();
-      if (seen.has(key)) continue;
+      if (seen.has(key)) {
+        // Duplicate name — but upgrade the existing result's image if the new one
+        // has a real product photo and the existing one only has an illustration fallback.
+        // This prevents Spoonacular's illustration from blocking a Kroger/OFF real photo.
+        if (r.image && !isIngredientIllustration(r.image)) {
+          const existing = allResults.find(x => x.name.toLowerCase().trim() === key);
+          if (existing && !existing.image) {
+            console.log(`[TextSearch] Upgraded image for "${existing.name}" from ${r.source}: ${r.image}`);
+            existing.image = r.image;
+            existing._imageSource = r.source;  // Track which source provided the winning image
+          }
+        }
+        continue;
+      }
       seen.add(key);
+      // Track the image source for debugging — helps verify priority order in DevTools
+      if (r.image) r._imageSource = r.source;
       allResults.push(r);
       added++;
     }
@@ -2338,15 +2363,20 @@ export default async function handler(req, res) {
         if (r._fallbackImg) {
           // Use the result's own ingredient illustration as first fallback
           r.image = r._fallbackImg;
+          r._imageSource = "illustration-fallback";
           console.log(`[TextSearch] Applied illustration fallback to "${r.name}" → ${r._fallbackImg}`);
         } else if (lookupImg) {
           // Last resort: use the prebuilt lookup table illustration
           r.image = lookupImg;
+          r._imageSource = "lookup-table";
           console.log(`[TextSearch] Applied lookup fallback to "${r.name}" → ${lookupImg}`);
         }
       }
-      // Clean up internal field before sending to client
+      // Log the winning image source for every result — verify priority order in Vercel logs
+      console.log(`[TextSearch] IMAGE WINNER: "${r.name}" → source: ${r._imageSource || "none"}, url: ${r.image || "(no image)"}`);
+      // Clean up internal fields before sending to client
       delete r._fallbackImg;
+      delete r._imageSource;
     }
   }
 

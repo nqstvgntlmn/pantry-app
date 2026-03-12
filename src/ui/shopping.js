@@ -691,6 +691,22 @@ async function _fetchAndScoreResults(query) {
 }
 
 /**
+ * _classifyImageSource(url) — Identifies the origin of an image URL for debug logging.
+ * Helps verify that real product photos (Kroger, Spoonacular /products/, OFF) are
+ * winning over generic ingredient illustrations (Spoonacular /ingredients_*).
+ */
+function _classifyImageSource(url) {
+  if (!url) return "NONE";
+  const lower = url.toLowerCase();
+  if (lower.includes("kroger.com")) return "Kroger (real product)";
+  if (lower.includes("img.spoonacular.com/products")) return "Spoonacular product (real photo)";
+  if (lower.includes("img.spoonacular.com/ingredients")) return "Spoonacular ingredient (illustration)";
+  if (lower.includes("openfoodfacts.org")) return "Open Food Facts (real photo)";
+  if (lower.includes("edamam")) return "Edamam";
+  return "Other: " + new URL(url).hostname;
+}
+
+/**
  * _runInlineSearch(query) — Fires the product search API (with caching) and
  * renders results in the inline dropdown below the input. Results are scored
  * by how prominently the query term appears in the product name, so
@@ -721,10 +737,11 @@ async function _runInlineSearch(query) {
 
     _inlineSearchResults = results;
 
-    // DEBUG: log each result's image URL so we can verify in DevTools
-    // whether images are present in the API response and reaching the render step
+    // Log each result's image URL and detected source so we can verify
+    // image priority order in DevTools (real product photos should beat illustrations)
     results.forEach((p, i) => {
-      console.log(`[ShopDropdown] #${i} "${p.name}" → image: ${p.image || "(none)"} | score: ${p._score}`);
+      const imgSrc = _classifyImageSource(p.image);
+      console.log(`[ShopDropdown] #${i} "${p.name}" → image: ${imgSrc} | url: ${p.image || "(none)"} | score: ${p._score}`);
     });
 
     // Render result rows inside the dropdown.

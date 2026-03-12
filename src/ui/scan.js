@@ -429,8 +429,7 @@ function showRes(prod) {
   if (prod.notFound) {
     // Product not in any database — show a manual name input so the user can still add it
     html = `<div class="nfb">⚠️ Barcode <code>${prod.barcode}</code> not found in any database. Enter name:<input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:10px"/></div>`;
-    // Disable the add button until the user types a name (valAdd() re-enables it)
-    setTimeout(() => g("addbtn").disabled = true, 0);
+    // Disabled state is applied after buttons are rendered below
   } else {
     // Product found — build a product card with image (or placeholder icon), name, brand, etc.
     const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
@@ -450,11 +449,51 @@ function showRes(prod) {
     // Assemble the full product card HTML with image, name, brand, category, source link, description, and nutrition
     html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand ? `<div class="pbr">${prod.brand}</div>` : ""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}</div></div>${desc}${nut}</div>`;
 
-    // Enable the add button immediately since we have a valid product name
-    setTimeout(() => g("addbtn").disabled = false, 0);
   }
 
   g("resbody").innerHTML = html;           // Inject the built HTML into the result overlay body
+
+  // Hide inventory-specific fields (location, expiry, unit) when scanning from the Shopping tab —
+  // shopping list items don't have a storage location or expiry date.
+  // These fields are direct children of .ovbody in the ov-result overlay.
+  const ovBody = g("ov-result")?.querySelector(".ovbody");
+  if (ovBody) {
+    const locationRow = ovBody.querySelector(".frow");          // First .frow = location picker
+    const expiryRow = ovBody.querySelectorAll(".frow")[1];      // Second .frow = expiry date
+    const unitRow = ovBody.querySelectorAll(".qrow")[1];        // Second .qrow = unit input
+    if (locationRow) locationRow.style.display = state.scanDestList ? "none" : "";
+    if (expiryRow) expiryRow.style.display = state.scanDestList ? "none" : "";
+    if (unitRow) unitRow.style.display = state.scanDestList ? "none" : "";
+  }
+
+  // Dynamically render the action buttons based on which tab triggered the scan.
+  // Shopping tab context (scanDestList=true): only show "Add to Shopping List" as primary —
+  // the user is clearly in shopping mode, so "Add to Pantry" is irrelevant and confusing.
+  // Pantry tab context (scanDestList=false): keep both options (Add to Pantry primary,
+  // Add to Shopping List secondary) since users might want either from inventory context.
+  const destEl = g("scan-dest-btns");
+  if (destEl) {
+    if (state.scanDestList) {
+      // Shopping tab context — single primary action: add to shopping list
+      destEl.innerHTML = `<div class="brow">
+        <button class="btn bs" style="flex:1" onclick="resumeScanner()">← Back</button>
+        <button class="btn bp" style="flex:2;background:var(--gn);border-color:var(--gn)" id="addbtn" onclick="addScannedToList()">🛒 Add to Shopping List</button>
+      </div>`;
+    } else {
+      // Pantry tab context — primary: add to pantry, secondary: add to shopping list
+      destEl.innerHTML = `<div class="brow">
+        <button class="btn bs" style="flex:1" onclick="resumeScanner()">← Back</button>
+        <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">📦 Add to Pantry</button>
+      </div>
+      <button class="btn bs bf" style="margin-top:8px;border-color:var(--gn);color:var(--gn)" onclick="addScannedToList()">🛒 Add to Shopping List instead</button>`;
+    }
+  }
+
+  // Re-apply disabled state for not-found products after re-rendering buttons
+  if (prod.notFound) {
+    setTimeout(() => { const btn = g("addbtn"); if (btn) btn.disabled = true; }, 0);
+  }
+
   showOv("result");                        // Show the result overlay
 }
 
