@@ -986,6 +986,8 @@ function _classifyInvImageSource(url) {
 /**
  * _runInvSearch(query) — Fetches and renders product search results in the
  * inventory add sheet dropdown. Uses relevance scoring and in-memory caching.
+ * Passes the household ID so the API checks customProducts first — user-uploaded
+ * photos take priority over all external sources (Kroger, Spoonacular, OFF, etc.).
  */
 async function _runInvSearch(query) {
   const dropdown = g("invSearchDropdown");
@@ -1003,8 +1005,11 @@ async function _runInvSearch(query) {
     if (cached && Date.now() - cached.ts < _INV_CACHE_TTL) {
       results = cached.scored;
     } else {
-      // Fetch from API
-      const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}`);
+      // Fetch from API — include household ID so the API can check the
+      // customProducts collection first. Without hid, custom product images
+      // are skipped and the search goes straight to external databases.
+      const hidParam = state.hid ? `&hid=${encodeURIComponent(state.hid)}` : "";
+      const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
       const data = await r.json();
       let raw = data.results || [];
 

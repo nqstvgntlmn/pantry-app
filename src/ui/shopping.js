@@ -909,16 +909,21 @@ export function enrichRemindersItems() {
 
       // Score >= 80 ensures a close name match (exact, starts-with, or first-word match).
       // This filters out loosely related products that the >= 20 threshold would allow.
-      if (results.length && results[0]._score >= 80 && results[0].image) {
+      // The score check is separate from the image check — a high-scoring result
+      // enriches the item with whatever data is available (image, brand, category).
+      // Previously the image was required alongside score >= 80, which caused items
+      // like "Manwich" to be skipped despite scoring 95 (USDA results lack images).
+      if (results.length && results[0]._score >= 80) {
         const best = results[0];
         const updated = { ...liveItem };
-        updated.image = best.image;
+        // Apply image if available — not all sources provide images (e.g. USDA)
+        if (best.image) updated.image = best.image;
         // Also apply brand/category if available and item doesn't already have them
         if (best.brand && !liveItem.brand) updated.brand = best.brand;
         if (best.category && best.category !== "General" && !liveItem.category) updated.category = best.category;
         updated.src = "reminders"; // Preserve the source tag
         svShopItem(updated);
-        console.log(`[RemindersEnrich] Auto-enriched "${item.name}" (score=${best._score}) with image from ${best.source || "search"}`);
+        console.log(`[RemindersEnrich] Auto-enriched "${item.name}" (score=${best._score}) with ${best.image ? "image from " + (best.source || "search") : "metadata only (no image)"}`);
       } else if (results.length) {
         console.log(`[RemindersEnrich] Skipped "${item.name}" — top result "${results[0].name}" scored ${results[0]._score} (need >= 80)`);
       }
