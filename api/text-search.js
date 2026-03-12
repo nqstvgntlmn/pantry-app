@@ -57,6 +57,19 @@ function isRelevant(name, query) {
 // normalized product objects. Returns [] on failure (never throws).
 
 /**
+ * spoonacularImageUrl(raw) — Normalizes a Spoonacular image field into a full URL.
+ * Spoonacular returns either a full URL or just a filename (e.g. "apple.jpg") that
+ * needs the CDN base URL prepended. Returns null if no image is available.
+ */
+function spoonacularImageUrl(raw) {
+  if (!raw) return null;
+  // Already a full URL — use as-is
+  if (raw.startsWith("http")) return raw;
+  // Bare filename — prepend Spoonacular's ingredient image CDN
+  return `https://spoonacular.com/cdn/ingredients_250x250/${raw}`;
+}
+
+/**
  * searchSpoonacular(query) — Searches the Spoonacular Grocery Products API.
  * Excellent for fresh produce, common ingredients, and branded grocery items.
  * Requires SPOONACULAR_API_KEY env var.
@@ -75,7 +88,8 @@ async function searchSpoonacular(query) {
       name: p.title || "",
       brand: "",
       category: "Grocery",
-      image: p.image || null,
+      // Spoonacular may return a bare filename — normalize to full CDN URL
+      image: spoonacularImageUrl(p.image),
       source: "Spoonacular",
       description: "",
       nutrition: null,
@@ -120,12 +134,14 @@ async function searchKroger(query) {
     const d = await r.json();
 
     return (d.data || []).slice(0, 5).map(p => {
-      // Kroger images are in p.images array — pick the first front-facing image
+      // Kroger images are in p.images array — pick the front-facing perspective,
+      // preferring "large" or "medium" size for good quality without being huge
       const images = p.images || [];
       const frontImg = images.find(img => img.perspective === "front");
-      const imgUrl = frontImg?.sizes?.find(s => s.size === "medium")?.url
-        || frontImg?.sizes?.[0]?.url
-        || images[0]?.sizes?.[0]?.url
+      const anyImg = frontImg || images[0]; // fall back to any available perspective
+      const imgUrl = anyImg?.sizes?.find(s => s.size === "large")?.url
+        || anyImg?.sizes?.find(s => s.size === "medium")?.url
+        || anyImg?.sizes?.[0]?.url
         || null;
 
       return {
@@ -147,6 +163,8 @@ async function searchKroger(query) {
  * searchUSDA(query) — Searches USDA FoodData Central.
  * Authoritative source for fresh produce, whole foods, and generic ingredients.
  * Requires USDA_API_KEY env var. Free tier allows 1000 requests/hour.
+ * USDA has no product images, so we backfill each result's image via Google
+ * Custom Search (if configured). Image fetches run in parallel for speed.
  */
 async function searchUSDA(query) {
   const key = process.env.USDA_API_KEY;
@@ -158,7 +176,7 @@ async function searchUSDA(query) {
     if (!r.ok) return [];
     const d = await r.json();
 
-    return (d.foods || []).slice(0, 5).map(f => {
+    const results = (d.foods || []).slice(0, 5).map(f => {
       // Extract key nutrients from the nutrients array
       const nutrients = f.foodNutrients || [];
       const findNutr = (name) => nutrients.find(n => (n.nutrientName || "").toLowerCase().includes(name.toLowerCase()));
@@ -171,7 +189,7 @@ async function searchUSDA(query) {
         name: f.description || "",
         brand: f.brandName || f.brandOwner || "",
         category: f.foodCategory || "General",
-        image: null, // USDA doesn't provide images
+        image: null, // USDA doesn't provide images — backfilled below via Google
         source: "USDA",
         description: f.additionalDescriptions || "",
         nutrition: {
@@ -182,6 +200,16 @@ async function searchUSDA(query) {
         },
       };
     }).filter(p => p.name);
+
+    // Backfill images from Google Custom Search in parallel.
+    // Each USDA result gets a Google image lookup for its product name.
+    // If Google isn't configured or a lookup fails, the result stays imageless.
+    await Promise.all(results.map(async (item) => {
+      const img = await fetchGoogleImage(item.name);
+      if (img) item.image = img;
+    }));
+
+    return results;
   } catch {
     return [];
   }
@@ -189,7 +217,8 @@ async function searchUSDA(query) {
 
 /**
  * searchGoogle(query) — Searches Google Custom Search for product info/images.
- * Catch-all for items not covered by food-specific databases.
+ * Uses regular web search (not image search) to get product pages with embedded
+ * images via pagemap.cse_image. Falls back to cse_thumbnail if no full image.
  * Requires GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_ENGINE_ID env vars.
  */
 async function searchGoogle(query) {
@@ -198,22 +227,60 @@ async function searchGoogle(query) {
   if (!key || !cx) return []; // Not configured — skip
 
   try {
-    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query + " grocery product")}&key=${key}&cx=${cx}&num=5&searchType=image`;
+    // Regular web search (no searchType=image) — results include pagemap with product images
+    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query + " grocery product")}&key=${key}&cx=${cx}&num=5`;
     const r = await fetch(url);
     if (!r.ok) return [];
     const d = await r.json();
 
-    return (d.items || []).slice(0, 5).map(item => ({
-      name: (item.title || "").replace(/ - .*$/, "").replace(/\|.*$/, "").trim(),
-      brand: "",
-      category: "General",
-      image: item.link || null,
-      source: "Google",
-      description: "",
-      nutrition: null,
-    })).filter(p => p.name);
+    return (d.items || []).slice(0, 5).map(item => {
+      // Extract image from pagemap: prefer cse_image (full size), fall back to cse_thumbnail
+      const pagemap = item.pagemap || {};
+      const imgUrl = pagemap.cse_image?.[0]?.src
+        || pagemap.cse_thumbnail?.[0]?.src
+        || null;
+
+      return {
+        name: (item.title || "").replace(/ - .*$/, "").replace(/\|.*$/, "").trim(),
+        brand: "",
+        category: "General",
+        image: imgUrl,
+        source: "Google",
+        description: (item.snippet || "").slice(0, 120),
+        nutrition: null,
+      };
+    }).filter(p => p.name);
   } catch {
     return [];
+  }
+}
+
+/**
+ * fetchGoogleImage(productName) — Fetches a single product image from Google Custom Search.
+ * Used to backfill images for sources that don't provide them (e.g. USDA).
+ * Returns the image URL string, or null if not found.
+ */
+async function fetchGoogleImage(productName) {
+  const key = process.env.GOOGLE_SEARCH_API_KEY;
+  const cx = process.env.GOOGLE_SEARCH_ENGINE_ID;
+  if (!key || !cx) return null;
+
+  try {
+    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(productName + " food product")}&key=${key}&cx=${cx}&num=1`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+
+    const item = (d.items || [])[0];
+    if (!item) return null;
+
+    // Extract image from pagemap — same logic as searchGoogle
+    const pagemap = item.pagemap || {};
+    return pagemap.cse_image?.[0]?.src
+      || pagemap.cse_thumbnail?.[0]?.src
+      || null;
+  } catch {
+    return null;
   }
 }
 
