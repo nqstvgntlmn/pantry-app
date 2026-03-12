@@ -701,9 +701,12 @@ export async function enrichExistingItems() {
  * _needsEnrich(item) — Returns true if an item is missing enrichment data.
  * An item needs enrichment if it has no image URL AND no brand field.
  * Also requires a non-empty name to search for.
+ * Items with imageDismissed=true are skipped — the user explicitly deleted
+ * the image and enrichment must not override that decision.
  */
 function _needsEnrich(item) {
   if (!item.name || item.name.length < 2) return false;
+  if (item.imageDismissed) return false;
   return !item.image && !item.brand;
 }
 

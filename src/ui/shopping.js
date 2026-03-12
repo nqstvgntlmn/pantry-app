@@ -868,9 +868,11 @@ const _enrichedIds = new Set();
  * Enrichment is fire-and-forget — failures are silently ignored.
  */
 export function enrichRemindersItems() {
-  // Find Reminders items that haven't been enriched and aren't being processed
+  // Find Reminders items that haven't been enriched and aren't being processed.
+  // Skip items where the user explicitly dismissed the image (imageDismissed flag) —
+  // re-enriching those would undo the user's deliberate deletion.
   const unenriched = state.shop.filter(i =>
-    i.src === "reminders" && !i.image && !_enrichedIds.has(i.id)
+    i.src === "reminders" && !i.image && !i.imageDismissed && !_enrichedIds.has(i.id)
   );
   if (!unenriched.length) return;
 
@@ -1113,8 +1115,11 @@ export async function deleteItemImage(id) {
   const item = state.shop.find(i => i.id === id);
   if (!item) return;
 
-  // Clear the image field and persist to Firestore
-  const updated = { ...item, image: null };
+  // Clear the image and set imageDismissed flag so enrichment pipelines
+  // (Reminders auto-enrich, retroactive enrich, etc.) won't re-apply the same image.
+  // The flag persists in Firestore and is only cleared when the user explicitly
+  // uploads a new photo or picks a new product match.
+  const updated = { ...item, image: null, imageDismissed: true };
   await svShopItem(updated);
 
   // Re-open the detail sheet to reflect the removed image (shows placeholder)
@@ -1171,8 +1176,10 @@ export async function handleProductPhotoSelected(id) {
     // Compress and upload — returns the Firebase Storage download URL
     const downloadUrl = await uploadProductImage(file, item.name);
 
-    // Save the new image URL back to the shopping item in Firestore
-    const updated = { ...item, image: downloadUrl };
+    // Save the new image URL back to the shopping item in Firestore.
+    // Clear imageDismissed — the user is explicitly choosing a new photo,
+    // so future enrichment should be allowed again if they later delete this one too.
+    const updated = { ...item, image: downloadUrl, imageDismissed: false };
     await svShopItem(updated);
 
     showNotif("Photo saved ✓");
@@ -1200,7 +1207,9 @@ export function pickEnrichResult(index) {
   if (!product) return;
 
   if (ctx.list === "shop") {
-    // Update the shopping list item with enriched product data
+    // Update the shopping list item with enriched product data.
+    // Clear imageDismissed — user is explicitly choosing a new product match,
+    // so the image should stick and not be blocked by a prior dismissal.
     const item = state.shop.find(i => i.id === ctx.itemId);
     if (item) {
       svShopItem({
@@ -1210,10 +1219,12 @@ export function pickEnrichResult(index) {
         image: product.image || null,
         category: product.category || "",
         source: product.source || "search",
+        imageDismissed: false,
       });
     }
   } else if (ctx.list === "inv") {
-    // Update the inventory item with enriched product data
+    // Update the inventory item with enriched product data.
+    // Clear imageDismissed — same reasoning as shopping list above.
     const item = state.inv.find(i => i.id === ctx.itemId);
     if (item) {
       svi({
@@ -1223,6 +1234,7 @@ export function pickEnrichResult(index) {
         image: product.image || null,
         category: product.category || item.category,
         source: product.source || "search",
+        imageDismissed: false,
       });
     }
   }
