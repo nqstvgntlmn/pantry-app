@@ -1571,14 +1571,64 @@ function lookupImage(query) {
   return null;
 }
 
+// ── RECIPE/DISH NAME DETECTION ───────────────────────────────────────────────
+// Detects product names that describe prepared dishes or recipes rather than
+// raw ingredients. A user searching "cucumber" wants to buy a cucumber, not
+// "Cucumber salad made with cucumber and vinegar". These get rejected outright
+// in addResults() so they never reach the client.
+
+// Single words that indicate a dish/recipe when they appear in the product name
+// but NOT in the user's search query. Checked after splitting on whitespace.
+const RECIPE_WORDS = new Set([
+  "salad", "soup", "stew", "casserole", "dish", "recipe", "curry", "pie",
+  "sandwich", "wrap", "risotto", "gratin", "puree", "smoothie", "juice",
+  "namasu", "pickled", "marinated", "braised", "sauteed", "sautéed",
+  "coleslaw", "gazpacho", "chutney", "relish", "compote", "ragout",
+  "ratatouille", "succotash", "bruschetta", "ceviche", "tartare",
+]);
+
+// Multi-word phrases that signal a recipe/dish description.
+// Checked as substrings of the full (lowercased) product name.
+const RECIPE_PHRASES = [
+  "made with", "and vegetable", "and rice", "and noodle", "and cheese",
+  "cooked in", "served with", "topped with", "stuffed with",
+  "mixed with", "tossed with", "dressed with",
+];
+
+/**
+ * isRecipeName(name, query) — Returns true if the product name looks like a
+ * prepared dish or recipe rather than a plain ingredient/product.
+ * Only triggers when recipe indicators are NOT part of the user's own query
+ * (so searching "chicken soup" still returns chicken soup).
+ */
+function isRecipeName(name, query) {
+  const nameLower = (name || "").toLowerCase().trim();
+  const queryLower = query.toLowerCase().trim();
+
+  // Exact match is never a recipe mismatch
+  if (nameLower === queryLower) return false;
+
+  // Check multi-word recipe phrases in the full name
+  for (const phrase of RECIPE_PHRASES) {
+    if (nameLower.includes(phrase) && !queryLower.includes(phrase)) return true;
+  }
+
+  // Check single recipe indicator words that aren't in the user's query
+  const queryWords = new Set(queryLower.split(/\s+/));
+  const nameWords = nameLower.split(/[\s,&+\-–—/()[\]]+/).filter(w => w.length >= 2);
+  for (const nw of nameWords) {
+    if (RECIPE_WORDS.has(nw) && !queryWords.has(nw)) return true;
+  }
+
+  return false;
+}
+
 // ── RELEVANCE SCORING ────────────────────────────────────────────────────────
 // Server-side relevance filter applied to ALL database results.
-// Two-layer approach:
+// Three-layer approach:
 //   1. isRelevant() — gate check: query must match a primary word in the name
-//   2. isStrictlyRelevant() — majority check: most meaningful words in the name
-//      must relate to the query. Catches products like
-//      "Formula Mixer Milk Powder Blender Stirrer" for a "milk" search — the word
-//      "milk" appears but the product is clearly a kitchen appliance, not food.
+//   2. isStrictlyRelevant() — majority check: most meaningful words must relate
+//   3. isRecipeName() — rejects dish/recipe names (user wants the ingredient)
 
 // Common stop words ignored when checking product name relevance.
 // These carry no product-category meaning (articles, prepositions, conjunctions).
@@ -1688,6 +1738,10 @@ function isStrictlyRelevant(name, query) {
 function scoreResult(name, query) {
   const nameLower = (name || "").toLowerCase().trim();
   const queryLower = query.toLowerCase().trim();
+
+  // Recipe/dish names get a very low score even if they start with the query —
+  // "Cucumber salad made with cucumber and vinegar" should never outrank "Cucumber"
+  if (isRecipeName(name, query)) return 2;
 
   // Exact match is the best possible result
   if (nameLower === queryLower) return 100;
@@ -2172,6 +2226,12 @@ export default async function handler(req, res) {
       // Second gate: majority of name words must relate to query terms
       if (!isStrictlyRelevant(r.name, query)) {
         console.log(`[TextSearch] Rejected (strict): "${r.name}" for query "${query}"`);
+        continue;
+      }
+      // Third gate: reject recipe/dish names — user wants the raw ingredient,
+      // not a prepared dish (e.g. "Cucumber salad" for a "cucumber" search)
+      if (isRecipeName(r.name, query)) {
+        console.log(`[TextSearch] Rejected (recipe-style): "${r.name}" for query "${query}"`);
         continue;
       }
       // Validate image URL — reject placeholders/icons before they reach the client

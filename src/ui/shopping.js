@@ -444,6 +444,45 @@ export function onShopInput() {
   _searchDebounceTimer = setTimeout(() => _runInlineSearch(query), 350);
 }
 
+// ── RECIPE/DISH NAME DETECTION (client-side mirror of server logic) ──────────
+// Catches recipe-style names that slip through or were cached before the server
+// filter was added. Same word lists as api/text-search.js — keep in sync.
+const _RECIPE_WORDS = new Set([
+  "salad", "soup", "stew", "casserole", "dish", "recipe", "curry", "pie",
+  "sandwich", "wrap", "risotto", "gratin", "puree", "smoothie", "juice",
+  "namasu", "pickled", "marinated", "braised", "sauteed", "sautéed",
+  "coleslaw", "gazpacho", "chutney", "relish", "compote", "ragout",
+  "ratatouille", "succotash", "bruschetta", "ceviche", "tartare",
+]);
+const _RECIPE_PHRASES = [
+  "made with", "and vegetable", "and rice", "and noodle", "and cheese",
+  "cooked in", "served with", "topped with", "stuffed with",
+  "mixed with", "tossed with", "dressed with",
+];
+
+/**
+ * _isRecipeName(name, query) — Client-side check: returns true if the product
+ * name describes a prepared dish/recipe rather than a plain ingredient.
+ * Only triggers when recipe indicators aren't part of the user's own query.
+ */
+function _isRecipeName(name, query) {
+  const nameLower = (name || "").toLowerCase().trim();
+  const queryLower = query.toLowerCase().trim();
+  if (nameLower === queryLower) return false;
+
+  for (const phrase of _RECIPE_PHRASES) {
+    if (nameLower.includes(phrase) && !queryLower.includes(phrase)) return true;
+  }
+
+  const queryWords = new Set(queryLower.split(/\s+/));
+  const nameWords = nameLower.split(/[\s,&+\-–—/()[\]]+/).filter(w => w.length >= 2);
+  for (const nw of nameWords) {
+    if (_RECIPE_WORDS.has(nw) && !queryWords.has(nw)) return true;
+  }
+
+  return false;
+}
+
 // Stop words for client-side relevance scoring — words that carry no product-category
 // meaning. Must match the server-side STOP_WORDS list in api/text-search.js.
 const _STOP_WORDS = new Set([
@@ -520,6 +559,11 @@ function _isStrictlyRelevant(name, query) {
 export function scoreSearchResult(name, query) {
   const nameLower = (name || "").toLowerCase().trim();
   const queryLower = query.toLowerCase().trim();
+
+  // Recipe/dish names get score 0 — filtered out entirely.
+  // "Cucumber salad made with cucumber and vinegar" should never appear
+  // when the user searches "cucumber" (they want to buy a cucumber).
+  if (_isRecipeName(name, query)) return 0;
 
   // Exact match is the best possible result
   if (nameLower === queryLower) return 100;
@@ -637,10 +681,16 @@ async function _runInlineSearch(query) {
 
     _inlineSearchResults = results;
 
+    // DEBUG: log each result's image URL so we can verify in DevTools
+    // whether images are present in the API response and reaching the render step
+    results.forEach((p, i) => {
+      console.log(`[ShopDropdown] #${i} "${p.name}" → image: ${p.image || "(none)"} | score: ${p._score}`);
+    });
+
     // Render result rows inside the dropdown
     dropdown.innerHTML = results.map((p, i) => {
       const img = p.image
-        ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'"/>`
+        ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.style.display='none'; console.warn('[ShopDropdown] Image failed to load:', '${(p.image || "").replace(/'/g, "\\'")}')"`
         : `<div class="enrich-img-ph">🛒</div>`;
       const brand = p.brand ? `<div class="enrich-brand">${p.brand}</div>` : "";
       const cat = p.category && p.category !== "General"
