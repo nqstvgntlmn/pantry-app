@@ -245,15 +245,38 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .pill:active{border-color:var(--ac);color:var(--ac);background:var(--acd)}
 
 /* ── SWIPE-TO-DELETE + MULTI-SELECT ── */
-.swipe-wrap{position:relative;overflow:hidden;border-radius:14px;margin-bottom:7px;transition:margin-left .25s cubic-bezier(.4,0,.2,1)}
-.swipe-inner{position:relative;z-index:1;transition:transform .3s cubic-bezier(.4,0,.2,1);will-change:transform;margin-bottom:0 !important;border-radius:14px;background:var(--card)}
-.swipe-inner.swiping{transition:none}
-.swipe-del{position:absolute;right:0;top:0;bottom:0;width:88px;background:var(--rd);display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;color:#fff;letter-spacing:.02em;cursor:pointer;border-radius:0 14px 14px 0;clip-path:inset(0 0 0 100%);transition:clip-path .3s cubic-bezier(.4,0,.2,1);pointer-events:none}
-.swipe-wrap.open .swipe-del{clip-path:inset(0 0 0 0%);pointer-events:auto}
+/* Apple-native swipe-to-delete: 1:1 finger tracking, rubber band resistance,
+   animated trash can with opening lid, spring animations, haptic feedback */
+.swipe-wrap{position:relative;overflow:hidden;border-radius:14px;margin-bottom:7px}
+.swipe-inner{position:relative;z-index:1;will-change:transform;margin-bottom:0 !important;border-radius:14px;background:var(--card)}
+/* During active drag, disable transitions so the row tracks the finger at 1:1 */
+.swipe-inner.swiping{transition:none !important}
+
+/* Red delete zone — sits behind the row, revealed via clip-path as user swipes.
+   80px wide to match Apple's native delete button proportions. */
+.swipe-del{position:absolute;right:0;top:0;bottom:0;width:80px;background:var(--rd);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;border-radius:0 14px 14px 0;clip-path:inset(0 0 0 100%);pointer-events:none;-webkit-tap-highlight-color:transparent}
+/* When row is snapped open, enable pointer events so delete button is tappable */
+.swipe-wrap.open .swipe-del{pointer-events:auto}
+
+/* Trash can icon — SVG container centered in the delete zone */
+.swipe-del-icon{width:24px;height:24px;position:relative}
+/* Trash can body (the bin part) */
+.trash-body{fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* Trash can lid — animates open (rotates) when swipe passes the snap threshold */
+.trash-lid{fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transform-origin:right center;transition:transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)}
+/* When swiped past threshold, rotate the lid open to signal "ready to delete" */
+.swipe-wrap.swipe-threshold .trash-lid{transform:rotate(-35deg)}
+
+/* "Delete" label below the trash icon */
+.swipe-del-label{font-size:.68rem;font-weight:700;color:#fff;letter-spacing:.02em}
+
+/* Multi-select: freeze swipe transform so rows can't be swiped while selecting */
 .swipe-wrap.selecting .swipe-inner{transform:none !important}
+/* Selection checkbox circle — hidden by default, shown in select mode */
 .sel-cb{width:26px;height:26px;border-radius:50%;border:2px solid var(--b2);background:var(--card);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:600;color:transparent;transition:background .2s, border-color .2s, color .2s;opacity:0}
 .swipe-wrap.selecting .sel-cb{opacity:1}
 .swipe-wrap.selected .sel-cb{background:var(--rd);border-color:var(--rd);color:#fff}
+/* Hide the checkbox circle during multi-select so it doesn't conflict with sel-cb */
 .swipe-wrap.selecting .shck{display:none}
 
 .atk-item{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--b1);gap:12px}

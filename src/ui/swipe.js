@@ -1,132 +1,323 @@
 // ── SWIPE-TO-DELETE + MULTI-SELECT ENGINE ────────────────────────────────────
-// This module provides two UI interaction patterns for list items:
-//   1. iOS-style swipe-to-reveal: user swipes a row left to expose a red delete button.
-//   2. Multi-select mode: user can toggle select on multiple items, then bulk-delete.
+// Rebuilt to match Apple's native swipe-to-delete interaction:
+//   - 1:1 finger tracking with rubber band resistance past the delete zone
+//   - Red delete zone slides in from the right (~80px) with an animated trash can
+//   - Trash can lid animates open when swiped past the snap threshold
+//   - ~40% swipe = snap/lock open with spring animation + haptic feedback
+//   - ~80% swipe = auto-complete delete with slide-out animation
+//   - Release before threshold = spring back smoothly
+//   - Only one row open at a time
+//   - Works on both shopping list and inventory items
 //
-// Both patterns work on the same DOM structure:
-//   <div class="swipe-wrap">        — outer wrapper, carries state classes (open, selecting, selected)
-//     <div class="swipe-inner">     — the visible row content; slides left on swipe
-//     <button class="swipe-del">    — the red delete button hidden behind the row
+// DOM structure expected for each swipeable row:
+//   <div class="swipe-wrap">
+//     <div class="swipe-inner">  — the visible card content (slides left)
+//     <div class="swipe-del">    — the red delete zone revealed behind the card
 //   </div>
-//
-// The module is used by both the inventory list ("inv") and the shopping list ("shop").
 
-import { state } from '../state.js';                // Shared app state (selectMode, selectedIds, etc.)
-import { dli, dlShopItem } from '../db.js';          // Database delete functions: dli = delete inventory item, dlShopItem = delete shopping item
-import { g, showNotif } from '../helpers.js';        // g = getElementById shorthand, showNotif = toast notification
+import { state } from '../state.js';
+import { dli, dlShopItem } from '../db.js';
+import { g, showNotif } from '../helpers.js';
 
-// Module-level tracking variables for swipe gesture state:
-// _swipeEl:  the .swipe-inner element currently being dragged (null when idle)
-// _swipeX0:  the starting X coordinate of the current swipe gesture
-// _openWrap: the .swipe-wrap that currently has its delete button revealed (only one at a time)
-let _swipeEl = null, _swipeX0 = 0, _openWrap = null;
+// ── Swipe gesture state ──
+// Tracks the currently-swiped element, start position, and which row is "locked open"
+let _swipeEl = null;     // The .swipe-inner element currently being dragged
+let _swipeX0 = 0;        // Starting X coordinate of the current touch
+let _swipeY0 = 0;        // Starting Y coordinate (for direction locking)
+let _openWrap = null;    // The one .swipe-wrap that has its delete zone revealed
+let _direction = null;   // Locked direction: "horizontal" or "vertical" (null = undecided)
+let _rowWidth = 0;       // Cached width of the current row for threshold calculations
+let _hapticFired = false; // Whether haptic feedback was already triggered this gesture
+
+// ── Constants for swipe behavior ──
+const DELETE_ZONE_WIDTH = 80;    // Width of the red delete zone in pixels (Apple-standard)
+const SNAP_THRESHOLD = 0.40;     // 40% of row width = snap/lock open
+const AUTO_DELETE_THRESHOLD = 0.80; // 80% of row width = auto-complete delete
+const DIRECTION_LOCK_PX = 8;     // Pixels of movement before locking to horizontal/vertical
+const RUBBER_BAND_FACTOR = 0.3;  // Resistance factor when swiping past the delete zone
+
+// Spring easing for snap animations — mimics Apple's bounce
+const SPRING_EASE = 'cubic-bezier(0.25, 1.5, 0.5, 1)';
+const SMOOTH_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
 // Registers all touch event listeners for swipe-to-delete behavior.
-// Called once at app startup. Uses document-level delegation so it automatically
-// works for dynamically added list items without re-binding.
+// Called once at app startup. Uses document-level delegation so dynamically
+// added rows work automatically without re-binding.
 export function initSwipe() {
 
   // ── TOUCH START: begin tracking a potential swipe gesture ──
   document.addEventListener("touchstart", e => {
-    // Only activate if the touch landed on a swipeable row's inner content
     const inner = e.target.closest(".swipe-inner");
     if (!inner) return;
     const wrap = inner.closest(".swipe-wrap");
     if (!wrap) return;
     // Swipe is disabled during multi-select mode (taps toggle selection instead)
     if (state.selectMode) return;
-    // Store the element being swiped and the initial finger position
+
+    // Store the element and initial finger position
     _swipeEl = inner;
     _swipeX0 = e.touches[0].clientX;
-    // "swiping" class disables CSS transitions so the row tracks the finger smoothly
+    _swipeY0 = e.touches[0].clientY;
+    _direction = null;  // Reset direction lock for new gesture
+    _hapticFired = false;
+    _rowWidth = wrap.offsetWidth; // Cache row width for threshold calculations
+
+    // Disable CSS transitions during drag so row tracks finger at 1:1
     inner.classList.add("swiping");
   }, { passive: true });
 
-  // ── TOUCH MOVE: drag the row left to follow the user's finger ──
+  // ── TOUCH MOVE: drag the row left with 1:1 tracking + rubber band resistance ──
   document.addEventListener("touchmove", e => {
-    if (!_swipeEl) return; // No active swipe in progress
-    // Calculate horizontal distance moved since touch start
-    const dx = e.touches[0].clientX - _swipeX0;
-    // Clamp translation: allow sliding left up to 80px (delete button width), but not right past 0
-    const tx = Math.max(-80, Math.min(0, dx));
-    _swipeEl.style.transform = `translateX(${tx}px)`;
-    // If the user has moved more than 8px horizontally, prevent vertical scrolling
-    // so the swipe gesture doesn't conflict with page scroll
-    if (Math.abs(dx) > 8) e.preventDefault();
-  }, { passive: false }); // passive: false is required to allow preventDefault()
+    if (!_swipeEl) return;
 
-  // ── TOUCH END: decide whether to snap open (reveal delete) or snap closed ──
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const dx = currentX - _swipeX0;
+    const dy = currentY - _swipeY0;
+
+    // Direction locking: decide whether this is a horizontal swipe or vertical scroll
+    // once the user has moved beyond the dead zone threshold
+    if (!_direction) {
+      if (Math.abs(dx) < DIRECTION_LOCK_PX && Math.abs(dy) < DIRECTION_LOCK_PX) return;
+      _direction = Math.abs(dx) > Math.abs(dy) ? "horizontal" : "vertical";
+    }
+    // If scrolling vertically, cancel the swipe and let the page scroll normally
+    if (_direction === "vertical") {
+      _swipeEl.classList.remove("swiping");
+      _swipeEl = null;
+      return;
+    }
+
+    // Prevent vertical scrolling when we're committed to a horizontal swipe
+    e.preventDefault();
+
+    // Calculate translation with rubber band resistance past the delete zone.
+    // Within the delete zone (0 to -80px): 1:1 finger tracking.
+    // Past the delete zone: diminishing returns via rubber band formula.
+    // Never allow swiping right past 0 (closed position).
+    let tx;
+    if (dx >= 0) {
+      // Don't allow swiping right past the starting position
+      tx = 0;
+    } else {
+      const absDx = Math.abs(dx);
+      if (absDx <= DELETE_ZONE_WIDTH) {
+        // Within the delete zone: 1:1 tracking
+        tx = dx;
+      } else {
+        // Past the delete zone: apply rubber band resistance.
+        // The further past, the more resistance — mimics iOS elastic overscroll.
+        const overscroll = absDx - DELETE_ZONE_WIDTH;
+        const dampened = overscroll * RUBBER_BAND_FACTOR;
+        tx = -(DELETE_ZONE_WIDTH + dampened);
+      }
+    }
+
+    _swipeEl.style.transform = `translateX(${tx}px)`;
+
+    // Update the delete zone's clip-path to reveal proportionally to the swipe distance
+    const wrap = _swipeEl.closest(".swipe-wrap");
+    const del = wrap?.querySelector(".swipe-del");
+    if (del) {
+      const reveal = Math.min(Math.abs(tx), DELETE_ZONE_WIDTH);
+      const pct = 100 - (reveal / DELETE_ZONE_WIDTH * 100);
+      del.style.clipPath = `inset(0 0 0 ${pct}%)`;
+    }
+
+    // Trigger haptic feedback and trash lid animation at the snap threshold
+    const swipePct = Math.abs(tx) / _rowWidth;
+    if (swipePct >= SNAP_THRESHOLD && !_hapticFired) {
+      _hapticFired = true;
+      // Haptic feedback (10ms vibration) — available on Android, silently fails on iOS
+      if (navigator.vibrate) navigator.vibrate(10);
+      // Open the trash can lid to signal "ready to delete"
+      wrap?.classList.add("swipe-threshold");
+    } else if (swipePct < SNAP_THRESHOLD && _hapticFired) {
+      // User pulled back below threshold — close the lid and allow re-fire
+      _hapticFired = false;
+      wrap?.classList.remove("swipe-threshold");
+    }
+  }, { passive: false }); // passive: false required for preventDefault()
+
+  // ── TOUCH END: snap open, spring back, or auto-delete based on swipe distance ──
   document.addEventListener("touchend", () => {
     if (!_swipeEl) return;
+
     const inner = _swipeEl;
     const wrap = inner.closest(".swipe-wrap");
-    // Remove "swiping" class to re-enable CSS transitions for the snap animation
+    // Re-enable CSS transitions for the snap animation
     inner.classList.remove("swiping");
-    // Read the current horizontal offset to decide open vs close
+
+    // Read the current horizontal offset to decide behavior
     const tx = parseFloat(inner.style.transform.replace("translateX(", "")) || 0;
-    if (tx < -50) {
-      // User swiped far enough left (>50px): lock the row open at 80px to reveal delete button
-      inner.style.transform = "translateX(-80px)";
+    const swipePct = Math.abs(tx) / _rowWidth;
+
+    if (swipePct >= AUTO_DELETE_THRESHOLD) {
+      // ── AUTO-DELETE: swiped past 80% — slide out and delete ──
+      _performAutoDelete(wrap, inner);
+    } else if (swipePct >= SNAP_THRESHOLD) {
+      // ── SNAP OPEN: swiped past 40% — lock at delete zone width with spring ──
+      inner.style.transition = `transform 0.4s ${SPRING_EASE}`;
+      inner.style.transform = `translateX(-${DELETE_ZONE_WIDTH}px)`;
+      // Fully reveal the delete zone
+      const del = wrap?.querySelector(".swipe-del");
+      if (del) {
+        del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
+        del.style.clipPath = "inset(0 0 0 0%)";
+      }
       wrap?.classList.add("open");
-      // Only one row can be open at a time — close the previously open one
+      wrap?.classList.add("swipe-threshold"); // Keep lid open
+      // Only one row open at a time — close any previously open row
       if (_openWrap && _openWrap !== wrap) _snapClose(_openWrap);
       _openWrap = wrap;
+      // Clean up inline transition after animation completes
+      setTimeout(() => { inner.style.transition = ""; }, 400);
     } else {
-      // User didn't swipe far enough: snap back to closed position
+      // ── SPRING BACK: didn't reach threshold — return to closed position ──
+      inner.style.transition = `transform 0.35s ${SPRING_EASE}`;
       inner.style.transform = "translateX(0)";
-      wrap?.classList.remove("open");
+      // Hide the delete zone
+      const del = wrap?.querySelector(".swipe-del");
+      if (del) {
+        del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
+        del.style.clipPath = "inset(0 0 0 100%)";
+      }
+      wrap?.classList.remove("open", "swipe-threshold");
       if (_openWrap === wrap) _openWrap = null;
+      // Clean up inline transition
+      setTimeout(() => {
+        inner.style.transition = "";
+        if (del) del.style.transition = "";
+      }, 350);
     }
-    // Clear the active swipe reference
+
     _swipeEl = null;
   });
 
   // ── DISMISS: close any open swipe row when the user taps elsewhere ──
   document.addEventListener("touchstart", e => {
-    if (!_openWrap) return;                                     // Nothing is open
-    if (e.target.closest(".swipe-del")) return;                 // Tap was on the delete button itself — let it fire
+    if (!_openWrap) return;
+    // Don't close if the tap was on the delete button — let the click handler fire
+    if (e.target.closest(".swipe-del")) return;
+    // Don't close if the tap was on the same open row (swipe handler will manage it)
     const inner = e.target.closest(".swipe-inner");
-    if (inner && inner.closest(".swipe-wrap") === _openWrap) return; // Tap was on the same open row — ignore
-    // Tap was somewhere else: close the open row
+    if (inner && inner.closest(".swipe-wrap") === _openWrap) return;
+    // Tap was somewhere else: close the open row with spring animation
     _snapClose(_openWrap);
     _openWrap = null;
   }, { passive: true });
 }
 
-// Animates a swipe row back to the closed position (translateX 0)
-// and removes the "open" class. Used when another row opens or
-// the user taps outside the open row.
+// Animates a swipe row back to the closed position with a spring bounce.
+// Resets transform, hides delete zone, and clears all state classes.
 function _snapClose(wrap) {
   const inner = wrap?.querySelector(".swipe-inner");
-  if (inner) inner.style.transform = "translateX(0)"; // CSS transition handles the animation
-  wrap?.classList.remove("open");
+  const del = wrap?.querySelector(".swipe-del");
+  if (inner) {
+    inner.style.transition = `transform 0.35s ${SPRING_EASE}`;
+    inner.style.transform = "translateX(0)";
+    setTimeout(() => { inner.style.transition = ""; }, 350);
+  }
+  if (del) {
+    del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
+    del.style.clipPath = "inset(0 0 0 100%)";
+    setTimeout(() => { del.style.transition = ""; }, 300);
+  }
+  wrap?.classList.remove("open", "swipe-threshold");
 }
 
-// Handles the delete action when the user taps the revealed red delete button.
-// Immediately dims the row for visual feedback, then removes the item from the database.
-// "list" is either "shop" (shopping list) or "inv" (inventory).
-export async function swipeDelItem(id, list) {
-  const wrap = g("sw-" + id); // Each swipe row has id="sw-{itemId}"
-  if (wrap) wrap.style.opacity = "0.5"; // Dim the row instantly so user sees feedback before async delete completes
+// Performs the auto-delete animation when the user swipes past 80% of the row.
+// Slides the row fully off-screen, collapses height, then removes from database.
+async function _performAutoDelete(wrap, inner) {
+  const id = wrap?.dataset.id;
+  const list = wrap?.dataset.list;
+  if (!id || !list) return;
+
+  // Slide the entire row off-screen to the left
+  inner.style.transition = `transform 0.3s ${SMOOTH_EASE}`;
+  inner.style.transform = `translateX(-${_rowWidth + 100}px)`;
+
+  // Also slide the delete zone with it for a clean exit
+  const del = wrap?.querySelector(".swipe-del");
+  if (del) {
+    del.style.transition = `transform 0.3s ${SMOOTH_EASE}`;
+    del.style.transform = `translateX(-${_rowWidth + 100}px)`;
+  }
+
+  // After the slide-out, collapse the row height for a smooth list reflow
+  await new Promise(r => setTimeout(r, 280));
+  wrap.style.transition = "height 0.25s ease, opacity 0.2s ease, margin 0.25s ease";
+  wrap.style.height = wrap.offsetHeight + "px"; // Set explicit height before collapsing
+  // Force reflow so the browser registers the explicit height
+  wrap.offsetHeight; // eslint-disable-line no-unused-expressions
+  wrap.style.height = "0px";
+  wrap.style.opacity = "0";
+  wrap.style.marginBottom = "0px";
+
+  // Clean up the open row reference
+  if (_openWrap === wrap) _openWrap = null;
+
+  // Wait for collapse animation, then delete from database
+  await new Promise(r => setTimeout(r, 250));
   if (list === "shop") {
-    await dlShopItem(id); // Shopping list items have their own delete path
+    await dlShopItem(id);
   } else {
-    await dli(id);              // Delete inventory item from Firestore
-    showNotif("Item removed");  // Only inventory shows a toast; shopping list updates are silent
+    await dli(id);
+    showNotif("Item removed");
   }
 }
 
-// Handles a tap on a list row. The behavior depends on the current mode:
-//   - If the row is swiped open: close it (treat tap as dismissal)
-//   - If multi-select mode is active: toggle this item's selected state
-//   - Normal mode, shopping list: toggle the item's checked/unchecked state
-//   - Normal mode, inventory: open the quantity adjustment overlay
+// Handles the delete action when the user taps the revealed red delete button.
+// Plays the same slide-out + collapse animation as auto-delete for consistency.
+export async function swipeDelItem(id, list) {
+  const wrap = g("sw-" + id);
+  if (!wrap) return;
+  const inner = wrap.querySelector(".swipe-inner");
+
+  // Slide off-screen to the left
+  const width = wrap.offsetWidth;
+  if (inner) {
+    inner.style.transition = `transform 0.3s ${SMOOTH_EASE}`;
+    inner.style.transform = `translateX(-${width + 100}px)`;
+  }
+  const del = wrap.querySelector(".swipe-del");
+  if (del) {
+    del.style.transition = `transform 0.3s ${SMOOTH_EASE}`;
+    del.style.transform = `translateX(-${width + 100}px)`;
+  }
+
+  // Collapse height after slide-out for smooth list reflow
+  await new Promise(r => setTimeout(r, 280));
+  wrap.style.transition = "height 0.25s ease, opacity 0.2s ease, margin 0.25s ease";
+  wrap.style.height = wrap.offsetHeight + "px";
+  wrap.offsetHeight; // eslint-disable-line no-unused-expressions
+  wrap.style.height = "0px";
+  wrap.style.opacity = "0";
+  wrap.style.marginBottom = "0px";
+
+  if (_openWrap === wrap) _openWrap = null;
+
+  // Wait for collapse, then delete from database
+  await new Promise(r => setTimeout(r, 250));
+  if (list === "shop") {
+    await dlShopItem(id);
+  } else {
+    await dli(id);
+    showNotif("Item removed");
+  }
+}
+
+// Handles a tap on a list row. Behavior depends on the current context:
+//   - Row is swiped open → close it (absorb the tap)
+//   - Multi-select mode → toggle this item's selected state
+//   - Normal shopping tap → open item detail sheet
+//   - Normal inventory tap → open quantity adjustment overlay
 export function swipeRowTap(id, list) {
   const wrap = g("sw-" + id);
   if (wrap) {
     const inner = wrap.querySelector(".swipe-inner");
-    // Check if this row is currently swiped open (shifted left by more than 10px)
-    const tx = parseFloat((inner.style.transform || "").replace("translateX(", "")) || 0;
+    // Check if row is currently swiped open (shifted left by more than 10px)
+    const tx = parseFloat((inner?.style.transform || "").replace("translateX(", "")) || 0;
     if (tx < -10) {
       // Row is open — close it and absorb the tap (don't trigger any action)
       _snapClose(wrap);
@@ -138,101 +329,80 @@ export function swipeRowTap(id, list) {
   // ── Multi-select mode: toggle item selection ──
   if (state.selectMode) {
     if (state.selectedIds.has(id)) {
-      // Deselect: remove from set and remove visual highlight
       state.selectedIds.delete(id);
       wrap?.classList.remove("selected");
     } else {
-      // Select: add to set and apply visual highlight
       state.selectedIds.add(id);
       wrap?.classList.add("selected");
     }
-    updateMultiBar(); // Refresh the "N selected" count in the action bar
+    updateMultiBar();
     return;
   }
 
   // ── Normal mode: perform the default tap action for this list type ──
-  // Shopping: open product detail sheet (circle handles checked toggle separately via togShop)
-  // Inventory: open quantity adjustment overlay
   if (list === "shop") window.openItemDetail(id);
   else window.openAdj(id);
 }
 
 // ── MULTI-SELECT MODE ────────────────────────────────────────────────────────
-// Multi-select lets users tap multiple rows to select them, then bulk-delete.
+// Lets users tap multiple rows to select them, then bulk-delete.
 // When active, swipe gestures are disabled and taps toggle selection instead.
-// Only one list (shop or inv) can be in select mode at a time.
 
 // Toggles multi-select mode for the shopping list.
-// If already in shop select mode, exits it. Otherwise enters shop select mode.
 export function togShopSelect() {
-  if (state.selectMode === "shop") { cancelSelect(); return; } // Already active — toggle off
-  if (state.selectMode) cancelSelect(); // Exit the other list's select mode first
+  if (state.selectMode === "shop") { cancelSelect(); return; }
+  if (state.selectMode) cancelSelect();
   state.selectMode = "shop";
-  state.selectedIds.clear(); // Start with nothing selected
-  // Add "selecting" class to all shopping list rows — shows selection checkboxes via CSS
+  state.selectedIds.clear();
   document.querySelectorAll("#shlist .swipe-wrap").forEach(w => w.classList.add("selecting"));
-  // Update the select button to show "Cancel" while in select mode
   const btn = g("sh-selbtn");
   if (btn) { btn.classList.add("active"); btn.textContent = "Cancel"; }
-  updateMultiBar(); // Show the bottom action bar (even with 0 selected, for context)
+  updateMultiBar();
 }
 
 // Toggles multi-select mode for the inventory list.
-// Mirror of togShopSelect() but targets the inventory DOM container.
 export function togInvSelect() {
   if (state.selectMode === "inv") { cancelSelect(); return; }
   if (state.selectMode) cancelSelect();
   state.selectMode = "inv";
   state.selectedIds.clear();
-  // Add "selecting" class to all inventory rows
   document.querySelectorAll("#ibody .swipe-wrap").forEach(w => w.classList.add("selecting"));
   const btn = g("inv-selbtn");
   if (btn) { btn.classList.add("active"); btn.textContent = "Cancel"; }
   updateMultiBar();
 }
 
-// Exits multi-select mode completely, regardless of which list was active.
-// Clears all selection state and resets the UI back to normal mode.
+// Exits multi-select mode completely, clears all selection state.
 export function cancelSelect() {
   state.selectMode = null;
   state.selectedIds.clear();
-  // Remove both "selecting" (shows checkboxes) and "selected" (highlight) from all rows
   document.querySelectorAll(".swipe-wrap.selecting").forEach(w => w.classList.remove("selecting", "selected"));
-  // Reset both select buttons back to their default "Select" label
   const sb = g("sh-selbtn"); if (sb) { sb.classList.remove("active"); sb.textContent = "Select"; }
   const ib = g("inv-selbtn"); if (ib) { ib.classList.remove("active"); ib.textContent = "Select"; }
-  updateMultiBar(); // Hides the bottom action bar since selectMode is now null
+  updateMultiBar();
 }
 
 // Deletes all currently selected items in a single batch operation.
-// Copies the selection state before cancelling select mode, so the UI
-// returns to normal immediately while deletes happen in the background.
 export async function deleteSelected() {
-  if (!state.selectedIds.size) return; // Nothing selected — no-op
-  // Snapshot the selected IDs and which list we're on before cancelSelect clears them
+  if (!state.selectedIds.size) return;
   const ids = [...state.selectedIds];
   const list = state.selectMode;
-  cancelSelect(); // Exit select mode immediately for responsive UI
-  // Delete all selected items in parallel for speed
+  cancelSelect();
   if (list === "shop") {
     await Promise.all(ids.map(id => dlShopItem(id)));
   } else {
     await Promise.all(ids.map(id => dli(id)));
   }
-  // Show a confirmation toast with the count (pluralized)
   showNotif(`Removed ${ids.length} item${ids.length !== 1 ? "s" : ""} 🗑`);
 }
 
-// Updates the floating action bar at the bottom of the screen that shows
-// "N selected — Delete" during multi-select mode.
-// Called whenever the selection changes (items toggled, mode entered/exited).
+// Updates the floating action bar showing "N selected — Delete" during multi-select.
 function updateMultiBar() {
-  const bar = g("multi-bar"); // The fixed-position action bar element
+  const bar = g("multi-bar");
   if (!bar) return;
   const n = state.selectedIds.size;
-  const count = g("multi-count"); // The <span> that displays the selected count
+  const count = g("multi-count");
   if (count) count.textContent = n;
-  // Show the bar when in select mode, hide it otherwise
   if (state.selectMode) bar.classList.add("visible");
   else bar.classList.remove("visible");
 }

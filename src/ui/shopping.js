@@ -261,8 +261,16 @@ export function sH(item) {
         <textarea class="sh-note-inp" id="sni-${item.id}" rows="2" placeholder="Add a note… (e.g. brand, size, store)" onblur="saveShNote('${item.id}')">${item.note || ""}</textarea>
       </div>
     </div>
-    <!-- Delete action revealed when user swipes the row left -->
-    <div class="swipe-del" onclick="swipeDelItem('${item.id}','shop')"><span>🗑</span>Delete</div>
+    <!-- Delete zone: slides in from right on swipe. Trash can lid animates open past threshold. -->
+    <div class="swipe-del" onclick="swipeDelItem('${item.id}','shop')">
+      <div class="swipe-del-icon">
+        <svg viewBox="0 0 24 24" width="24" height="24">
+          <path class="trash-lid" d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0H5"/>
+          <path class="trash-body" d="M6 6v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6M10 11v6M14 11v6"/>
+        </svg>
+      </div>
+      <span class="swipe-del-label">Delete</span>
+    </div>
   </div>`;
 }
 
