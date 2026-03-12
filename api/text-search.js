@@ -31,7 +31,7 @@ const EK = "8db76605e873aaf2fbdf41256cb24cb4";
 // product image database in Firestore. This lets user-uploaded photos take
 // priority over all external sources (Kroger, Spoonacular, OFF, etc.).
 //
-// Firestore path: customProducts/{householdId}/items/{normalizedProductName}
+// Firestore path: households/{householdId}/customProducts/{normalizedProductName}
 // The normalized name is: lowercase, trimmed, spaces → underscores, stripped of special chars.
 
 const FS_PROJECT = "family-pantry-c65d6";
@@ -61,7 +61,7 @@ async function lookupCustomProduct(householdId, query) {
   if (!normalized) return null;
 
   try {
-    const url = `${FS_BASE}/customProducts/${householdId}/items/${normalized}?key=${FS_API_KEY}`;
+    const url = `${FS_BASE}/households/${householdId}/customProducts/${normalized}?key=${FS_API_KEY}`;
     const r = await fetch(url);
     if (r.status === 404) return null;
     const doc = await r.json();

@@ -1127,7 +1127,7 @@ export async function deleteItemImage(id) {
   if (state.hid && item.name) {
     const normalized = normalizeProductName(item.name);
     if (normalized) {
-      dbSet(`customProducts/${state.hid}/items/${normalized}`, {
+      dbSet(`households/${state.hid}/customProducts/${normalized}`, {
         name: item.name.trim(),
         imageDismissed: true,
         imageUrl: null,
@@ -1241,7 +1241,7 @@ export function pickEnrichResult(index) {
       if (state.hid && product.name) {
         const normalized = normalizeProductName(product.name);
         if (normalized) {
-          dbSet(`customProducts/${state.hid}/items/${normalized}`, {
+          dbSet(`households/${state.hid}/customProducts/${normalized}`, {
             name: product.name.trim(),
             imageDismissed: false,
             updatedAt: new Date().toISOString()

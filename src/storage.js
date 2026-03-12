@@ -159,7 +159,7 @@ export async function uploadProductImage(file, productName) {
   // before falling back to external product databases.
   try {
     const user = getCurrentUser();
-    await dbSet(`customProducts/${state.hid}/items/${normalized}`, {
+    await dbSet(`households/${state.hid}/customProducts/${normalized}`, {
       name: productName.trim(),
       imageUrl: downloadUrl,
       imageDismissed: false,  // Clear any prior dismissal — user is uploading a new photo
@@ -191,6 +191,6 @@ export async function lookupCustomProductImage(productName) {
   const normalized = normalizeProductName(productName);
   if (!normalized) return null;
 
-  const doc = await dbGet(`customProducts/${state.hid}/items/${normalized}`);
+  const doc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
   return doc?.imageUrl || null;
 }
