@@ -301,8 +301,9 @@ async function searchKroger(query) {
  * searchUSDA(query) — Searches USDA FoodData Central.
  * Authoritative source for fresh produce, whole foods, and generic ingredients.
  * Requires USDA_API_KEY env var. Free tier allows 1000 requests/hour.
- * USDA has no product images, so we backfill each result's image via Google
- * Custom Search (if configured). Image fetches run in parallel for speed.
+ * USDA has no product images — the final backfillImagesAndReturn() step
+ * handles image lookups for all imageless results in one pass, so we
+ * intentionally leave image: null here to avoid redundant Google calls.
  */
 async function searchUSDA(query) {
   const key = process.env.USDA_API_KEY;
@@ -314,7 +315,7 @@ async function searchUSDA(query) {
     if (!r.ok) return [];
     const d = await r.json();
 
-    const results = (d.foods || []).slice(0, 5).map(f => {
+    return (d.foods || []).slice(0, 5).map(f => {
       // Extract key nutrients from the nutrients array
       const nutrients = f.foodNutrients || [];
       const findNutr = (name) => nutrients.find(n => (n.nutrientName || "").toLowerCase().includes(name.toLowerCase()));
@@ -327,7 +328,7 @@ async function searchUSDA(query) {
         name: f.description || "",
         brand: f.brandName || f.brandOwner || "",
         category: f.foodCategory || "General",
-        image: null, // USDA doesn't provide images — backfilled below via Google
+        image: null, // USDA has no images — backfilled later by backfillImagesAndReturn()
         source: "USDA",
         description: f.additionalDescriptions || "",
         nutrition: {
@@ -338,16 +339,6 @@ async function searchUSDA(query) {
         },
       };
     }).filter(p => p.name);
-
-    // Backfill images from Google Custom Search in parallel.
-    // Each USDA result gets a Google image lookup for its product name.
-    // If Google isn't configured or a lookup fails, the result stays imageless.
-    await Promise.all(results.map(async (item) => {
-      const img = await fetchGoogleImage(item.name);
-      if (img) item.image = img;
-    }));
-
-    return results;
   } catch {
     return [];
   }
@@ -395,12 +386,31 @@ async function searchGoogle(query) {
   }
 }
 
+// Per-request cache for Google image lookups. Prevents the same product name
+// from triggering multiple Google API calls within a single text-search request.
+// Key = lowercase product name, Value = Promise<string|null> (so concurrent
+// callers await the same in-flight request instead of firing duplicates).
+let _googleImageCache = new Map();
+
 /**
- * fetchGoogleImage(productName) — Fetches a single product image from Google Custom Search.
- * Used to backfill images for sources that don't provide them (e.g. USDA)
- * or for results that ended up with no valid image after the waterfall.
- * Returns the image URL string, or null if not found.
- * Logs every call so we can confirm in Vercel logs that it's actually firing.
+ * resetGoogleImageCache() — Clears the per-request image cache.
+ * Called at the start of each handler invocation so stale results from a
+ * previous request (same serverless container) don't leak across requests.
+ */
+function resetGoogleImageCache() {
+  _googleImageCache = new Map();
+}
+
+/**
+ * fetchGoogleImage(productName) — Fetches a single product image via Google
+ * Custom Search Image API (searchType=image). Used to backfill images for
+ * sources that don't provide them (e.g. USDA, Edamam).
+ *
+ * Returns the image URL string, or null if not found/configured.
+ *
+ * Uses a per-request cache so the same product name is never looked up twice,
+ * even when multiple callers fire in parallel (they share the same Promise).
+ * Logs the full request URL (key redacted) for debugging 403/quota issues.
  */
 async function fetchGoogleImage(productName) {
   const key = process.env.GOOGLE_SEARCH_API_KEY;
@@ -410,9 +420,37 @@ async function fetchGoogleImage(productName) {
     return null;
   }
 
+  // Check per-request cache — return existing promise if already in-flight or resolved
+  const cacheKey = productName.toLowerCase().trim();
+  if (_googleImageCache.has(cacheKey)) {
+    console.log(`[GoogleImage] CACHE HIT for "${productName}" — reusing previous lookup`);
+    return _googleImageCache.get(cacheKey);
+  }
+
+  // Store the promise immediately so parallel callers share the same request
+  const promise = _fetchGoogleImageUncached(productName, key, cx);
+  _googleImageCache.set(cacheKey, promise);
+  return promise;
+}
+
+/**
+ * _fetchGoogleImageUncached(productName, key, cx) — Internal: performs the
+ * actual Google Custom Search Image API call. Uses searchType=image to get
+ * direct image URLs instead of scraping pagemap from web results.
+ *
+ * Correct endpoint format:
+ *   https://www.googleapis.com/customsearch/v1?key=KEY&cx=CX&q=QUERY&searchType=image&num=1
+ */
+async function _fetchGoogleImageUncached(productName, key, cx) {
   console.log(`[GoogleImage] Fetching image for: "${productName}"`);
   try {
-    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(productName + " food product")}&key=${key}&cx=${cx}&num=1`;
+    // Use searchType=image for direct image results (not web page scraping)
+    const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${encodeURIComponent(productName + " food product")}&searchType=image&num=1`;
+
+    // Log the full URL with the API key redacted for debugging
+    const redactedUrl = url.replace(key, "REDACTED");
+    console.log(`[GoogleImage] Request URL: ${redactedUrl}`);
+
     const r = await fetch(url);
     if (!r.ok) {
       console.log(`[GoogleImage] API returned ${r.status} for "${productName}"`);
@@ -426,11 +464,9 @@ async function fetchGoogleImage(productName) {
       return null;
     }
 
-    // Extract image from pagemap — same logic as searchGoogle
-    const pagemap = item.pagemap || {};
-    const imgUrl = pagemap.cse_image?.[0]?.src
-      || pagemap.cse_thumbnail?.[0]?.src
-      || null;
+    // With searchType=image, the image URL is in item.link (direct image URL).
+    // item.image.thumbnailLink is also available as a smaller fallback.
+    const imgUrl = item.link || item.image?.thumbnailLink || null;
 
     // Validate the image URL before returning it
     if (imgUrl && !isValidImageUrl(imgUrl)) {
@@ -638,6 +674,10 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
+
+  // Clear per-request Google image cache so stale results from a previous
+  // invocation (same serverless container) don't leak into this request.
+  resetGoogleImageCache();
 
   const query = (req.query.q || "").trim();
   console.log(`[TextSearch] ── Incoming query: "${query}" | method: ${req.method}`);
