@@ -4,12 +4,13 @@
 // found to keep response times fast.
 //
 // Waterfall order (fastest/most relevant first):
-//   Tier 1 (parallel): Spoonacular + Kroger + USDA
-//   Tier 2 (1.5s timeout): Open Food Facts
-//   Tier 3: UPC Item DB
-//   Tier 4 (deprioritized): Open Beauty Facts + Open Pet Food Facts
-// Note: Beauty/Pet results are kept but score-penalized so food results always
-// rank above them. Users may legitimately search for shampoo, lotion, pet food, etc.
+//   Tier 1 (parallel): Spoonacular + Kroger + USDA + Open Food Facts (OFF gets 1.5s timeout)
+//   Tier 2: UPC Item DB
+//   Tier 3 (deprioritized): Open Beauty Facts + Open Pet Food Facts
+// Note: OFF is in Tier 1 because it's the most reliable source of real product
+// images for branded/packaged goods. Without it, USDA (which never has images)
+// can return enough results to short-circuit, leaving ALL results imageless.
+// Beauty/Pet results are kept but score-penalized so food results always rank above them.
 //
 // Image priority (real product photos always beat illustrations):
 //   1. Kroger product image — real product packaging, highest quality
@@ -2459,10 +2460,10 @@ export default async function handler(req, res) {
   // Minimum relevant results to short-circuit (stop searching more databases)
   const ENOUGH = 3;
 
-  // Maximum time (ms) Tier 2 gets before we move on.
-  // Reduced from 3s → 1.5s because Edamam/OFF consistently hit the old timeout.
+  // Maximum time (ms) slower sources (OFF, Beauty/Pet) get before we move on.
+  // Reduced from 3s → 1.5s because these sources consistently hit the old timeout.
   // Target total search time is under 2 seconds for common items.
-  const TIER2_TIMEOUT_MS = 1500;
+  const SLOW_SOURCE_TIMEOUT_MS = 1500;
 
   /**
    * withTimeout(promise, ms) — Races a promise against a timeout.
@@ -2476,15 +2477,20 @@ export default async function handler(req, res) {
     ]);
   }
 
-  // ── Tier 1: Spoonacular + Kroger + USDA (top 3 — run in parallel) ─────
-  // These are the fastest and most grocery-relevant databases. Running all 3
-  // in parallel instead of sequentially cuts Tier 1 from ~3-4s to ~1-1.5s.
-  console.log(`[TextSearch] Starting Tier 1 (Spoonacular + Kroger + USDA) in parallel`);
+  // ── Tier 1: Spoonacular + Kroger + USDA + Open Food Facts (parallel) ──
+  // All four primary databases run concurrently. Open Food Facts (free, no API key)
+  // is included here instead of a separate tier because it's the most reliable
+  // source of real product images for branded/packaged goods. Without it in Tier 1,
+  // USDA (which never has images) could return enough results to trigger the
+  // short-circuit, causing ALL results to have image: NONE.
+  // OFF gets a 1.5s timeout so a slow response doesn't hold up the whole tier.
+  console.log(`[TextSearch] Starting Tier 1 (Spoonacular + Kroger + USDA + OFF) in parallel`);
   const t1Start = Date.now();
   const tier1 = await Promise.allSettled([
     searchSpoonacular(query),
     searchKroger(query),
     searchUSDA(query),
+    withTimeout(searchOpenFoodFacts(query), SLOW_SOURCE_TIMEOUT_MS),
   ]);
   // Extract results from settled promises (fulfilled only — rejected = [])
   tier1.forEach(r => {
@@ -2492,7 +2498,11 @@ export default async function handler(req, res) {
   });
   console.log(`[TextSearch] Tier 1 done in ${Date.now() - t1Start}ms — ${allResults.length} result(s)`);
 
-  if (allResults.length >= ENOUGH) {
+  // Short-circuit only if we have enough results AND at least one has a real image.
+  // Without the image check, imageless sources (like USDA) can trigger early exit
+  // before image-rich sources (like OFF or UPC Item DB) get a chance to contribute.
+  const hasAnyImage = allResults.some(r => r.image);
+  if (allResults.length >= ENOUGH && hasAnyImage) {
     // Sort by relevance so the best matches appear first in the dropdown
     allResults.sort((a, b) => scoreResult(b.name, query, b.source) - scoreResult(a.name, query, a.source));
     const slice1 = allResults.slice(0, 5);
@@ -2501,55 +2511,34 @@ export default async function handler(req, res) {
     return res.status(200).json({ results: slice1 });
   }
 
-  // ── Tier 2: Open Food Facts only (1.5s timeout) ─────────────────────
-  // Edamam removed — consistently slow (3s+ response times) and doesn't add
-  // unique value over Spoonacular/Kroger/USDA which already cover grocery items well.
-  // Only reached if Tier 1 returned fewer than 3 relevant results.
-  console.log(`[TextSearch] Starting Tier 2 (Open Food Facts) with ${TIER2_TIMEOUT_MS}ms timeout`);
+  // ── Tier 2: UPC Item DB (fallback for obscure queries) ──────────────────
+  // Only reached if Tier 1 didn't return enough results with images.
+  // UPC Item DB has Walmart/Target CDN images for many packaged goods.
+  console.log(`[TextSearch] Starting Tier 2 (UPC Item DB only)`);
   const t2Start = Date.now();
   const tier2 = await Promise.allSettled([
-    withTimeout(searchOpenFoodFacts(query), TIER2_TIMEOUT_MS),
+    searchUpcItemDb(query),
   ]);
   tier2.forEach(r => {
     if (r.status === "fulfilled") addResults(r.value);
   });
   console.log(`[TextSearch] Tier 2 done in ${Date.now() - t2Start}ms — ${allResults.length} total result(s)`);
 
-  if (allResults.length >= ENOUGH) {
-    allResults.sort((a, b) => scoreResult(b.name, query, b.source) - scoreResult(a.name, query, a.source));
-    const slice2 = allResults.slice(0, 5);
-    applyFallbackImages(slice2);
-    return res.status(200).json({ results: slice2 });
-  }
-
-  // ── Tier 3: UPC Item DB (last-resort fallback) ─────────────────────────
-  // Only reached for very obscure queries that major databases don't cover.
-  console.log(`[TextSearch] Starting Tier 3 (UPC Item DB only)`);
+  // ── Tier 3: Open Beauty Facts + Open Pet Food Facts (deprioritized) ────
+  // Non-food grocery items (shampoo, lotion, pet food, treats). Always included
+  // so users can find legitimate non-food items, but scoreResult() applies a -50
+  // penalty so food results always rank higher. Prevents "Cucumber Mint Lip Balm"
+  // from outranking "Cucumber" while still surfacing "Dog Food" when intended.
+  console.log(`[TextSearch] Starting Tier 3 (Open Beauty Facts + Open Pet Food Facts — deprioritized)`);
   const t3Start = Date.now();
   const tier3 = await Promise.allSettled([
-    searchUpcItemDb(query),
+    withTimeout(searchOpenBeautyFacts(query), SLOW_SOURCE_TIMEOUT_MS),
+    withTimeout(searchOpenPetFoodFacts(query), SLOW_SOURCE_TIMEOUT_MS),
   ]);
   tier3.forEach(r => {
     if (r.status === "fulfilled") addResults(r.value);
   });
   console.log(`[TextSearch] Tier 3 done in ${Date.now() - t3Start}ms — ${allResults.length} total result(s)`);
-
-  // ── Tier 4: Open Beauty Facts + Open Pet Food Facts (deprioritized) ────
-  // These databases cover non-food grocery items like shampoo, lotion, pet food,
-  // and treats. We always include them so users can find legitimate non-food items,
-  // but scoreResult() applies a -50 penalty to their results so food always ranks
-  // higher. This prevents "Cucumber Mint Lip Balm" from outranking "Cucumber"
-  // while still allowing "Dog Food" to appear when that's what the user wants.
-  console.log(`[TextSearch] Starting Tier 4 (Open Beauty Facts + Open Pet Food Facts — deprioritized)`);
-  const t4Start = Date.now();
-  const tier4 = await Promise.allSettled([
-    withTimeout(searchOpenBeautyFacts(query), TIER2_TIMEOUT_MS),
-    withTimeout(searchOpenPetFoodFacts(query), TIER2_TIMEOUT_MS),
-  ]);
-  tier4.forEach(r => {
-    if (r.status === "fulfilled") addResults(r.value);
-  });
-  console.log(`[TextSearch] Tier 4 done in ${Date.now() - t4Start}ms — ${allResults.length} total result(s)`);
 
   // Sort by relevance score so the best matches appear first, then take top 5.
   // Non-food sources get a -50 penalty in scoreResult(), so food results will
