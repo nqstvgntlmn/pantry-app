@@ -182,6 +182,19 @@ export function toggleVoice() {
  */
 
 /**
+ * toTitleCase(str) — Normalizes a product name to Title Case for uniform display.
+ * Capitalizes the first letter of each word, lowercases the rest.
+ * Handles ALL CAPS, mixed case, and already-correct names uniformly.
+ * Applied at render time so it works for existing items and newly added ones.
+ */
+function toTitleCase(str) {
+  if (!str) return "";
+  return str.replace(/\S+/g, word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  );
+}
+
+/**
  * _shouldShowBrand(item) — Determines whether to display the brand name on a shopping list item.
  * Rules:
  *   - Barcode scans (src === "scan"): always show brand — user explicitly scanned that product.
@@ -226,7 +239,7 @@ export function sH(item) {
         <div class="shck" onclick="event.stopPropagation();swipeRowTap('${item.id}','shop')">${item.checked ? "✓" : ""}</div>  <!-- Tap to toggle checked (or toggle selection in multi-select) -->
         ${thumb}                               <!-- Product thumbnail from barcode scan (if available) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
-          <div class="shnm">${item.name}${qtyBadge}</div>
+          <div class="shnm">${toTitleCase(item.name)}${qtyBadge}</div>
           ${_shouldShowBrand(item) ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand shown for barcode scans always; for text search only if the user's query matches the brand name -->
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
         </div>
@@ -953,7 +966,7 @@ export function openItemDetail(id) {
   let html = `<div class="item-detail-header">
     ${img}
     <div style="flex:1;min-width:0">
-      <div class="item-detail-name">${item.name}</div>
+      <div class="item-detail-name">${toTitleCase(item.name)}</div>
       ${showBrand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
       ${item.checked ? `<div style="margin-top:4px"><span class="item-detail-badge" style="background:var(--gnd);color:var(--gn)">✓ Purchased</span></div>` : ""}
     </div>

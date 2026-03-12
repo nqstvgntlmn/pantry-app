@@ -151,8 +151,10 @@ export function swipeRowTap(id, list) {
   }
 
   // ── Normal mode: perform the default tap action for this list type ──
-  if (list === "shop") window.togShop(id);  // Toggle checked state on shopping list item
-  else window.openAdj(id);                  // Open quantity adjustment overlay for inventory item
+  // Shopping: open product detail sheet (circles are hidden, so taps always open detail)
+  // Inventory: open quantity adjustment overlay
+  if (list === "shop") window.openItemDetail(id);
+  else window.openAdj(id);
 }
 
 // ── MULTI-SELECT MODE ────────────────────────────────────────────────────────
