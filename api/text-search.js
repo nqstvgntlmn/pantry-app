@@ -22,6 +22,29 @@
 // Response: { results: [{ name, brand, category, image, source, nutrition }] }
 //      or:  { results: [] }  (no matches found)
 
+// ── FIREBASE ADMIN SDK ──────────────────────────────────────────────────────
+// Used for server-side Firestore reads (custom product lookups). The client-side
+// Firebase SDK can't run in Vercel serverless functions, and the REST API with
+// just an API key fails when Firestore security rules require authentication.
+// The Admin SDK uses service account credentials to bypass security rules entirely,
+// which is the correct approach for trusted server-side code.
+import admin from 'firebase-admin';
+
+// Initialize the Admin SDK once (survives across warm invocations on Vercel).
+// Uses FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY env vars set in Vercel dashboard.
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId: process.env.FIREBASE_PROJECT_ID || 'family-pantry-c65d6',
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    }),
+  });
+}
+
+// Firestore instance for custom product lookups
+const firestore = admin.firestore();
+
 // --- Edamam credentials (free tier — same as barcode.js) ---
 const EID = "2b6ecac2";
 const EK = "8db76605e873aaf2fbdf41256cb24cb4";
@@ -33,10 +56,11 @@ const EK = "8db76605e873aaf2fbdf41256cb24cb4";
 //
 // Firestore path: households/{householdId}/customProducts/{normalizedProductName}
 // The normalized name is: lowercase, trimmed, spaces → underscores, stripped of special chars.
-
-const FS_PROJECT = "family-pantry-c65d6";
-const FS_BASE = `https://firestore.googleapis.com/v1/projects/${FS_PROJECT}/databases/(default)/documents`;
-const FS_API_KEY = process.env.FIREBASE_API_KEY;
+//
+// Uses Firebase Admin SDK for authenticated server-side reads — the previous
+// approach (REST API with FIREBASE_API_KEY) failed silently because Firestore
+// security rules require authentication, and the text-search endpoint doesn't
+// receive the client's Bearer token.
 
 /**
  * normalizeForLookup(name) — Normalizes a product name the same way the client does,
@@ -48,12 +72,15 @@ function normalizeForLookup(name) {
 
 /**
  * lookupCustomProduct(householdId, query) — Checks the household's customProducts
- * Firestore collection for a matching image. Returns the imageUrl string if found,
- * or null if no custom image exists for this product.
+ * Firestore collection for a matching image using Firebase Admin SDK.
  *
- * This is called at the very top of the handler, before any external API tiers.
- * If a match is found, we inject it as a top-priority result so the household's
- * own photos always win.
+ * Returns an object with { name, imageUrl, imageDismissed } if a custom product
+ * record exists, or null if no record is found. Called at the very top of the
+ * handler before any external API tiers — user-uploaded photos always win.
+ *
+ * Uses Admin SDK (not REST API) because this runs server-side on Vercel where
+ * we don't have the client's Firebase Auth token. Admin SDK authenticates via
+ * service account credentials and bypasses Firestore security rules.
  */
 async function lookupCustomProduct(householdId, query) {
   if (!householdId || !query) return null;
@@ -61,31 +88,42 @@ async function lookupCustomProduct(householdId, query) {
   if (!normalized) return null;
 
   try {
-    const url = `${FS_BASE}/households/${householdId}/customProducts/${normalized}?key=${FS_API_KEY}`;
-    const r = await fetch(url);
-    if (r.status === 404) return null;
-    const doc = await r.json();
-    if (doc.error || !doc.fields) return null;
+    // Read the custom product document from Firestore via Admin SDK.
+    // Path: households/{householdId}/customProducts/{normalizedProductName}
+    const docRef = firestore.collection('households').doc(householdId)
+      .collection('customProducts').doc(normalized);
+    const doc = await docRef.get();
+
+    // No document found — no custom product image for this query
+    if (!doc.exists) {
+      console.log(`[TextSearch] Custom product MISS for "${query}" → "${normalized}" (household: ${householdId})`);
+      return null;
+    }
+
+    const data = doc.data();
 
     // Check imageDismissed flag — if the user explicitly deleted the image for
     // this product, skip ALL image enrichment. This flag lives on the customProducts
     // record (not the shopping item) so it persists across item deletions.
-    const imageDismissed = doc.fields?.imageDismissed?.booleanValue === true;
-    if (imageDismissed) {
+    if (data.imageDismissed === true) {
       console.log(`[TextSearch] Custom product DISMISSED for "${query}" (household: ${householdId}) — skipping all images`);
       return { name: query, imageUrl: null, imageDismissed: true };
     }
 
-    // Extract imageUrl from the Firestore REST response (typed value format)
-    const imageUrl = doc.fields?.imageUrl?.stringValue || null;
-    const name = doc.fields?.name?.stringValue || query;
-    if (!imageUrl) return null;
+    // Extract the custom image URL — if no imageUrl field, treat as no custom image
+    const imageUrl = data.imageUrl || null;
+    const name = data.name || query;
+    if (!imageUrl) {
+      console.log(`[TextSearch] Custom product found but no imageUrl for "${query}" (household: ${householdId})`);
+      return null;
+    }
 
     console.log(`[TextSearch] Custom product HIT for "${query}" (household: ${householdId}) → ${imageUrl}`);
     return { name, imageUrl, imageDismissed: false };
   } catch (e) {
-    // Non-blocking — if the lookup fails, fall through to external APIs
-    console.warn(`[TextSearch] Custom product lookup failed for "${query}":`, e.message);
+    // Non-blocking — if the lookup fails, fall through to external APIs.
+    // Log the full error for debugging since this was previously failing silently.
+    console.error(`[TextSearch] Custom product lookup FAILED for "${query}" (household: ${householdId}):`, e.message);
     return null;
   }
 }
