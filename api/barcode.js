@@ -20,6 +20,55 @@
 const EID = "2b6ecac2";
 const EK = "8db76605e873aaf2fbdf41256cb24cb4";
 
+// --- In-memory image cache ---
+// Google Custom Search has a 100 queries/day free limit, so we cache image URLs
+// by product name to avoid redundant lookups within the same serverless instance.
+const googleImageCache = new Map();
+
+/**
+ * fetchGoogleImage(productName) — Fetches a product image via Google Custom Search.
+ * Used as a universal fallback when any database returns a result without an image.
+ * Caches results in memory so repeated lookups for the same product name don't
+ * burn through the 100/day free tier quota.
+ * Returns the image URL string, or null if not found / not configured.
+ */
+async function fetchGoogleImage(productName) {
+  if (!productName) return null;
+
+  // Check in-memory cache first to preserve daily quota
+  const cacheKey = productName.toLowerCase().trim();
+  if (googleImageCache.has(cacheKey)) return googleImageCache.get(cacheKey);
+
+  const key = process.env.GOOGLE_SEARCH_API_KEY;
+  const cx = process.env.GOOGLE_SEARCH_ENGINE_ID;
+  if (!key || !cx) return null;
+
+  try {
+    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(productName + " product")}&key=${key}&cx=${cx}&num=1`;
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const d = await r.json();
+
+    const item = (d.items || [])[0];
+    if (!item) {
+      // Cache the miss too so we don't re-query Google for the same product
+      googleImageCache.set(cacheKey, null);
+      return null;
+    }
+
+    // Prefer full-size image from pagemap, fall back to thumbnail
+    const pagemap = item.pagemap || {};
+    const imgUrl = pagemap.cse_image?.[0]?.src
+      || pagemap.cse_thumbnail?.[0]?.src
+      || null;
+
+    googleImageCache.set(cacheKey, imgUrl);
+    return imgUrl;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * isLowQualityName(name) — Detects truncated, generic, or garbled product names.
  * Returns true if the name looks like it was cut off mid-word, contains import/export
@@ -295,6 +344,12 @@ export default async function handler(req, res) {
       }
       // Clean the product name: strip artifacts and prepend brand if missing
       result.name = cleanProductName(result.name, result.brand);
+
+      // If no image from any database, try Google Custom Search as a universal fallback
+      if (!result.image) {
+        result.image = await fetchGoogleImage(result.name);
+      }
+
       return res.status(200).json({ found: true, product: result });
     }
 
@@ -305,6 +360,12 @@ export default async function handler(req, res) {
   // No high-quality result found; return the best fallback we have (with cleaned name)
   if (bestFallback) {
     bestFallback.name = cleanProductName(bestFallback.name, bestFallback.brand);
+
+    // If no image from any database, try Google Custom Search as a universal fallback
+    if (!bestFallback.image) {
+      bestFallback.image = await fetchGoogleImage(bestFallback.name);
+    }
+
     return res.status(200).json({ found: true, product: bestFallback });
   }
 
