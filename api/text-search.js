@@ -1,18 +1,15 @@
 // ── TEXT SEARCH API ──────────────────────────────────────────────────────────
 // Serverless function that searches for products by name/text query across
-// a 9-database waterfall. Short-circuits once enough high-quality results are
+// an 8-database waterfall. Short-circuits once enough high-quality results are
 // found to keep response times fast.
 //
 // Waterfall order (fastest/most relevant first):
-//   1. Spoonacular   — food-focused, great for produce & ingredients
-//   2. Kroger        — real grocery inventory with clean product images
-//   3. USDA FoodData — authoritative for fresh produce & whole foods
-//   4. Google Custom Search — catch-all with product images from the web
-//   5. Edamam        — food database with nutrition data
-//   6. Open Food Facts — community-driven food database (no key needed)
-//   7. UPC Item DB   — general products (no key for trial)
-//   8. Open Beauty Facts — cosmetics & personal care (no key needed)
-//   9. Open Pet Food Facts — pet food & treats (no key needed)
+//   Tier 1 (parallel): Spoonacular + Kroger + USDA
+//   Tier 2 (parallel, 3s timeout): Edamam + Open Food Facts
+//   Tier 3 (parallel): UPC Item DB + Open Beauty Facts + Open Pet Food Facts
+//
+// Image priority: Spoonacular CDN > Kroger > Open Food Facts > Edamam > others
+// (Google Custom Search removed — API closed to new customers)
 //
 // Request:  GET /api/text-search?q=olive+oil
 // Response: { results: [{ name, brand, category, image, source, nutrition }] }
@@ -132,7 +129,7 @@ function isStrictlyRelevant(name, query) {
 // ── IMAGE URL VALIDATION ─────────────────────────────────────────────────────
 // Filters out placeholder images, SVG icons, and broken/relative URLs before
 // they reach the client. If a URL fails validation, it's treated as "no image"
-// so the Google fallback can provide a real product photo instead.
+// and the client can show a generic placeholder instead.
 
 /**
  * isValidImageUrl(url) — Returns true only if the URL looks like a real product
@@ -215,16 +212,23 @@ async function searchSpoonacular(query) {
     if (!r.ok) return [];
     const d = await r.json();
 
-    return (d.products || []).slice(0, 5).map(p => ({
-      name: p.title || "",
-      brand: "",
-      category: "Grocery",
+    return (d.products || []).slice(0, 5).map(p => {
       // Spoonacular may return a bare filename — normalize to full CDN URL, then validate
-      image: isValidImageUrl(spoonacularImageUrl(p.image)) ? spoonacularImageUrl(p.image) : null,
-      source: "Spoonacular",
-      description: "",
-      nutrition: null,
-    })).filter(p => p.name);
+      const rawImg = p.image || p.imageType || null;
+      const fullImg = spoonacularImageUrl(rawImg);
+      const validImg = isValidImageUrl(fullImg) ? fullImg : null;
+      // Log what Spoonacular returns so we can verify image extraction in Vercel logs
+      console.log(`[Spoonacular] "${p.title}" — raw image: ${rawImg}, resolved: ${fullImg}, valid: ${!!validImg}`);
+      return {
+        name: p.title || "",
+        brand: "",
+        category: "Grocery",
+        image: validImg,
+        source: "Spoonacular",
+        description: "",
+        nutrition: null,
+      };
+    }).filter(p => p.name);
   } catch {
     return [];
   }
@@ -301,9 +305,8 @@ async function searchKroger(query) {
  * searchUSDA(query) — Searches USDA FoodData Central.
  * Authoritative source for fresh produce, whole foods, and generic ingredients.
  * Requires USDA_API_KEY env var. Free tier allows 1000 requests/hour.
- * USDA has no product images — the final backfillImagesAndReturn() step
- * handles image lookups for all imageless results in one pass, so we
- * intentionally leave image: null here to avoid redundant Google calls.
+ * USDA has no product images — results will have image: null.
+ * The client shows a generic placeholder for imageless results.
  */
 async function searchUSDA(query) {
   const key = process.env.USDA_API_KEY;
@@ -328,7 +331,7 @@ async function searchUSDA(query) {
         name: f.description || "",
         brand: f.brandName || f.brandOwner || "",
         category: f.foodCategory || "General",
-        image: null, // USDA has no images — backfilled later by backfillImagesAndReturn()
+        image: null, // USDA has no product images
         source: "USDA",
         description: f.additionalDescriptions || "",
         nutrition: {
@@ -341,159 +344,6 @@ async function searchUSDA(query) {
     }).filter(p => p.name);
   } catch {
     return [];
-  }
-}
-
-/**
- * searchGoogle(query) — Searches Google Custom Search for product info/images.
- * Uses regular web search (not image search) to get product pages with embedded
- * images via pagemap.cse_image. Falls back to cse_thumbnail if no full image.
- * Requires GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_ENGINE_ID env vars.
- */
-async function searchGoogle(query) {
-  const key = process.env.GOOGLE_SEARCH_API_KEY;
-  const cx = process.env.GOOGLE_SEARCH_ENGINE_ID;
-  if (!key || !cx) return []; // Not configured — skip
-
-  try {
-    // Regular web search (no searchType=image) — results include pagemap with product images
-    // Raw query only — appending "grocery product" was contributing to 403 errors
-    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query)}&key=${key}&cx=${cx}&num=5&prettyPrint=false`;
-    const r = await fetch(url, {
-      headers: { "Accept": "application/json" },
-    });
-    if (!r.ok) {
-      // Log the full error response so we can diagnose 403s and quota issues
-      const errorBody = await r.text().catch(() => "(could not read body)");
-      console.log(`[Google] API returned ${r.status} for "${query}" — body: ${errorBody}`);
-      return [];
-    }
-    const d = await r.json();
-
-    return (d.items || []).slice(0, 5).map(item => {
-      // Extract image from pagemap: prefer cse_image (full size), fall back to cse_thumbnail.
-      // Validate the URL to reject placeholders/icons/SVGs.
-      const pagemap = item.pagemap || {};
-      const rawImg = pagemap.cse_image?.[0]?.src
-        || pagemap.cse_thumbnail?.[0]?.src
-        || null;
-      const imgUrl = isValidImageUrl(rawImg) ? rawImg : null;
-
-      return {
-        name: (item.title || "").replace(/ - .*$/, "").replace(/\|.*$/, "").trim(),
-        brand: "",
-        category: "General",
-        image: imgUrl,
-        source: "Google",
-        description: (item.snippet || "").slice(0, 120),
-        nutrition: null,
-      };
-    }).filter(p => p.name);
-  } catch {
-    return [];
-  }
-}
-
-// Per-request cache for Google image lookups. Prevents the same product name
-// from triggering multiple Google API calls within a single text-search request.
-// Key = lowercase product name, Value = Promise<string|null> (so concurrent
-// callers await the same in-flight request instead of firing duplicates).
-let _googleImageCache = new Map();
-
-/**
- * resetGoogleImageCache() — Clears the per-request image cache.
- * Called at the start of each handler invocation so stale results from a
- * previous request (same serverless container) don't leak across requests.
- */
-function resetGoogleImageCache() {
-  _googleImageCache = new Map();
-}
-
-/**
- * fetchGoogleImage(productName) — Fetches a single product image via Google
- * Custom Search Image API (searchType=image). Used to backfill images for
- * sources that don't provide them (e.g. USDA, Edamam).
- *
- * Returns the image URL string, or null if not found/configured.
- *
- * Uses a per-request cache so the same product name is never looked up twice,
- * even when multiple callers fire in parallel (they share the same Promise).
- * Logs the full request URL (key redacted) for debugging 403/quota issues.
- */
-async function fetchGoogleImage(productName) {
-  const key = process.env.GOOGLE_SEARCH_API_KEY;
-  const cx = process.env.GOOGLE_SEARCH_ENGINE_ID;
-  if (!key || !cx) {
-    console.log(`[GoogleImage] SKIPPED "${productName}" — API key or CX not configured`);
-    return null;
-  }
-
-  // Check per-request cache — return existing promise if already in-flight or resolved
-  const cacheKey = productName.toLowerCase().trim();
-  if (_googleImageCache.has(cacheKey)) {
-    console.log(`[GoogleImage] CACHE HIT for "${productName}" — reusing previous lookup`);
-    return _googleImageCache.get(cacheKey);
-  }
-
-  // Store the promise immediately so parallel callers share the same request
-  const promise = _fetchGoogleImageUncached(productName, key, cx);
-  _googleImageCache.set(cacheKey, promise);
-  return promise;
-}
-
-/**
- * _fetchGoogleImageUncached(productName, key, cx) — Internal: performs the
- * actual Google Custom Search Image API call. Uses searchType=image to get
- * direct image URLs instead of scraping pagemap from web results.
- *
- * Uses raw product name (no "food product" suffix) to avoid triggering
- * Google's spam/abuse filters which can cause 403s on appended queries.
- * Adds prettyPrint=false to reduce response size and Accept header for clarity.
- */
-async function _fetchGoogleImageUncached(productName, key, cx) {
-  console.log(`[GoogleImage] Fetching image for: "${productName}"`);
-  try {
-    // Use raw product name — appending "food product" was triggering 403 errors
-    // prettyPrint=false reduces payload size slightly
-    const url = `https://www.googleapis.com/customsearch/v1?key=${key}&cx=${cx}&q=${encodeURIComponent(productName)}&searchType=image&num=1&prettyPrint=false`;
-
-    // Log the full URL with the API key redacted for debugging
-    const redactedUrl = url.replace(key, "REDACTED");
-    console.log(`[GoogleImage] Request URL: ${redactedUrl}`);
-
-    // Explicit Accept header to signal we expect JSON (some proxies/WAFs care)
-    const r = await fetch(url, {
-      headers: { "Accept": "application/json" },
-    });
-    if (!r.ok) {
-      // Log the FULL response body so we can see exactly what Google is saying
-      const errorBody = await r.text().catch(() => "(could not read body)");
-      console.log(`[GoogleImage] API returned ${r.status} for "${productName}" — body: ${errorBody}`);
-      return null;
-    }
-    const d = await r.json();
-
-    const item = (d.items || [])[0];
-    if (!item) {
-      console.log(`[GoogleImage] No results for "${productName}"`);
-      return null;
-    }
-
-    // With searchType=image, the image URL is in item.link (direct image URL).
-    // item.image.thumbnailLink is also available as a smaller fallback.
-    const imgUrl = item.link || item.image?.thumbnailLink || null;
-
-    // Validate the image URL before returning it
-    if (imgUrl && !isValidImageUrl(imgUrl)) {
-      console.log(`[GoogleImage] Rejected invalid image for "${productName}": ${imgUrl}`);
-      return null;
-    }
-
-    console.log(`[GoogleImage] ${imgUrl ? "Found" : "No image in"} result for "${productName}"${imgUrl ? ": " + imgUrl : ""}`);
-    return imgUrl;
-  } catch (e) {
-    console.log(`[GoogleImage] Error for "${productName}": ${e.message}`);
-    return null;
   }
 }
 
@@ -540,7 +390,8 @@ async function searchEdamam(query) {
  */
 async function searchOpenFoodFacts(query) {
   try {
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=5&fields=product_name,brands,categories_tags,image_front_small_url,image_front_url,nutriments,generic_name`;
+    // Request image_url too — some products only have a generic image, not a front-specific one
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=5&fields=product_name,brands,categories_tags,image_front_small_url,image_front_url,image_url,nutriments,generic_name`;
     const r = await fetch(url, {
       headers: { "User-Agent": "KitchenApp/1.0" }
     });
@@ -559,8 +410,10 @@ async function searchOpenFoodFacts(query) {
         name: nm,
         brand: p.brands || "",
         category: ((p.categories_tags || [])[0] || "").replace("en:", "") || "General",
+        // Prefer front-facing image, fall back to generic image_url (some packaged goods only have this)
         image: isValidImageUrl(p.image_front_url) ? p.image_front_url
              : isValidImageUrl(p.image_front_small_url) ? p.image_front_small_url
+             : isValidImageUrl(p.image_url) ? p.image_url
              : null,
         source: "Open Food Facts",
         description: p.generic_name || "",
@@ -671,7 +524,7 @@ async function searchOpenPetFoodFacts(query) {
 
 /**
  * Vercel serverless handler — accepts a GET request with a text query,
- * runs a 9-database waterfall with short-circuit logic, applies strict
+ * runs an 8-database waterfall with short-circuit logic, applies strict
  * relevance filtering, deduplicates, and returns the best matches (up to 5).
  *
  * Short-circuit: the waterfall runs databases in tiers. Each tier fires its
@@ -689,10 +542,6 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
-
-  // Clear per-request Google image cache so stale results from a previous
-  // invocation (same serverless container) don't leak into this request.
-  resetGoogleImageCache();
 
   const query = (req.query.q || "").trim();
   console.log(`[TextSearch] ── Incoming query: "${query}" | method: ${req.method}`);
@@ -737,33 +586,19 @@ export default async function handler(req, res) {
   // Minimum relevant results to short-circuit (stop searching more databases)
   const ENOUGH = 3;
 
-  // Maximum time (ms) to spend on image backfill before returning results.
-  // Keeps total response time snappy — images that don't resolve in time
-  // will be null and the client can show a placeholder.
-  const IMAGE_BACKFILL_TIMEOUT_MS = 1500;
+  // Maximum time (ms) any single Tier 2 database gets before we move on.
+  // Prevents slow external APIs from blocking the entire response.
+  const TIER2_TIMEOUT_MS = 3000;
 
   /**
-   * backfillImagesWithTimeout(results) — Attempts to fill in missing images
-   * via Google/Bing, but races against a timeout so image lookups never block
-   * the response for more than IMAGE_BACKFILL_TIMEOUT_MS. Results are mutated
-   * in place — any images that resolve before the timeout are included.
+   * withTimeout(promise, ms) — Races a promise against a timeout.
+   * Returns [] if the timeout fires first, so the waterfall can continue
+   * without waiting for a slow database that's holding up the response.
    */
-  async function backfillImagesWithTimeout(results) {
-    const imageless = results.filter(r => !r.image);
-    if (imageless.length === 0) return;
-
-    console.log(`[TextSearch] ${imageless.length} result(s) missing images — backfilling (timeout: ${IMAGE_BACKFILL_TIMEOUT_MS}ms)`);
-
-    // Race all image lookups against a single timeout — whichever images
-    // resolve before the deadline get attached, the rest stay null
-    const imagePromises = imageless.map(async (item) => {
-      const img = await fetchGoogleImage(item.name);
-      if (img) item.image = img;
-    });
-
-    await Promise.race([
-      Promise.allSettled(imagePromises),
-      new Promise(resolve => setTimeout(resolve, IMAGE_BACKFILL_TIMEOUT_MS)),
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise(resolve => setTimeout(() => resolve([]), ms)),
     ]);
   }
 
@@ -784,19 +619,18 @@ export default async function handler(req, res) {
   console.log(`[TextSearch] Tier 1 done in ${Date.now() - t1Start}ms — ${allResults.length} result(s)`);
 
   if (allResults.length >= ENOUGH) {
-    const final = allResults.slice(0, 5);
-    await backfillImagesWithTimeout(final);
-    return res.status(200).json({ results: final });
+    return res.status(200).json({ results: allResults.slice(0, 5) });
   }
 
-  // ── Tier 2: Google + Edamam + Open Food Facts (broader coverage) ───────
-  // Only reached if Tier 1 returned fewer than 3 relevant results
-  console.log(`[TextSearch] Starting Tier 2 (Google + Edamam + Open Food Facts) in parallel`);
+  // ── Tier 2: Edamam + Open Food Facts (broader coverage, 3s timeout) ────
+  // Only reached if Tier 1 returned fewer than 3 relevant results.
+  // Both run in parallel with a 3s timeout each to prevent slow APIs from
+  // blocking the response (previously took 8+ seconds with Google included).
+  console.log(`[TextSearch] Starting Tier 2 (Edamam + Open Food Facts) in parallel, ${TIER2_TIMEOUT_MS}ms timeout each`);
   const t2Start = Date.now();
   const tier2 = await Promise.allSettled([
-    searchGoogle(query),
-    searchEdamam(query),
-    searchOpenFoodFacts(query),
+    withTimeout(searchEdamam(query), TIER2_TIMEOUT_MS),
+    withTimeout(searchOpenFoodFacts(query), TIER2_TIMEOUT_MS),
   ]);
   tier2.forEach(r => {
     if (r.status === "fulfilled") addResults(r.value);
@@ -804,9 +638,7 @@ export default async function handler(req, res) {
   console.log(`[TextSearch] Tier 2 done in ${Date.now() - t2Start}ms — ${allResults.length} total result(s)`);
 
   if (allResults.length >= ENOUGH) {
-    const final = allResults.slice(0, 5);
-    await backfillImagesWithTimeout(final);
-    return res.status(200).json({ results: final });
+    return res.status(200).json({ results: allResults.slice(0, 5) });
   }
 
   // ── Tier 3: UPC Item DB + niche databases (rarely needed fallbacks) ────
@@ -823,9 +655,9 @@ export default async function handler(req, res) {
   });
   console.log(`[TextSearch] Tier 3 done in ${Date.now() - t3Start}ms — ${allResults.length} total result(s)`);
 
-  // Return whatever we found (may be 0-5 results), with time-limited image backfill
+  // Return whatever we found (may be 0-5 results) — no image backfill needed
+  // since all remaining sources provide their own images natively
   const final = allResults.slice(0, 5);
-  await backfillImagesWithTimeout(final);
   const totalMs = Date.now() - t1Start;
   console.log(`[TextSearch] ── Complete: ${final.length} result(s) in ${totalMs}ms`);
   return res.status(200).json({ results: final });
