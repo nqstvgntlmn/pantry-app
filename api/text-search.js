@@ -1,8 +1,18 @@
 // ── TEXT SEARCH API ──────────────────────────────────────────────────────────
 // Serverless function that searches for products by name/text query across
-// two databases: Edamam Food Database and Open Food Facts.
-// Returns the top matches (up to 5) so the user can pick the best one when
-// manually adding items to the shopping list or pantry.
+// a 9-database waterfall. Short-circuits once enough high-quality results are
+// found to keep response times fast.
+//
+// Waterfall order (fastest/most relevant first):
+//   1. Spoonacular   — food-focused, great for produce & ingredients
+//   2. Kroger        — real grocery inventory with clean product images
+//   3. USDA FoodData — authoritative for fresh produce & whole foods
+//   4. Google Custom Search — catch-all with product images from the web
+//   5. Edamam        — food database with nutrition data
+//   6. Open Food Facts — community-driven food database (no key needed)
+//   7. UPC Item DB   — general products (no key for trial)
+//   8. Open Beauty Facts — cosmetics & personal care (no key needed)
+//   9. Open Pet Food Facts — pet food & treats (no key needed)
 //
 // Request:  GET /api/text-search?q=olive+oil
 // Response: { results: [{ name, brand, category, image, source, nutrition }] }
@@ -11,6 +21,201 @@
 // --- Edamam credentials (free tier — same as barcode.js) ---
 const EID = "2b6ecac2";
 const EK = "8db76605e873aaf2fbdf41256cb24cb4";
+
+// ── RELEVANCE SCORING ────────────────────────────────────────────────────────
+// Server-side relevance filter applied to ALL database results. Ensures only
+// products where the query is a primary/leading word pass through.
+// This prevents irrelevant matches like "Chicken & Mushroom POT noodle" for "mushroom".
+
+/**
+ * isRelevant(name, query) — Returns true only if the query is a primary word
+ * in the product name (starts with query, or one of the first 3 words matches).
+ * Strict filter: anything else is rejected before results reach the client.
+ */
+function isRelevant(name, query) {
+  const nameLower = (name || "").toLowerCase().trim();
+  const queryLower = query.toLowerCase().trim();
+
+  // Exact match
+  if (nameLower === queryLower) return true;
+
+  // Name starts with query
+  if (nameLower.startsWith(queryLower)) return true;
+
+  // Split into words and check the first 3
+  const words = nameLower.split(/[\s,&+\-–—/]+/).filter(w => w.length >= 2);
+  const earlyWords = words.slice(0, 3);
+  for (const w of earlyWords) {
+    if (w.startsWith(queryLower) || queryLower.startsWith(w)) return true;
+  }
+
+  return false;
+}
+
+// ── DATABASE SEARCH FUNCTIONS ────────────────────────────────────────────────
+// Each function searches one product database and returns an array of
+// normalized product objects. Returns [] on failure (never throws).
+
+/**
+ * searchSpoonacular(query) — Searches the Spoonacular Grocery Products API.
+ * Excellent for fresh produce, common ingredients, and branded grocery items.
+ * Requires SPOONACULAR_API_KEY env var.
+ */
+async function searchSpoonacular(query) {
+  const key = process.env.SPOONACULAR_API_KEY;
+  if (!key) return []; // API key not configured — skip this source
+
+  try {
+    const url = `https://api.spoonacular.com/food/products/search?query=${encodeURIComponent(query)}&number=5&apiKey=${key}`;
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const d = await r.json();
+
+    return (d.products || []).slice(0, 5).map(p => ({
+      name: p.title || "",
+      brand: "",
+      category: "Grocery",
+      image: p.image || null,
+      source: "Spoonacular",
+      description: "",
+      nutrition: null,
+    })).filter(p => p.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * searchKroger(query) — Searches the Kroger Products API.
+ * Real grocery store inventory with clean product images and brand data.
+ * Requires KROGER_API_KEY env var (client_id:client_secret format or bearer token).
+ */
+async function searchKroger(query) {
+  const key = process.env.KROGER_API_KEY;
+  if (!key) return []; // API key not configured — skip
+
+  try {
+    // Kroger API uses OAuth2 client credentials — the env var should contain
+    // a base64-encoded "client_id:client_secret" string for the token request.
+    // First, get an access token.
+    const tokenRes = await fetch("https://api.kroger.com/v1/connect/oauth2/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Basic ${key}`,
+      },
+      body: "grant_type=client_credentials&scope=product.compact",
+    });
+    if (!tokenRes.ok) return [];
+    const tokenData = await tokenRes.json();
+    const token = tokenData.access_token;
+    if (!token) return [];
+
+    // Search products with the access token
+    const url = `https://api.kroger.com/v1/products?filter.term=${encodeURIComponent(query)}&filter.limit=5`;
+    const r = await fetch(url, {
+      headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json" },
+    });
+    if (!r.ok) return [];
+    const d = await r.json();
+
+    return (d.data || []).slice(0, 5).map(p => {
+      // Kroger images are in p.images array — pick the first front-facing image
+      const images = p.images || [];
+      const frontImg = images.find(img => img.perspective === "front");
+      const imgUrl = frontImg?.sizes?.find(s => s.size === "medium")?.url
+        || frontImg?.sizes?.[0]?.url
+        || images[0]?.sizes?.[0]?.url
+        || null;
+
+      return {
+        name: p.description || "",
+        brand: p.brand || "",
+        category: (p.categories || []).join(", ") || "Grocery",
+        image: imgUrl,
+        source: "Kroger",
+        description: "",
+        nutrition: null,
+      };
+    }).filter(p => p.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * searchUSDA(query) — Searches USDA FoodData Central.
+ * Authoritative source for fresh produce, whole foods, and generic ingredients.
+ * Requires USDA_API_KEY env var. Free tier allows 1000 requests/hour.
+ */
+async function searchUSDA(query) {
+  const key = process.env.USDA_API_KEY;
+  if (!key) return []; // API key not configured — skip
+
+  try {
+    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&pageSize=5&api_key=${key}`;
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const d = await r.json();
+
+    return (d.foods || []).slice(0, 5).map(f => {
+      // Extract key nutrients from the nutrients array
+      const nutrients = f.foodNutrients || [];
+      const findNutr = (name) => nutrients.find(n => (n.nutrientName || "").toLowerCase().includes(name.toLowerCase()));
+      const cal = findNutr("Energy");
+      const protein = findNutr("Protein");
+      const fat = findNutr("Total lipid");
+      const carbs = findNutr("Carbohydrate");
+
+      return {
+        name: f.description || "",
+        brand: f.brandName || f.brandOwner || "",
+        category: f.foodCategory || "General",
+        image: null, // USDA doesn't provide images
+        source: "USDA",
+        description: f.additionalDescriptions || "",
+        nutrition: {
+          calories: cal ? Math.round(cal.value) : null,
+          protein: protein ? `${protein.value.toFixed(1)}g` : null,
+          fat: fat ? `${fat.value.toFixed(1)}g` : null,
+          carbs: carbs ? `${carbs.value.toFixed(1)}g` : null,
+        },
+      };
+    }).filter(p => p.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * searchGoogle(query) — Searches Google Custom Search for product info/images.
+ * Catch-all for items not covered by food-specific databases.
+ * Requires GOOGLE_SEARCH_API_KEY and GOOGLE_SEARCH_ENGINE_ID env vars.
+ */
+async function searchGoogle(query) {
+  const key = process.env.GOOGLE_SEARCH_API_KEY;
+  const cx = process.env.GOOGLE_SEARCH_ENGINE_ID;
+  if (!key || !cx) return []; // Not configured — skip
+
+  try {
+    const url = `https://www.googleapis.com/customsearch/v1?q=${encodeURIComponent(query + " grocery product")}&key=${key}&cx=${cx}&num=5&searchType=image`;
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const d = await r.json();
+
+    return (d.items || []).slice(0, 5).map(item => ({
+      name: (item.title || "").replace(/ - .*$/, "").replace(/\|.*$/, "").trim(),
+      brand: "",
+      category: "General",
+      image: item.link || null,
+      source: "Google",
+      description: "",
+      nutrition: null,
+    })).filter(p => p.name);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * searchEdamam(query) — Searches the Edamam Food Database by text.
@@ -24,7 +229,6 @@ async function searchEdamam(query) {
     if (!r.ok) return [];
     const d = await r.json();
 
-    // Edamam returns results in "hints" — each has a "food" object
     const hints = d.hints || [];
     return hints.slice(0, 5).map(h => {
       const f = h.food;
@@ -43,7 +247,7 @@ async function searchEdamam(query) {
           carbs: n.CHOCDF ? `${n.CHOCDF.toFixed(1)}g` : null,
         },
       };
-    }).filter(r => r.name); // Only return results that have a name
+    }).filter(r => r.name);
   } catch {
     return [];
   }
@@ -66,7 +270,7 @@ async function searchOpenFoodFacts(query) {
     const products = d.products || [];
     return products.slice(0, 5).map(p => {
       const nm = p.product_name || "";
-      if (!nm) return null; // Skip products without a name
+      if (!nm) return null;
 
       const nt = p.nutriments || {};
       const hasNutrition = nt["energy-kcal_100g"] || nt["proteins_100g"];
@@ -85,16 +289,112 @@ async function searchOpenFoodFacts(query) {
           carbs: nt["carbohydrates_100g"] ? `${nt["carbohydrates_100g"].toFixed(1)}g` : null,
         } : null,
       };
-    }).filter(Boolean); // Remove nulls from nameless products
+    }).filter(Boolean);
   } catch {
     return [];
   }
 }
 
 /**
+ * searchUpcItemDb(query) — Text search against UPC Item DB trial endpoint.
+ * General US products across all categories. No API key for trial tier.
+ * Limited to 100 lookups/day.
+ */
+async function searchUpcItemDb(query) {
+  try {
+    const url = `https://api.upcitemdb.com/prod/trial/search?s=${encodeURIComponent(query)}&type=product`;
+    const r = await fetch(url, {
+      headers: { "User-Agent": "KitchenApp/1.0" }
+    });
+    if (!r.ok) return [];
+    const d = await r.json();
+
+    return (d.items || []).slice(0, 5).map(i => ({
+      name: i.title || "",
+      brand: i.brand || "",
+      category: i.category || "General",
+      image: (i.images || []).length > 0 ? i.images[0] : null,
+      source: "UPC Item DB",
+      description: i.description || "",
+      nutrition: null,
+    })).filter(p => p.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * searchOpenBeautyFacts(query) — Text search against Open Beauty Facts.
+ * Cosmetics, shampoos, and personal care products. No API key needed.
+ */
+async function searchOpenBeautyFacts(query) {
+  try {
+    const url = `https://world.openbeautyfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=5&fields=product_name,brands,categories_tags,image_front_url,generic_name`;
+    const r = await fetch(url, {
+      headers: { "User-Agent": "KitchenApp/1.0" }
+    });
+    if (!r.ok) return [];
+    const d = await r.json();
+
+    return (d.products || []).slice(0, 5).map(p => {
+      const nm = p.product_name || "";
+      if (!nm) return null;
+      return {
+        name: nm,
+        brand: p.brands || "",
+        category: ((p.categories_tags || [])[0] || "").replace("en:", "") || "Personal Care",
+        image: p.image_front_url || null,
+        source: "Open Beauty Facts",
+        description: p.generic_name || "",
+        nutrition: null,
+      };
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * searchOpenPetFoodFacts(query) — Text search against Open Pet Food Facts.
+ * Pet food and treats. No API key needed.
+ */
+async function searchOpenPetFoodFacts(query) {
+  try {
+    const url = `https://world.openpetfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=5&fields=product_name,brands,categories_tags,image_front_url,generic_name`;
+    const r = await fetch(url, {
+      headers: { "User-Agent": "KitchenApp/1.0" }
+    });
+    if (!r.ok) return [];
+    const d = await r.json();
+
+    return (d.products || []).slice(0, 5).map(p => {
+      const nm = p.product_name || "";
+      if (!nm) return null;
+      return {
+        name: nm,
+        brand: p.brands || "",
+        category: ((p.categories_tags || [])[0] || "").replace("en:", "") || "Pet Food",
+        image: p.image_front_url || null,
+        source: "Open Pet Food Facts",
+        description: p.generic_name || "",
+        nutrition: null,
+      };
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+// ── HANDLER ──────────────────────────────────────────────────────────────────
+
+/**
  * Vercel serverless handler — accepts a GET request with a text query,
- * searches both Edamam and Open Food Facts in parallel, deduplicates,
- * and returns the best matches (up to 5).
+ * runs a 9-database waterfall with short-circuit logic, applies strict
+ * relevance filtering, deduplicates, and returns the best matches (up to 5).
+ *
+ * Short-circuit: the waterfall runs databases in tiers. Each tier fires its
+ * databases in parallel. As soon as we have >= 3 relevant results after a tier,
+ * we stop and return — no need to hit slower/less-relevant sources.
  */
 export default async function handler(req, res) {
   // --- CORS headers for browser frontend ---
@@ -108,24 +408,71 @@ export default async function handler(req, res) {
   const query = (req.query.q || "").trim();
   if (!query) return res.status(400).json({ error: "Missing 'q' query parameter" });
 
-  // Search both databases in parallel for speed
-  const [edamamResults, offResults] = await Promise.all([
-    searchEdamam(query),
-    searchOpenFoodFacts(query),
-  ]);
-
-  // Merge results: Edamam first (better nutrition data), then OFF
-  const all = [...edamamResults, ...offResults];
-
-  // Deduplicate by normalized name (case-insensitive, trimmed)
+  // Track all unique results across tiers — deduped by lowercase name
   const seen = new Set();
-  const unique = all.filter(r => {
-    const key = r.name.toLowerCase().trim();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const allResults = [];
 
-  // Return top 5 unique results
-  return res.status(200).json({ results: unique.slice(0, 5) });
+  /**
+   * addResults(results) — Merges new results into allResults, deduplicating
+   * by name and applying strict relevance filtering. Returns the count of
+   * new results added (for short-circuit decision).
+   */
+  function addResults(results) {
+    let added = 0;
+    for (const r of results) {
+      if (!r || !r.name) continue;
+      // Strict relevance: query must be a primary word in the product name
+      if (!isRelevant(r.name, query)) continue;
+      const key = r.name.toLowerCase().trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      allResults.push(r);
+      added++;
+    }
+    return added;
+  }
+
+  // Minimum relevant results to short-circuit (stop searching more databases)
+  const ENOUGH = 3;
+
+  // ── Tier 1: Spoonacular + Kroger (fastest, most grocery-relevant) ──
+  const tier1 = await Promise.all([
+    searchSpoonacular(query),
+    searchKroger(query),
+  ]);
+  tier1.forEach(r => addResults(r));
+  if (allResults.length >= ENOUGH) {
+    return res.status(200).json({ results: allResults.slice(0, 5) });
+  }
+
+  // ── Tier 2: USDA + Google + Edamam (good coverage, slightly slower) ──
+  const tier2 = await Promise.all([
+    searchUSDA(query),
+    searchGoogle(query),
+    searchEdamam(query),
+  ]);
+  tier2.forEach(r => addResults(r));
+  if (allResults.length >= ENOUGH) {
+    return res.status(200).json({ results: allResults.slice(0, 5) });
+  }
+
+  // ── Tier 3: Open Food Facts + UPC Item DB (community/general fallbacks) ──
+  const tier3 = await Promise.all([
+    searchOpenFoodFacts(query),
+    searchUpcItemDb(query),
+  ]);
+  tier3.forEach(r => addResults(r));
+  if (allResults.length >= ENOUGH) {
+    return res.status(200).json({ results: allResults.slice(0, 5) });
+  }
+
+  // ── Tier 4: Niche databases (beauty, pet food — rarely needed) ──
+  const tier4 = await Promise.all([
+    searchOpenBeautyFacts(query),
+    searchOpenPetFoodFacts(query),
+  ]);
+  tier4.forEach(r => addResults(r));
+
+  // Return whatever we found (may be 0-5 results)
+  return res.status(200).json({ results: allResults.slice(0, 5) });
 }

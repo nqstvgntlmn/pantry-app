@@ -191,12 +191,12 @@ export function sH(item) {
 
   return `<div class="swipe-wrap" id="sw-${item.id}" data-id="${item.id}" data-list="shop">
     <div class="swipe-inner">
-      <!-- Main row: tap toggles checked state -->
+      <!-- Main row: swipeRowTap handles multi-select; checkbox toggles checked; content area opens detail -->
       <div class="shit${item.checked ? " chk" : ""}" onclick="swipeRowTap('${item.id}','shop')">
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
-        <div class="shck">${item.checked ? "✓" : ""}</div>  <!-- Checked indicator circle -->
+        <div class="shck" onclick="event.stopPropagation();swipeRowTap('${item.id}','shop')">${item.checked ? "✓" : ""}</div>  <!-- Tap to toggle checked (or toggle selection in multi-select) -->
         ${thumb}                               <!-- Product thumbnail from barcode scan (if available) -->
-        <div style="flex:1;min-width:0">
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
           <div class="shnm">${item.name}${qtyBadge}</div>
           ${item.brand ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand subtitle from barcode scan -->
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
@@ -445,55 +445,53 @@ export function onShopInput() {
 }
 
 /**
- * scoreSearchResult(name, query) — Scores how relevant a product name is
- * to the user's search query. Higher scores = more relevant.
+ * scoreSearchResult(name, query) — Strictly scores how relevant a product name
+ * is to the user's search query. Enforces that the query must be a PRIMARY word
+ * in the product name — not a secondary ingredient or flavor descriptor.
  *
- * Prioritizes results where the query is the primary word (e.g. "Mushrooms"
- * for query "mushroom") over results where it's a secondary ingredient
- * (e.g. "Chicken & Mushroom Flavour POT noodle").
- *
- * Scoring breakdown:
- *   100  = exact match
- *   50+  = name starts with query
- *   40+  = first word of name matches
- *   0-30 = query position bonus (earlier = higher)
- *   0-15 = shorter names get a bonus (more specific products)
- *   10   = word-boundary match bonus
+ * STRICT RULES (to prevent irrelevant results like "Chicken & Mushroom POT noodle"
+ * showing up for a search of "mushroom"):
+ *   - Product name must START with the query, OR
+ *   - The FIRST meaningful word of the name must match the query, OR
+ *   - The query must match a standalone word at the beginning of the name
+ *     (within the first 3 words)
+ *   - Anything else gets score 0 and is filtered out
  *
  * @param {string} name — The product name to score
  * @param {string} query — The user's search query
- * @returns {number} Relevance score (higher = more relevant)
+ * @returns {number} Relevance score (higher = more relevant, 0 = rejected)
  */
 export function scoreSearchResult(name, query) {
-  const nameLower = (name || "").toLowerCase();
-  const queryLower = query.toLowerCase();
-  let score = 0;
+  const nameLower = (name || "").toLowerCase().trim();
+  const queryLower = query.toLowerCase().trim();
 
   // Exact match is highest priority
   if (nameLower === queryLower) return 100;
 
   // Name starts with the query (e.g. "Mushrooms 8oz" for "mushroom")
-  if (nameLower.startsWith(queryLower)) score += 50;
+  if (nameLower.startsWith(queryLower)) return 90;
 
-  // First word of name matches the query (e.g. "Mushroom Soup" for "mushroom")
-  const firstWord = nameLower.split(/\s+/)[0];
-  if (firstWord.startsWith(queryLower) || queryLower.startsWith(firstWord)) score += 40;
+  // Split name into words, stripping common brand/flavor noise
+  const nameWords = nameLower.split(/[\s,&+\-–—/]+/).filter(w => w.length >= 2);
 
-  // Position bonus: query appearing earlier in the name means higher relevance
-  const pos = nameLower.indexOf(queryLower);
-  if (pos >= 0) {
-    score += Math.max(0, 30 - pos);
+  // First word of product name starts with query (e.g. "Mushroom Soup" for "mushroom")
+  if (nameWords.length && nameWords[0].startsWith(queryLower)) return 80;
+
+  // Query starts with the first word (e.g. searching "mushrooms" matches "Mushroom")
+  if (nameWords.length && queryLower.startsWith(nameWords[0])) return 75;
+
+  // Query matches one of the first 3 words as a word-boundary match
+  // This catches "Organic Mushrooms" but NOT "Chicken Mushroom Flavour POT noodle"
+  const earlyWords = nameWords.slice(0, 3);
+  for (let i = 0; i < earlyWords.length; i++) {
+    if (earlyWords[i].startsWith(queryLower) || queryLower.startsWith(earlyWords[i])) {
+      return 60 - (i * 10); // Position penalty: 1st word = 60, 2nd = 50, 3rd = 40
+    }
   }
 
-  // Shorter names tend to be more specific/relevant products
-  score += Math.max(0, 15 - Math.floor(name.length / 4));
-
-  // Word-boundary match: query appears as a whole word, not as a substring
-  // (e.g. "mushroom" in "Baby Bella Mushrooms" but not "mush" in "mushy peas")
-  const escaped = queryLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (new RegExp(`\\b${escaped}`, 'i').test(name)) score += 10;
-
-  return score;
+  // STRICT: if the query doesn't match any of the first 3 words, reject it entirely.
+  // This eliminates results like "Chicken & Mushroom Flavour POT noodle" for "mushroom"
+  return 0;
 }
 
 /**
@@ -524,12 +522,13 @@ async function _fetchAndScoreResults(query) {
     return queryWords.some(w => nameLower.includes(w));
   });
 
-  // Score by relevance and cut off low-scoring results.
-  // Minimum score of 15 eliminates products where the query is just a minor
-  // secondary ingredient (e.g. "Chicken & Mushroom Flavour POT noodle" for "mushroom").
+  // Score by relevance and STRICTLY filter: only results where the query is
+  // a primary/leading word in the product name pass (score > 0).
+  // scoreSearchResult returns 0 for anything where the query is buried deep
+  // in the name (e.g. "Chicken & Mushroom Flavour POT noodle" for "mushroom").
   const scored = results
     .map(p => ({ ...p, _score: scoreSearchResult(p.name || "", query) }))
-    .filter(p => p._score >= 15)
+    .filter(p => p._score > 0)
     .sort((a, b) => b._score - a._score)
     .slice(0, 5);
 
@@ -740,6 +739,115 @@ export function closeEnrichSheet() {
   if (sheet) sheet.classList.remove("active");
   // Clean up the temporary enrichment context
   window._enrichCtx = null;
+}
+
+// ── PRODUCT DETAIL BOTTOM SHEET ──────────────────────────────────────────────
+// Shows full product info when a user taps a shopping list item's name/content area.
+// Displays whatever data is stored on the item: name, brand, image, category,
+// quantity, note, source badge, and nutrition (if available from enrichment).
+
+/**
+ * openItemDetail(id) — Opens the product detail bottom sheet for a shopping item.
+ * Reads all stored fields from the item and renders them into the sheet.
+ * In multi-select mode, delegates to the parent row tap handler instead.
+ */
+export function openItemDetail(id) {
+  // In multi-select mode, let the parent swipeRowTap handle the tap for selection toggle
+  if (state.selectMode) return;
+
+  // Stop propagation so the parent row's swipeRowTap doesn't also fire (toggling checked)
+  if (event) event.stopPropagation();
+
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+
+  const content = g("itemDetailContent");
+  if (!content) return;
+
+  // Build the product image or placeholder
+  const img = item.image
+    ? `<img src="${item.image}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>`
+    : `<div class="item-detail-img-ph">🛒</div>`;
+
+  // Build the header section (image + name + brand)
+  let html = `<div class="item-detail-header">
+    ${img}
+    <div style="flex:1;min-width:0">
+      <div class="item-detail-name">${item.name}</div>
+      ${item.brand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
+      ${item.checked ? `<div style="margin-top:4px"><span class="item-detail-badge" style="background:var(--gnd);color:var(--gn)">✓ Purchased</span></div>` : ""}
+    </div>
+  </div>`;
+
+  // Info badges row: category, source, quantity
+  const badges = [];
+  if (item.category && item.category !== "General") badges.push(item.category);
+  if (item.source) badges.push(`via ${item.source}`);
+  if (item.src) badges.push(item.src === "manual" ? "Added manually" : item.src === "meal-plan" ? "From meal plan" : item.src === "deal" ? "From deals" : item.src === "search" ? "Product search" : item.src);
+
+  if (badges.length) {
+    html += `<div style="margin-bottom:10px">${badges.map(b => `<span class="item-detail-badge">${b}</span>`).join("")}</div>`;
+  }
+
+  // Quantity section
+  const qty = item.qty || 1;
+  if (qty > 1) {
+    html += `<div class="item-detail-section">
+      <div class="item-detail-label">Quantity</div>
+      <div class="item-detail-value">× ${qty}</div>
+    </div>`;
+  }
+
+  // Note section (if present)
+  if (item.note) {
+    html += `<div class="item-detail-section">
+      <div class="item-detail-label">Note</div>
+      <div class="item-detail-value">${item.note}</div>
+    </div>`;
+  }
+
+  // Nutrition section (if enriched with product data)
+  if (item.nutrition) {
+    const n = item.nutrition;
+    const nutrItems = [];
+    if (n.calories != null) nutrItems.push({ val: n.calories, lbl: "Calories" });
+    if (n.protein) nutrItems.push({ val: n.protein, lbl: "Protein" });
+    if (n.fat) nutrItems.push({ val: n.fat, lbl: "Fat" });
+    if (n.carbs) nutrItems.push({ val: n.carbs, lbl: "Carbs" });
+
+    if (nutrItems.length) {
+      html += `<div class="item-detail-section">
+        <div class="item-detail-label">Nutrition</div>
+        <div class="item-detail-nutr-grid">
+          ${nutrItems.map(ni => `<div class="item-detail-nutr-item">
+            <div class="item-detail-nutr-val">${ni.val}</div>
+            <div class="item-detail-nutr-lbl">${ni.lbl}</div>
+          </div>`).join("")}
+        </div>
+      </div>`;
+    }
+  }
+
+  // Close button at the bottom
+  html += `<button class="btn bs bf" onclick="closeItemDetail()" style="margin-top:8px">Close</button>`;
+
+  content.innerHTML = html;
+
+  // Show the bottom sheet
+  const backdrop = g("itemDetailBackdrop");
+  const sheet = g("itemDetailSheet");
+  if (backdrop) backdrop.classList.add("active");
+  if (sheet) sheet.classList.add("active");
+}
+
+/**
+ * closeItemDetail() — Dismisses the product detail bottom sheet.
+ */
+export function closeItemDetail() {
+  const backdrop = g("itemDetailBackdrop");
+  const sheet = g("itemDetailSheet");
+  if (backdrop) backdrop.classList.remove("active");
+  if (sheet) sheet.classList.remove("active");
 }
 
 /**
