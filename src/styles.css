@@ -252,10 +252,11 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* During active drag, disable transitions so the row tracks the finger at 1:1 */
 .swipe-inner.swiping{transition:none !important}
 
-/* Red delete zone — sits behind the row, revealed via clip-path as user swipes.
-   80px wide to match Apple's native delete button proportions. */
+/* Red delete zone — sits behind the row, hidden by clip-path until the user
+   swipes left. Any left swipe immediately reveals the full zone (no progressive
+   reveal). 80px wide to match Apple's native delete button proportions. */
 .swipe-del{position:absolute;right:0;top:0;bottom:0;width:80px;background:var(--rd);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;border-radius:0 14px 14px 0;clip-path:inset(0 0 0 100%);pointer-events:none;-webkit-tap-highlight-color:transparent}
-/* When row is snapped open, enable pointer events so delete button is tappable */
+/* When row is snapped open, enable pointer events so trashcan is tappable */
 .swipe-wrap.open .swipe-del{pointer-events:auto}
 
 /* Trash can icon — SVG container centered in the delete zone */

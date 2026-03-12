@@ -1,12 +1,11 @@
 // ── SWIPE-TO-DELETE + MULTI-SELECT ENGINE ────────────────────────────────────
-// Rebuilt to match Apple's native swipe-to-delete interaction:
+// Apple-style swipe-to-delete with immediate delete zone reveal:
+//   - Any left swipe immediately reveals the red delete zone + trashcan icon
 //   - 1:1 finger tracking with rubber band resistance past the delete zone
-//   - Red delete zone slides in from the right (~80px) with an animated trash can
-//   - Trash can lid animates open when swiped past the snap threshold
-//   - ~40% swipe = snap/lock open with spring animation + haptic feedback
+//   - Tapping the trashcan deletes the item with slide-out animation
 //   - ~80% swipe = auto-complete delete with slide-out animation
-//   - Release before threshold = spring back smoothly
-//   - Only one row open at a time
+//   - Release before snap threshold = spring back, delete zone hides
+//   - Only one row open at a time — swiping a new row closes any open row
 //   - Works on both shopping list and inventory items
 //
 // DOM structure expected for each swipeable row:
@@ -53,6 +52,13 @@ export function initSwipe() {
     if (!wrap) return;
     // Swipe is disabled during multi-select mode (taps toggle selection instead)
     if (state.selectMode) return;
+
+    // Only one row open at a time — close any previously open row when
+    // the user starts swiping a different row
+    if (_openWrap && _openWrap !== wrap) {
+      _snapClose(_openWrap);
+      _openWrap = null;
+    }
 
     // Store the element and initial finger position
     _swipeEl = inner;
@@ -115,13 +121,13 @@ export function initSwipe() {
 
     _swipeEl.style.transform = `translateX(${tx}px)`;
 
-    // Update the delete zone's clip-path to reveal proportionally to the swipe distance
+    // Immediately reveal the full delete zone on any left swipe — no progressive
+    // clip-path reveal. The red zone + trashcan icon appear as soon as the user
+    // starts dragging left, giving clear visual feedback of the delete affordance.
     const wrap = _swipeEl.closest(".swipe-wrap");
     const del = wrap?.querySelector(".swipe-del");
-    if (del) {
-      const reveal = Math.min(Math.abs(tx), DELETE_ZONE_WIDTH);
-      const pct = 100 - (reveal / DELETE_ZONE_WIDTH * 100);
-      del.style.clipPath = `inset(0 0 0 ${pct}%)`;
+    if (del && tx < 0) {
+      del.style.clipPath = "inset(0 0 0 0%)";
     }
 
     // Trigger haptic feedback and trash lid animation at the snap threshold
