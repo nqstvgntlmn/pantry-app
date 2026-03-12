@@ -11,8 +11,11 @@
 // Note: Beauty/Pet results are kept but score-penalized so food results always
 // rank above them. Users may legitimately search for shampoo, lotion, pet food, etc.
 //
-// Image priority: Spoonacular CDN > Kroger > Open Food Facts > Edamam > others
-// (Google Custom Search removed — API closed to new customers)
+// Image priority (real product photos always beat illustrations):
+//   1. Kroger product image — real product packaging, highest quality
+//   2. Spoonacular product image (img.spoonacular.com/products/) — real photos
+//   3. Open Food Facts image — real photos for packaged goods
+//   4. Lookup table / Spoonacular ingredient illustrations — last resort only
 //
 // Request:  GET /api/text-search?q=olive+oil
 // Response: { results: [{ name, brand, category, image, source, nutrition }] }
@@ -24,9 +27,11 @@ const EK = "8db76605e873aaf2fbdf41256cb24cb4";
 
 // ── PREBUILT IMAGE LOOKUP TABLE ─────────────────────────────────────────────
 // Maps ~1000 common grocery and household item names to their Spoonacular CDN
-// image filenames. Used as the FIRST image fallback — checked before any API
-// calls, so we can instantly provide an image for common queries without
-// burning API quota or adding latency.
+// image filenames. Used as a LAST-RESORT fallback — only applied after all API
+// sources have been tried and no real product photo was found. These are generic
+// ingredient illustrations (a glass of milk, a loaf of bread), not real product
+// packaging photos. A real Horizon Organic Milk carton from Kroger is always
+// better than a stock illustration of a glass of milk.
 //
 // Base URL: https://img.spoonacular.com/ingredients_100x100/{filename}
 // IMPORTANT: Only .jpg works on this CDN — .png files return 404.
@@ -1799,6 +1804,27 @@ function scoreResult(name, query, source) {
   return Math.max(base, 1); // floor at 1 — never go negative
 }
 
+// ── IMAGE CLASSIFICATION ─────────────────────────────────────────────────────
+// Distinguishes real product photos (packaging shots from Kroger, Spoonacular
+// product images, Open Food Facts, etc.) from generic ingredient illustrations
+// (Spoonacular's ingredients_* CDN). Illustrations are a glass of milk or a
+// slice of bread — useful as a last resort but always worse than a real photo
+// of the actual product packaging.
+
+/**
+ * isIngredientIllustration(url) — Returns true if the URL points to a
+ * Spoonacular ingredient illustration rather than a real product photo.
+ * These are the generic stock illustrations at img.spoonacular.com/ingredients_*
+ * (e.g., a glass of milk, a single apple, a piece of bread).
+ * Real product photos live at img.spoonacular.com/products/ or on other CDNs.
+ */
+function isIngredientIllustration(url) {
+  if (!url || typeof url !== "string") return false;
+  const lower = url.toLowerCase();
+  // Spoonacular ingredient CDN — illustrations, not real product photos
+  return lower.includes("img.spoonacular.com/ingredients_");
+}
+
 // ── IMAGE URL VALIDATION ─────────────────────────────────────────────────────
 // Filters out placeholder images, SVG icons, and broken/relative URLs before
 // they reach the client. If a URL fails validation, it's treated as "no image"
@@ -2236,9 +2262,10 @@ export default async function handler(req, res) {
   if (!query) return res.status(400).json({ error: "Missing 'q' query parameter" });
 
   // ── Pre-check: look up the query in our prebuilt image table ────────
-  // If we have a cached Spoonacular CDN URL for this common item, we can
-  // instantly provide an image to any search result that comes back without one.
-  // This saves API calls and cuts latency for the ~1000 most common grocery items.
+  // Pre-compute the lookup table match so it's ready if needed as a last-resort
+  // fallback. This is NOT applied immediately — real product photos from Kroger,
+  // Spoonacular products, and Open Food Facts all take priority. The lookup image
+  // is only applied in post-processing after all tiers have been searched.
   const lookupImg = lookupImage(query);
   if (lookupImg) {
     console.log(`[TextSearch] Image lookup HIT for "${query}" → ${lookupImg}`);
@@ -2277,12 +2304,14 @@ export default async function handler(req, res) {
         console.log(`[TextSearch] Rejected bad image for "${r.name}": ${r.image}`);
         r.image = null;
       }
-      // If the result has no image, try the prebuilt lookup table before giving up.
-      // This catches USDA results (never have images) and any other source that
-      // returned null — we can still provide a relevant Spoonacular CDN image.
-      if (!r.image && lookupImg) {
-        r.image = lookupImg;
-        console.log(`[TextSearch] Applied lookup image to "${r.name}" → ${lookupImg}`);
+      // Downgrade ingredient illustrations to fallback status. Real product photos
+      // (Kroger, Spoonacular /products/, Open Food Facts) stay as r.image.
+      // Illustrations (Spoonacular /ingredients_*) are saved as _fallbackImg so
+      // they're only used when NO real product photo is found from any source.
+      if (r.image && isIngredientIllustration(r.image)) {
+        console.log(`[TextSearch] Downgraded illustration for "${r.name}": ${r.image}`);
+        r._fallbackImg = r.image;
+        r.image = null;
       }
       const key = r.name.toLowerCase().trim();
       if (seen.has(key)) continue;
@@ -2291,6 +2320,34 @@ export default async function handler(req, res) {
       added++;
     }
     return added;
+  }
+
+  /**
+   * applyFallbackImages(results) — Post-processing step that fills in images
+   * for results that have no real product photo. Applies fallback images in
+   * priority order:
+   *   1. The result's own ingredient illustration (from Spoonacular's ingredients CDN)
+   *   2. The prebuilt lookup table illustration
+   * Only called right before returning results to the client, so all API sources
+   * have had a chance to provide a real product photo first.
+   */
+  function applyFallbackImages(results) {
+    for (const r of results) {
+      if (!r.image) {
+        // No real product photo — apply fallbacks in priority order
+        if (r._fallbackImg) {
+          // Use the result's own ingredient illustration as first fallback
+          r.image = r._fallbackImg;
+          console.log(`[TextSearch] Applied illustration fallback to "${r.name}" → ${r._fallbackImg}`);
+        } else if (lookupImg) {
+          // Last resort: use the prebuilt lookup table illustration
+          r.image = lookupImg;
+          console.log(`[TextSearch] Applied lookup fallback to "${r.name}" → ${lookupImg}`);
+        }
+      }
+      // Clean up internal field before sending to client
+      delete r._fallbackImg;
+    }
   }
 
   // Minimum relevant results to short-circuit (stop searching more databases)
@@ -2332,7 +2389,10 @@ export default async function handler(req, res) {
   if (allResults.length >= ENOUGH) {
     // Sort by relevance so the best matches appear first in the dropdown
     allResults.sort((a, b) => scoreResult(b.name, query, b.source) - scoreResult(a.name, query, a.source));
-    return res.status(200).json({ results: allResults.slice(0, 5) });
+    const slice1 = allResults.slice(0, 5);
+    // Apply illustration/lookup fallbacks to results that have no real product photo
+    applyFallbackImages(slice1);
+    return res.status(200).json({ results: slice1 });
   }
 
   // ── Tier 2: Open Food Facts only (1.5s timeout) ─────────────────────
@@ -2351,7 +2411,9 @@ export default async function handler(req, res) {
 
   if (allResults.length >= ENOUGH) {
     allResults.sort((a, b) => scoreResult(b.name, query, b.source) - scoreResult(a.name, query, a.source));
-    return res.status(200).json({ results: allResults.slice(0, 5) });
+    const slice2 = allResults.slice(0, 5);
+    applyFallbackImages(slice2);
+    return res.status(200).json({ results: slice2 });
   }
 
   // ── Tier 3: UPC Item DB (last-resort fallback) ─────────────────────────
@@ -2388,6 +2450,8 @@ export default async function handler(req, res) {
   // always appear above beauty/pet results when both are present.
   allResults.sort((a, b) => scoreResult(b.name, query, b.source) - scoreResult(a.name, query, a.source));
   const final = allResults.slice(0, 5);
+  // Last step: fill in illustration/lookup fallbacks for results with no real photo
+  applyFallbackImages(final);
   const totalMs = Date.now() - t1Start;
   console.log(`[TextSearch] ── Complete: ${final.length} result(s) in ${totalMs}ms`);
   return res.status(200).json({ results: final });
