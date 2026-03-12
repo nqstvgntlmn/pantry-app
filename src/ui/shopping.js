@@ -315,6 +315,10 @@ export function renderShop() {
     const body = document.querySelector(".shbody");
     if (body) body.style.paddingLeft = "52px"; // Shift body right to make room for selection checkboxes
   }
+
+  // Auto-enrich any Reminders items that arrived without product images.
+  // Runs in the background — no UI interruption, results applied silently.
+  enrichRemindersItems();
 }
 
 /**
@@ -841,6 +845,57 @@ function _clearInlineSearch() {
   if (dropdown) { dropdown.classList.remove("active"); dropdown.innerHTML = ""; }
 }
 
+// ── AUTO-ENRICH REMINDERS ITEMS ──────────────────────────────────────────────
+// When items arrive from Apple Reminders (via /api/sync-reminders), they may
+// lack product images. This runs each unenriched Reminders item through the
+// same text search pipeline used by the shopping list input, and silently
+// applies the top result's image if it scores well enough (>= 20).
+
+/** Tracks item IDs currently being enriched or already processed, to prevent
+ *  duplicate API calls when renderShop triggers multiple times. */
+const _enrichedIds = new Set();
+
+/**
+ * enrichRemindersItems() — Scans the shopping list for Reminders-sourced items
+ * that have no image and enriches them in the background using the text search
+ * pipeline (/api/text-search → score → apply top result).
+ *
+ * Called from renderShop() on each render. The _enrichedIds guard ensures each
+ * item is only processed once per session, even if renderShop fires repeatedly.
+ * Enrichment is fire-and-forget — failures are silently ignored.
+ */
+export function enrichRemindersItems() {
+  // Find Reminders items that haven't been enriched and aren't being processed
+  const unenriched = state.shop.filter(i =>
+    i.src === "reminders" && !i.image && !_enrichedIds.has(i.id)
+  );
+  if (!unenriched.length) return;
+
+  for (const item of unenriched) {
+    // Mark as in-progress so we don't re-process on the next render cycle
+    _enrichedIds.add(item.id);
+
+    // Fire-and-forget: search, score, and apply the best image if found
+    _fetchAndScoreResults(item.name).then(results => {
+      // Only apply if the top result scores >= 20 (same threshold as inline search)
+      // and actually has an image URL to use
+      if (results.length && results[0]._score >= 20 && results[0].image) {
+        const best = results[0];
+        const updated = { ...item };
+        updated.image = best.image;
+        // Also apply brand/category if available and item doesn't already have them
+        if (best.brand && !item.brand) updated.brand = best.brand;
+        if (best.category && best.category !== "General" && !item.category) updated.category = best.category;
+        updated.src = "reminders"; // Preserve the source tag
+        svShopItem(updated);
+        console.log(`[RemindersEnrich] Auto-enriched "${item.name}" with image from ${best.source || "search"}`);
+      }
+    }).catch(() => {
+      // Silent failure — item stays as plain text, no user disruption
+    });
+  }
+}
+
 // ── PRODUCT TEXT SEARCH & ENRICHMENT (BOTTOM SHEET) ─────────────────────────
 // Used for enrichment AFTER an item is already added (e.g. voice input, inventory).
 // For shopping list text input, the inline dropdown (above) is used instead.
@@ -955,9 +1010,15 @@ export function openItemDetail(id) {
   const content = g("itemDetailContent");
   if (!content) return;
 
-  // Build the product image or placeholder
+  // Build the product image or placeholder.
+  // If the item has an image, show it with a small "×" delete button overlaid
+  // in the top-right corner so the user can remove it. Positioned relative
+  // to a wrapper div so the button sits on the image itself.
   const img = item.image
-    ? `<img src="${item.image}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>`
+    ? `<div class="item-detail-img-wrap">
+        <img src="${item.image}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
+        <button class="item-detail-img-del" onclick="deleteItemImage('${item.id}')" title="Remove image">×</button>
+      </div>`
     : `<div class="item-detail-img-ph">🛒</div>`;
 
   // Build the header section (image + name + brand).
@@ -1041,6 +1102,24 @@ export function closeItemDetail() {
   const sheet = g("itemDetailSheet");
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
+}
+
+/**
+ * deleteItemImage(id) — Removes the product image from a shopping list item.
+ * Clears the image field and saves immediately to Firestore, keeping all other
+ * fields (name, brand, category, note, etc.) intact. Then re-opens the detail
+ * sheet to show the updated placeholder state.
+ */
+export async function deleteItemImage(id) {
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+
+  // Clear the image field and persist to Firestore
+  const updated = { ...item, image: null };
+  await svShopItem(updated);
+
+  // Re-open the detail sheet to reflect the removed image (shows placeholder)
+  openItemDetail(id);
 }
 
 /**

@@ -440,7 +440,9 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* ── PRODUCT DETAIL BOTTOM SHEET ── */
 /* Shows full product info when tapping a shopping list item */
 .item-detail-header{display:flex;align-items:flex-start;gap:14px;margin-bottom:16px}
+.item-detail-img-wrap{position:relative;flex-shrink:0;width:72px;height:72px}
 .item-detail-img{width:72px;height:72px;border-radius:12px;object-fit:cover;background:var(--sf);border:1px solid var(--b1);flex-shrink:0}
+.item-detail-img-del{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;background:var(--rd,#e53935);color:#fff;border:2px solid var(--bg);font-size:.8rem;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;font-weight:700;-webkit-tap-highlight-color:transparent}
 .item-detail-img-ph{width:72px;height:72px;border-radius:12px;background:var(--sf);border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0}
 .item-detail-name{font-family:"Fraunces",serif;font-size:1.15rem;font-weight:400;margin-bottom:2px}
 .item-detail-brand{font-size:.82rem;color:var(--mt)}
