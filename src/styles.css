@@ -249,8 +249,9 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
    animated trash can with opening lid, spring animations, haptic feedback */
 .swipe-wrap{position:relative;overflow:hidden;border-radius:14px;margin-bottom:7px}
 .swipe-inner{position:relative;z-index:1;will-change:transform;margin-bottom:0 !important;border-radius:14px;background:var(--card)}
-/* During active drag, disable transitions so the row tracks the finger at 1:1 */
-.swipe-inner.swiping{transition:none !important}
+/* During active drag, disable transitions so the row tracks the finger/cursor at 1:1.
+   user-select:none prevents accidental text selection during mouse drags on desktop. */
+.swipe-inner.swiping{transition:none !important;user-select:none;-webkit-user-select:none}
 
 /* Red delete zone — sits behind the row, hidden by clip-path until the user
    swipes left. Any left swipe immediately reveals the full zone (no progressive

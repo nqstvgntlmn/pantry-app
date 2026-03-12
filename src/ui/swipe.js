@@ -7,6 +7,7 @@
 //   - Release before snap threshold = spring back, delete zone hides
 //   - Only one row open at a time — swiping a new row closes any open row
 //   - Works on both shopping list and inventory items
+//   - Supports both touch (mobile) and mouse drag (desktop) input methods
 //
 // DOM structure expected for each swipeable row:
 //   <div class="swipe-wrap">
@@ -21,12 +22,13 @@ import { g, showNotif } from '../helpers.js';
 // ── Swipe gesture state ──
 // Tracks the currently-swiped element, start position, and which row is "locked open"
 let _swipeEl = null;     // The .swipe-inner element currently being dragged
-let _swipeX0 = 0;        // Starting X coordinate of the current touch
+let _swipeX0 = 0;        // Starting X coordinate of the current touch/mouse
 let _swipeY0 = 0;        // Starting Y coordinate (for direction locking)
 let _openWrap = null;    // The one .swipe-wrap that has its delete zone revealed
 let _direction = null;   // Locked direction: "horizontal" or "vertical" (null = undecided)
 let _rowWidth = 0;       // Cached width of the current row for threshold calculations
 let _hapticFired = false; // Whether haptic feedback was already triggered this gesture
+let _mouseDown = false;  // Whether the left mouse button is currently held (for mouse drag tracking)
 
 // ── Constants for swipe behavior ──
 const DELETE_ZONE_WIDTH = 80;    // Width of the red delete zone in pixels (Apple-standard)
@@ -38,7 +40,7 @@ const DIRECTION_LOCK_PX = 8;     // Pixels of movement before locking to horizon
 const SPRING_EASE = 'cubic-bezier(0.25, 1.5, 0.5, 1)';
 const SMOOTH_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
-// Registers all touch event listeners for swipe-to-delete behavior.
+// Registers all touch and mouse event listeners for swipe-to-delete behavior.
 // Called once at app startup. Uses document-level delegation so dynamically
 // added rows work automatically without re-binding.
 export function initSwipe() {
@@ -181,6 +183,166 @@ export function initSwipe() {
     }
 
     _swipeEl = null;
+  });
+
+  // ── MOUSE SUPPORT ──────────────────────────────────────────────────────────
+  // Mirror of the touch handlers above so swipe-to-delete also works with a
+  // mouse on desktop. Uses mousedown/mousemove/mouseup+mouseleave and a
+  // _mouseDown flag to track whether the button is held.
+
+  // ── MOUSE DOWN: begin tracking a potential mouse-drag swipe ──
+  // Equivalent to touchstart — records start position and prepares the row for dragging.
+  // Only responds to the primary (left) mouse button.
+  document.addEventListener("mousedown", e => {
+    // Only respond to left mouse button
+    if (e.button !== 0) return;
+    const inner = e.target.closest(".swipe-inner");
+    if (!inner) return;
+    const wrap = inner.closest(".swipe-wrap");
+    if (!wrap) return;
+    // Swipe is disabled during multi-select mode
+    if (state.selectMode) return;
+
+    // Close any previously open row when starting a drag on a different row
+    if (_openWrap && _openWrap !== wrap) {
+      _snapClose(_openWrap);
+      _openWrap = null;
+    }
+
+    _mouseDown = true;
+    _swipeEl = inner;
+    _swipeX0 = e.clientX;
+    _swipeY0 = e.clientY;
+    _direction = null;
+    _hapticFired = false;
+    _rowWidth = wrap.offsetWidth;
+
+    // Disable CSS transitions during drag so row tracks mouse at 1:1
+    inner.classList.add("swiping");
+  });
+
+  // ── MOUSE MOVE: drag the row left following the cursor ──
+  // Equivalent to touchmove — 1:1 tracking with direction locking.
+  // Only fires while the mouse button is held (_mouseDown flag).
+  document.addEventListener("mousemove", e => {
+    if (!_mouseDown || !_swipeEl) return;
+
+    const dx = e.clientX - _swipeX0;
+    const dy = e.clientY - _swipeY0;
+
+    // Direction locking: decide horizontal swipe vs vertical scroll
+    if (!_direction) {
+      if (Math.abs(dx) < DIRECTION_LOCK_PX && Math.abs(dy) < DIRECTION_LOCK_PX) return;
+      _direction = Math.abs(dx) > Math.abs(dy) ? "horizontal" : "vertical";
+    }
+    // If vertical, cancel the drag and let normal behavior proceed
+    if (_direction === "vertical") {
+      _swipeEl.classList.remove("swiping");
+      _swipeEl = null;
+      _mouseDown = false;
+      return;
+    }
+
+    // Prevent text selection while dragging horizontally
+    e.preventDefault();
+
+    // 1:1 cursor tracking, clamped so the row can't be dragged right past rest
+    const tx = dx >= 0 ? 0 : dx;
+    _swipeEl.style.transform = `translateX(${tx}px)`;
+
+    // Progressive delete zone reveal — same as touch
+    const wrap = _swipeEl.closest(".swipe-wrap");
+    const del = wrap?.querySelector(".swipe-del");
+    if (del && tx < 0) {
+      const revealPct = Math.min(100, (Math.abs(tx) / DELETE_ZONE_WIDTH) * 100);
+      del.style.clipPath = `inset(0 0 0 ${100 - revealPct}%)`;
+    }
+
+    // Trash lid animation at auto-delete threshold — same as touch
+    const swipePct = Math.abs(tx) / _rowWidth;
+    if (swipePct >= AUTO_DELETE_THRESHOLD && !_hapticFired) {
+      _hapticFired = true;
+      if (navigator.vibrate) navigator.vibrate(10);
+      wrap?.classList.add("swipe-threshold");
+    } else if (swipePct < AUTO_DELETE_THRESHOLD && _hapticFired) {
+      _hapticFired = false;
+      wrap?.classList.remove("swipe-threshold");
+    }
+  });
+
+  // ── _finishMouseSwipe: shared end-of-drag logic for mouseup and mouseleave ──
+  // Equivalent to touchend — snaps open, springs back, or auto-deletes based on distance.
+  function _finishMouseSwipe() {
+    if (!_mouseDown || !_swipeEl) {
+      _mouseDown = false;
+      return;
+    }
+    _mouseDown = false;
+
+    const inner = _swipeEl;
+    const wrap = inner.closest(".swipe-wrap");
+    inner.classList.remove("swiping");
+
+    const tx = parseFloat(inner.style.transform.replace("translateX(", "")) || 0;
+    const swipePct = Math.abs(tx) / _rowWidth;
+
+    if (swipePct >= AUTO_DELETE_THRESHOLD) {
+      // Auto-delete: swiped past threshold — slide out and delete
+      _performAutoDelete(wrap, inner);
+    } else if (swipePct >= SNAP_THRESHOLD) {
+      // Snap open: lock at delete zone width with spring bounce
+      inner.style.transition = `transform 0.4s ${SPRING_EASE}`;
+      inner.style.transform = `translateX(-${DELETE_ZONE_WIDTH}px)`;
+      const del = wrap?.querySelector(".swipe-del");
+      if (del) {
+        del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
+        del.style.clipPath = "inset(0 0 0 0%)";
+      }
+      wrap?.classList.add("open");
+      wrap?.classList.add("swipe-threshold");
+      if (_openWrap && _openWrap !== wrap) _snapClose(_openWrap);
+      _openWrap = wrap;
+      setTimeout(() => { inner.style.transition = ""; }, 400);
+    } else {
+      // Spring back: didn't reach threshold — return to closed position
+      inner.style.transition = `transform 0.35s ${SPRING_EASE}`;
+      inner.style.transform = "translateX(0)";
+      const del = wrap?.querySelector(".swipe-del");
+      if (del) {
+        del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
+        del.style.clipPath = "inset(0 0 0 100%)";
+      }
+      wrap?.classList.remove("open", "swipe-threshold");
+      if (_openWrap === wrap) _openWrap = null;
+      setTimeout(() => {
+        inner.style.transition = "";
+        if (del) del.style.transition = "";
+      }, 350);
+    }
+
+    _swipeEl = null;
+  }
+
+  // ── MOUSE UP: end drag on button release ──
+  document.addEventListener("mouseup", _finishMouseSwipe);
+
+  // ── MOUSE LEAVE: end drag if cursor exits the document while button is held ──
+  // Prevents stuck drag state when user drags outside the browser window.
+  document.addEventListener("mouseleave", _finishMouseSwipe);
+
+  // ── DISMISS OPEN ROW ON MOUSE CLICK ELSEWHERE ──
+  // Same as the touchstart dismiss handler but for mouse — close any open
+  // swipe row when the user clicks elsewhere on the page.
+  document.addEventListener("mousedown", e => {
+    if (!_openWrap) return;
+    // Don't close if the click was on the delete button
+    if (e.target.closest(".swipe-del")) return;
+    // Don't close if the click was on the same open row
+    const inner = e.target.closest(".swipe-inner");
+    if (inner && inner.closest(".swipe-wrap") === _openWrap) return;
+    // Click was somewhere else: close the open row
+    _snapClose(_openWrap);
+    _openWrap = null;
   });
 
   // ── DISMISS INLINE EDITORS: close open note/qty editors on outside tap ──
