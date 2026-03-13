@@ -139,7 +139,10 @@ Return this exact JSON shape:
   "cuisine": "Italian",
   "tags": ["Quick", "Healthy"],
   "imageUrl": "https://full-url-to-primary-recipe-image.jpg",
-  "notes": "Any tips, substitutions, or serving suggestions"
+  "notes": "Any tips, substitutions, or serving suggestions",
+  "difficulty": "Easy",
+  "recipeYield": "24 cookies",
+  "storageInstructions": "Keeps in fridge for 3 days, freeze for up to 3 months"
 }
 
 Rules:
@@ -154,6 +157,9 @@ Rules:
   Protein: Chicken, Beef, Pork, Fish, Seafood, Eggs, Beans & Legumes, Nuts & Seeds, Cheese
 - For imageUrl: find the primary/hero recipe image URL. Prefer og:image, then the largest recipe photo. Return full absolute URL.
 - For times: use human-readable format like "15 min", "1 hour 30 min".
+- For difficulty: map the source site's difficulty to exactly one of "Easy", "Medium", or "Hard". If not stated on the page, use an empty string — do not guess.
+- For recipeYield: extract the recipe output quantity if different from servings (e.g. "24 cookies", "2 loaves", "1 dozen"). If the page only shows servings (number of people), leave recipeYield as an empty string.
+- For storageInstructions: extract any storage, refrigeration, or freezing tips mentioned on the page. Max 200 characters. If not found, use an empty string — do not guess.
 - If a field is not available, use an empty string or empty array.`;
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -290,6 +296,10 @@ async function saveRecipeToFirestore(db, recipe, recipeId, householdId, userId, 
     cookTime: recipe.cookTime || "",
     totalTime: recipe.totalTime || "",
     servings: recipe.servings || "",
+    // New metadata fields: difficulty, yield, and storage instructions
+    difficulty: recipe.difficulty || "",
+    recipeYield: recipe.recipeYield || "",
+    storageInstructions: recipe.storageInstructions || "",
     // Store structured data alongside the flattened description
     ingredientsRaw: recipe.ingredients || [],
     stepsRaw: recipe.steps || [],
@@ -460,6 +470,9 @@ export default async function handler(req, res) {
         tags: recipe.tags || [],
         imageUrl: recipe._imageUrl || null,
         notes: recipe.notes || "",
+        difficulty: recipe.difficulty || "",
+        recipeYield: recipe.recipeYield || "",
+        storageInstructions: recipe.storageInstructions || "",
         saved: !!savedDoc,
       },
     });

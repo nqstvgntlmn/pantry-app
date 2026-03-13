@@ -178,6 +178,39 @@ function parseTimeToInput(timeStr) {
   return { value: timeStr, unit: "min" };
 }
 
+// ── DIFFICULTY PILL SELECTOR ──────────────────────────────────────────────────
+// 3-option pill toggle (Easy / Medium / Hard) used in both add and edit forms.
+
+/**
+ * selectDifficulty — handles tapping a difficulty pill. Toggles the selected
+ * state: tapping the already-selected pill deselects it (allowing "none").
+ * @param {string} containerId - DOM ID of the .diff-pills container
+ * @param {string} value - "Easy", "Medium", or "Hard"
+ */
+export function selectDifficulty(containerId, value) {
+  const container = g(containerId);
+  if (!container) return;
+  const pills = container.querySelectorAll(".diff-pill");
+  const alreadySelected = container.querySelector(`.diff-pill.sel[data-val="${value}"]`);
+  // Deselect all pills first
+  pills.forEach(p => p.classList.remove("sel"));
+  // If the tapped pill wasn't already selected, select it
+  if (!alreadySelected) {
+    const target = container.querySelector(`.diff-pill[data-val="${value}"]`);
+    if (target) target.classList.add("sel");
+  }
+}
+
+/**
+ * getDifficulty — reads the currently selected difficulty from a pill container.
+ * Returns "Easy", "Medium", "Hard", or "" if none selected.
+ * @param {string} containerId - DOM ID of the .diff-pills container
+ */
+function getDifficulty(containerId) {
+  const sel = document.querySelector(`#${containerId} .diff-pill.sel`);
+  return sel ? sel.dataset.val : "";
+}
+
 // ── TAG HELPERS ──────────────────────────────────────────────────────────────
 
 /**
@@ -384,6 +417,9 @@ export async function importFromUrl() {
       cookTime: p.cookTime || "",
       totalTime: p.totalTime || "",
       servings: p.servings || "",
+      difficulty: p.difficulty || "",
+      recipeYield: p.recipeYield || "",
+      storageInstructions: p.storageInstructions || "",
     };
 
     // Pre-fill the time/serves form fields with imported values so user can edit
@@ -404,6 +440,13 @@ export async function importFromUrl() {
       _totalTimeManual.add = true; // imported total — treat as manual override
     }
     if (p.servings && g("rserves")) g("rserves").value = p.servings;
+
+    // Pre-fill new metadata fields from AI import (difficulty, yield, storage)
+    if (p.difficulty && ["Easy", "Medium", "Hard"].includes(p.difficulty)) {
+      selectDifficulty("rdiff", p.difficulty);
+    }
+    if (p.recipeYield && g("ryield")) g("ryield").value = p.recipeYield;
+    if (p.storageInstructions && g("rstorage")) g("rstorage").value = p.storageInstructions;
 
     // Show time/serving metadata if available
     const metaParts = [
@@ -625,6 +668,9 @@ export async function startBulkImport() {
           cookTime: recipe.cookTime || "",
           totalTime: recipe.totalTime || "",
           servings: recipe.servings || "",
+          difficulty: recipe.difficulty || "",
+          recipeYield: recipe.recipeYield || "",
+          storageInstructions: recipe.storageInstructions || "",
           tags: recipe.tags || [],
           savedAt: new Date().toLocaleDateString(),
         });
@@ -860,6 +906,9 @@ export async function retryBulkImport(url) {
         cookTime: recipe.cookTime || "",
         totalTime: recipe.totalTime || "",
         servings: recipe.servings || "",
+        difficulty: recipe.difficulty || "",
+        recipeYield: recipe.recipeYield || "",
+        storageInstructions: recipe.storageInstructions || "",
         tags: recipe.tags || [],
         savedAt: new Date().toLocaleDateString(),
       });
@@ -999,6 +1048,10 @@ export async function saveRec() {
     cookTime: readTimeField("rcooktime", "rcooktimeunit") || imported.cookTime || "",
     totalTime: readTotalTimeField("rtotaltime", "rtotaltimeunit") || imported.totalTime || "",
     servings: (g("rserves") ? g("rserves").value.trim() : "") || imported.servings || "",
+    // New metadata fields: difficulty, yield, storage instructions
+    difficulty: getDifficulty("rdiff") || imported.difficulty || "",
+    recipeYield: (g("ryield") ? g("ryield").value.trim() : "") || imported.recipeYield || "",
+    storageInstructions: (g("rstorage") ? g("rstorage").value.trim() : "") || imported.storageInstructions || "",
     ingredientsRaw: imported.ingredientsRaw || [],
     stepsRaw: imported.stepsRaw || [],
     stepPhotos: {},
@@ -1028,6 +1081,11 @@ export async function saveRec() {
   if (g("rpreptimeunit")) g("rpreptimeunit").value = "min";
   if (g("rcooktimeunit")) g("rcooktimeunit").value = "min";
   if (g("rtotaltimeunit")) g("rtotaltimeunit").value = "min";
+  if (g("ryield")) g("ryield").value = "";
+  if (g("rstorage")) g("rstorage").value = "";
+  // Reset difficulty pill selector — deselect all pills
+  const rdiffPills = document.querySelectorAll("#rdiff .diff-pill");
+  rdiffPills.forEach(p => p.classList.remove("sel"));
   _totalTimeManual.add = false; // reset auto-calc override flag
   setTagsUI("rtags", []); // deselect all tags
   state.nr = 0;           // reset the star rating state
@@ -1099,12 +1157,15 @@ export function openRecipeView(id) {
     ${r.savedAt ? `<div class="rv-author">Saved ${r.savedAt}${r.source && r.source !== "Manual" ? ` · ${r.source}` : ""}${r.cookCount ? ` · Cooked ${r.cookCount}×` : ""}</div>` : ""}
   </div>`;
 
-  // ── Metadata pills — prep, cook, total time, servings ──
+  // ── Metadata pills — prep, cook, total time, servings, difficulty, yield ──
   const metaParts = [
     r.prepTime ? `🔪 Prep: ${r.prepTime}` : "",
     r.cookTime ? `🔥 Cook: ${r.cookTime}` : "",
     r.totalTime ? `⏱ Total: ${r.totalTime}` : "",
     r.servings ? `🍽 Serves: ${r.servings}` : "",
+    r.recipeYield ? `🍪 Yield: ${r.recipeYield}` : "",
+    // Difficulty pill: show star icons based on level (hidden if not set)
+    r.difficulty === "Easy" ? `⭐ Easy` : r.difficulty === "Medium" ? `⭐⭐ Medium` : r.difficulty === "Hard" ? `⭐⭐⭐ Hard` : "",
   ].filter(Boolean);
   const metaHtml = metaParts.length
     ? `<div class="rv-meta">${metaParts.map(m => `<div class="rv-meta-pill">${m}</div>`).join("")}</div>`
@@ -1170,6 +1231,11 @@ export function openRecipeView(id) {
     rawDescHtml = `<div class="rv-section">Details</div><div style="font-size:.88rem;color:var(--tx2);line-height:1.8;white-space:pre-wrap">${_esc(r.description)}</div>`;
   }
 
+  // ── Storage instructions — only shown if populated ──
+  const storageHtml = r.storageInstructions
+    ? `<div class="rv-section">🗄️ Storage</div><div class="rv-storage">${_esc(r.storageInstructions)}</div>`
+    : "";
+
   // ── Notes ──
   const notesHtml = r.notes
     ? `<div class="rv-section">Notes</div><div style="font-size:.86rem;color:var(--tx2);line-height:1.6;font-style:italic;padding:10px 14px;background:var(--card);border-radius:10px;border:1px solid var(--b1)">${_esc(r.notes)}</div>`
@@ -1198,6 +1264,7 @@ export function openRecipeView(id) {
     ${ingredientsHtml}
     ${stepsHtml}
     ${rawDescHtml}
+    ${storageHtml}
     ${notesHtml}
     ${sourceHtml}
   `;
@@ -1400,6 +1467,20 @@ export function openER(id) {
     <div class="frow"><label class="flbl">Serves</label>
       <input class="fi" id="eserves" type="text" inputmode="numeric" placeholder="e.g. 4" value="${_esc(r.servings || "")}"/>
     </div>
+    <div class="frow"><label class="flbl">Yield <span class="otag">optional</span></label>
+      <input class="fi" id="eyield" type="text" placeholder="e.g. 24 cookies, 1 loaf" value="${_esc(r.recipeYield || "")}"/>
+      <div style="font-size:.68rem;color:var(--mt);margin-top:4px">e.g. 24 cookies, 1 loaf (use Serves for people)</div>
+    </div>
+    <div class="frow"><label class="flbl">Difficulty <span class="otag">optional</span></label>
+      <div class="diff-pills" id="ediff">
+        <button type="button" class="diff-pill${r.difficulty === "Easy" ? " sel" : ""}" data-val="Easy" onclick="selectDifficulty('ediff','Easy')">Easy</button>
+        <button type="button" class="diff-pill${r.difficulty === "Medium" ? " sel" : ""}" data-val="Medium" onclick="selectDifficulty('ediff','Medium')">Medium</button>
+        <button type="button" class="diff-pill${r.difficulty === "Hard" ? " sel" : ""}" data-val="Hard" onclick="selectDifficulty('ediff','Hard')">Hard</button>
+      </div>
+    </div>
+    <div class="frow"><label class="flbl">Storage instructions <span class="otag">optional</span></label>
+      <textarea class="fta" id="estorage" maxlength="200" placeholder="e.g. Keeps in fridge for 3 days, freeze for up to 3 months" style="min-height:60px">${_esc(r.storageInstructions || "")}</textarea>
+    </div>
   </div>`;
 
   // ── Step photos — build upload buttons for each step (if structured steps exist) ──
@@ -1512,8 +1593,13 @@ export async function updR() {
   const totalTime = readTotalTimeField("etotaltime", "etotaltimeunit") || "";
   const servings = g("eserves") ? g("eserves").value.trim() : (r.servings || "");
 
+  // Read new metadata fields: difficulty, yield, storage instructions
+  const difficulty = getDifficulty("ediff") || "";
+  const recipeYield = g("eyield") ? g("eyield").value.trim() : (r.recipeYield || "");
+  const storageInstructions = g("estorage") ? g("estorage").value.trim() : (r.storageInstructions || "");
+
   // Spread the original recipe and override only the editable fields
-  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine, imageUrl, stepPhotos, prepTime, cookTime, totalTime, servings });
+  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine, imageUrl, stepPhotos, prepTime, cookTime, totalTime, servings, difficulty, recipeYield, storageInstructions });
   showNotif("Recipe updated!"); hideOv("erec");
 }
 

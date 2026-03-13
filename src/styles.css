@@ -604,9 +604,18 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .rv-desc{font-size:.86rem;color:var(--tx2);line-height:1.6;margin-bottom:10px}
 .rv-author{font-size:.74rem;color:var(--mt)}
 
-/* Metadata pills — prep/cook/total time, servings */
+/* Metadata pills — prep/cook/total time, servings, difficulty, yield */
 .rv-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 .rv-meta-pill{font-size:.74rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:5px 12px;display:flex;align-items:center;gap:4px}
+
+/* Difficulty pill selector — 3-option toggle used in both add and edit forms */
+.diff-pills{display:flex;gap:0;border-radius:10px;overflow:hidden;border:1px solid var(--b2)}
+.diff-pill{flex:1;text-align:center;padding:9px 12px;font-size:.78rem;font-weight:600;cursor:pointer;transition:background .2s,color .2s;background:var(--card);color:var(--mt);border:none;outline:none}
+.diff-pill:not(:last-child){border-right:1px solid var(--b2)}
+.diff-pill.sel{background:var(--ac);color:var(--bg)}
+
+/* Storage instructions section in read-only recipe view */
+.rv-storage{font-size:.86rem;color:var(--tx2);line-height:1.6;padding:12px 14px;background:var(--card);border-radius:10px;border:1px solid var(--b1);margin-top:8px}
 
 /* Cuisine & tags row */
 .rv-cuisine{font-size:.82rem;color:var(--ac);font-weight:600;margin-bottom:8px}

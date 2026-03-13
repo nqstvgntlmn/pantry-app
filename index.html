@@ -592,6 +592,26 @@
         <label class="flbl">Serves <span class="otag">optional</span></label>
         <input class="fi" id="rserves" type="text" inputmode="numeric" placeholder="e.g. 4"/>
       </div>
+      <!-- Yield — free text, different intent from Serves (output quantity vs people) -->
+      <div class="frow">
+        <label class="flbl">Yield <span class="otag">optional</span></label>
+        <input class="fi" id="ryield" type="text" placeholder="e.g. 24 cookies, 1 loaf"/>
+        <div style="font-size:.68rem;color:var(--mt);margin-top:4px">e.g. 24 cookies, 1 loaf (use Serves for people)</div>
+      </div>
+      <!-- Difficulty level — 3-option pill selector: Easy / Medium / Hard -->
+      <div class="frow">
+        <label class="flbl">Difficulty <span class="otag">optional</span></label>
+        <div class="diff-pills" id="rdiff">
+          <button type="button" class="diff-pill" data-val="Easy" onclick="selectDifficulty('rdiff','Easy')">Easy</button>
+          <button type="button" class="diff-pill" data-val="Medium" onclick="selectDifficulty('rdiff','Medium')">Medium</button>
+          <button type="button" class="diff-pill" data-val="Hard" onclick="selectDifficulty('rdiff','Hard')">Hard</button>
+        </div>
+      </div>
+      <!-- Storage instructions — free text, 200 char limit -->
+      <div class="frow">
+        <label class="flbl">Storage instructions <span class="otag">optional</span></label>
+        <textarea class="fta" id="rstorage" maxlength="200" placeholder="e.g. Keeps in fridge for 3 days, freeze for up to 3 months" style="min-height:60px"></textarea>
+      </div>
       <!-- Tags — curated fixed set, grouped by category. Tapping toggles selection. -->
       <div class="frow"><label class="flbl">Tags <span class="otag">optional</span></label>
         <div class="tags-grid" id="rtags">

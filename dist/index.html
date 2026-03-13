@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-D4oyQz0Y.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-Dj1dU0pV.css">
+  <script type="module" crossorigin src="/assets/index-9KbpxpA4.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CQhNFS1F.css">
 </head>
 <body>
 
@@ -557,6 +557,63 @@
       <div class="frow"><label class="flbl">Your rating</label><div class="sinp" id="rstars"><span class="star" onclick="setStar(1,'r')">☆</span><span class="star" onclick="setStar(2,'r')">☆</span><span class="star" onclick="setStar(3,'r')">☆</span><span class="star" onclick="setStar(4,'r')">☆</span><span class="star" onclick="setStar(5,'r')">☆</span></div></div>
       <div class="frow"><label class="flbl">Description / Ingredients <span class="otag">optional</span></label><textarea class="fta" id="rd" placeholder="Key ingredients, method…"></textarea></div>
       <div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><input class="fi" id="rnotes" placeholder="e.g. Add more garlic next time!"/></div>
+      <!-- Time & serves fields — number+unit for times, plain number for serves.
+           Non-numeric text accepted as free-form override (e.g. "8–10 min").
+           Total auto-calculates from Prep + Cook but can be manually overridden. -->
+      <div class="frow">
+        <label class="flbl">Prep time <span class="otag">optional</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="fi" id="rpreptime" type="text" inputmode="numeric" placeholder="e.g. 15" style="flex:1" oninput="recipeTimeChanged('add')"/>
+          <select class="fi" id="rpreptimeunit" style="width:auto;min-width:90px" onchange="recipeTimeChanged('add')">
+            <option value="min">minutes</option>
+            <option value="hr">hours</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow">
+        <label class="flbl">Cook time <span class="otag">optional</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="fi" id="rcooktime" type="text" inputmode="numeric" placeholder="e.g. 30" style="flex:1" oninput="recipeTimeChanged('add')"/>
+          <select class="fi" id="rcooktimeunit" style="width:auto;min-width:90px" onchange="recipeTimeChanged('add')">
+            <option value="min">minutes</option>
+            <option value="hr">hours</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow">
+        <label class="flbl">Total time <span class="otag">auto-calculated</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="fi" id="rtotaltime" type="text" inputmode="numeric" placeholder="Auto from prep + cook" style="flex:1" oninput="markTotalTimeManual('add')"/>
+          <select class="fi" id="rtotaltimeunit" style="width:auto;min-width:90px">
+            <option value="min">minutes</option>
+            <option value="hr">hours</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow">
+        <label class="flbl">Serves <span class="otag">optional</span></label>
+        <input class="fi" id="rserves" type="text" inputmode="numeric" placeholder="e.g. 4"/>
+      </div>
+      <!-- Yield — free text, different intent from Serves (output quantity vs people) -->
+      <div class="frow">
+        <label class="flbl">Yield <span class="otag">optional</span></label>
+        <input class="fi" id="ryield" type="text" placeholder="e.g. 24 cookies, 1 loaf"/>
+        <div style="font-size:.68rem;color:var(--mt);margin-top:4px">e.g. 24 cookies, 1 loaf (use Serves for people)</div>
+      </div>
+      <!-- Difficulty level — 3-option pill selector: Easy / Medium / Hard -->
+      <div class="frow">
+        <label class="flbl">Difficulty <span class="otag">optional</span></label>
+        <div class="diff-pills" id="rdiff">
+          <button type="button" class="diff-pill" data-val="Easy" onclick="selectDifficulty('rdiff','Easy')">Easy</button>
+          <button type="button" class="diff-pill" data-val="Medium" onclick="selectDifficulty('rdiff','Medium')">Medium</button>
+          <button type="button" class="diff-pill" data-val="Hard" onclick="selectDifficulty('rdiff','Hard')">Hard</button>
+        </div>
+      </div>
+      <!-- Storage instructions — free text, 200 char limit -->
+      <div class="frow">
+        <label class="flbl">Storage instructions <span class="otag">optional</span></label>
+        <textarea class="fta" id="rstorage" maxlength="200" placeholder="e.g. Keeps in fridge for 3 days, freeze for up to 3 months" style="min-height:60px"></textarea>
+      </div>
       <!-- Tags — curated fixed set, grouped by category. Tapping toggles selection. -->
       <div class="frow"><label class="flbl">Tags <span class="otag">optional</span></label>
         <div class="tags-grid" id="rtags">
