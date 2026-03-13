@@ -53,6 +53,15 @@ export const state = {
   adjId: null,            // Firestore doc ID of the inventory item currently open in the adjust-quantity overlay; null = overlay closed
   it: "all",              // active tab filter on the Supplies screen ("all", "fridge", "freezer", "pantry", "household")
   rt: "all",              // active tab filter on the Recipes screen ("all", "quick", "saved", etc.)
+  recSearch: "",           // search text for My Recipes tab
+  recSort: "az",           // sort order for My Recipes: "az", "newest", "rating"
+  recFilters: {            // My Recipes filter state (persisted in localStorage ks-recFilters)
+    tags: [],              // selected tag names
+    difficulty: "",        // "Easy", "Medium", "Hard", or "" (any)
+    cookTime: "any",       // "any", "under30", "under60", "over60"
+    serves: "any",         // "any", "1-2", "3-4", "5+"
+    protein: [],           // selected protein tag names
+  },
   md: null,               // date key (e.g. "2025-03-09") of the day whose meal-plan modal is open; null = closed
   cn: "",                 // meal/recipe name typed into the "log as cooked" input
   nr: 0,                  // star rating (0-5) the user has selected in the cook-log modal

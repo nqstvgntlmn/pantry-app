@@ -125,6 +125,7 @@ Return this exact JSON shape:
 {
   "title": "Full recipe name",
   "description": "Brief 1-2 sentence description of the dish",
+  "summary": "Exactly 2 sentences: first describes what the dish is, second describes what makes it special or notable",
   "ingredients": [
     { "name": "ingredient name", "amount": "2", "unit": "cups" }
   ],
@@ -155,11 +156,18 @@ Rules:
   Occasion: Holiday, Party, Summer, Winter Comfort, Halloween, Thanksgiving, Easter, Valentine's Day, Game Day, Graduation, Brunch Party, Ramadan, Hanukkah
   Cuisine: Italian, Mexican, Japanese, Chinese, Indian, Thai, Greek, French, Middle Eastern, Korean, Spanish, Vietnamese, American, African, Latin American, Turkish, Mediterranean Cuisine
   Protein: Chicken, Beef, Pork, Fish, Seafood, Eggs, Beans & Legumes, Nuts & Seeds, Cheese
+- For Kid-Friendly tag: Evaluate whether the recipe is suitable for children. Apply the "Kid-Friendly" tag ONLY when ALL of these criteria are clearly met:
+  * No spicy ingredients (no chili, jalapeño, sriracha, hot sauce, cayenne, pepper flakes, wasabi, horseradish, habanero, ghost pepper, or any hot pepper varieties)
+  * No alcohol as a primary ingredient (cooking wine for deglazing is acceptable, but cocktails, beer-based, or liquor-heavy recipes are not kid-friendly)
+  * Simple, familiar flavors that children typically enjoy (pasta, cheese, chicken, rice, mild sauces, pancakes, meatballs, etc.)
+  * No overly complex or unusual textures/ingredients that children commonly reject
+  If ANY criterion is uncertain or borderline, do NOT apply the Kid-Friendly tag.
 - For imageUrl: find the primary/hero recipe image URL. Prefer og:image, then the largest recipe photo. Return full absolute URL.
 - For times: use human-readable format like "15 min", "1 hour 30 min".
 - For difficulty: map the source site's difficulty to exactly one of "Easy", "Medium", or "Hard". If not stated on the page, use an empty string — do not guess.
 - For recipeYield: extract the recipe output quantity if different from servings (e.g. "24 cookies", "2 loaves", "1 dozen"). If the page only shows servings (number of people), leave recipeYield as an empty string.
 - For storageInstructions: extract any storage, refrigeration, or freezing tips mentioned on the page. Max 200 characters. If not found, use an empty string — do not guess.
+- For summary: Write exactly 2 sentences. The first sentence describes what the dish is. The second sentence describes what makes it special or notable. Example: "A classic Italian pasta dish with a rich tomato-based meat sauce. Made with just a handful of pantry staples and ready in under 30 minutes." Max 200 characters total. Do not list ingredients or steps.
 - If a field is not available, use an empty string or empty array.`;
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -296,10 +304,11 @@ async function saveRecipeToFirestore(db, recipe, recipeId, householdId, userId, 
     cookTime: recipe.cookTime || "",
     totalTime: recipe.totalTime || "",
     servings: recipe.servings || "",
-    // New metadata fields: difficulty, yield, and storage instructions
+    // New metadata fields: difficulty, yield, storage, and summary
     difficulty: recipe.difficulty || "",
     recipeYield: recipe.recipeYield || "",
     storageInstructions: recipe.storageInstructions || "",
+    summary: recipe.summary || "",
     // Store structured data alongside the flattened description
     ingredientsRaw: recipe.ingredients || [],
     stepsRaw: recipe.steps || [],
@@ -311,22 +320,39 @@ async function saveRecipeToFirestore(db, recipe, recipeId, householdId, userId, 
   // Save to the household's recipes collection
   await db.doc(`households/${householdId}/recipes/${recipeId}`).set(doc);
 
-  // If publish flag is set, also save to the public community collection
+  // If publish flag is set, create a fully independent copy in the community collection.
+  // Uses a separate ID so community and private versions are completely standalone.
   if (publish && userId) {
+    const pubId = "pub-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
     const pubDoc = {
       title: doc.name,
       ingredients: doc.description,
       steps: (recipe.steps || []).join("\n"),
       tags: doc.tags,
       cuisine: doc.cuisine,
+      difficulty: doc.difficulty || "",
+      summary: doc.summary || "",
+      ingredientsRaw: doc.ingredientsRaw || [],
+      stepsRaw: doc.stepsRaw || [],
+      prepTime: doc.prepTime || "",
+      cookTime: doc.cookTime || "",
+      totalTime: doc.totalTime || "",
+      servings: doc.servings || "",
       authorUid: userId,
       authorName: recipe._authorName || "Anonymous",
-      householdId: householdId,
+      // No householdId — community recipes are fully standalone
       createdAt: new Date().toISOString(),
       likes: 0,
+      commentCount: 0,
+      ratingSum: 0,
+      ratingCount: 0,
+      avgRating: 0,
       imageUrl: doc.imageUrl || null,
     };
-    await db.doc(`public_recipes/${recipeId}`).set(pubDoc);
+    await db.doc(`public_recipes/${pubId}`).set(pubDoc);
+    // Store the publicId on the private recipe for future reference
+    doc.publicId = pubId;
+    await db.doc(`households/${householdId}/recipes/${recipeId}`).update({ publicId: pubId });
   }
 
   return doc;
@@ -473,6 +499,7 @@ export default async function handler(req, res) {
         difficulty: recipe.difficulty || "",
         recipeYield: recipe.recipeYield || "",
         storageInstructions: recipe.storageInstructions || "",
+        summary: recipe.summary || "",
         saved: !!savedDoc,
       },
     });

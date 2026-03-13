@@ -12,7 +12,7 @@
 //   g(id)     = getElementById    nr  = new rating (star count)
 //   eid       = edit-target ID    cfg = user config/preferences
 
-import { state } from '../state.js';
+import { state, J, Js } from '../state.js';
 import { svr, dlr, dbSet, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
 import { g, fmtR, showNotif, showOv, hideOv, renderStars } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
@@ -238,6 +238,326 @@ function setTagsUI(containerId, tags) {
  */
 export function togTag(el) { el.classList.toggle("sel"); }
 
+// ── FILTER SYSTEM ────────────────────────────────────────────────────────────
+// Shared filter panel used in both My Recipes and Community tabs.
+// Filters are collapsible, show active count on toggle, persist in localStorage.
+
+// Curated tag list for filter pills — same categories as the tag system
+const _filterTags = [
+  { cat: "Meal Type", tags: ["Breakfast","Lunch","Dinner","Snack","Dessert","Drinks","Brunch","Bread & Baking","Sauce & Condiment","Preserve & Pickle"] },
+  { cat: "Diet & Lifestyle", tags: ["Vegetarian","Vegan","Pescatarian","Meat","Gluten-Free","Dairy-Free","Nut-Free","Sugar-Free","Healthy","High Protein","Low Carb","Keto","Heart Healthy","Pregnancy-Safe","Baby & Toddler","Halal","Kosher","Paleo","Egg-Free","Mediterranean"] },
+  { cat: "Cook Style", tags: ["Quick","Kid-Friendly","Date Night","Batch Cook","Freezer Friendly","One Pot","Special Occasion","Budget Friendly","Spicy","Pasta","Salad","Soup & Stew","Grill & BBQ","Slow Cooker","Air Fryer","Meal Prep","World Cuisine","Fermented & Preserved","Stovetop","Wrap & Sandwich","Street Food","Raw & No-Cook","Camping & Outdoors"] },
+  { cat: "Occasion", tags: ["Holiday","Party","Summer","Winter Comfort","Halloween","Thanksgiving","Easter","Valentine's Day","Game Day","Graduation","Brunch Party","Ramadan","Hanukkah"] },
+  { cat: "Cuisine", tags: ["Italian","Mexican","Japanese","Chinese","Indian","Thai","Greek","French","Middle Eastern","Korean","Spanish","Vietnamese","American","African","Latin American","Turkish","Mediterranean Cuisine"] },
+  { cat: "Protein", tags: ["Chicken","Beef","Pork","Fish","Seafood","Eggs","Beans & Legumes","Nuts & Seeds","Cheese"] },
+];
+
+/**
+ * _countActiveFilters — counts how many filters are active for a given context.
+ * Used to display "Filters (3)" on the toggle button.
+ * @param {string} ctx - "my" or "com"
+ * @returns {number} count of active filter values
+ */
+function _countActiveFilters(ctx) {
+  if (ctx === "my") {
+    const f = state.recFilters;
+    let count = f.tags.length + f.protein.length;
+    if (f.difficulty) count++;
+    if (f.cookTime !== "any") count++;
+    if (f.serves !== "any") count++;
+    return count;
+  } else {
+    let count = state.comTags.length;
+    if (state.comCuisine !== "all") count++;
+    if (state.comTime !== "any") count++;
+    if (state.comMinRating > 0) count++;
+    return count;
+  }
+}
+
+/**
+ * _buildFilterPanelHtml — generates the collapsible filter panel HTML.
+ * Shared between My Recipes and Community tabs with context-specific options.
+ * @param {string} ctx - "my" for My Recipes, "com" for Community
+ * @returns {string} HTML string for the filter panel
+ */
+function _buildFilterPanelHtml(ctx) {
+  const lsKey = ctx === "my" ? "ks-recFiltersOpen" : "ks-comFiltersOpen";
+  const isOpen = J(lsKey);
+  const activeCount = _countActiveFilters(ctx);
+  const countLabel = activeCount > 0 ? ` (${activeCount})` : "";
+
+  // Toggle button
+  let html = `<button class="filter-toggle" id="${ctx}-filter-toggle" onclick="toggleFilterPanel('${ctx}')">
+    <span>Filters${countLabel}</span><span>${isOpen ? "▲" : "▼"}</span>
+  </button>`;
+
+  // Panel contents — hidden by default
+  html += `<div class="filter-panel" id="${ctx}-filter-panel" style="display:${isOpen ? "block" : "none"}">`;
+
+  if (ctx === "my") {
+    // ── My Recipes filters ──
+    const f = state.recFilters;
+
+    // Difficulty pills
+    html += `<div class="filter-section"><div class="filter-section-title">Difficulty</div><div class="filter-row">`;
+    ["Easy", "Medium", "Hard"].forEach(d => {
+      html += `<button class="filter-pill${f.difficulty === d ? " sel" : ""}" onclick="setRecDifficulty('${d}')">${d}</button>`;
+    });
+    html += `</div></div>`;
+
+    // Cook time pills
+    html += `<div class="filter-section"><div class="filter-section-title">Cook Time</div><div class="filter-row">`;
+    [["any","Any"],["under30","Under 30 min"],["under60","Under 1 hour"],["over60","Over 1 hour"]].forEach(([v,l]) => {
+      html += `<button class="filter-pill${f.cookTime === v ? " sel" : ""}" onclick="setRecCookTime('${v}')">${l}</button>`;
+    });
+    html += `</div></div>`;
+
+    // Serves pills
+    html += `<div class="filter-section"><div class="filter-section-title">Serves</div><div class="filter-row">`;
+    [["any","Any"],["1-2","1–2"],["3-4","3–4"],["5+","5+"]].forEach(([v,l]) => {
+      html += `<button class="filter-pill${f.serves === v ? " sel" : ""}" onclick="setRecServes('${v}')">${l}</button>`;
+    });
+    html += `</div></div>`;
+
+    // Protein pills
+    html += `<div class="filter-section"><div class="filter-section-title">Protein</div><div class="filter-row">`;
+    _filterTags.find(c => c.cat === "Protein").tags.forEach(t => {
+      html += `<button class="filter-pill${f.protein.includes(t) ? " sel" : ""}" onclick="toggleRecProtein('${t}')">${t}</button>`;
+    });
+    html += `</div></div>`;
+
+    // Tags — collapsible sub-section with all tag categories
+    html += `<div class="filter-section"><div class="filter-section-title">Tags</div><div class="filter-row" style="max-height:${J("ks-recTagsExpanded") ? "none" : "0"};overflow:hidden;transition:max-height .2s" id="my-tags-wrap">`;
+    _filterTags.forEach(cat => {
+      cat.tags.forEach(t => {
+        html += `<button class="filter-pill${f.tags.includes(t) ? " sel" : ""}" onclick="toggleRecTag('${t.replace(/'/g, "\\'")}')">${t}</button>`;
+      });
+    });
+    html += `</div>`;
+    html += `<button class="filter-pill" style="margin-top:4px;font-size:.7rem;color:var(--ac);border-color:var(--ac)" onclick="toggleRecTagsExpand()">${J("ks-recTagsExpanded") ? "Hide tags ▲" : "Show all tags ▼"}${f.tags.length ? ` (${f.tags.length} selected)` : ""}</button>`;
+    html += `</div>`;
+
+    // Clear all button
+    if (activeCount > 0) {
+      html += `<button class="filter-pill" style="color:var(--rd);border-color:var(--rd);width:100%;text-align:center;margin-top:4px" onclick="clearRecFilters()">Clear all filters</button>`;
+    }
+  } else {
+    // ── Community filters ──
+
+    // Rating pills (community only)
+    html += `<div class="filter-section"><div class="filter-section-title">Min Rating</div><div class="filter-row">`;
+    [[0,"Any"],[1,"1★+"],[2,"2★+"],[3,"3★+"],[4,"4★+"]].forEach(([v,l]) => {
+      html += `<button class="filter-pill${state.comMinRating === v ? " sel" : ""}" onclick="setComMinRating(${v})">${l}</button>`;
+    });
+    html += `</div></div>`;
+
+    // Cook time pills
+    html += `<div class="filter-section"><div class="filter-section-title">Cook Time</div><div class="filter-row">`;
+    [["any","Any"],["under30","Under 30 min"],["30to60","30–60 min"],["over60","Over 1 hour"]].forEach(([v,l]) => {
+      html += `<button class="filter-pill${state.comTime === v ? " sel" : ""}" onclick="setComTime('${v}')">${l}</button>`;
+    });
+    html += `</div></div>`;
+
+    // Cuisine pills
+    html += `<div class="filter-section"><div class="filter-section-title">Cuisine</div><div class="filter-row">`;
+    const cuisineList = ["all","Italian","Mexican","Japanese","Chinese","Indian","Thai","Greek","French","Middle Eastern","Korean","Spanish","Vietnamese","American","African","Latin American","Turkish","Mediterranean","Bangladeshi"];
+    cuisineList.forEach(c => {
+      html += `<button class="filter-pill${state.comCuisine === c.toLowerCase() ? " sel" : ""}" onclick="setComCuisine('${c.toLowerCase()}')">${c === "all" ? "All" : c}</button>`;
+    });
+    html += `</div></div>`;
+
+    // Sort options
+    html += `<div class="filter-section"><div class="filter-section-title">Sort</div><div class="filter-row">`;
+    [["newest","Newest"],["popular","Most Popular"],["rated","Highest Rated"],["az","A → Z"],["cooktime","Cook Time"]].forEach(([v,l]) => {
+      html += `<button class="filter-pill${state.comSort === v ? " sel" : ""}" onclick="setComSort('${v}')">${l}</button>`;
+    });
+    html += `</div></div>`;
+
+    // Tags — collapsible sub-section
+    html += `<div class="filter-section"><div class="filter-section-title">Tags</div><div class="filter-row" style="max-height:${J("ks-comTagsOpen") ? "none" : "0"};overflow:hidden;transition:max-height .2s" id="com-tags-wrap">`;
+    _filterTags.forEach(cat => {
+      cat.tags.forEach(t => {
+        html += `<button class="filter-pill${state.comTags.includes(t) ? " sel" : ""}" onclick="toggleComTag('${t.replace(/'/g, "\\'")}')">${t}</button>`;
+      });
+    });
+    html += `</div>`;
+    html += `<button class="filter-pill" style="margin-top:4px;font-size:.7rem;color:var(--ac);border-color:var(--ac)" onclick="toggleComTagsPanel()">${J("ks-comTagsOpen") ? "Hide tags ▲" : "Show all tags ▼"}${state.comTags.length ? ` (${state.comTags.length} selected)` : ""}</button>`;
+    html += `</div>`;
+
+    // Clear all
+    if (_countActiveFilters("com") > 0) {
+      html += `<button class="filter-pill" style="color:var(--rd);border-color:var(--rd);width:100%;text-align:center;margin-top:4px" onclick="clearComFilters()">Clear all filters</button>`;
+    }
+  }
+
+  html += `</div>`; // close filter-panel
+  return html;
+}
+
+// ── MY RECIPES FILTER/SEARCH FUNCTIONS ─────────────────────────────────────
+
+/**
+ * setRecSearch — updates the search text for My Recipes and re-renders.
+ * Filters by recipe name in real time as the user types.
+ */
+export function setRecSearch(val) {
+  state.recSearch = val;
+  renderRecs();
+}
+
+/**
+ * setRecSort — updates the sort order for My Recipes and persists to localStorage.
+ * Options: "az" (A-Z), "newest" (most recent first), "rating" (highest rated first).
+ */
+export function setRecSort(val) {
+  state.recSort = val;
+  Js("ks-recSort", val);
+  renderRecs();
+}
+
+/**
+ * toggleFilterPanel — toggles the collapsible filter panel open/closed.
+ * @param {string} ctx - "my" or "com"
+ */
+export function toggleFilterPanel(ctx) {
+  const lsKey = ctx === "my" ? "ks-recFiltersOpen" : "ks-comFiltersOpen";
+  const panel = g(`${ctx}-filter-panel`);
+  const btn = g(`${ctx}-filter-toggle`);
+  if (!panel) return;
+  const isOpen = panel.style.display !== "none";
+  panel.style.display = isOpen ? "none" : "block";
+  Js(lsKey, !isOpen);
+  const count = _countActiveFilters(ctx);
+  const countLabel = count > 0 ? ` (${count})` : "";
+  if (btn) btn.innerHTML = `<span>Filters${countLabel}</span><span>${!isOpen ? "▲" : "▼"}</span>`;
+}
+
+/**
+ * setRecDifficulty — toggles difficulty filter. Tapping the same value clears it.
+ */
+export function setRecDifficulty(val) {
+  state.recFilters.difficulty = state.recFilters.difficulty === val ? "" : val;
+  _saveRecFilters();
+  renderRecs();
+}
+
+/**
+ * setRecCookTime — sets cook time filter for My Recipes.
+ */
+export function setRecCookTime(val) {
+  state.recFilters.cookTime = val;
+  _saveRecFilters();
+  renderRecs();
+}
+
+/**
+ * setRecServes — sets serves filter for My Recipes.
+ */
+export function setRecServes(val) {
+  state.recFilters.serves = val;
+  _saveRecFilters();
+  renderRecs();
+}
+
+/**
+ * toggleRecProtein — toggles a protein filter for My Recipes.
+ */
+export function toggleRecProtein(tag) {
+  const idx = state.recFilters.protein.indexOf(tag);
+  if (idx >= 0) state.recFilters.protein.splice(idx, 1);
+  else state.recFilters.protein.push(tag);
+  _saveRecFilters();
+  renderRecs();
+}
+
+/**
+ * toggleRecTag — toggles a tag filter for My Recipes.
+ */
+export function toggleRecTag(tag) {
+  const idx = state.recFilters.tags.indexOf(tag);
+  if (idx >= 0) state.recFilters.tags.splice(idx, 1);
+  else state.recFilters.tags.push(tag);
+  _saveRecFilters();
+  renderRecs();
+}
+
+/**
+ * toggleRecTagsExpand — toggles visibility of the full tags list in My Recipes filter panel.
+ */
+export function toggleRecTagsExpand() {
+  const isExpanded = J("ks-recTagsExpanded");
+  Js("ks-recTagsExpanded", !isExpanded);
+  renderRecs();
+}
+
+/**
+ * clearRecFilters — resets all My Recipes filters to defaults.
+ */
+export function clearRecFilters() {
+  state.recFilters = { tags: [], difficulty: "", cookTime: "any", serves: "any", protein: [] };
+  state.recSearch = "";
+  _saveRecFilters();
+  renderRecs();
+}
+
+/**
+ * _saveRecFilters — persists My Recipes filters to localStorage.
+ */
+function _saveRecFilters() {
+  Js("ks-recFilters", state.recFilters);
+}
+
+/**
+ * _loadRecFilters — restores My Recipes filters from localStorage on app boot.
+ */
+function _loadRecFilters() {
+  const saved = J("ks-recFilters");
+  if (saved) {
+    state.recFilters = { tags: [], difficulty: "", cookTime: "any", serves: "any", protein: [], ...saved };
+  }
+  state.recSort = J("ks-recSort") || "az";
+}
+
+// Restore persisted filters on module load
+_loadRecFilters();
+
+// ── COMMUNITY FILTER FUNCTIONS ─────────────────────────────────────────────
+
+/**
+ * toggleComTagsPanel — toggles the tags sub-section in the community filter panel.
+ * Remembers state in localStorage.
+ */
+export function toggleComTagsPanel() {
+  const isOpen = J("ks-comTagsOpen");
+  Js("ks-comTagsOpen", !isOpen);
+  renderCommunity();
+}
+
+/**
+ * clearComFilters — resets all community filters to defaults.
+ */
+export function clearComFilters() {
+  state.comTags = [];
+  state.comCuisine = "all";
+  state.comTime = "any";
+  state.comMinRating = 0;
+  state.comSort = "newest";
+  state.comSearch = "";
+  state.comPage = 0;
+  renderCommunity();
+}
+
+/**
+ * _parseServings — extracts a numeric serving count from a servings string.
+ * Handles "4", "4 servings", "4-6", etc. Returns 0 if unparseable.
+ */
+function _parseServings(str) {
+  if (!str) return 0;
+  const m = str.match(/(\d+)/);
+  return m ? parseInt(m[1]) : 0;
+}
+
 // ── SINGLE RECIPE CARD HTML ─────────────────────────────────────────────────
 
 /**
@@ -266,7 +586,14 @@ function rH(r) {
 
   // Assemble the full card — tapping opens the read-only view (not edit).
   // stopPropagation on the heart so tapping it doesn't also open the recipe.
-  return `<div class="rcd${r.favorited ? " fav" : ""}" onclick="openRecipeView('${r.id}')">${imgHtml}<div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited ? "❤️" : "🤍"}</div></div><div class="stars">${st}</div>${metaHtml}${r.description ? `<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0, 100)}${r.description.length > 100 ? "…" : ""}</div>` : ""}${r.notes ? `<div class="rnot">${r.notes}</div>` : ""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;
+  // Show summary (preferred) or truncated description on the card
+  const descPreview = r.summary
+    ? `<div class="rnot" style="color:var(--tx2);margin-top:6px;font-style:italic">${r.summary}</div>`
+    : r.description
+      ? `<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0, 100)}${r.description.length > 100 ? "…" : ""}</div>`
+      : "";
+
+  return `<div class="rcd${r.favorited ? " fav" : ""}" onclick="openRecipeView('${r.id}')">${imgHtml}<div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited ? "❤️" : "🤍"}</div></div><div class="stars">${st}</div>${metaHtml}${descPreview}${r.notes ? `<div class="rnot">${r.notes}</div>` : ""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;
 }
 
 // ── TAB SWITCHING ────────────────────────────────────────────────────────────
@@ -303,10 +630,53 @@ export function renderRecs() {
 
   // Apply the currently selected tab filter
   if (state.rt === "fav") f = f.filter(r => r.favorited);
-  else if (state.rt === "top") f = f.filter(r => r.rating >= 4).sort((a, b) => b.rating - a.rating);
+  else if (state.rt === "top") f = f.filter(r => r.rating >= 4);
   else if (state.rt === "quick") f = f.filter(r => (r.tags || []).includes("Quick"));
   else if (state.rt === "kid") f = f.filter(r => (r.tags || []).includes("Kid-Friendly"));
-  else f = f.sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0)); // "all" tab — newest first
+
+  // Apply real-time text search filter — matches recipe name
+  if (state.recSearch) {
+    const q = state.recSearch.toLowerCase();
+    f = f.filter(r => (r.name || "").toLowerCase().includes(q));
+  }
+
+  // Apply advanced filters from the filter panel
+  const rf = state.recFilters;
+  if (rf.tags.length) {
+    f = f.filter(r => rf.tags.every(t => (r.tags || []).includes(t)));
+  }
+  if (rf.difficulty) {
+    f = f.filter(r => r.difficulty === rf.difficulty);
+  }
+  if (rf.cookTime && rf.cookTime !== "any") {
+    f = f.filter(r => {
+      const mins = _parseMinutes(r.cookTime || r.totalTime);
+      if (!mins) return false;
+      if (rf.cookTime === "under30") return mins <= 30;
+      if (rf.cookTime === "under60") return mins <= 60;
+      if (rf.cookTime === "over60") return mins > 60;
+      return true;
+    });
+  }
+  if (rf.serves && rf.serves !== "any") {
+    f = f.filter(r => {
+      const s = _parseServings(r.servings);
+      if (!s) return false;
+      if (rf.serves === "1-2") return s <= 2;
+      if (rf.serves === "3-4") return s >= 3 && s <= 4;
+      if (rf.serves === "5+") return s >= 5;
+      return true;
+    });
+  }
+  if (rf.protein.length) {
+    f = f.filter(r => rf.protein.some(t => (r.tags || []).includes(t)));
+  }
+
+  // Apply sort order — A-Z default, newest, or rating
+  const sort = state.recSort || "az";
+  if (sort === "az") f.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  else if (sort === "newest") f.sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0));
+  else if (sort === "rating") f.sort((a, b) => (b.rating || 0) - (a.rating || 0));
 
   // Update the subtitle with a count like "12 recipes"
   const rsub = g("rsub");
@@ -315,14 +685,28 @@ export function renderRecs() {
   const c = g("rbody"); // container div that holds recipe cards
   if (!c) return;
 
+  // Build search bar + sort dropdown above recipe cards
+  const searchSortHtml = `<div style="margin-bottom:12px">
+    <input class="fi" id="rec-search" placeholder="Search recipes…" value="${(state.recSearch || "").replace(/"/g, "&quot;")}" oninput="setRecSearch(this.value)" style="margin-bottom:8px"/>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <select class="fsel" onchange="setRecSort(this.value)" style="font-size:.78rem;padding:7px 10px;flex:1">
+        <option value="az"${sort === "az" ? " selected" : ""}>A → Z</option>
+        <option value="newest"${sort === "newest" ? " selected" : ""}>Newest first</option>
+        <option value="rating"${sort === "rating" ? " selected" : ""}>Highest rated</option>
+      </select>
+    </div>
+    ${_buildFilterPanelHtml("my")}
+  </div>`;
+
   // Show a friendly empty state if no recipes match the filter
   if (!f.length) {
-    c.innerHTML = `<div class="es"><div class="ei">📖</div><p>${state.rt === "fav" ? "No favorites yet!" : state.rt === "top" ? "No 4–5 star recipes yet." : state.rt === "quick" ? "No quick recipes saved yet." : state.rt === "kid" ? "No kid-friendly recipes yet." : "No recipes saved yet.<br/>Mark meals as cooked or tap + Add."}</p></div>`;
+    const hasFilters = state.recSearch || rf.tags.length || rf.difficulty || rf.cookTime !== "any" || rf.serves !== "any" || rf.protein.length;
+    c.innerHTML = searchSortHtml + `<div class="es"><div class="ei">📖</div><p>${hasFilters ? "No recipes match your filters." : state.rt === "fav" ? "No favorites yet!" : state.rt === "top" ? "No 4–5 star recipes yet." : state.rt === "quick" ? "No quick recipes saved yet." : state.rt === "kid" ? "No kid-friendly recipes yet." : "No recipes saved yet.<br/>Mark meals as cooked or tap + Add."}</p></div>`;
     return;
   }
 
-  // Render all matching recipes as card HTML
-  c.innerHTML = f.map(rH).join("");
+  // Render search/sort + filter panel + all matching recipe cards
+  c.innerHTML = searchSortHtml + f.map(rH).join("");
 }
 
 // ── FAVORITE TOGGLE ──────────────────────────────────────────────────────────
@@ -420,6 +804,7 @@ export async function importFromUrl() {
       difficulty: p.difficulty || "",
       recipeYield: p.recipeYield || "",
       storageInstructions: p.storageInstructions || "",
+      summary: p.summary || "",
     };
 
     // Pre-fill the time/serves form fields with imported values so user can edit
@@ -1052,6 +1437,7 @@ export async function saveRec() {
     difficulty: getDifficulty("rdiff") || imported.difficulty || "",
     recipeYield: (g("ryield") ? g("ryield").value.trim() : "") || imported.recipeYield || "",
     storageInstructions: (g("rstorage") ? g("rstorage").value.trim() : "") || imported.storageInstructions || "",
+    summary: (g("rsummary") ? g("rsummary").value.trim() : "") || imported.summary || "",
     ingredientsRaw: imported.ingredientsRaw || [],
     stepsRaw: imported.stepsRaw || [],
     stepPhotos: {},
@@ -1060,14 +1446,16 @@ export async function saveRec() {
     isPublic,
   };
 
-  await svr(recipe);
-
-  // If publishing, also save to the public community collection
+  // If publishing, create a fully independent copy in the community collection
+  // and store the publicId on the private recipe for future unpublish
   if (isPublic) {
     const user = getCurrentUser();
     const authorName = user?.displayName || localStorage.getItem("ks-who") || "Anonymous";
-    await publishRecipe(recipe, authorName, state.hid);
+    const pub = await publishRecipe(recipe, authorName);
+    recipe.publicId = pub.id;
   }
+
+  await svr(recipe);
 
   // Reset all form fields back to empty/default
   g("rn").value = ""; g("rnotes").value = ""; g("rd").value = "";
@@ -1083,6 +1471,7 @@ export async function saveRec() {
   if (g("rtotaltimeunit")) g("rtotaltimeunit").value = "min";
   if (g("ryield")) g("ryield").value = "";
   if (g("rstorage")) g("rstorage").value = "";
+  if (g("rsummary")) g("rsummary").value = "";
   // Reset difficulty pill selector — deselect all pills
   const rdiffPills = document.querySelectorAll("#rdiff .diff-pill");
   rdiffPills.forEach(p => p.classList.remove("sel"));
@@ -1149,11 +1538,27 @@ export function openRecipeView(id) {
     </div>`;
   }
 
-  // ── Recipe header — title (shown again if cover has image), description ──
+  // ── Recipe header — title, interactive stars, summary, metadata ──
   const showTitleAgain = r.imageUrl; // only show title below image if we have a cover photo
+
+  // Interactive star rating — visible on the main recipe page (not edit).
+  // Authors cannot rate their own recipes in community, but can rate their private recipes.
+  const rt2 = r.rating || 0;
+  const starsHtml = `<div class="sinp" id="rvstars" style="margin-bottom:6px">${
+    Array.from({ length: 5 }, (_, i) =>
+      `<span class="star${i < rt2 ? " on" : ""}" onclick="setViewStar(${i + 1})" style="cursor:pointer">${i < rt2 ? "★" : "☆"}</span>`
+    ).join("")
+  }${rt2 > 0 ? `<span class="star-clear" onclick="event.stopPropagation();setViewStar(0)">✕</span>` : ""}</div>`;
+
+  // Summary line — standardized 2-sentence format below the title
+  const summaryHtml = r.summary
+    ? `<div style="font-size:.86rem;color:var(--tx2);line-height:1.5;margin-bottom:8px;font-style:italic">${_esc(r.summary)}</div>`
+    : "";
+
   const headerHtml = `<div class="rv-header">
     ${showTitleAgain ? `<div class="rv-title">${(r.name || "").replace(/</g, "&lt;")}</div>` : ""}
-    ${r.rating ? `<div class="stars" style="margin-bottom:6px">${Array.from({length:5},(_,i)=>`<span class="star${i<r.rating?" on":""}">` + (i<r.rating?"★":"☆") + "</span>").join("")}</div>` : ""}
+    ${starsHtml}
+    ${summaryHtml}
     ${r.savedAt ? `<div class="rv-author">Saved ${r.savedAt}${r.source && r.source !== "Manual" ? ` · ${r.source}` : ""}${r.cookCount ? ` · Cooked ${r.cookCount}×` : ""}</div>` : ""}
   </div>`;
 
@@ -1311,9 +1716,7 @@ export function openER(id) {
   const titleEl = g("erecTitle");
   if (titleEl) titleEl.textContent = "Edit Recipe";
 
-  // Build the star rating display with click handlers for editing
-  const rt2 = r.rating || 0;
-  const st = Array.from({ length: 5 }, (_, i) => `<span class="star${i < rt2 ? " on" : ""}" onclick="setStar(${i + 1},'e')">${i < rt2 ? "★" : "☆"}</span>`).join("");
+  // Rating is now shown on the read-only view, not the edit form (Feature 8)
 
   // If the recipe was imported from a URL, show a clickable link to the original
   const srcLink = r.sourceUrl ? `<div class="frow"><label class="flbl">Original</label><a href="${r.sourceUrl}" target="_blank" style="font-size:.82rem;color:var(--ac);word-break:break-all">${r.sourceUrl}</a></div>` : "";
@@ -1522,7 +1925,7 @@ export function openER(id) {
       <div id="scaleStatus" style="font-size:.74rem;color:var(--mt);margin-top:8px;display:none"></div>
     </div>
     <div class="frow"><label class="flbl">Name</label><input class="fi" id="ern" value="${r.name}"/></div>
-    <div class="frow"><label class="flbl">Rating</label><div class="sinp" id="estars">${st}</div></div>
+    <div class="frow"><label class="flbl">Summary <span class="otag">optional</span></label><input class="fi" id="esummary" value="${_esc(r.summary || "")}" placeholder="e.g. A classic Italian pasta dish. Made with just 4 ingredients and ready in under 20 minutes." maxlength="200"/></div>
     ${tagsHtml}
     <div class="frow"><label class="flbl">Description / Ingredients</label><textarea class="fta" id="erd" style="min-height:140px">${r.description || ""}</textarea></div>
     <div class="frow"><label class="flbl">Notes</label><input class="fi" id="erno" value="${r.notes || ""}"/></div>
@@ -1546,8 +1949,9 @@ export function openER(id) {
 export async function updR() {
   const r = state.recs.find(r => r.id === state.eid); if (!r) return;
 
-  // Count how many stars have the "on" class to get the edited rating
-  const rt2 = [...document.querySelectorAll("#estars .star")].filter(s => s.classList.contains("on")).length;
+  // Rating is now set on the read-only view page, not the edit form.
+  // Preserve the current rating value from the recipe object.
+  const rt2 = r.rating || 0;
   const tags = getSelTags("etags"); // read selected tags from the edit form
 
   // Read the cuisine field from the edit form
@@ -1593,13 +1997,14 @@ export async function updR() {
   const totalTime = readTotalTimeField("etotaltime", "etotaltimeunit") || "";
   const servings = g("eserves") ? g("eserves").value.trim() : (r.servings || "");
 
-  // Read new metadata fields: difficulty, yield, storage instructions
+  // Read new metadata fields: difficulty, yield, storage instructions, summary
   const difficulty = getDifficulty("ediff") || "";
   const recipeYield = g("eyield") ? g("eyield").value.trim() : (r.recipeYield || "");
   const storageInstructions = g("estorage") ? g("estorage").value.trim() : (r.storageInstructions || "");
+  const summary = g("esummary") ? g("esummary").value.trim() : (r.summary || "");
 
   // Spread the original recipe and override only the editable fields
-  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine, imageUrl, stepPhotos, prepTime, cookTime, totalTime, servings, difficulty, recipeYield, storageInstructions });
+  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine, imageUrl, stepPhotos, prepTime, cookTime, totalTime, servings, difficulty, recipeYield, storageInstructions, summary });
   showNotif("Recipe updated!"); hideOv("erec");
 }
 
@@ -1721,14 +2126,67 @@ export async function addRecIngToShop(id) {
  * Sets the star rating to `n` (1-5) for a given context:
  *   "r" = Add Recipe form stars
  *   "c" = Cook/log form stars
- *   "e" = Edit Recipe form stars
  * Updates both the global state and the visual star display.
+ * Shows a small grey ✕ clear button next to stars when rating > 0.
  */
 export function setStar(n, ctx) {
   state.nr = n; // store the rating value in state for use when saving
-  if (ctx === "r") renderStars("rstars", n);
-  else if (ctx === "c") renderStars("cstars", n);
-  else if (ctx === "e") renderStars("estars", n);
+  if (ctx === "r") { renderStars("rstars", n); _showClearRating("rstars", ctx); }
+  else if (ctx === "c") { renderStars("cstars", n); _showClearRating("cstars", ctx); }
+}
+
+/**
+ * _showClearRating — shows a small grey ✕ button after the stars to let the
+ * user clear their rating. Only appears when rating > 0. Removes itself when
+ * clicked and resets rating to 0. Subtle styling to not compete with stars.
+ * @param {string} containerId - DOM ID of the star container
+ * @param {string} ctx - rating context ("r", "c", or "rv")
+ */
+function _showClearRating(containerId, ctx) {
+  const el = g(containerId);
+  if (!el) return;
+  // Remove existing clear button if present
+  const existing = el.querySelector(".star-clear");
+  if (existing) existing.remove();
+  // Only show clear button if a rating is set
+  if (state.nr > 0) {
+    const btn = document.createElement("span");
+    btn.className = "star-clear";
+    btn.textContent = "✕";
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      state.nr = 0;
+      renderStars(containerId, 0);
+      btn.remove();
+      // If clearing on the read-only view, persist immediately
+      if (ctx === "rv" && state.eid) {
+        const r = state.recs.find(r => r.id === state.eid);
+        if (r) { r.rating = 0; svr({ ...r, rating: 0 }); }
+      }
+    };
+    el.appendChild(btn);
+  }
+}
+
+/**
+ * setViewStar — sets the star rating from the read-only recipe view page.
+ * Saves immediately to Firestore so users don't need to enter edit mode.
+ * Shows the clear button for easy rating removal.
+ * @param {number} n - star rating 1-5
+ */
+export async function setViewStar(n) {
+  const r = state.recs.find(r => r.id === state.eid);
+  if (!r) return;
+  r.rating = n;
+  state.nr = n;
+  // Re-render stars with the new rating value (0 clears all stars)
+  const el = g("rvstars");
+  if (el) {
+    el.innerHTML = Array.from({ length: 5 }, (_, i) =>
+      `<span class="star${i < n ? " on" : ""}" onclick="setViewStar(${i + 1})" style="cursor:pointer">${i < n ? "★" : "☆"}</span>`
+    ).join("") + (n > 0 ? `<span class="star-clear" onclick="event.stopPropagation();setViewStar(0)">✕</span>` : "");
+  }
+  await svr({ ...r, rating: n });
 }
 
 // ── SHARE PUBLICLY TOGGLE ────────────────────────────────────────────────────
@@ -1747,17 +2205,21 @@ export async function togglePublic(id) {
   const authorName = user?.displayName || localStorage.getItem("ks-who") || "Anonymous";
 
   if (isPublic) {
-    // Publish to the community collection
-    await publishRecipe(r, authorName, state.hid);
+    // Publish as a fully independent copy to the community collection.
+    // Store the returned publicId so we can unpublish later.
+    const pub = await publishRecipe(r, authorName);
+    r.publicId = pub.id;
     showNotif("Recipe shared with the community!");
   } else {
-    // Remove from the community collection
-    await unpublishRecipe(r.id);
+    // Remove from the community collection using the stored publicId
+    const pubId = r.publicId || r.id; // fallback to r.id for legacy recipes
+    await unpublishRecipe(pubId);
+    r.publicId = null;
     showNotif("Recipe removed from community");
   }
 
-  // Update the local recipe's isPublic flag and persist
-  await svr({ ...r, isPublic });
+  // Update the local recipe's isPublic flag and publicId, then persist
+  await svr({ ...r, isPublic, publicId: r.publicId || null });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2217,6 +2679,10 @@ export function renderCommunity() {
     recs.sort((a, b) => (b.likes || 0) - (a.likes || 0));
   } else if (state.comSort === "rated") {
     recs.sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0));
+  } else if (state.comSort === "az") {
+    recs.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  } else if (state.comSort === "cooktime") {
+    recs.sort((a, b) => _parseMinutes(a.cookTime || a.totalTime) - _parseMinutes(b.cookTime || b.totalTime));
   } else {
     // Default: newest first
     recs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -2231,81 +2697,10 @@ export function renderCommunity() {
   const rsub = g("rsub");
   if (rsub) rsub.textContent = recs.length + " community recipe" + (recs.length !== 1 ? "s" : "");
 
-  // ── Build the filter panel ──
-  // Cuisine dropdown options — matches the new Cuisine tag category plus legacy values
-  const cuisines = [
-    ["all", "All Cuisines"], ["italian", "Italian"], ["mexican", "Mexican"],
-    ["japanese", "Japanese"], ["chinese", "Chinese"], ["indian", "Indian"],
-    ["thai", "Thai"], ["greek", "Greek"], ["french", "French"],
-    ["middle eastern", "Middle Eastern"], ["korean", "Korean"], ["spanish", "Spanish"],
-    ["vietnamese", "Vietnamese"], ["american", "American"], ["african", "African"],
-    ["latin american", "Latin American"], ["turkish", "Turkish"],
-    ["mediterranean", "Mediterranean"], ["asian", "Asian"], ["bangladeshi", "Bangladeshi"]
-  ];
-  const cuisineOpts = cuisines.map(([v, l]) =>
-    `<option value="${v}"${state.comCuisine === v ? " selected" : ""}>${l}</option>`
-  ).join("");
-
-  // Tag filter pills — curated fixed set matching the recipe tag system.
-  // Grouped visually but rendered inline. Each pill toggles filtering.
-  // Includes all 6 categories: Meal Type, Diet & Lifestyle, Cook Style, Occasion, Cuisine, Protein
-  const tagList = [
-    // Meal Type
-    "Breakfast", "Lunch", "Dinner", "Snack", "Dessert", "Drinks",
-    "Brunch", "Bread & Baking", "Sauce & Condiment", "Preserve & Pickle",
-    // Diet & Lifestyle
-    "Vegetarian", "Vegan", "Pescatarian", "Meat", "Gluten-Free",
-    "Dairy-Free", "Nut-Free", "Sugar-Free", "Healthy", "High Protein",
-    "Low Carb", "Keto", "Heart Healthy", "Pregnancy-Safe", "Baby & Toddler",
-    "Halal", "Kosher", "Paleo", "Egg-Free", "Mediterranean",
-    // Cook Style
-    "Quick", "Kid-Friendly", "Date Night",
-    "Batch Cook", "Freezer Friendly", "One Pot", "Special Occasion",
-    "Budget Friendly", "Spicy", "Pasta", "Salad", "Soup & Stew",
-    "Grill & BBQ", "Slow Cooker", "Air Fryer", "Meal Prep", "World Cuisine",
-    "Fermented & Preserved", "Stovetop", "Wrap & Sandwich", "Street Food",
-    "Raw & No-Cook", "Camping & Outdoors",
-    // Occasion
-    "Holiday", "Party", "Summer", "Winter Comfort",
-    "Halloween", "Thanksgiving", "Easter", "Valentine's Day",
-    "Game Day", "Graduation", "Brunch Party", "Ramadan", "Hanukkah",
-    // Cuisine
-    "Italian", "Mexican", "Japanese", "Chinese", "Indian", "Thai",
-    "Greek", "French", "Middle Eastern", "Korean", "Spanish", "Vietnamese",
-    "American", "African", "Latin American", "Turkish", "Mediterranean Cuisine",
-    // Protein
-    "Chicken", "Beef", "Pork", "Fish", "Seafood", "Eggs",
-    "Beans & Legumes", "Nuts & Seeds", "Cheese"
-  ];
-  const tagPills = tagList.map(t => {
-    const sel = state.comTags.includes(t);
-    return `<div class="com-tag${sel ? " com-tag-sel" : ""}" onclick="toggleComTag('${t}')" style="cursor:pointer;${sel ? "background:var(--ac);color:#fff;border-color:var(--ac)" : ""}">${t}</div>`;
-  }).join("");
-
+  // ── Build the unified filter panel (search + collapsible filters) ──
   let html = `<div style="margin-bottom:14px">
     <input class="fi" id="com-search" placeholder="Search recipes, tags, authors…" value="${state.comSearch.replace(/"/g, "&quot;")}" oninput="setComSearch(this.value)" style="margin-bottom:10px"/>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-      <select class="fsel" onchange="setComCuisine(this.value)" style="flex:1;font-size:.78rem;padding:7px 10px">${cuisineOpts}</select>
-      <select class="fsel" onchange="setComTime(this.value)" style="flex:1;font-size:.78rem;padding:7px 10px">
-        <option value="any"${state.comTime === "any" ? " selected" : ""}>Any time</option>
-        <option value="under30"${state.comTime === "under30" ? " selected" : ""}>Under 30 min</option>
-        <option value="30to60"${state.comTime === "30to60" ? " selected" : ""}>30–60 min</option>
-        <option value="over60"${state.comTime === "over60" ? " selected" : ""}>Over 1 hour</option>
-      </select>
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-      <select class="fsel" onchange="setComMinRating(this.value)" style="font-size:.78rem;padding:7px 10px;flex:1">
-        <option value="0"${state.comMinRating === 0 ? " selected" : ""}>Any rating</option>
-        <option value="3"${state.comMinRating === 3 ? " selected" : ""}>3+ stars</option>
-        <option value="4"${state.comMinRating === 4 ? " selected" : ""}>4+ stars</option>
-      </select>
-      <select class="fsel" onchange="setComSort(this.value)" style="font-size:.78rem;padding:7px 10px;flex:1">
-        <option value="newest"${state.comSort === "newest" ? " selected" : ""}>Newest</option>
-        <option value="popular"${state.comSort === "popular" ? " selected" : ""}>Most popular</option>
-        <option value="rated"${state.comSort === "rated" ? " selected" : ""}>Highest rated</option>
-      </select>
-    </div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap">${tagPills}</div>
+    ${_buildFilterPanelHtml("com")}
   </div>`;
 
   // ── Empty state ──
@@ -2532,10 +2927,13 @@ export async function openComRecipe(id) {
         `<span class="star${i < myRatingVal ? " on" : ""}" onclick="rateComRecipe('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < myRatingVal ? "★" : "☆"}</span>`
       ).join("");
 
-  // Publish/unpublish button (only for the recipe author)
-  const publishBtn = isAuthor
-    ? `<button class="btn bd bsm" onclick="unpublishComRecipe('${id}')" style="margin-top:12px;width:100%">🚫 Unpublish this recipe</button>`
+  // Author action buttons: edit community version + unpublish
+  // Non-authors can only fork (save to their own recipes)
+  const authorActionsHtml = isAuthor
+    ? `<button class="btn bs bsm" onclick="editComRecipe('${id}')" style="margin-top:8px;width:100%">✏️ Edit community version</button>
+       <button class="btn bd bsm" onclick="unpublishComRecipe('${id}')" style="margin-top:8px;width:100%">🚫 Unpublish this recipe</button>`
     : "";
+  const publishBtn = authorActionsHtml;
 
   // Report button for the recipe (subtle, not shown to author)
   const reportRecipeBtn = !isAuthor && uid
@@ -2947,6 +3345,146 @@ export async function deleteComComment(recipeId, commentId) {
   } catch (e) {
     console.error("deleteComComment:", e);
     showNotif("Couldn't delete comment");
+  }
+}
+
+// ── COMMUNITY RECIPE EDITING (AUTHOR ONLY) ──────────────────────────────
+// Recipe authors can edit their community version directly.
+// Non-authors must fork (save to their own recipes) instead.
+
+/**
+ * editComRecipe — opens an edit form for the author's own community recipe.
+ * Shows a prominent warning banner that edits affect the public version.
+ * Saves directly to public_recipes/{id} via dbSet.
+ * @param {string} id - public recipe ID
+ */
+export async function editComRecipe(id) {
+  const r = state.comRecs.find(x => x.id === id);
+  if (!r) return;
+  const uid = getCurrentUser()?.uid;
+  if (uid !== r.authorUid) { showNotif("Only the author can edit"); return; }
+
+  state._editingComId = id;
+  _recipeViewMode = "edit";
+
+  const titleEl = g("erecTitle");
+  if (titleEl) titleEl.textContent = "Edit Community Recipe";
+
+  // Warning banner — clearly communicates that changes are public immediately
+  const warningHtml = `<div style="background:rgba(201,168,76,0.15);border:1px solid var(--ac);border-radius:10px;padding:12px;margin-bottom:14px;font-size:.82rem;color:var(--ac);line-height:1.5">
+    ⚠️ You are editing the <strong>community version</strong>. Changes will be visible to everyone immediately.
+  </div>`;
+
+  // Pre-fill form with current community recipe data
+  const _t = r.tags || [];
+  const _sel = (tag) => _t.includes(tag) ? " sel" : "";
+
+  // Build tag pills for community edit (same categories as regular edit)
+  let comTagsHtml = `<div class="frow"><label class="flbl">Tags</label><div class="tags-grid" id="comEditTags">`;
+  _filterTags.forEach(cat => {
+    comTagsHtml += `<div class="tag-cat">${cat.cat}</div>`;
+    cat.tags.forEach(t => {
+      comTagsHtml += `<div class="tag${_sel(t)}" data-tag="${t}" onclick="togTag(this)">${t}</div>`;
+    });
+  });
+  comTagsHtml += `</div></div>`;
+
+  // Time fields for community edit
+  const _prep = parseTimeToInput(r.prepTime);
+  const _cook = parseTimeToInput(r.cookTime);
+  const _total = parseTimeToInput(r.totalTime);
+
+  g("erecbody").innerHTML = `
+    ${warningHtml}
+    <div class="frow"><label class="flbl">Title</label><input class="fi" id="comEditTitle" value="${_esc(r.title || "")}"/></div>
+    <div class="frow"><label class="flbl">Summary <span class="otag">optional</span></label><input class="fi" id="comEditSummary" value="${_esc(r.summary || "")}" placeholder="1-2 sentence description" maxlength="200"/></div>
+    <div class="frow"><label class="flbl">Cuisine <span class="otag">optional</span></label><input class="fi" id="comEditCuisine" value="${_esc(r.cuisine || "")}" placeholder="e.g. Mediterranean, Turkish…"/></div>
+    <div style="margin-bottom:14px">
+      <div class="frow" style="margin-bottom:8px"><label class="flbl">Prep time</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="fi" id="comEditPrepTime" type="text" inputmode="numeric" placeholder="e.g. 15" value="${_esc(_prep.value)}" style="flex:1"/>
+          <select class="fi" id="comEditPrepUnit" style="width:auto;min-width:90px">
+            <option value="min"${_prep.unit === "min" ? " selected" : ""}>minutes</option>
+            <option value="hr"${_prep.unit === "hr" ? " selected" : ""}>hours</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow" style="margin-bottom:8px"><label class="flbl">Cook time</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="fi" id="comEditCookTime" type="text" inputmode="numeric" placeholder="e.g. 30" value="${_esc(_cook.value)}" style="flex:1"/>
+          <select class="fi" id="comEditCookUnit" style="width:auto;min-width:90px">
+            <option value="min"${_cook.unit === "min" ? " selected" : ""}>minutes</option>
+            <option value="hr"${_cook.unit === "hr" ? " selected" : ""}>hours</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow"><label class="flbl">Serves</label>
+        <input class="fi" id="comEditServes" type="text" inputmode="numeric" placeholder="e.g. 4" value="${_esc(r.servings || "")}"/>
+      </div>
+    </div>
+    ${comTagsHtml}
+    <div class="frow"><label class="flbl">Ingredients</label><textarea class="fta" id="comEditIngredients" style="min-height:100px">${_esc(r.ingredients || "")}</textarea></div>
+    <div class="frow"><label class="flbl">Steps</label><textarea class="fta" id="comEditSteps" style="min-height:100px">${_esc(r.steps || "")}</textarea></div>
+    <div class="brow" style="margin-top:14px">
+      <button class="btn bs" style="flex:1" onclick="hideOv('erec')">Cancel</button>
+      <button class="btn bp" style="flex:2" onclick="saveComRecipeEdit()">Save Changes</button>
+    </div>`;
+
+  showOv("erec");
+}
+
+/**
+ * saveComRecipeEdit — saves edits to a community recipe.
+ * Reads form values and writes directly to public_recipes/{id} via dbSet.
+ * Only callable by the recipe author.
+ */
+export async function saveComRecipeEdit() {
+  const id = state._editingComId;
+  const r = state.comRecs.find(x => x.id === id);
+  if (!r) return;
+
+  // Read updated values from the edit form
+  const title = g("comEditTitle")?.value?.trim() || r.title;
+  const summary = g("comEditSummary")?.value?.trim() || "";
+  const cuisine = g("comEditCuisine")?.value?.trim() || "";
+  const servings = g("comEditServes")?.value?.trim() || "";
+  const tags = getSelTags("comEditTags");
+  const ingredients = g("comEditIngredients")?.value?.trim() || "";
+  const steps = g("comEditSteps")?.value?.trim() || "";
+
+  // Read time fields
+  const prepTime = readTimeField("comEditPrepTime", "comEditPrepUnit") || "";
+  const cookTime = readTimeField("comEditCookTime", "comEditCookUnit") || "";
+
+  // Build updated doc — preserve all existing fields, override only edited ones
+  const updated = {
+    ...r,
+    title,
+    summary,
+    cuisine,
+    servings,
+    tags,
+    ingredients,
+    steps,
+    prepTime,
+    cookTime,
+  };
+
+  // Remove `id` from the doc body (Firestore doc ID is in the path, not the body)
+  delete updated.id;
+
+  try {
+    await dbSet(`public_recipes/${id}`, updated);
+
+    // Update local cache with the new values
+    Object.assign(r, { title, summary, cuisine, servings, tags, ingredients, steps, prepTime, cookTime });
+
+    showNotif("Community recipe updated!");
+    hideOv("erec");
+    renderCommunity();
+  } catch (e) {
+    console.error("saveComRecipeEdit:", e);
+    showNotif("Couldn't save changes");
   }
 }
 

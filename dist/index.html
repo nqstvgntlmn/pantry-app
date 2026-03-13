@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-9KbpxpA4.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CQhNFS1F.css">
+  <script type="module" crossorigin src="/assets/index-ykXvdmuK.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-6JB7BCzL.css">
 </head>
 <body>
 
@@ -557,6 +557,7 @@
       <div class="frow"><label class="flbl">Your rating</label><div class="sinp" id="rstars"><span class="star" onclick="setStar(1,'r')">☆</span><span class="star" onclick="setStar(2,'r')">☆</span><span class="star" onclick="setStar(3,'r')">☆</span><span class="star" onclick="setStar(4,'r')">☆</span><span class="star" onclick="setStar(5,'r')">☆</span></div></div>
       <div class="frow"><label class="flbl">Description / Ingredients <span class="otag">optional</span></label><textarea class="fta" id="rd" placeholder="Key ingredients, method…"></textarea></div>
       <div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><input class="fi" id="rnotes" placeholder="e.g. Add more garlic next time!"/></div>
+      <div class="frow"><label class="flbl">Summary <span class="otag">optional</span></label><input class="fi" id="rsummary" placeholder="e.g. A classic Italian pasta dish. Made with just 4 ingredients and ready in under 20 minutes." maxlength="200"/></div>
       <!-- Time & serves fields — number+unit for times, plain number for serves.
            Non-numeric text accepted as free-form override (e.g. "8–10 min").
            Total auto-calculates from Prep + Cook but can be manually overridden. -->
@@ -851,6 +852,8 @@
         </div>
       </div>
       <div class="sset"><div class="ssetttl">Utilities</div>
+        <button class="btn bs bf" id="bulkPubBtn" onclick="bulkPublishAll()" style="width:100%;margin-bottom:8px;display:none">📤 Publish all recipes to community</button>
+        <div id="bulkPubProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-bottom:8px"></div>
         <button class="btn bs bf" id="enrichBtn" onclick="enrichExistingItems()" style="width:100%">🔍 Enrich existing items</button>
         <div style="font-size:.72rem;color:var(--mt);margin-top:6px;line-height:1.5">Scans all shopping list and pantry items that lack an image or brand, and tries to match them against product databases (Edamam, Open Food Facts). Items with no match are left unchanged.</div>
         <div id="enrichProgress" style="display:none;margin-top:10px">

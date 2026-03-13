@@ -422,7 +422,22 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .mttl{font-family:"Fraunces",serif;font-size:1.3rem;font-weight:300;margin-bottom:18px}
 .minp{background:var(--card);border:1.5px solid var(--b2);border-radius:14px;padding:14px 18px;color:var(--tx);font-size:.92rem;font-family:"DM Sans",sans-serif;width:100%;margin-bottom:14px}
 .minp:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.1)}
-.sinp{display:flex;gap:4px}.sinp .star{font-size:1.8rem}
+.sinp{display:flex;gap:4px;align-items:center}.sinp .star{font-size:1.8rem}
+/* Small grey clear button next to stars — appears only after a rating is selected */
+.star-clear{font-size:.72rem;color:var(--mt);cursor:pointer;margin-left:6px;padding:4px 6px;opacity:.5;vertical-align:middle;line-height:1}
+.star-clear:active{opacity:1}
+
+/* ── FILTER PANEL ── */
+/* Collapsible filter panel used in both My Recipes and Community tabs */
+.filter-toggle{min-height:44px;width:100%;font-size:.78rem;padding:10px 14px;background:var(--card);border:1px solid var(--b2);border-radius:10px;color:var(--tx);cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-family:"DM Sans",sans-serif}
+.filter-toggle:active{background:var(--b1)}
+.filter-panel{background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:12px;margin-bottom:12px}
+.filter-section{margin-bottom:10px}
+.filter-section-title{font-size:.72rem;color:var(--mt);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;font-weight:600}
+.filter-pill{display:inline-block;font-size:.72rem;padding:5px 10px;border-radius:20px;border:1px solid var(--b2);color:var(--tx2);cursor:pointer;margin:2px;background:transparent;font-family:"DM Sans",sans-serif;min-height:32px}
+.filter-pill.sel{background:var(--ac);color:#fff;border-color:var(--ac)}
+.filter-pill:active{opacity:.8}
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 
 /* ── SETTINGS ── */
 .sset{margin-bottom:26px}.ssetttl{font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--mt);margin-bottom:14px;font-weight:700}

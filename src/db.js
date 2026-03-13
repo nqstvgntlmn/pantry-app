@@ -744,8 +744,10 @@ export async function dlShopItem(id) {
  * so the community detail view can render rich recipe cards.
  * Returns the public recipe doc that was written.
  */
-export async function publishRecipe(recipe, authorName, householdId) {
-  const pubId = recipe.id; // reuse the same ID so we can link them
+export async function publishRecipe(recipe, authorName) {
+  // Generate a unique public ID — fully independent from the private recipe ID.
+  // This ensures community and private versions have no shared identity.
+  const pubId = "pub-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
   const doc = {
     title: recipe.name,
     ingredients: recipe.description || "",
@@ -758,13 +760,15 @@ export async function publishRecipe(recipe, authorName, householdId) {
     cookTime: recipe.cookTime || "",
     totalTime: recipe.totalTime || "",
     servings: recipe.servings || "",
+    difficulty: recipe.difficulty || "",
+    summary: recipe.summary || "",
     ingredientsRaw: recipe.ingredientsRaw || [],
     stepsRaw: recipe.stepsRaw || [],
     // Author metadata — both display name and public username
     authorName: authorName || "Anonymous",
     authorUsername: state.username || "",
     authorUid: getCurrentUser()?.uid || "",
-    householdId: householdId || state.hid,
+    // No householdId — community recipes are fully standalone
     createdAt: new Date().toISOString(),
     likes: 0,
     commentCount: 0,
@@ -914,6 +918,9 @@ export async function saveRecipeToKitchen(pubRecipe) {
     servings: pubRecipe.servings || "",
     ingredientsRaw: pubRecipe.ingredientsRaw || [],
     stepsRaw: pubRecipe.stepsRaw || [],
+    difficulty: pubRecipe.difficulty || "",
+    summary: pubRecipe.summary || "",
+    // Fully independent fork — no link back to community version
     rating: 0,
     favorited: false,
     source: "Community",

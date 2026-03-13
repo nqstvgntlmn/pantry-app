@@ -11,7 +11,7 @@ import { state, J, Js } from '../state.js';
 // joinHouseholdByCode: join a household via invite code lookup
 // regenerateInviteCode: generate a new 6-char invite code (owner only)
 // removeMember: remove a member from a household (owner only)
-import { saveCfg, dbGet, dbSet, dbList, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, svShopItem, svi } from '../db.js';
+import { saveCfg, dbGet, dbSet, dbList, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, svShopItem, svi, publishRecipe } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
 import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
@@ -65,6 +65,9 @@ export function loadCfgUI() {
 
   // Populate the invite code and members list for the current household
   renderHouseholdInfo();
+
+  // Show/hide the one-time bulk publish button
+  showBulkPublishBtn();
 }
 
 /**
@@ -718,3 +721,69 @@ function _needsEnrich(item) {
  * Returns a promise that resolves after the given milliseconds.
  */
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── ONE-TIME BULK PUBLISH ────────────────────────────────────────────────────
+// Utility to publish all existing private recipes to the community as
+// fully independent copies. Runs once, then permanently disables itself.
+
+/**
+ * bulkPublishAll — one-time utility that publishes all household recipes
+ * to the community as fully independent copies with new IDs.
+ * Each published recipe has no link back to the private version.
+ * Stores ks-bulk-published in localStorage to prevent re-running.
+ */
+export async function bulkPublishAll() {
+  if (J("ks-bulk-published")) {
+    showNotif("Already published all recipes");
+    return;
+  }
+  if (!confirm(`Publish all ${state.recs.length} recipes to the community? This creates independent copies visible to everyone.`)) return;
+
+  const user = getCurrentUser();
+  const authorName = user?.displayName || localStorage.getItem("ks-who") || "Anonymous";
+  const total = state.recs.length;
+  let success = 0;
+
+  // Show progress indicator
+  const progressEl = g("bulkPubProgress");
+  if (progressEl) { progressEl.style.display = "block"; progressEl.textContent = `Publishing 0/${total}…`; }
+
+  const btn = g("bulkPubBtn");
+  if (btn) btn.disabled = true;
+
+  for (const r of state.recs) {
+    try {
+      // Publish as a fully independent copy — no householdId, new ID
+      await publishRecipe(r, authorName);
+      success++;
+      if (progressEl) progressEl.textContent = `Published ${success}/${total}…`;
+    } catch (e) {
+      console.error("Failed to publish:", r.name, e);
+    }
+  }
+
+  // Mark as complete so the button never appears again
+  Js("ks-bulk-published", true);
+  showNotif(`Published ${success} of ${total} recipes to community!`);
+
+  // Disable the button permanently
+  if (btn) { btn.disabled = true; btn.textContent = "All recipes published ✓"; }
+  if (progressEl) progressEl.textContent = `Done — ${success} recipes published.`;
+}
+
+/**
+ * showBulkPublishBtn — shows the bulk publish button in settings if not yet run.
+ * Called from loadCfgUI() to conditionally display the one-time utility.
+ */
+export function showBulkPublishBtn() {
+  const btn = g("bulkPubBtn");
+  const progress = g("bulkPubProgress");
+  if (btn) {
+    if (J("ks-bulk-published")) {
+      btn.style.display = "none";
+      if (progress) progress.style.display = "none";
+    } else {
+      btn.style.display = "block";
+    }
+  }
+}
