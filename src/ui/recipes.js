@@ -51,9 +51,9 @@ export function togTag(el) { el.classList.toggle("sel"); }
 
 /**
  * Builds the HTML string for one recipe card in the list view.
- * Each card shows: name, favorite heart, star rating, truncated description,
- * notes, date saved, and an optional source link. Clicking the card opens
- * the edit/detail overlay (openER).
+ * Each card shows: cover image (if available), name, favorite heart, star
+ * rating, truncated description, time/servings metadata, notes, date saved,
+ * and an optional source link. Clicking the card opens the edit/detail overlay.
  */
 function rH(r) {
   // Build 5 star spans — filled stars up to the rating, hollow after
@@ -63,9 +63,19 @@ function rH(r) {
   // label (e.g. "Manual"), show it as a badge; otherwise nothing
   const srcLink = r.sourceUrl ? `<a href="${r.sourceUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:.68rem;color:var(--ac);text-decoration:none;border:1px solid rgba(212,168,83,.3);border-radius:20px;padding:2px 8px;background:transparent">🔗 View original</a>` : r.source ? `<span class="sbdg">${r.source}</span>` : "";
 
+  // Cover image: show a hero image at the top of the card if available
+  const imgHtml = r.imageUrl ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;max-height:140px"><img src="${r.imageUrl}" alt="" style="width:100%;height:140px;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>` : "";
+
+  // Time/servings metadata pills — show if imported via AI
+  const metaParts = [
+    r.totalTime || r.cookTime ? `⏱ ${r.totalTime || r.cookTime}` : "",
+    r.servings ? `🍽 ${r.servings} servings` : "",
+  ].filter(Boolean);
+  const metaHtml = metaParts.length ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${metaParts.map(m => `<span style="font-size:.68rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:2px 8px">${m}</span>`).join("")}</div>` : "";
+
   // Assemble the full card — stopPropagation on the heart so tapping it
   // doesn't also open the edit overlay
-  return `<div class="rcd${r.favorited ? " fav" : ""}" onclick="openER('${r.id}')"><div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited ? "❤️" : "🤍"}</div></div><div class="stars">${st}</div>${r.description ? `<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0, 100)}${r.description.length > 100 ? "…" : ""}</div>` : ""}${r.notes ? `<div class="rnot">${r.notes}</div>` : ""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;
+  return `<div class="rcd${r.favorited ? " fav" : ""}" onclick="openER('${r.id}')">${imgHtml}<div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited ? "❤️" : "🤍"}</div></div><div class="stars">${st}</div>${metaHtml}${r.description ? `<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0, 100)}${r.description.length > 100 ? "…" : ""}</div>` : ""}${r.notes ? `<div class="rnot">${r.notes}</div>` : ""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;
 }
 
 // ── TAB SWITCHING ────────────────────────────────────────────────────────────
@@ -151,20 +161,23 @@ export function valR() { g("savrecbtn").disabled = !g("rn").value.trim(); }
 // ── URL IMPORT (AI-POWERED) ─────────────────────────────────────────────────
 
 /**
- * Fetches a recipe from a URL using the dedicated import-recipe endpoint.
- * Extracts full recipe structure: title, ingredients, steps, cuisine, cook time,
- * servings. On success, populates the Add Recipe form fields so the user can
- * review before saving. Supports AllRecipes, NYT Cooking, Food Network, etc.
+ * Fetches a recipe from a URL using the Claude AI-powered import endpoint.
+ * Sends the URL to /api/import-recipe which fetches HTML, parses with Claude
+ * Sonnet, downloads the cover image, and returns structured recipe data.
+ * On success, populates the Add Recipe form for user review before saving.
  */
 export async function importFromUrl() {
   const url = g("rurl").value.trim(); if (!url) return;
 
   const st = g("rurlstatus"), btn = g("rimportbtn");
   // Show a loading indicator and disable the button to prevent double-submits
-  st.style.display = "block"; st.style.color = "var(--mt)"; st.textContent = "⏳ Fetching recipe…"; btn.disabled = true;
+  st.style.display = "block";
+  st.style.color = "var(--mt)";
+  st.textContent = "🤖 Importing recipe with AI…";
+  btn.disabled = true;
 
   try {
-    // Call the dedicated import-recipe endpoint which uses Claude + web_search
+    // Call the AI-powered import endpoint — sends HTML to Claude Sonnet
     const r = await fetch("/api/import-recipe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -181,27 +194,119 @@ export async function importFromUrl() {
 
     const p = data.recipe;
 
-    // Build the description: combine ingredients + steps into a single field
-    // so the existing recipe view can display them together
-    const desc = [
-      p.ingredients || "",
-      p.steps ? "\n\nSteps:\n" + p.steps : ""
-    ].join("").trim();
+    // Build the description from structured ingredients + steps arrays
+    // so it displays nicely in the recipe view
+    const desc = _buildDescription(p);
 
     // Populate the Add Recipe form with the extracted data
     g("rn").value = p.title || "";
-    g("rd").value = desc || p.description || "";
+    g("rd").value = desc;
     g("rnotes").value = p.notes || "";
     g("rsourceurl").value = url;
     if (g("rcuisine")) g("rcuisine").value = p.cuisine || "";
+
+    // Auto-select tags that Claude inferred from the recipe content
+    if (p.tags && p.tags.length) {
+      setTagsUI("rtags", p.tags);
+    }
+
+    // Enable save button since we have a title
     g("savrecbtn").disabled = !p.title;
+
+    // Show the cover image preview if the endpoint found one
+    _showImagePreview(p.imageUrl);
+
+    // Store structured data and image URL in a temp variable so saveRec
+    // can include them when saving to Firestore
+    state._importedRecipe = {
+      ingredientsRaw: p.ingredients || [],
+      stepsRaw: p.steps || [],
+      imageUrl: p.imageUrl || null,
+      prepTime: p.prepTime || "",
+      cookTime: p.cookTime || "",
+      totalTime: p.totalTime || "",
+      servings: p.servings || "",
+    };
+
+    // Show time/serving metadata if available
+    const metaParts = [
+      p.prepTime ? `Prep: ${p.prepTime}` : "",
+      p.cookTime ? `Cook: ${p.cookTime}` : "",
+      p.servings ? `Serves: ${p.servings}` : "",
+    ].filter(Boolean);
+
     st.style.color = "var(--gn)";
-    st.textContent = "✓ Recipe imported! Review and save.";
-  } catch {
+    st.textContent = "✓ Recipe imported! " + (metaParts.length ? metaParts.join(" · ") : "Review and save.");
+  } catch (e) {
+    console.error("importFromUrl:", e);
     st.style.color = "var(--rd)";
     st.textContent = "⚠️ Couldn't import — try copying the recipe text manually.";
   }
   btn.disabled = false;
+}
+
+/**
+ * _buildDescription — converts structured ingredient and step arrays into
+ * a formatted text string for the description field. Keeps ingredients with
+ * amounts and steps numbered for readability.
+ */
+function _buildDescription(recipe) {
+  const parts = [];
+
+  // Add brief description if provided
+  if (recipe.description) {
+    parts.push(recipe.description);
+    parts.push("");
+  }
+
+  // Format structured ingredients with amounts and units
+  if (recipe.ingredients && recipe.ingredients.length) {
+    parts.push("Ingredients:");
+    recipe.ingredients.forEach(ing => {
+      if (typeof ing === "string") {
+        parts.push(`- ${ing}`);
+      } else {
+        const amt = [ing.amount, ing.unit].filter(Boolean).join(" ");
+        parts.push(`- ${amt ? amt + " " : ""}${ing.name}`);
+      }
+    });
+    parts.push("");
+  }
+
+  // Format steps as numbered list
+  if (recipe.steps && recipe.steps.length) {
+    parts.push("Steps:");
+    recipe.steps.forEach((step, i) => {
+      parts.push(`${i + 1}. ${step}`);
+    });
+  }
+
+  return parts.join("\n");
+}
+
+/**
+ * _showImagePreview — displays the imported recipe's cover image in the
+ * save form so the user can see what they're importing. Creates or updates
+ * the preview element above the form fields.
+ */
+function _showImagePreview(imageUrl) {
+  // Remove existing preview if any
+  const existing = document.getElementById("rimgpreview");
+  if (existing) existing.remove();
+
+  if (!imageUrl) return;
+
+  // Insert the image preview after the import section, before the form fields
+  const importSection = g("rurlstatus")?.parentElement;
+  if (!importSection) return;
+
+  const preview = document.createElement("div");
+  preview.id = "rimgpreview";
+  preview.style.cssText = "margin:12px 0;border-radius:12px;overflow:hidden;background:var(--b1);max-height:200px;display:flex;align-items:center;justify-content:center";
+  preview.innerHTML = `<img src="${imageUrl}" alt="Recipe photo" style="width:100%;height:200px;object-fit:cover;border-radius:12px" onerror="this.parentElement.style.display='none'"/>`;
+
+  // Insert after the import card
+  importSection.after(preview);
 }
 
 // ── SAVE NEW RECIPE ──────────────────────────────────────────────────────────
@@ -210,6 +315,9 @@ export async function importFromUrl() {
  * Collects data from the Add Recipe form and saves a new recipe to Firestore.
  * Generates a unique ID using timestamp, sets initial metadata (cook count,
  * saved date), then resets the form and closes the overlay.
+ *
+ * If this recipe was imported via AI (state._importedRecipe exists), includes
+ * the structured ingredient/step arrays, image URL, and time metadata.
  */
 export async function saveRec() {
   const nm = g("rn").value.trim(); if (!nm) return; // name is required
@@ -218,15 +326,67 @@ export async function saveRec() {
   const cuisine = g("rcuisine") ? g("rcuisine").value.trim() : "";
   const tags = getSelTags("rtags"); // read which tag pills are selected
 
-  // Build the recipe object and persist it
-  await svr({ id: "rec-" + Date.now(), name: nm, rating: state.nr, favorited: false, notes: g("rnotes").value.trim(), description: desc, source: srcUrl ? "Web Import" : "Manual", sourceUrl: srcUrl || null, tags, cuisine, cookCount: 0, savedAt: new Date().toLocaleDateString(), isPublic: false });
+  // Check if the "Publish to community" toggle is on
+  const pubToggle = document.getElementById("rpubtoggle");
+  const isPublic = pubToggle ? pubToggle.classList.contains("on") : false;
+
+  // Pull structured data from AI import if available
+  const imported = state._importedRecipe || {};
+
+  // Build the recipe object with both flat text and structured data
+  const recipe = {
+    id: "rec-" + Date.now(),
+    name: nm,
+    rating: state.nr,
+    favorited: false,
+    notes: g("rnotes").value.trim(),
+    description: desc,
+    source: srcUrl ? "AI Import" : "Manual",
+    sourceUrl: srcUrl || null,
+    imageUrl: imported.imageUrl || null,
+    tags,
+    cuisine,
+    prepTime: imported.prepTime || "",
+    cookTime: imported.cookTime || "",
+    totalTime: imported.totalTime || "",
+    servings: imported.servings || "",
+    ingredientsRaw: imported.ingredientsRaw || [],
+    stepsRaw: imported.stepsRaw || [],
+    cookCount: 0,
+    savedAt: new Date().toLocaleDateString(),
+    isPublic,
+  };
+
+  await svr(recipe);
+
+  // If publishing, also save to the public community collection
+  if (isPublic) {
+    const user = getCurrentUser();
+    const authorName = user?.displayName || localStorage.getItem("ks-who") || "Anonymous";
+    await publishRecipe(recipe, authorName, state.hid);
+  }
 
   // Reset all form fields back to empty/default
-  g("rn").value = ""; g("rnotes").value = ""; g("rd").value = ""; g("rsourceurl").value = ""; g("rurl").value = ""; if (g("rcuisine")) g("rcuisine").value = "";
+  g("rn").value = ""; g("rnotes").value = ""; g("rd").value = "";
+  g("rsourceurl").value = ""; g("rurl").value = "";
+  if (g("rcuisine")) g("rcuisine").value = "";
   setTagsUI("rtags", []); // deselect all tags
   state.nr = 0;           // reset the star rating state
+  state._importedRecipe = null; // clear imported data
   g("savrecbtn").disabled = true;
   renderStars("rstars", 0); // visually clear the star widget
+
+  // Remove the image preview if it was shown
+  const imgPreview = document.getElementById("rimgpreview");
+  if (imgPreview) imgPreview.remove();
+
+  // Reset the publish toggle
+  if (pubToggle) pubToggle.classList.remove("on");
+
+  // Reset the import status text
+  const urlStatus = g("rurlstatus");
+  if (urlStatus) { urlStatus.style.display = "none"; urlStatus.textContent = ""; }
+
   showNotif("Recipe saved! 📖");
   hideOv("arec"); // close the Add Recipe overlay
 }
@@ -261,9 +421,23 @@ export function openER(id) {
     <div class="tag${(r.tags || []).includes("Under 30 min") ? " sel" : ""}" data-tag="Under 30 min" onclick="togTag(this)">⏱ Under 30 min</div>
   </div></div>`;
 
+  // Cover image at the top of the edit overlay (if recipe has one)
+  const coverImg = r.imageUrl ? `<div style="margin:-16px -16px 16px;border-radius:0;overflow:hidden;max-height:220px"><img src="${r.imageUrl}" alt="" style="width:100%;height:220px;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>` : "";
+
+  // Time & servings metadata bar — shown for AI-imported recipes
+  const editMeta = [
+    r.prepTime ? `Prep: ${r.prepTime}` : "",
+    r.cookTime ? `Cook: ${r.cookTime}` : "",
+    r.totalTime ? `Total: ${r.totalTime}` : "",
+    r.servings ? `Serves: ${r.servings}` : "",
+  ].filter(Boolean);
+  const editMetaHtml = editMeta.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${editMeta.map(m => `<span style="font-size:.74rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:4px 10px">${m}</span>`).join("")}</div>` : "";
+
   // Render the full edit overlay body — includes action buttons at top,
   // scaling controls, form fields, and save/delete buttons at bottom
   g("erecbody").innerHTML = `
+    ${coverImg}
+    ${editMetaHtml}
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn bp bsm" style="flex:1" onclick="scheduleRecipe('${r.name.replace(/'/g, "\\'")}')">📅 Schedule</button>
       <button class="btn bs bsm" style="flex:1" onclick="addRecIngToShop('${r.id}')">🛒 Shop ingredients</button>
