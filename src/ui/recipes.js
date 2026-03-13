@@ -31,6 +31,153 @@ let _pendingCommentPhotos = []; // Array of File objects for comment photo attac
 let _photoViewerImages = [];  // Array of image URLs for the fullscreen photo viewer
 let _photoViewerIndex = 0;    // Current index in the photo viewer
 
+// ── TIME/SERVES HELPERS ──────────────────────────────────────────────────────
+// These handle the prep/cook/total time inputs with auto-calculation logic.
+// Each time field accepts either a numeric value (paired with a unit dropdown)
+// or free-form text like "8–10 min". Total auto-calculates from prep+cook
+// but the user can override it at any time.
+
+// Tracks whether the user has manually edited the Total time field.
+// Keyed by form prefix: "add" for the new recipe form, "edit" for the edit form.
+let _totalTimeManual = { add: false, edit: false };
+
+/**
+ * formatTimeValue — converts a total number of minutes into a human-friendly
+ * string. Uses hours if >= 60 and evenly divisible, otherwise minutes.
+ * Examples: 90 → "1 hour 30 min", 120 → "2 hours", 45 → "45"
+ */
+function formatTimeValue(totalMinutes) {
+  if (totalMinutes <= 0) return "";
+  if (totalMinutes < 60) return String(totalMinutes);
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (mins === 0) return `${hrs} hour${hrs > 1 ? "s" : ""}`;
+  return `${hrs} hour${hrs > 1 ? "s" : ""} ${mins} min`;
+}
+
+/**
+ * readTimeField — reads a time input + unit dropdown pair, returning a
+ * display string. If the input is non-numeric (free text), returns it as-is.
+ * If numeric, combines with the unit for a clean display value.
+ * @param {string} inputId  - the ID of the text input element
+ * @param {string} unitId   - the ID of the unit <select> element
+ * @returns {string} e.g. "15 min", "1 hr", "8–10 min", or ""
+ */
+function readTimeField(inputId, unitId) {
+  const input = g(inputId);
+  const unitEl = g(unitId);
+  if (!input) return "";
+  const val = input.value.trim();
+  if (!val) return "";
+  // If the value is not a plain number, treat as free-form text — store as-is
+  if (isNaN(val)) return val;
+  const unit = unitEl ? unitEl.value : "min";
+  const num = parseFloat(val);
+  if (unit === "hr") return num === 1 ? "1 hour" : `${num} hours`;
+  return `${num} min`;
+}
+
+/**
+ * getTimeInMinutes — converts the value+unit of a time field to total minutes.
+ * Returns NaN if the input is non-numeric (free text).
+ */
+function getTimeInMinutes(inputId, unitId) {
+  const input = g(inputId);
+  const unitEl = g(unitId);
+  if (!input) return NaN;
+  const val = parseFloat(input.value.trim());
+  if (isNaN(val)) return NaN;
+  const unit = unitEl ? unitEl.value : "min";
+  return unit === "hr" ? val * 60 : val;
+}
+
+/**
+ * recipeTimeChanged — called when Prep or Cook time inputs change.
+ * Auto-populates the Total time field unless the user has manually overridden it.
+ * Converts the sum intelligently (e.g. 90+30 min → "2 hours").
+ * @param {string} prefix - "add" or "edit" to target the correct form fields
+ */
+export function recipeTimeChanged(prefix) {
+  if (_totalTimeManual[prefix]) return; // user overrode total — don't auto-calc
+  const prepId = prefix === "add" ? "rpreptime" : "epreptime";
+  const prepUnitId = prefix === "add" ? "rpreptimeunit" : "epreptimeunit";
+  const cookId = prefix === "add" ? "rcooktime" : "ecooktime";
+  const cookUnitId = prefix === "add" ? "rcooktimeunit" : "ecooktimeunit";
+  const totalId = prefix === "add" ? "rtotaltime" : "etotaltime";
+  const totalUnitId = prefix === "add" ? "rtotaltimeunit" : "etotaltimeunit";
+
+  const prepMin = getTimeInMinutes(prepId, prepUnitId);
+  const cookMin = getTimeInMinutes(cookId, cookUnitId);
+  const totalEl = g(totalId);
+  const totalUnitEl = g(totalUnitId);
+  if (!totalEl) return;
+
+  // Only auto-calc if both prep and cook are valid numbers
+  if (isNaN(prepMin) && isNaN(cookMin)) { totalEl.value = ""; return; }
+  const sum = (isNaN(prepMin) ? 0 : prepMin) + (isNaN(cookMin) ? 0 : cookMin);
+  if (sum <= 0) { totalEl.value = ""; return; }
+
+  // Display in hours if >= 60 min, otherwise stay in minutes
+  if (sum >= 60) {
+    const formatted = formatTimeValue(sum);
+    totalEl.value = formatted;
+    // Set unit dropdown to match the display
+    if (totalUnitEl) totalUnitEl.value = "min"; // formatted string already includes unit text
+  } else {
+    totalEl.value = String(sum);
+    if (totalUnitEl) totalUnitEl.value = "min";
+  }
+}
+
+/**
+ * markTotalTimeManual — called when the user types directly in the Total time
+ * field. Sets a flag so auto-calculation stops overwriting their value.
+ */
+export function markTotalTimeManual(prefix) {
+  _totalTimeManual[prefix] = true;
+}
+
+/**
+ * readTotalTimeField — reads the Total time field. If it was auto-calculated
+ * and contains a formatted string (e.g. "2 hours"), returns it as-is.
+ * If it's a plain number, appends the selected unit.
+ */
+function readTotalTimeField(inputId, unitId) {
+  const input = g(inputId);
+  if (!input) return "";
+  const val = input.value.trim();
+  if (!val) return "";
+  // If value already contains text (from auto-calc like "2 hours"), return as-is
+  if (isNaN(val)) return val;
+  const unitEl = g(unitId);
+  const unit = unitEl ? unitEl.value : "min";
+  const num = parseFloat(val);
+  if (unit === "hr") return num === 1 ? "1 hour" : `${num} hours`;
+  return `${num} min`;
+}
+
+/**
+ * parseTimeToInput — takes a stored time string (e.g. "15 min", "2 hours",
+ * "1 hour 30 min") and returns {value, unit} for populating form fields.
+ * Free-form text that can't be parsed returns as-is with "min" unit.
+ */
+function parseTimeToInput(timeStr) {
+  if (!timeStr) return { value: "", unit: "min" };
+  // Try to match patterns like "2 hours", "15 min", "1.5 hr"
+  const hrMatch = timeStr.match(/^(\d+\.?\d*)\s*hours?$/i);
+  if (hrMatch) return { value: hrMatch[1], unit: "hr" };
+  const minMatch = timeStr.match(/^(\d+\.?\d*)\s*min(utes?)?$/i);
+  if (minMatch) return { value: minMatch[1], unit: "min" };
+  // Compound like "1 hour 30 min" — just put the full string as free-form
+  if (/\d+\s*hour/i.test(timeStr) && /\d+\s*min/i.test(timeStr)) {
+    return { value: timeStr, unit: "min" };
+  }
+  // Pure number with no unit — assume minutes
+  if (!isNaN(timeStr)) return { value: timeStr, unit: "min" };
+  // Anything else (free-form) — store as-is
+  return { value: timeStr, unit: "min" };
+}
+
 // ── TAG HELPERS ──────────────────────────────────────────────────────────────
 
 /**
@@ -238,6 +385,25 @@ export async function importFromUrl() {
       totalTime: p.totalTime || "",
       servings: p.servings || "",
     };
+
+    // Pre-fill the time/serves form fields with imported values so user can edit
+    if (p.prepTime) {
+      const pt = parseTimeToInput(p.prepTime);
+      if (g("rpreptime")) g("rpreptime").value = pt.value;
+      if (g("rpreptimeunit")) g("rpreptimeunit").value = pt.unit;
+    }
+    if (p.cookTime) {
+      const ct = parseTimeToInput(p.cookTime);
+      if (g("rcooktime")) g("rcooktime").value = ct.value;
+      if (g("rcooktimeunit")) g("rcooktimeunit").value = ct.unit;
+    }
+    if (p.totalTime) {
+      const tt = parseTimeToInput(p.totalTime);
+      if (g("rtotaltime")) g("rtotaltime").value = tt.value;
+      if (g("rtotaltimeunit")) g("rtotaltimeunit").value = tt.unit;
+      _totalTimeManual.add = true; // imported total — treat as manual override
+    }
+    if (p.servings && g("rserves")) g("rserves").value = p.servings;
 
     // Show time/serving metadata if available
     const metaParts = [
@@ -828,10 +994,11 @@ export async function saveRec() {
     imageUrl: coverUrl,
     tags,
     cuisine,
-    prepTime: imported.prepTime || "",
-    cookTime: imported.cookTime || "",
-    totalTime: imported.totalTime || "",
-    servings: imported.servings || "",
+    // Time/serves: prefer manual form input, fall back to AI-imported values
+    prepTime: readTimeField("rpreptime", "rpreptimeunit") || imported.prepTime || "",
+    cookTime: readTimeField("rcooktime", "rcooktimeunit") || imported.cookTime || "",
+    totalTime: readTotalTimeField("rtotaltime", "rtotaltimeunit") || imported.totalTime || "",
+    servings: (g("rserves") ? g("rserves").value.trim() : "") || imported.servings || "",
     ingredientsRaw: imported.ingredientsRaw || [],
     stepsRaw: imported.stepsRaw || [],
     stepPhotos: {},
@@ -853,6 +1020,15 @@ export async function saveRec() {
   g("rn").value = ""; g("rnotes").value = ""; g("rd").value = "";
   g("rsourceurl").value = ""; g("rurl").value = "";
   if (g("rcuisine")) g("rcuisine").value = "";
+  // Reset time/serves fields
+  if (g("rpreptime")) g("rpreptime").value = "";
+  if (g("rcooktime")) g("rcooktime").value = "";
+  if (g("rtotaltime")) g("rtotaltime").value = "";
+  if (g("rserves")) g("rserves").value = "";
+  if (g("rpreptimeunit")) g("rpreptimeunit").value = "min";
+  if (g("rcooktimeunit")) g("rcooktimeunit").value = "min";
+  if (g("rtotaltimeunit")) g("rtotaltimeunit").value = "min";
+  _totalTimeManual.add = false; // reset auto-calc override flag
   setTagsUI("rtags", []); // deselect all tags
   state.nr = 0;           // reset the star rating state
   state._importedRecipe = null; // clear imported data
@@ -1188,14 +1364,43 @@ export function openER(id) {
   </div>
   <input type="file" id="editCoverInput" accept="image/*" style="display:none" onchange="handleCoverSelected(event,'edit')"/>`;
 
-  // Time & servings metadata bar — shown for AI-imported recipes
-  const editMeta = [
-    r.prepTime ? `Prep: ${r.prepTime}` : "",
-    r.cookTime ? `Cook: ${r.cookTime}` : "",
-    r.totalTime ? `Total: ${r.totalTime}` : "",
-    r.servings ? `Serves: ${r.servings}` : "",
-  ].filter(Boolean);
-  const editMetaHtml = editMeta.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${editMeta.map(m => `<span style="font-size:.74rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:4px 10px">${m}</span>`).join("")}</div>` : "";
+  // Time & servings — editable fields (same inputs as the add form, pre-filled)
+  const _prep = parseTimeToInput(r.prepTime);
+  const _cook = parseTimeToInput(r.cookTime);
+  const _total = parseTimeToInput(r.totalTime);
+  _totalTimeManual.edit = !!r.totalTime; // if recipe already has total, treat as manual
+  const editMetaHtml = `<div style="margin-bottom:14px">
+    <div class="frow" style="margin-bottom:8px"><label class="flbl">Prep time</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="fi" id="epreptime" type="text" inputmode="numeric" placeholder="e.g. 15" value="${_esc(_prep.value)}" style="flex:1" oninput="recipeTimeChanged('edit')"/>
+        <select class="fi" id="epreptimeunit" style="width:auto;min-width:90px" onchange="recipeTimeChanged('edit')">
+          <option value="min"${_prep.unit === "min" ? " selected" : ""}>minutes</option>
+          <option value="hr"${_prep.unit === "hr" ? " selected" : ""}>hours</option>
+        </select>
+      </div>
+    </div>
+    <div class="frow" style="margin-bottom:8px"><label class="flbl">Cook time</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="fi" id="ecooktime" type="text" inputmode="numeric" placeholder="e.g. 30" value="${_esc(_cook.value)}" style="flex:1" oninput="recipeTimeChanged('edit')"/>
+        <select class="fi" id="ecooktimeunit" style="width:auto;min-width:90px" onchange="recipeTimeChanged('edit')">
+          <option value="min"${_cook.unit === "min" ? " selected" : ""}>minutes</option>
+          <option value="hr"${_cook.unit === "hr" ? " selected" : ""}>hours</option>
+        </select>
+      </div>
+    </div>
+    <div class="frow" style="margin-bottom:8px"><label class="flbl">Total time</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="fi" id="etotaltime" type="text" inputmode="numeric" placeholder="Auto from prep + cook" value="${_esc(_total.value)}" style="flex:1" oninput="markTotalTimeManual('edit')"/>
+        <select class="fi" id="etotaltimeunit" style="width:auto;min-width:90px">
+          <option value="min"${_total.unit === "min" ? " selected" : ""}>minutes</option>
+          <option value="hr"${_total.unit === "hr" ? " selected" : ""}>hours</option>
+        </select>
+      </div>
+    </div>
+    <div class="frow"><label class="flbl">Serves</label>
+      <input class="fi" id="eserves" type="text" inputmode="numeric" placeholder="e.g. 4" value="${_esc(r.servings || "")}"/>
+    </div>
+  </div>`;
 
   // ── Step photos — build upload buttons for each step (if structured steps exist) ──
   let stepPhotosHtml = "";
@@ -1301,8 +1506,14 @@ export async function updR() {
     _pendingStepPhotos = {};
   }
 
+  // Read time/serves fields from the edit form
+  const prepTime = readTimeField("epreptime", "epreptimeunit") || "";
+  const cookTime = readTimeField("ecooktime", "ecooktimeunit") || "";
+  const totalTime = readTotalTimeField("etotaltime", "etotaltimeunit") || "";
+  const servings = g("eserves") ? g("eserves").value.trim() : (r.servings || "");
+
   // Spread the original recipe and override only the editable fields
-  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine, imageUrl, stepPhotos });
+  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine, imageUrl, stepPhotos, prepTime, cookTime, totalTime, servings });
   showNotif("Recipe updated!"); hideOv("erec");
 }
 
@@ -2183,14 +2394,14 @@ export async function openComRecipe(id) {
     ? `<div style="margin:-16px -16px 16px;overflow:hidden;max-height:240px"><img src="${r.imageUrl}" alt="" style="width:100%;height:240px;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
     : "";
 
-  // Time and servings metadata bar
+  // Time and servings metadata pills — same style as private recipe view
   const meta = [
-    r.prepTime ? `Prep: ${r.prepTime}` : "",
-    r.cookTime ? `Cook: ${r.cookTime}` : "",
-    r.totalTime ? `Total: ${r.totalTime}` : "",
-    r.servings ? `Serves: ${r.servings}` : "",
+    r.prepTime ? `🔪 Prep: ${r.prepTime}` : "",
+    r.cookTime ? `🔥 Cook: ${r.cookTime}` : "",
+    r.totalTime ? `⏱ Total: ${r.totalTime}` : "",
+    r.servings ? `🍽 Serves: ${r.servings}` : "",
   ].filter(Boolean);
-  const metaHtml = meta.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${meta.map(m => `<span style="font-size:.74rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:4px 10px">${m}</span>`).join("")}</div>` : "";
+  const metaHtml = meta.length ? `<div class="rv-meta">${meta.map(m => `<div class="rv-meta-pill">${m}</div>`).join("")}</div>` : "";
 
   // Rating display — show aggregate rating with star icons
   const ratingHtml = (r.ratingCount || 0) > 0
