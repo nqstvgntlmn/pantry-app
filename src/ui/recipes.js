@@ -419,11 +419,11 @@ export async function startBulkImport() {
     const entry = toActuallyImport[i];
     const paywallWarn = entry.status === "paywall" ? " — may be paywalled" : "";
 
-    // 3-second delay between imports to avoid hitting Anthropic rate limits
+    // 2-second courtesy delay between imports to be gentle on the Anthropic API
     // (skip delay before the very first import)
     if (i > 0) {
       progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Waiting before next import… (${i + 1} of ${toActuallyImport.length})</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, 2000));
     }
 
     // Update progress indicator with current URL index
@@ -480,9 +480,10 @@ export async function startBulkImport() {
 }
 
 /**
- * _importWithRetry — calls the import-recipe API and auto-retries once
- * on rate limit (429) errors with a 10-second backoff. This prevents
- * rate limit failures from immediately marking the URL as failed.
+ * _importWithRetry — calls the import-recipe API with exponential backoff
+ * on rate limit (429) errors. Retries up to 3 times with increasing delays
+ * (10s → 20s → 40s) before giving up. Non-rate-limit errors fail immediately.
+ *
  * @param {string} url - the recipe URL to import
  * @param {HTMLElement} progress - the progress DOM element for status updates
  * @param {number} idx - current index in the import queue (for display)
@@ -490,28 +491,72 @@ export async function startBulkImport() {
  * @returns {Object} the parsed API response (success/error)
  */
 async function _importWithRetry(url, progress, idx, total) {
+  // Backoff delays in ms: 10s, 20s, 40s — doubles each retry attempt
+  const BACKOFF_DELAYS = [10000, 20000, 40000];
+  const MAX_RETRIES = 3;
+
+  // Extract a short display name from the URL for progress messages
+  const shortUrl = _shortenUrl(url);
+
+  // First attempt — no backoff needed
   const r = await fetch("/api/import-recipe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url })
   });
-  const data = await r.json();
+  let data = await r.json();
 
-  // If rate limited (429 or reason flag), wait 10s and retry once
-  if (r.status === 429 || data.reason === "rate_limit") {
-    progress.innerHTML = `<div style="font-size:.78rem;color:var(--yw,orange)">Rate limited — waiting 10s before retry… (${idx + 1} of ${total})</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
-    await new Promise(r => setTimeout(r, 10000));
+  // If NOT a rate limit error, return immediately (success or non-retryable failure)
+  if (r.status !== 429 && data.reason !== "rate_limit") return data;
 
-    progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Retrying ${idx + 1} of ${total}…</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
-    const r2 = await fetch("/api/import-recipe", {
+  // Rate limit hit — enter exponential backoff retry loop
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const delaySec = BACKOFF_DELAYS[attempt] / 1000;
+
+    // Show the user which URL is being retried and how long the wait is
+    progress.innerHTML = `<div style="font-size:.78rem;color:var(--yw,orange)">Rate limit hit — waiting ${delaySec}s before retrying ${shortUrl}… (${idx + 1} of ${total})</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
+    await new Promise(resolve => setTimeout(resolve, BACKOFF_DELAYS[attempt]));
+
+    // Retry the import after the backoff delay
+    progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Retrying ${idx + 1} of ${total} (attempt ${attempt + 2})…</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
+    const retryResp = await fetch("/api/import-recipe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url })
     });
-    return await r2.json();
+    data = await retryResp.json();
+
+    // If this attempt succeeded or failed with a non-rate-limit error, stop retrying
+    if (retryResp.status !== 429 && data.reason !== "rate_limit") return data;
   }
 
-  return data;
+  // Exhausted all retries — return a structured failure so the summary shows it clearly
+  return {
+    success: false,
+    error: "Rate limit — could not recover after 3 retries",
+    reason: "rate_limit"
+  };
+}
+
+/**
+ * _shortenUrl — extracts a readable short form of a URL for display in
+ * progress messages. Returns hostname + first path segment to keep it concise.
+ * e.g. "https://www.recipetineats.com/beef-stroganoff/" → "recipetineats.com/beef-stroganoff"
+ *
+ * @param {string} url - full URL to shorten
+ * @returns {string} shortened display string
+ */
+function _shortenUrl(url) {
+  try {
+    const u = new URL(url);
+    // Strip "www." prefix and grab the first meaningful path segment
+    const host = u.hostname.replace(/^www\./, "");
+    const path = u.pathname.replace(/\/$/, "").split("/").filter(Boolean).slice(0, 1).join("/");
+    return path ? `${host}/${path}` : host;
+  } catch {
+    // If URL parsing fails, just return the last 40 chars
+    return url.length > 40 ? "…" + url.slice(-40) : url;
+  }
 }
 
 /**
