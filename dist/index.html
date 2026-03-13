@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-DesQYFTp.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CDFLZ8XL.css">
+  <script type="module" crossorigin src="/assets/index-BbivMilH.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-kYnyra0K.css">
 </head>
 <body>
 
@@ -532,6 +532,13 @@
         <div id="rurlstatus" style="font-size:.74rem;margin-top:8px;display:none"></div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin:4px 0 14px"><div style="flex:1;height:1px;background:var(--b1)"></div><span style="font-size:.7rem;color:var(--mt);text-transform:uppercase;letter-spacing:.08em">or add manually</span><div style="flex:1;height:1px;background:var(--b1)"></div></div>
+      <!-- Cover photo upload zone — tap or drag-and-drop to add a cover image -->
+      <div class="cover-upload-zone" id="addRecCoverZone" onclick="triggerCoverUpload('add')" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="event.preventDefault();this.classList.remove('drag-over');handleCoverDrop(event,'add')">
+        <div class="cuz-icon">📷</div>
+        <div class="cuz-label">Add cover photo</div>
+        <div class="cuz-hint">Tap to upload or drag & drop</div>
+      </div>
+      <input type="file" id="addRecCoverInput" accept="image/*" style="display:none" onchange="handleCoverSelected(event,'add')"/>
       <div class="frow"><label class="flbl">Recipe name <span style="color:var(--rd)">*</span></label><input class="fi" id="rn" placeholder="e.g. Chicken Stir Fry" oninput="valR()"/></div>
       <div class="frow"><label class="flbl">Your rating</label><div class="sinp" id="rstars"><span class="star" onclick="setStar(1,'r')">☆</span><span class="star" onclick="setStar(2,'r')">☆</span><span class="star" onclick="setStar(3,'r')">☆</span><span class="star" onclick="setStar(4,'r')">☆</span><span class="star" onclick="setStar(5,'r')">☆</span></div></div>
       <div class="frow"><label class="flbl">Description / Ingredients <span class="otag">optional</span></label><textarea class="fta" id="rd" placeholder="Key ingredients, method…"></textarea></div>
@@ -553,9 +560,9 @@
     </div>
   </div>
 
-  <!-- OVERLAY: EDIT RECIPE -->
+  <!-- OVERLAY: EDIT/VIEW RECIPE — shows read-only view first, edit mode on pencil tap -->
   <div class="ov" id="ov-erec">
-    <div class="ovhdr"><div class="bkbtn" onclick="hideOv('erec')">←</div><div class="ovttl">Edit Recipe</div></div>
+    <div class="ovhdr"><div class="bkbtn" id="erecBack" onclick="handleRecipeBack()">←</div><div class="ovttl" id="erecTitle">Recipe</div></div>
     <div class="ovbody" id="erecbody"></div>
   </div>
 
@@ -776,6 +783,17 @@
     <button class="btn bs bf" onclick="submitComReport('Other')">Other</button>
   </div>
   <button class="btn bd bf" onclick="closeReportSheet()" style="margin-top:12px">Cancel</button>
+</div>
+
+<!-- FULLSCREEN PHOTO VIEWER — tap-to-expand for recipe/step/comment photos -->
+<div class="photo-viewer-overlay" id="photoViewer">
+  <button class="pv-close" onclick="closePhotoViewer()">✕</button>
+  <div class="pv-counter" id="pvCounter"></div>
+  <button class="pv-prev" id="pvPrev" onclick="photoViewerNav(-1)">‹</button>
+  <button class="pv-next" id="pvNext" onclick="photoViewerNav(1)">›</button>
+  <div class="pv-img-wrap" id="pvWrap">
+    <img id="pvImg" src="" alt=""/>
+  </div>
 </div>
 
 <div class="notif" id="notif" style="display:none"></div>

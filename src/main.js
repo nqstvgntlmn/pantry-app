@@ -52,7 +52,7 @@ import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQt
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
-import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif } from './ui/recipes.js';
+import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, openRecipeView, handleRecipeBack, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif, triggerCoverUpload, handleCoverSelected, handleCoverDrop, removeCoverPhoto, triggerStepPhotoUpload, handleStepPhotoSelected, removeStepPhoto, openPhotoViewer, closePhotoViewer, photoViewerNav, triggerCommentPhotoUpload, handleCommentPhotosSelected, removeCommentPhoto } from './ui/recipes.js';
 
 // Insights screen: usage analytics and charts
 import { renderInsights } from './ui/insights.js';
@@ -255,6 +255,26 @@ window.submitComReport = submitComReport;         // Submit a report with select
 window.loadMoreComments = loadMoreComments;       // Load next 20 comments (pagination)
 window.openNotifications = openNotifications;     // Open the notifications list
 window.openComRecipeFromNotif = openComRecipeFromNotif; // Open a recipe from a notification tap
+// Read-only recipe view and back navigation
+window.openRecipeView = openRecipeView;           // Open read-only cookbook view for a saved recipe
+window.handleRecipeBack = handleRecipeBack;       // Back button handler (edit→view or view→close)
+// Cover photo upload handlers
+window.triggerCoverUpload = triggerCoverUpload;           // Open file picker for cover photo
+window.handleCoverSelected = handleCoverSelected;         // Process selected cover photo file
+window.handleCoverDrop = handleCoverDrop;                 // Process dropped cover photo file
+window.removeCoverPhoto = removeCoverPhoto;               // Remove cover photo from recipe
+// Step photo upload handlers
+window.triggerStepPhotoUpload = triggerStepPhotoUpload;   // Open file picker for a step photo
+window.handleStepPhotoSelected = handleStepPhotoSelected; // Process selected step photo file
+window.removeStepPhoto = removeStepPhoto;                 // Remove a step photo from recipe
+// Fullscreen photo viewer
+window.openPhotoViewer = openPhotoViewer;                 // Open fullscreen photo viewer
+window.closePhotoViewer = closePhotoViewer;               // Close fullscreen photo viewer
+window.photoViewerNav = photoViewerNav;                   // Navigate between photos in viewer
+// Comment photo handlers
+window.triggerCommentPhotoUpload = triggerCommentPhotoUpload;     // Open file picker for comment photos
+window.handleCommentPhotosSelected = handleCommentPhotosSelected; // Process selected comment photos
+window.removeCommentPhoto = removeCommentPhoto;                   // Remove a pending comment photo
 
 // ── Chat screen handlers ──
 window.sendChat = sendChat;     // Send a chat message to the AI assistant

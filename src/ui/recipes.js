@@ -13,12 +13,23 @@
 //   eid       = edit-target ID    cfg = user config/preferences
 
 import { state } from '../state.js';
-import { svr, dlr, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
+import { svr, dlr, dbSet, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
 import { g, fmtR, showNotif, showOv, hideOv, renderStars } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
+import { uploadRecipeCover, uploadStepPhoto, uploadCommentPhoto, deleteRecipeStorageFile } from '../storage.js';
 // g = getElementById shorthand, fmtR = format AI response text to HTML,
 // showNotif = toast notification, showOv/hideOv = show/hide overlay panels,
 // renderStars = re-render a star-rating widget, getCurrentUser = Firebase user
+
+// ── MODULE-LEVEL STATE ──────────────────────────────────────────────────────
+// Tracks whether the recipe overlay is in read-only or edit mode,
+// pending cover photo for upload, and step photo data during editing.
+let _recipeViewMode = "view"; // "view" or "edit" — controls overlay behavior
+let _pendingCoverFile = null; // File object for a cover photo selected but not yet uploaded
+let _pendingStepPhotos = {};  // { stepIndex: File } — step photos selected during editing
+let _pendingCommentPhotos = []; // Array of File objects for comment photo attachments
+let _photoViewerImages = [];  // Array of image URLs for the fullscreen photo viewer
+let _photoViewerIndex = 0;    // Current index in the photo viewer
 
 // ── TAG HELPERS ──────────────────────────────────────────────────────────────
 
@@ -73,9 +84,9 @@ function rH(r) {
   ].filter(Boolean);
   const metaHtml = metaParts.length ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${metaParts.map(m => `<span style="font-size:.68rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:2px 8px">${m}</span>`).join("")}</div>` : "";
 
-  // Assemble the full card — stopPropagation on the heart so tapping it
-  // doesn't also open the edit overlay
-  return `<div class="rcd${r.favorited ? " fav" : ""}" onclick="openER('${r.id}')">${imgHtml}<div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited ? "❤️" : "🤍"}</div></div><div class="stars">${st}</div>${metaHtml}${r.description ? `<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0, 100)}${r.description.length > 100 ? "…" : ""}</div>` : ""}${r.notes ? `<div class="rnot">${r.notes}</div>` : ""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;
+  // Assemble the full card — tapping opens the read-only view (not edit).
+  // stopPropagation on the heart so tapping it doesn't also open the recipe.
+  return `<div class="rcd${r.favorited ? " fav" : ""}" onclick="openRecipeView('${r.id}')">${imgHtml}<div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited ? "❤️" : "🤍"}</div></div><div class="stars">${st}</div>${metaHtml}${r.description ? `<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0, 100)}${r.description.length > 100 ? "…" : ""}</div>` : ""}${r.notes ? `<div class="rnot">${r.notes}</div>` : ""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;
 }
 
 // ── TAB SWITCHING ────────────────────────────────────────────────────────────
@@ -296,17 +307,12 @@ function _showImagePreview(imageUrl) {
 
   if (!imageUrl) return;
 
-  // Insert the image preview after the import section, before the form fields
-  const importSection = g("rurlstatus")?.parentElement;
-  if (!importSection) return;
-
-  const preview = document.createElement("div");
-  preview.id = "rimgpreview";
-  preview.style.cssText = "margin:12px 0;border-radius:12px;overflow:hidden;background:var(--b1);max-height:200px;display:flex;align-items:center;justify-content:center";
-  preview.innerHTML = `<img src="${imageUrl}" alt="Recipe photo" style="width:100%;height:200px;object-fit:cover;border-radius:12px" onerror="this.parentElement.style.display='none'"/>`;
-
-  // Insert after the import card
-  importSection.after(preview);
+  // Update the cover upload zone to show the imported image as the cover preview
+  const coverZone = g("addRecCoverZone");
+  if (coverZone) {
+    coverZone.classList.add("has-preview");
+    coverZone.innerHTML = `<img src="${imageUrl}" alt="Cover preview" onerror="this.parentElement.classList.remove('has-preview')"/><button class="cuz-remove" onclick="event.stopPropagation();removeCoverPhoto('add')">✕</button>`;
+  }
 }
 
 // ── SAVE NEW RECIPE ──────────────────────────────────────────────────────────
@@ -333,9 +339,25 @@ export async function saveRec() {
   // Pull structured data from AI import if available
   const imported = state._importedRecipe || {};
 
+  // Generate the recipe ID early so we can use it for storage paths
+  const recipeId = "rec-" + Date.now();
+
+  // Upload pending cover photo if user selected one in the add form
+  let coverUrl = imported.imageUrl || null;
+  if (_pendingCoverFile) {
+    try {
+      showNotif("Uploading cover photo…");
+      coverUrl = await uploadRecipeCover(_pendingCoverFile, recipeId);
+      _pendingCoverFile = null;
+    } catch (e) {
+      console.error("Cover upload failed:", e);
+      showNotif("Cover photo upload failed — saving recipe without it");
+    }
+  }
+
   // Build the recipe object with both flat text and structured data
   const recipe = {
-    id: "rec-" + Date.now(),
+    id: recipeId,
     name: nm,
     rating: state.nr,
     favorited: false,
@@ -343,7 +365,7 @@ export async function saveRec() {
     description: desc,
     source: srcUrl ? "AI Import" : "Manual",
     sourceUrl: srcUrl || null,
-    imageUrl: imported.imageUrl || null,
+    imageUrl: coverUrl,
     tags,
     cuisine,
     prepTime: imported.prepTime || "",
@@ -352,6 +374,7 @@ export async function saveRec() {
     servings: imported.servings || "",
     ingredientsRaw: imported.ingredientsRaw || [],
     stepsRaw: imported.stepsRaw || [],
+    stepPhotos: {},
     cookCount: 0,
     savedAt: new Date().toLocaleDateString(),
     isPublic,
@@ -376,9 +399,16 @@ export async function saveRec() {
   g("savrecbtn").disabled = true;
   renderStars("rstars", 0); // visually clear the star widget
 
-  // Remove the image preview if it was shown
+  // Remove the image preview if it was shown (from AI import)
   const imgPreview = document.getElementById("rimgpreview");
   if (imgPreview) imgPreview.remove();
+
+  // Reset the cover photo upload zone
+  const coverZone = g("addRecCoverZone");
+  if (coverZone) {
+    coverZone.classList.remove("has-preview");
+    coverZone.innerHTML = `<div class="cuz-icon">📷</div><div class="cuz-label">Add cover photo</div><div class="cuz-hint">Tap to upload or drag & drop</div>`;
+  }
 
   // Reset the publish toggle
   if (pubToggle) pubToggle.classList.remove("on");
@@ -391,18 +421,192 @@ export async function saveRec() {
   hideOv("arec"); // close the Add Recipe overlay
 }
 
+// ── READ-ONLY RECIPE VIEW ────────────────────────────────────────────────────
+// A clean, cookbook-style view shown when a user taps a saved recipe card.
+// Shows cover photo, title, metadata, ingredients, numbered steps with optional
+// step photos, and action buttons. An "Edit" pencil button switches to edit mode.
+
+/**
+ * openRecipeView — opens a read-only cookbook-style view for a saved recipe.
+ * This is the default view when tapping a recipe card. The edit overlay
+ * (openER) is accessed via the pencil button in the top-right corner.
+ */
+export function openRecipeView(id) {
+  const r = state.recs.find(r => r.id === id);
+  if (!r) return;
+  state.eid = id;
+  _recipeViewMode = "view";
+
+  // Update overlay header for read-only mode
+  const titleEl = g("erecTitle");
+  if (titleEl) titleEl.textContent = "Recipe";
+
+  // ── Cover photo or tasteful placeholder ──
+  let coverHtml;
+  if (r.imageUrl) {
+    coverHtml = `<div class="rv-cover">
+      <img src="${r.imageUrl}" alt="${(r.name || "").replace(/"/g, "&quot;")}" onerror="this.parentElement.style.display='none'"/>
+      <div class="rv-edit-btn" onclick="openER('${r.id}')" title="Edit recipe">✏️</div>
+    </div>`;
+  } else {
+    coverHtml = `<div class="rv-cover-placeholder">
+      <div class="rv-cover-title">${(r.name || "Untitled").replace(/</g, "&lt;")}</div>
+      <div class="rv-edit-btn" onclick="openER('${r.id}')" title="Edit recipe">✏️</div>
+    </div>`;
+  }
+
+  // ── Recipe header — title (shown again if cover has image), description ──
+  const showTitleAgain = r.imageUrl; // only show title below image if we have a cover photo
+  const headerHtml = `<div class="rv-header">
+    ${showTitleAgain ? `<div class="rv-title">${(r.name || "").replace(/</g, "&lt;")}</div>` : ""}
+    ${r.rating ? `<div class="stars" style="margin-bottom:6px">${Array.from({length:5},(_,i)=>`<span class="star${i<r.rating?" on":""}">` + (i<r.rating?"★":"☆") + "</span>").join("")}</div>` : ""}
+    ${r.savedAt ? `<div class="rv-author">Saved ${r.savedAt}${r.source && r.source !== "Manual" ? ` · ${r.source}` : ""}${r.cookCount ? ` · Cooked ${r.cookCount}×` : ""}</div>` : ""}
+  </div>`;
+
+  // ── Metadata pills — prep, cook, total time, servings ──
+  const metaParts = [
+    r.prepTime ? `🔪 Prep: ${r.prepTime}` : "",
+    r.cookTime ? `🔥 Cook: ${r.cookTime}` : "",
+    r.totalTime ? `⏱ Total: ${r.totalTime}` : "",
+    r.servings ? `🍽 Serves: ${r.servings}` : "",
+  ].filter(Boolean);
+  const metaHtml = metaParts.length
+    ? `<div class="rv-meta">${metaParts.map(m => `<div class="rv-meta-pill">${m}</div>`).join("")}</div>`
+    : "";
+
+  // ── Cuisine and tags ──
+  const cuisineHtml = r.cuisine ? `<div class="rv-cuisine">${r.cuisine}</div>` : "";
+  const tagsHtml = (r.tags || []).length
+    ? `<div class="rv-tags">${r.tags.map(t => `<span class="com-tag">${t}</span>`).join("")}</div>`
+    : "";
+
+  // ── Ingredients section — prefer structured ingredientsRaw, fall back to description ──
+  let ingredientsHtml = "";
+  if (r.ingredientsRaw && r.ingredientsRaw.length) {
+    const items = r.ingredientsRaw.map(ing => {
+      if (typeof ing === "string") return `<li>${_esc(ing)}</li>`;
+      const amt = [ing.amount, ing.unit].filter(Boolean).join(" ");
+      return `<li>${amt ? `<strong>${_esc(amt)}</strong> ` : ""}${_esc(ing.name || "")}</li>`;
+    }).join("");
+    ingredientsHtml = `<div class="rv-section">Ingredients</div><ul class="rv-ingredients">${items}</ul>`;
+  } else if (r.description) {
+    // Try to extract ingredients section from description text
+    const descLines = r.description.split("\n");
+    const ingStart = descLines.findIndex(l => /^ingredients/i.test(l.trim()));
+    const stepsStart = descLines.findIndex(l => /^steps/i.test(l.trim()));
+    if (ingStart >= 0) {
+      const end = stepsStart > ingStart ? stepsStart : descLines.length;
+      const ingLines = descLines.slice(ingStart + 1, end).filter(l => l.trim());
+      if (ingLines.length) {
+        ingredientsHtml = `<div class="rv-section">Ingredients</div><ul class="rv-ingredients">${ingLines.map(l => `<li>${_esc(l.replace(/^[-•*]\s*/, ""))}</li>`).join("")}</ul>`;
+      }
+    }
+  }
+
+  // ── Steps section — prefer structured stepsRaw, fall back to description ──
+  let stepsHtml = "";
+  if (r.stepsRaw && r.stepsRaw.length) {
+    const items = r.stepsRaw.map((s, i) => {
+      const text = typeof s === "string" ? s : (s.text || "");
+      // Check for step photo URL stored on the recipe
+      const stepPhotoUrl = r.stepPhotos?.[i];
+      const photoHtml = stepPhotoUrl
+        ? `<div class="rv-step-photo" onclick="openPhotoViewer(['${stepPhotoUrl}'],0)"><img src="${stepPhotoUrl}" alt="Step ${i + 1}" onerror="this.parentElement.style.display='none'"/></div>`
+        : "";
+      return `<li>${_esc(text)}${photoHtml}</li>`;
+    }).join("");
+    stepsHtml = `<div class="rv-section">Instructions</div><ol class="rv-steps">${items}</ol>`;
+  } else if (r.description) {
+    // Try to extract steps section from description text
+    const descLines = r.description.split("\n");
+    const stepsStart = descLines.findIndex(l => /^steps/i.test(l.trim()));
+    if (stepsStart >= 0) {
+      const stepLines = descLines.slice(stepsStart + 1).filter(l => l.trim());
+      if (stepLines.length) {
+        stepsHtml = `<div class="rv-section">Instructions</div><ol class="rv-steps">${stepLines.map(l => `<li>${_esc(l.replace(/^\d+\.\s*/, ""))}</li>`).join("")}</ol>`;
+      }
+    }
+  }
+
+  // ── If no structured data at all, show raw description ──
+  let rawDescHtml = "";
+  if (!ingredientsHtml && !stepsHtml && r.description) {
+    rawDescHtml = `<div class="rv-section">Details</div><div style="font-size:.88rem;color:var(--tx2);line-height:1.8;white-space:pre-wrap">${_esc(r.description)}</div>`;
+  }
+
+  // ── Notes ──
+  const notesHtml = r.notes
+    ? `<div class="rv-section">Notes</div><div style="font-size:.86rem;color:var(--tx2);line-height:1.6;font-style:italic;padding:10px 14px;background:var(--card);border-radius:10px;border:1px solid var(--b1)">${_esc(r.notes)}</div>`
+    : "";
+
+  // ── Source link ──
+  const sourceHtml = r.sourceUrl
+    ? `<div style="margin-top:16px"><a href="${r.sourceUrl}" target="_blank" style="font-size:.82rem;color:var(--ac);text-decoration:none">🔗 View original recipe ↗</a></div>`
+    : "";
+
+  // ── Action buttons ──
+  const actionsHtml = `<div class="rv-actions">
+    <button class="btn bp bsm" style="flex:1" onclick="scheduleRecipe('${r.name.replace(/'/g, "\\'")}')">📅 Schedule</button>
+    <button class="btn bs bsm" style="flex:1" onclick="addRecIngToShop('${r.id}')">🛒 Shop ingredients</button>
+    <button class="btn bs bsm" onclick="openER('${r.id}')">✏️ Edit</button>
+  </div>`;
+
+  // ── Assemble the full read-only view ──
+  g("erecbody").innerHTML = `
+    ${coverHtml}
+    ${headerHtml}
+    ${metaHtml}
+    ${cuisineHtml}
+    ${tagsHtml}
+    ${actionsHtml}
+    ${ingredientsHtml}
+    ${stepsHtml}
+    ${rawDescHtml}
+    ${notesHtml}
+    ${sourceHtml}
+  `;
+
+  showOv("erec");
+}
+
+/**
+ * handleRecipeBack — handles the back button in the recipe overlay.
+ * If in edit mode, goes back to read-only view. If in read-only, closes the overlay.
+ */
+export function handleRecipeBack() {
+  if (_recipeViewMode === "edit" && state.eid) {
+    // Go back to read-only view instead of closing
+    openRecipeView(state.eid);
+  } else {
+    hideOv("erec");
+  }
+}
+
+/**
+ * _esc — escapes HTML special characters to prevent XSS in user content.
+ */
+function _esc(str) {
+  return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 // ── EDIT RECIPE OVERLAY ──────────────────────────────────────────────────────
 
 /**
  * Opens the Edit Recipe overlay for a given recipe ID. Builds a rich detail
- * view with: action buttons (schedule, shop ingredients), a serving-size
- * scaler, editable fields (name, rating, tags, description, notes, favorite
- * toggle), and delete/save buttons. All rendered as innerHTML into the
- * overlay body.
+ * view with: cover photo upload, action buttons (schedule, shop ingredients),
+ * a serving-size scaler, editable fields (name, rating, tags, description,
+ * notes, favorite toggle), step photo uploads, and delete/save buttons.
  */
 export function openER(id) {
   const r = state.recs.find(r => r.id === id); if (!r) return;
   state.eid = id; // store which recipe is being edited for updR() and delER()
+  _recipeViewMode = "edit"; // mark overlay as being in edit mode
+  _pendingCoverFile = null;  // reset pending cover upload
+  _pendingStepPhotos = {};   // reset pending step photo uploads
+
+  // Update overlay header for edit mode
+  const titleEl = g("erecTitle");
+  if (titleEl) titleEl.textContent = "Edit Recipe";
 
   // Build the star rating display with click handlers for editing
   const rt2 = r.rating || 0;
@@ -421,8 +625,12 @@ export function openER(id) {
     <div class="tag${(r.tags || []).includes("Under 30 min") ? " sel" : ""}" data-tag="Under 30 min" onclick="togTag(this)">⏱ Under 30 min</div>
   </div></div>`;
 
-  // Cover image at the top of the edit overlay (if recipe has one)
-  const coverImg = r.imageUrl ? `<div style="margin:-16px -16px 16px;border-radius:0;overflow:hidden;max-height:220px"><img src="${r.imageUrl}" alt="" style="width:100%;height:220px;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>` : "";
+  // ── Cover photo upload zone — shows current cover or empty upload area ──
+  const hasCover = !!r.imageUrl;
+  const coverUploadHtml = `<div class="cover-upload-zone${hasCover ? " has-preview" : ""}" id="editCoverZone" onclick="triggerCoverUpload('edit')" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="event.preventDefault();this.classList.remove('drag-over');handleCoverDrop(event,'edit')">
+    ${hasCover ? `<img src="${r.imageUrl}" alt="Cover" onerror="this.parentElement.classList.remove('has-preview');this.remove()"/><button class="cuz-remove" onclick="event.stopPropagation();removeCoverPhoto('edit')">✕</button>` : `<div class="cuz-icon">📷</div><div class="cuz-label">Add cover photo</div><div class="cuz-hint">Tap to upload or drag & drop · Max 800×600, 300KB</div>`}
+  </div>
+  <input type="file" id="editCoverInput" accept="image/*" style="display:none" onchange="handleCoverSelected(event,'edit')"/>`;
 
   // Time & servings metadata bar — shown for AI-imported recipes
   const editMeta = [
@@ -433,10 +641,29 @@ export function openER(id) {
   ].filter(Boolean);
   const editMetaHtml = editMeta.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${editMeta.map(m => `<span style="font-size:.74rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:4px 10px">${m}</span>`).join("")}</div>` : "";
 
-  // Render the full edit overlay body — includes action buttons at top,
-  // scaling controls, form fields, and save/delete buttons at bottom
+  // ── Step photos — build upload buttons for each step (if structured steps exist) ──
+  let stepPhotosHtml = "";
+  if (r.stepsRaw && r.stepsRaw.length) {
+    const stepItems = r.stepsRaw.map((s, i) => {
+      const text = typeof s === "string" ? s : (s.text || "");
+      const hasPhoto = r.stepPhotos?.[i];
+      return `<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;padding:10px;background:var(--card);border-radius:10px;border:1px solid var(--b1)">
+        <div style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--acd);color:var(--ac);font-size:.72rem;font-weight:700;display:flex;align-items:center;justify-content:center">${i + 1}</div>
+        <div style="flex:1;font-size:.84rem;color:var(--tx2);line-height:1.5">${_esc(text)}</div>
+        ${hasPhoto ? `<img src="${hasPhoto}" class="step-photo-preview" onclick="event.stopPropagation();openPhotoViewer(['${hasPhoto}'],0)" alt="Step ${i+1}"/>` : ""}
+        <button class="step-photo-btn${hasPhoto ? " has-photo" : ""}" onclick="event.stopPropagation();triggerStepPhotoUpload(${i})" title="${hasPhoto ? "Change" : "Add"} step photo">📷</button>
+        ${hasPhoto ? `<button class="step-photo-btn" onclick="event.stopPropagation();removeStepPhoto(${i})" title="Remove step photo" style="color:var(--rd)">✕</button>` : ""}
+      </div>`;
+    }).join("");
+    stepPhotosHtml = `<div class="frow"><label class="flbl">Step Photos <span class="otag">optional</span></label>${stepItems}</div>`;
+    // Hidden file input for step photos
+    stepPhotosHtml += `<input type="file" id="stepPhotoInput" accept="image/*" style="display:none" onchange="handleStepPhotoSelected(event)"/>`;
+  }
+
+  // Render the full edit overlay body — includes cover upload, action buttons,
+  // scaling controls, form fields, step photos, and save/delete buttons
   g("erecbody").innerHTML = `
-    ${coverImg}
+    ${coverUploadHtml}
     ${editMetaHtml}
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <button class="btn bp bsm" style="flex:1" onclick="scheduleRecipe('${r.name.replace(/'/g, "\\'")}')">📅 Schedule</button>
@@ -459,6 +686,7 @@ export function openER(id) {
     <div class="frow"><label class="flbl">Notes</label><input class="fi" id="erno" value="${r.notes || ""}"/></div>
     ${srcLink}
     <div class="frow"><label class="flbl">Cuisine <span class="otag">optional</span></label><input class="fi" id="ecuis" value="${r.cuisine || ""}" placeholder="e.g. Mediterranean, Turkish, Asian…"/></div>
+    ${stepPhotosHtml}
     <div style="display:flex;align-items:center;gap:10px;margin:12px 0"><span style="font-size:.88rem">Favorite</span><div class="tog${r.favorited ? " on" : ""}" id="etog" onclick="this.classList.toggle('on')"></div></div>
     <div style="display:flex;align-items:center;gap:10px;margin:6px 0 14px"><span style="font-size:.88rem">Share publicly</span><div class="tog${r.isPublic ? " on" : ""}" id="epub" onclick="togglePublic('${r.id}');this.classList.toggle('on')"></div><span style="font-size:.72rem;color:var(--mt)">Visible to the community</span></div>
     <div class="brow"><button class="btn bd" style="flex:1" onclick="delER()">Delete</button><button class="btn bp" style="flex:2" onclick="updR()">Save</button></div>`;
@@ -483,8 +711,42 @@ export async function updR() {
   // Read the cuisine field from the edit form
   const cuisine = g("ecuis") ? g("ecuis").value.trim() : (r.cuisine || "");
 
+  // ── Upload pending cover photo if user selected one, or clear if removed ──
+  let imageUrl = r.imageUrl;
+  if (_pendingCoverFile) {
+    try {
+      showNotif("Uploading cover photo…");
+      imageUrl = await uploadRecipeCover(_pendingCoverFile, r.id);
+      _pendingCoverFile = null;
+    } catch (e) {
+      console.error("Cover upload failed:", e);
+      showNotif("Cover photo upload failed — saving recipe without it");
+    }
+  } else if (r._removeCover) {
+    // User clicked remove on the cover photo — clear the URL and delete from Storage
+    imageUrl = null;
+    delete r._removeCover;
+    deleteRecipeStorageFile(`recipes/${r.id}/cover.jpg`).catch(() => {});
+  }
+
+  // ── Upload pending step photos ──
+  const stepPhotos = { ...(r.stepPhotos || {}) };
+  const stepKeys = Object.keys(_pendingStepPhotos);
+  if (stepKeys.length) {
+    showNotif("Uploading step photos…");
+    for (const idx of stepKeys) {
+      try {
+        const url = await uploadStepPhoto(_pendingStepPhotos[idx], r.id, parseInt(idx));
+        stepPhotos[idx] = url;
+      } catch (e) {
+        console.error(`Step ${idx} photo upload failed:`, e);
+      }
+    }
+    _pendingStepPhotos = {};
+  }
+
   // Spread the original recipe and override only the editable fields
-  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine });
+  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine, imageUrl, stepPhotos });
   showNotif("Recipe updated!"); hideOv("erec");
 }
 
@@ -643,6 +905,288 @@ export async function togglePublic(id) {
 
   // Update the local recipe's isPublic flag and persist
   await svr({ ...r, isPublic });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COVER PHOTO HANDLERS — upload, preview, remove for both add and edit forms
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * triggerCoverUpload — opens the file picker for cover photo upload.
+ * Called from the cover upload zone's onclick. Context is "add" or "edit".
+ */
+export function triggerCoverUpload(ctx) {
+  const inputId = ctx === "add" ? "addRecCoverInput" : "editCoverInput";
+  const input = g(inputId);
+  if (input) input.click();
+}
+
+/**
+ * handleCoverSelected — processes a cover photo file selected via file picker.
+ * Shows an instant preview and stores the file for upload on save.
+ */
+export function handleCoverSelected(event, ctx) {
+  const file = event.target?.files?.[0];
+  if (!file) return;
+  _pendingCoverFile = file;
+  _showCoverPreview(file, ctx);
+}
+
+/**
+ * handleCoverDrop — processes a cover photo file dropped onto the upload zone.
+ */
+export function handleCoverDrop(event, ctx) {
+  const file = event.dataTransfer?.files?.[0];
+  if (!file || !file.type.startsWith("image/")) return;
+  _pendingCoverFile = file;
+  _showCoverPreview(file, ctx);
+}
+
+/**
+ * _showCoverPreview — reads a File and renders an instant preview in the upload zone.
+ */
+function _showCoverPreview(file, ctx) {
+  const zoneId = ctx === "add" ? "addRecCoverZone" : "editCoverZone";
+  const zone = g(zoneId);
+  if (!zone) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    zone.classList.add("has-preview");
+    zone.innerHTML = `<img src="${e.target.result}" alt="Cover preview"/><button class="cuz-remove" onclick="event.stopPropagation();removeCoverPhoto('${ctx}')">✕</button>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+/**
+ * removeCoverPhoto — removes the cover photo preview and clears the pending file.
+ * If editing, also removes the imageUrl from the recipe on next save.
+ */
+export function removeCoverPhoto(ctx) {
+  _pendingCoverFile = null;
+  const zoneId = ctx === "add" ? "addRecCoverZone" : "editCoverZone";
+  const zone = g(zoneId);
+  if (!zone) return;
+
+  zone.classList.remove("has-preview");
+  zone.innerHTML = `<div class="cuz-icon">📷</div><div class="cuz-label">Add cover photo</div><div class="cuz-hint">Tap to upload or drag & drop · Max 800×600, 300KB</div>`;
+
+  // If in edit mode, mark the imageUrl for removal on save
+  if (ctx === "edit" && state.eid) {
+    const r = state.recs.find(r => r.id === state.eid);
+    if (r) r._removeCover = true;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STEP PHOTO HANDLERS — optional photos per instruction step
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Tracks which step index is being uploaded to
+let _activeStepIndex = null;
+
+/**
+ * triggerStepPhotoUpload — opens the file picker for a specific step's photo.
+ */
+export function triggerStepPhotoUpload(stepIndex) {
+  _activeStepIndex = stepIndex;
+  const input = g("stepPhotoInput");
+  if (input) { input.value = ""; input.click(); }
+}
+
+/**
+ * handleStepPhotoSelected — processes a step photo file selected via file picker.
+ * Shows an instant preview thumbnail next to the step and queues for upload on save.
+ */
+export function handleStepPhotoSelected(event) {
+  const file = event.target?.files?.[0];
+  if (!file || _activeStepIndex === null) return;
+
+  _pendingStepPhotos[_activeStepIndex] = file;
+
+  // Show preview — find the step's photo button and add a thumbnail
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    // Re-render would be complex, so update the button state visually
+    showNotif(`Step ${_activeStepIndex + 1} photo added`);
+  };
+  reader.readAsDataURL(file);
+}
+
+/**
+ * removeStepPhoto — removes a step photo from the recipe.
+ * Queues the deletion and updates the UI.
+ */
+export function removeStepPhoto(stepIndex) {
+  const r = state.recs.find(r => r.id === state.eid);
+  if (!r) return;
+
+  // Remove from pending uploads if it was just added
+  delete _pendingStepPhotos[stepIndex];
+
+  // Remove from saved step photos
+  if (r.stepPhotos && r.stepPhotos[stepIndex]) {
+    // Queue deletion from Firebase Storage
+    const path = `recipes/${r.id}/steps/${stepIndex}.jpg`;
+    deleteRecipeStorageFile(path).catch(() => {});
+    delete r.stepPhotos[stepIndex];
+  }
+
+  // Re-render the edit view to reflect the change
+  openER(r.id);
+  showNotif(`Step ${stepIndex + 1} photo removed`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// FULLSCREEN PHOTO VIEWER — tap to expand, swipe navigation, pinch-to-zoom
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * openPhotoViewer — opens the fullscreen photo viewer overlay.
+ * Accepts an array of image URLs and the starting index.
+ * Supports single photos (recipe cover, step photos) and multi-photo
+ * galleries (comment photos with swipe navigation).
+ */
+export function openPhotoViewer(images, startIndex) {
+  _photoViewerImages = images || [];
+  _photoViewerIndex = startIndex || 0;
+  _renderPhotoViewer();
+
+  const overlay = g("photoViewer");
+  if (overlay) overlay.classList.add("active");
+
+  // Set up swipe gestures for navigation on touch devices
+  _initPhotoViewerSwipe();
+}
+
+/**
+ * closePhotoViewer — closes the fullscreen photo viewer.
+ */
+export function closePhotoViewer() {
+  const overlay = g("photoViewer");
+  if (overlay) overlay.classList.remove("active");
+  _photoViewerImages = [];
+}
+
+/**
+ * photoViewerNav — navigates to the previous (-1) or next (+1) photo.
+ */
+export function photoViewerNav(dir) {
+  const newIdx = _photoViewerIndex + dir;
+  if (newIdx < 0 || newIdx >= _photoViewerImages.length) return;
+  _photoViewerIndex = newIdx;
+  _renderPhotoViewer();
+}
+
+/**
+ * _renderPhotoViewer — updates the viewer image and navigation UI.
+ */
+function _renderPhotoViewer() {
+  const img = g("pvImg");
+  const counter = g("pvCounter");
+  const prev = g("pvPrev");
+  const next = g("pvNext");
+
+  if (img) img.src = _photoViewerImages[_photoViewerIndex] || "";
+  if (counter) {
+    counter.textContent = _photoViewerImages.length > 1
+      ? `${_photoViewerIndex + 1} / ${_photoViewerImages.length}` : "";
+  }
+  // Show/hide navigation arrows based on position
+  if (prev) prev.style.display = _photoViewerIndex > 0 ? "flex" : "none";
+  if (next) next.style.display = _photoViewerIndex < _photoViewerImages.length - 1 ? "flex" : "none";
+}
+
+/**
+ * _initPhotoViewerSwipe — sets up touch swipe gestures on the photo viewer.
+ * Swipe left/right to navigate between photos in a multi-photo gallery.
+ */
+function _initPhotoViewerSwipe() {
+  const wrap = g("pvWrap");
+  if (!wrap) return;
+
+  let startX = 0;
+  let startY = 0;
+
+  // Remove old listeners by cloning the element
+  const newWrap = wrap.cloneNode(true);
+  wrap.parentNode.replaceChild(newWrap, wrap);
+
+  newWrap.addEventListener("touchstart", (e) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+
+  newWrap.addEventListener("touchend", (e) => {
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    // Only trigger swipe if horizontal movement > 50px and more horizontal than vertical
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      photoViewerNav(dx < 0 ? 1 : -1); // swipe left = next, swipe right = prev
+    }
+  }, { passive: true });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMMENT PHOTO HANDLERS — attach photos to community recipe comments
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * triggerCommentPhotoUpload — opens file picker to add photos to a comment.
+ * Supports multiple photos — user can add as many as they want.
+ */
+export function triggerCommentPhotoUpload() {
+  const input = g("cmtPhotoInput");
+  if (input) { input.value = ""; input.click(); }
+}
+
+/**
+ * handleCommentPhotosSelected — processes photo files selected for a comment.
+ * Shows thumbnails in the preview area and queues files for upload on post.
+ */
+export function handleCommentPhotosSelected(event) {
+  const files = event.target?.files;
+  if (!files || !files.length) return;
+
+  // Add new files to the pending array
+  for (let i = 0; i < files.length; i++) {
+    if (files[i].type.startsWith("image/")) {
+      _pendingCommentPhotos.push(files[i]);
+    }
+  }
+
+  _renderCommentPhotoPreview();
+}
+
+/**
+ * removeCommentPhoto — removes a photo from the pending comment attachments.
+ */
+export function removeCommentPhoto(index) {
+  _pendingCommentPhotos.splice(index, 1);
+  _renderCommentPhotoPreview();
+}
+
+/**
+ * _renderCommentPhotoPreview — renders thumbnail previews of pending comment photos.
+ */
+function _renderCommentPhotoPreview() {
+  const container = g("cmtPhotoPreview");
+  if (!container) return;
+
+  if (!_pendingCommentPhotos.length) {
+    container.innerHTML = "";
+    return;
+  }
+
+  // Read and display thumbnails for each pending file
+  let html = "";
+  _pendingCommentPhotos.forEach((file, i) => {
+    const url = URL.createObjectURL(file);
+    html += `<div style="position:relative;display:inline-block"><img src="${url}" class="cmt-preview-thumb" alt=""/><button onclick="event.stopPropagation();removeCommentPhoto(${i})" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:var(--rd);color:#fff;border:none;font-size:.6rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button></div>`;
+  });
+  // Add button to add more photos
+  html += `<div class="cmt-preview-add" onclick="triggerCommentPhotoUpload()">+</div>`;
+  container.innerHTML = html;
 }
 
 // ── COMMUNITY TAB ────────────────────────────────────────────────────────────
@@ -1024,6 +1568,8 @@ export async function openComRecipe(id) {
 
   // Store which community recipe is open (for report/comment/rating handlers)
   state._openComId = id;
+  _recipeViewMode = "view"; // community recipes use the same overlay
+  _pendingCommentPhotos = []; // reset any pending comment photo uploads
 
   // Fetch like status, comments, user's rating, and review in parallel
   const uid = getCurrentUser()?.uid;
@@ -1149,8 +1695,11 @@ export async function openComRecipe(id) {
       ${hasMoreComments ? `<button class="btn bs bsm" id="com-load-more" onclick="loadMoreComments()" style="width:100%;margin-top:8px">Load more comments (${comments.length - 20} remaining)</button>` : ""}
       <div style="display:flex;gap:8px;margin-top:12px">
         <input class="fi" id="com-cmt-input" placeholder="Add a comment…" maxlength="500" style="flex:1" onkeydown="if(event.key==='Enter')addComComment('${id}')"/>
+        <button class="btn bs bsm" onclick="triggerCommentPhotoUpload()" title="Attach photos">📷</button>
         <button class="btn bp bsm" onclick="addComComment('${id}')">Post</button>
       </div>
+      <input type="file" id="cmtPhotoInput" accept="image/*" multiple style="display:none" onchange="handleCommentPhotosSelected(event)"/>
+      <div id="cmtPhotoPreview" class="cmt-photo-previews"></div>
       <div style="font-size:.68rem;color:var(--mt);margin-top:4px;text-align:right" id="com-cmt-counter">0 / 500</div>
     </div>
 
@@ -1309,10 +1858,10 @@ export async function addComComment(id) {
 
   const input = g("com-cmt-input");
   const text = input?.value?.trim();
-  if (!text) return;
+  if (!text && !_pendingCommentPhotos.length) return;
 
   // Enforce 500-character limit
-  if (text.length > 500) {
+  if (text && text.length > 500) {
     showNotif("Comment must be 500 characters or less");
     return;
   }
@@ -1320,9 +1869,35 @@ export async function addComComment(id) {
   const authorName = user.displayName || localStorage.getItem("ks-who") || "Anonymous";
 
   try {
-    const cmt = await addComment(id, text, authorName);
-    input.value = "";
-    // Reset character counter
+    // Post the comment text first to get the commentId
+    const cmt = await addComment(id, text || "", authorName);
+    if (!cmt) return;
+
+    // Upload any attached photos to Firebase Storage
+    let photoUrls = [];
+    if (_pendingCommentPhotos.length) {
+      showNotif("Uploading photos…");
+      for (let i = 0; i < _pendingCommentPhotos.length; i++) {
+        try {
+          const url = await uploadCommentPhoto(_pendingCommentPhotos[i], id, cmt.id, i);
+          photoUrls.push(url);
+        } catch (e) {
+          console.error(`Comment photo ${i} upload failed:`, e);
+        }
+      }
+      // Save photo URLs back to the comment doc if any uploaded
+      if (photoUrls.length) {
+        cmt.photoUrls = photoUrls;
+        // Update the comment in Firestore with photo URLs
+        await dbSet(`public_recipes/${id}/comments/${cmt.id}`, { ...cmt, id: undefined });
+      }
+    }
+
+    // Reset input and photo state
+    if (input) input.value = "";
+    _pendingCommentPhotos = [];
+    const previewEl = g("cmtPhotoPreview");
+    if (previewEl) previewEl.innerHTML = "";
     const counter = g("com-cmt-counter");
     if (counter) counter.textContent = "0 / 500";
 
@@ -1336,14 +1911,13 @@ export async function addComComment(id) {
       if (container.querySelector("div[style*='color:var(--mt)']") && !container.querySelector("div[style*='border-bottom']")) {
         container.innerHTML = "";
       }
-      // Build comment HTML with delete button (user can always delete own comments)
       container.innerHTML += _buildSingleCommentHtml(cmt, id, user.uid, isAuthor);
     }
 
     // Add to cached comments array
     if (state._comComments) state._comComments.push(cmt);
 
-    showNotif("Comment posted!");
+    showNotif(photoUrls.length ? `Comment posted with ${photoUrls.length} photo${photoUrls.length !== 1 ? "s" : ""}!` : "Comment posted!");
   } catch (e) {
     console.error("addComComment:", e);
     showNotif("Couldn't post comment");
@@ -1397,6 +1971,19 @@ function _buildSingleCommentHtml(c, recipeId, currentUid, isRecipeAuthor) {
     actions += `<button class="btn-report" onclick="openReportSheet('comment','${c.id}','${recipeId}')" title="Report comment" style="font-size:.7rem">🚩</button>`;
   }
 
+  // ── Comment photos — render as a 3-column thumbnail grid ──
+  let photosHtml = "";
+  const photos = c.photoUrls || [];
+  if (photos.length) {
+    // Build JSON-safe URL array for the viewer — each URL is escaped
+    const urlsJson = JSON.stringify(photos).replace(/'/g, "\\'");
+    const thumbs = photos.map((url, i) =>
+      `<img src="${url}" alt="Photo ${i + 1}" onclick="event.stopPropagation();openPhotoViewer(${urlsJson.replace(/"/g, '&quot;')},${i})" onerror="this.style.display='none'"/>`
+    ).join("");
+    photosHtml = `<div class="cmt-photos-grid">${thumbs}</div>
+      <div class="cmt-photo-count">📷 ${photos.length} photo${photos.length !== 1 ? "s" : ""}</div>`;
+  }
+
   return `<div class="com-comment-row" id="cmt-${c.id}" style="padding:10px 0;border-bottom:1px solid var(--b1)">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:.78rem;font-weight:600">${displayName}</span>
@@ -1406,6 +1993,7 @@ function _buildSingleCommentHtml(c, recipeId, currentUid, isRecipeAuthor) {
       </div>
     </div>
     <div style="font-size:.84rem;color:var(--tx2);margin-top:4px;line-height:1.5">${escapedText}</div>
+    ${photosHtml}
   </div>`;
 }
 

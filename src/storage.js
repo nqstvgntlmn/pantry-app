@@ -1,13 +1,10 @@
 // ── FIREBASE STORAGE MODULE ──────────────────────────────────────────────────
-// Handles image uploads for the personal product image database. Uses Firebase
-// Storage to store compressed product photos uploaded by household members.
+// Handles image uploads for the personal product image database and recipe photos.
+// Uses Firebase Storage to store compressed images uploaded by household members.
 //
-// Images are stored at: households/{householdId}/customProducts/{normalizedName}.jpg
-// After upload, the download URL is saved back to both the shopping/inventory item
-// and to a shared customProducts Firestore collection for household-wide reuse.
-//
-// This module also provides a lookup function so the text search enrichment
-// pipeline can check for household-uploaded images before hitting external APIs.
+// Product images are DISABLED (see [IMAGES DISABLED] blocks below).
+// Recipe images (cover photos, step photos, comment photos) are ACTIVE and use
+// the compressRecipeImage / uploadRecipeImage functions at the bottom of this file.
 
 // [IMAGES DISABLED] — Product images commented out pending decision.
 // See session notes: images caused false positives from external databases,
@@ -19,11 +16,20 @@ import { state } from './state.js';  // Access state.hid for household-scoped st
 // import { dbSet, dbGet } from './db.js'; // Firestore read/write for the customProducts collection
 // import { getCurrentUser } from './auth.js'; // Get current user for updatedBy field
 
+// ── RECIPE IMAGE IMPORTS ────────────────────────────────────────────────────
+// These are separate from the disabled product image imports. Recipe images
+// (cover photos, step photos, comment photos) are an active feature.
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { app } from './auth.js';
+
+// Firebase Storage instance for recipe image uploads
+const storage = getStorage(app);
+
 // [IMAGES DISABLED] — Product images commented out pending decision.
 // See session notes: images caused false positives from external databases,
 // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
 // To re-enable: uncomment these blocks and restore image display logic.
-// const storage = getStorage(app);
+// const productStorage = getStorage(app);
 
 // ── NAME NORMALIZATION ──────────────────────────────────────────────────────
 
@@ -215,4 +221,140 @@ export async function lookupCustomProductImage(productName) {
   //
   // const doc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
   // return doc?.imageUrl || null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RECIPE IMAGE PIPELINE — cover photos, step photos, comment photos
+// These are ACTIVE (not disabled like product images above).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * compressRecipeImage — generic image compressor for recipe photos.
+ * Resizes to fit within maxW×maxH and compresses to JPEG under maxBytes.
+ * Uses Canvas API — no external libraries. Returns a Blob.
+ *
+ * @param {File|Blob} file - The source image file
+ * @param {number} maxW - Maximum width in pixels
+ * @param {number} maxH - Maximum height in pixels
+ * @param {number} maxBytes - Target file size limit in bytes
+ * @returns {Promise<Blob>} Compressed JPEG blob
+ */
+export function compressRecipeImage(file, maxW, maxH, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      img.onload = () => {
+        // Scale down to fit within maxW×maxH while preserving aspect ratio
+        let w = img.width;
+        let h = img.height;
+        if (w > maxW || h > maxH) {
+          const ratio = Math.min(maxW / w, maxH / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+
+        // Draw onto an offscreen canvas at the target dimensions
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+
+        // Encode as JPEG, stepping down quality until under the size limit
+        let quality = 0.82;
+        const tryCompress = () => {
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) return reject(new Error("Canvas compression failed"));
+              if (blob.size <= maxBytes || quality <= 0.3) {
+                resolve(blob);
+              } else {
+                quality -= 0.1;
+                tryCompress();
+              }
+            },
+            "image/jpeg",
+            quality
+          );
+        };
+        tryCompress();
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * uploadRecipeImage — compresses and uploads an image to Firebase Storage.
+ * Returns the public download URL. Used for cover, step, and comment photos.
+ *
+ * @param {File|Blob} file - Source image file
+ * @param {string} storagePath - Full Firebase Storage path (e.g. "recipes/rec-123/cover.jpg")
+ * @param {number} maxW - Max width for compression
+ * @param {number} maxH - Max height for compression
+ * @param {number} maxBytes - Max file size after compression
+ * @returns {Promise<string>} Firebase Storage download URL
+ */
+export async function uploadRecipeImage(file, storagePath, maxW, maxH, maxBytes) {
+  if (!file) throw new Error("No file provided");
+
+  // Step 1: Compress the image client-side
+  const compressed = await compressRecipeImage(file, maxW, maxH, maxBytes);
+  console.log(`[uploadRecipeImage] Compressed to ${(compressed.size / 1024).toFixed(1)}KB → ${storagePath}`);
+
+  // Step 2: Upload to Firebase Storage
+  const storageRef = ref(storage, storagePath);
+  await uploadBytes(storageRef, compressed, { contentType: "image/jpeg" });
+
+  // Step 3: Get the public download URL
+  const url = await getDownloadURL(storageRef);
+  console.log("[uploadRecipeImage] Upload complete:", storagePath);
+  return url;
+}
+
+/**
+ * uploadRecipeCover — uploads a recipe cover photo.
+ * Compresses to 800×600px / 300KB. Stored at recipes/{recipeId}/cover.jpg.
+ */
+export async function uploadRecipeCover(file, recipeId) {
+  return uploadRecipeImage(file, `recipes/${recipeId}/cover.jpg`, 800, 600, 300 * 1024);
+}
+
+/**
+ * uploadStepPhoto — uploads an optional step instruction photo.
+ * Compresses to 800×600px / 300KB. Stored at recipes/{recipeId}/steps/{stepNumber}.jpg.
+ */
+export async function uploadStepPhoto(file, recipeId, stepNumber) {
+  return uploadRecipeImage(file, `recipes/${recipeId}/steps/${stepNumber}.jpg`, 800, 600, 300 * 1024);
+}
+
+/**
+ * uploadCommentPhoto — uploads a photo attached to a community recipe comment.
+ * Compresses to 600×600px / 200KB. Stored at recipes/{recipeId}/comments/{commentId}/{index}.jpg.
+ */
+export async function uploadCommentPhoto(file, recipeId, commentId, photoIndex) {
+  return uploadRecipeImage(file, `recipes/${recipeId}/comments/${commentId}/${photoIndex}.jpg`, 600, 600, 200 * 1024);
+}
+
+/**
+ * deleteRecipeStorageFile — deletes a file from Firebase Storage by path.
+ * Used when removing cover photos, step photos, etc. Silently ignores
+ * "not found" errors since the file may have been deleted externally.
+ */
+export async function deleteRecipeStorageFile(storagePath) {
+  try {
+    const storageRef = ref(storage, storagePath);
+    await deleteObject(storageRef);
+    console.log("[deleteRecipeStorageFile] Deleted:", storagePath);
+  } catch (e) {
+    // Ignore 'object-not-found' — the file is already gone
+    if (e.code !== "storage/object-not-found") {
+      console.error("[deleteRecipeStorageFile] Error:", e);
+    }
+  }
 }
