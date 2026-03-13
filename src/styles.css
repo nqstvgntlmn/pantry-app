@@ -99,6 +99,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .setbtn:active{border-color:var(--ac)}
 .hsec-lbl{font-size:.78rem;font-weight:700;color:var(--tx2);letter-spacing:.04em;margin:18px 0 10px;display:flex;align-items:center;gap:7px}
 .hsec-lbl::after{content:"";flex:1;height:1px;background:var(--b1)}
+/* Collapsible home sections — toggle arrow and body visibility */
+.hsec-toggle{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
+.hsec-arrow{font-size:.7rem;transition:transform .25s ease;display:inline-block}
+.hsec-arrow.collapsed{transform:rotate(-90deg)}
+.hsec-body{overflow:hidden;transition:max-height .3s ease, opacity .25s ease;max-height:2000px;opacity:1}
+.hsec-body.collapsed{max-height:0;opacity:0;margin:0;padding:0}
 .today-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
 .today-card{background:var(--card);border:1.5px solid var(--b1);border-radius:18px;padding:16px 14px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;text-align:center;gap:5px;min-height:110px;position:relative;overflow:hidden;justify-content:center}
 .today-card::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 100% 60% at 50% 0%,rgba(212,168,83,.06),transparent);pointer-events:none}
@@ -149,7 +155,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .iileft{display:flex;align-items:center;gap:12px}
 .iimg{width:40px;height:40px;border-radius:10px;object-fit:contain;background:var(--sf);flex-shrink:0}
 .iph{width:40px;height:40px;border-radius:10px;background:var(--sf);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0}
-.inm{font-size:.88rem;font-weight:500;line-height:1.3}.isb{font-size:.73rem;color:var(--mt)}
+.inm{font-size:.9rem;font-weight:500;line-height:1.3}.isb{font-size:.73rem;color:var(--mt)}
 .iqt{font-family:"Fraunces",serif;font-size:1.3rem;font-weight:300;color:var(--ac);text-align:right}
 .iun{font-size:.68rem;color:var(--mt)}
 .etag{font-size:.64rem;padding:2px 8px;border-radius:20px;margin-top:3px;display:inline-block;font-weight:600}
@@ -276,6 +282,14 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
 /* "Delete" label below the trash icon */
 .swipe-del-label{font-size:.68rem;font-weight:700;color:#fff;letter-spacing:.02em}
+
+/* Green add-to-shopping zone — sits behind the row on the left side,
+   revealed when user right-swipes an inventory item. Mirrors .swipe-del layout. */
+.swipe-add{position:absolute;left:0;top:0;bottom:0;width:80px;background:var(--gn);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;border-radius:14px 0 0 14px;clip-path:inset(0 100% 0 0);pointer-events:none;-webkit-tap-highlight-color:transparent}
+/* When row is snapped open, enable pointer events so the zone is tappable */
+.swipe-wrap.open .swipe-add{pointer-events:auto}
+.swipe-add-icon{font-size:1.3rem}
+.swipe-add-label{font-size:.68rem;font-weight:700;color:#fff;letter-spacing:.02em}
 
 /* Multi-select: freeze swipe transform so rows can't be swiped while selecting */
 .swipe-wrap.selecting .swipe-inner{transform:none !important}

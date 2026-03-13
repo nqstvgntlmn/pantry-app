@@ -51,7 +51,7 @@ export const state = {
   selR: "fridge",         // location dropdown selection inside the scan-result overlay ("fridge", "pantry", etc.)
   maL: "fridge",          // location dropdown selection inside the manual-add overlay
   adjId: null,            // Firestore doc ID of the inventory item currently open in the adjust-quantity overlay; null = overlay closed
-  it: "all",              // active tab filter on the Inventory screen ("all", "fridge", "pantry", "freezer")
+  it: "fridge",           // active tab filter on the Supplies screen ("fridge", "freezer", "pantry", "household")
   rt: "all",              // active tab filter on the Recipes screen ("all", "quick", "saved", etc.)
   md: null,               // date key (e.g. "2025-03-09") of the day whose meal-plan modal is open; null = closed
   cn: "",                 // meal/recipe name typed into the "log as cooked" input

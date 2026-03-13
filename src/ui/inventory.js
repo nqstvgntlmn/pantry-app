@@ -13,29 +13,20 @@ import { svi, dli, addWasteEntry, dbSet, dbGet } from '../db.js';
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 import { updExport } from './home.js';
 // searchAndEnrich — searches product databases for text matches and shows enrichment picker
 // scoreSearchResult — relevance scoring for search results
-import { searchAndEnrich, scoreSearchResult } from './shopping.js';
+// _savePreferredLocation / _getPreferredLocation — remember where user stores each product
+import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferredLocation } from './shopping.js';
 // [IMAGES DISABLED] — Product images commented out pending decision.
 // See session notes: images caused false positives from external databases,
 // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
 // To re-enable: uncomment these blocks and restore image display logic.
 // import { uploadProductImage, normalizeProductName } from '../storage.js';
 
-/**
- * toTitleCase(str) — Normalizes a product name to Title Case for uniform display.
- * Capitalizes the first letter of each word, lowercases the rest.
- * Applied at render time so it works for existing items and newly added ones.
- */
-function toTitleCase(str) {
-  if (!str) return "";
-  return str.replace(/\S+/g, word =>
-    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-  );
-}
+// toTitleCase imported from helpers.js — used for uniform product name display
 
 /**
  * _shouldShowInvBrand(item) — Determines whether to display the brand on an inventory item.
@@ -107,6 +98,11 @@ export function iH(item) {
         </div>
       </div>
     </div>
+    <!-- Add-to-shopping zone: slides in from left on right-swipe (green, mirrors delete zone) -->
+    <div class="swipe-add" onclick="swipeAddItem('${item.id}','inv')">
+      <div class="swipe-add-icon">🛒</div>
+      <span class="swipe-add-label">Add to List</span>
+    </div>
     <!-- Delete zone: slides in from right on swipe. Trash can lid animates open past threshold. -->
     <div class="swipe-del" onclick="swipeDelItem('${item.id}','inv')">
       <div class="swipe-del-icon">
@@ -121,21 +117,19 @@ export function iH(item) {
 }
 
 // Full re-render of the inventory list (#ibody).
-// The active tab (state.it) controls which view is shown:
-//   "all"  – items grouped by location, with an "Expiring Soon" section on top
-//   "cat"  – items grouped by category
-//   "fridge"/"freezer"/"pantry" – flat list filtered to one location
+// The active tab (state.it) controls which sub-tab is shown:
+//   "fridge"/"freezer"/"pantry"/"household" – flat list filtered to one location
 export function renderInv() {
-  // Alphabetical sort comparator used for every view
+  // Alphabetical sort comparator
   const az = (a, b) => a.name.localeCompare(b.name);
 
-  // Build the filtered + sorted item list.
-  // "all" and "cat" show everything; other tabs filter by location.
-  const f = (state.it === "all" || state.it === "cat" ? state.inv : state.inv.filter(i => i.location === state.it)).slice().sort(az);
+  // Filter items by the selected location sub-tab
+  const f = state.inv.filter(i => i.location === state.it).slice().sort(az);
 
   // Update the subtitle text (e.g. "12 fridge items")
   const isub = g("isub");
-  if (isub) isub.textContent = f.length + " " + ({ all: "items", fridge: "fridge items", freezer: "frozen items", pantry: "pantry items", cat: "items by type" }[state.it] || "items");
+  const labels = { fridge: "fridge items", freezer: "frozen items", pantry: "pantry items", household: "household items" };
+  if (isub) isub.textContent = f.length + " " + (labels[state.it] || "items");
 
   // Keep the export feature on the home screen in sync with current data
   updExport();
@@ -144,33 +138,9 @@ export function renderInv() {
   if (!c) return;
 
   // Empty-state placeholder when no items match the current filter
-  if (!f.length) { c.innerHTML = `<div class="es"><div class="ei">🧺</div><p>No items here yet.<br/>Tap Scan or Add to get started.</p></div>`; return; }
+  if (!f.length) { c.innerHTML = `<div class="es"><div class="ei">🧺</div><p>No items here yet.<br/>Tap + Add item to get started.</p></div>`; return; }
 
-  // ── "By Category" view ──
-  if (state.it === "cat") {
-    // Group items into a { category: [items] } map, then render each group
-    const gr = {}; f.forEach(item => { const cat = gcat(item); if (!gr[cat]) gr[cat] = []; gr[cat].push(item); });
-    c.innerHTML = Object.entries(gr).sort((a, b) => a[0].localeCompare(b[0])).map(([cat, its]) => `<div class="lgrp"><div class="lgt">${CATS[cat] || "📦"} ${cat}</div><div class="ilst">${its.map(iH).join("")}</div></div>`).join("");
-    // If multi-select mode is active, mark each row with the "selecting" class
-    // and highlight already-selected items
-    if (state.selectMode === "inv") document.querySelectorAll("#ibody .swipe-wrap").forEach(w => { w.classList.add("selecting"); if (state.selectedIds.has(w.dataset.id)) w.classList.add("selected"); });
-    return;
-  }
-
-  // ── "All" view: expiring items on top, then groups by location ──
-  if (state.it === "all") {
-    // Collect items that are expiring or already expired, sorted by earliest expiry
-    const ex = state.inv.filter(i => { const s = xSt(i.expiry); return s && (s.c === "expiring" || s.c === "expired"); }).sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
-    // Render the "Expiring Soon" warning group (only if any items qualify)
-    const exH = ex.length ? `<div class="lgrp"><div class="lgt" style="color:var(--am)">⚠️ Expiring Soon</div><div class="ilst">${ex.map(iH).join("")}</div></div>` : "";
-    // Follow with groups for each storage location (fridge, freezer, pantry)
-    c.innerHTML = exH + ["fridge", "freezer", "pantry"].map(loc => { const its = f.filter(i => i.location === loc); return its.length ? `<div class="lgrp"><div class="lgt">${ll(loc)}</div><div class="ilst">${its.map(iH).join("")}</div></div>` : ""; }).join("");
-    // Apply multi-select state if active
-    if (state.selectMode === "inv") document.querySelectorAll("#ibody .swipe-wrap").forEach(w => { w.classList.add("selecting"); if (state.selectedIds.has(w.dataset.id)) w.classList.add("selected"); });
-    return;
-  }
-
-  // ── Single-location view (fridge / freezer / pantry) ──
+  // Render flat list for the selected location sub-tab
   c.innerHTML = `<div class="ilst">${f.map(iH).join("")}</div>`;
   // Apply multi-select state if active
   if (state.selectMode === "inv") {
@@ -205,7 +175,7 @@ export function openAdj(id) {
   // quantity stepper, expiry date picker, and notes textarea.
   // Category/source tags removed — they added no user value.
   // Each control calls its own global handler on change (e.g. updL, adjQ).
-  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${toTitleCase(item.name)}</div>${brandHtml}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div></div></div><div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Low stock alert at</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${item.lowStockThreshold || 1}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div></div>`;
+  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${toTitleCase(item.name)}</div>${brandHtml}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div></div></div><div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button><button class="lbtn ${item.location === "household" ? "sel" : ""}" onclick="updL('household',this)">🏠 Household</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Low stock alert at</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${item.lowStockThreshold || 1}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div></div>`;
 
   // Wire the "Remove" button at the bottom of the overlay
   g("rembtn").onclick = () => remItem(id);
@@ -321,8 +291,9 @@ export async function openInvItemDetail(id) {
     </div>`;
   }
 
-  // Action buttons: Adjust (opens full overlay) and Close
-  html += `<div style="display:flex;gap:8px;margin-top:12px">
+  // Action buttons: Add to Shopping, Adjust (full overlay), Remove, and Close
+  html += `<button class="btn bf" style="margin-top:12px;background:var(--gnd);color:var(--gn);border:1.5px solid var(--gn)" onclick="addInvToShopping('${item.id}')">🛒 Add to Shopping List</button>
+  <div style="display:flex;gap:8px;margin-top:8px">
     <button class="btn bs bf" onclick="closeInvItemDetail();openAdj('${item.id}')" style="flex:1">⚙️ Adjust</button>
     <button class="btn bd bf" onclick="closeInvItemDetail();remItem('${item.id}')" style="flex:1">Remove</button>
   </div>
@@ -585,7 +556,8 @@ export async function remItem(id) {
 // the adjust overlay HTML. They all follow the same pattern: look up the
 // item being edited via state.adjId, apply the change, and persist via svi().
 
-// Updates the storage location (fridge / freezer / pantry) for the current item
+// Updates the storage location for the current item and saves the preference
+// so next time this product is added, the same location is auto-selected.
 export async function updL(loc, btn) {
   const item = state.inv.find(i => i.id === state.adjId);
   if (!item) return;
@@ -593,6 +565,8 @@ export async function updL(loc, btn) {
   document.querySelectorAll("#adjbody .lbtn").forEach(b => b.classList.remove("sel"));
   btn.classList.add("sel");
   await svi({ ...item, location: loc });
+  // Save location preference for this product
+  _savePreferredLocation(item.name, loc);
 }
 
 // Adjusts quantity by a delta (d): +1 or -1 from the stepper buttons.
@@ -861,10 +835,10 @@ export function toggleInvAddNote() {
 /**
  * qaddInv() — Quick-add an item to inventory from the bottom sheet text input.
  * Parses optional quantity from common patterns (e.g. "5 apples", "eggs x3"),
- * saves the item to the selected location, and triggers product enrichment
- * so the user can pick a richer match with image/brand/category.
+ * checks for a saved product location preference, saves the item to the
+ * selected location, and triggers product enrichment.
  */
-export function qaddInv() {
+export async function qaddInv() {
   const inp = g("invi"), v = inp ? inp.value.trim() : "";
   if (!v) return;
 
@@ -879,13 +853,17 @@ export function qaddInv() {
   const noteInp = g("invAddNoteInp");
   const note = noteInp ? noteInp.value.trim() : "";
 
+  // Check for a saved product location preference
+  const prefLoc = await _getPreferredLocation(name);
+  const loc = prefLoc || _invAddLocation;
+
   // Generate a unique ID for the new inventory item
   const id = "itm-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
 
-  // Save the item to inventory with the selected location
+  // Save the item to inventory with the preferred/selected location
   const item = {
     id, barcode: id, name, brand: "", unit: "unit", qty,
-    location: _invAddLocation, category: gcat({ name }),
+    location: loc, category: gcat({ name }),
     image: null, source: "Manual",
     expiry: null, addedAt: new Date().toLocaleDateString()
   };
@@ -1281,4 +1259,42 @@ export function toggleInvVoice() {
   };
 
   _invRecognition.start();
+}
+
+// ── ADD INVENTORY ITEM TO SHOPPING LIST ──────────────────────────────────────
+// Lets the user quickly add a supplies item to their shopping list — useful
+// when they notice they're running low while browsing their inventory.
+
+/**
+ * addInvToShopping(id) — Creates a new shopping list entry from an inventory item.
+ * Copies the item's name, brand, and image (if any). Prevents duplicates by
+ * checking if the item is already on the shopping list.
+ */
+export async function addInvToShopping(id) {
+  const { svShopItem } = await import('../db.js');
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+
+  // Check if this item is already on the shopping list (case-insensitive)
+  const existing = state.shop.find(s =>
+    s.name.toLowerCase() === item.name.toLowerCase() && !s.checked
+  );
+  if (existing) {
+    showNotif(`${item.name} is already on your list`);
+    return;
+  }
+
+  // Create a new shopping item with the same name and brand
+  await svShopItem({
+    id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2),
+    name: item.name,
+    qty: 1,
+    checked: false,
+    brand: item.brand || "",
+    image: item.image || null,
+    src: "supplies"
+  });
+
+  showNotif(`${item.name} added to shopping list 🛒`);
+  closeInvItemDetail();
 }

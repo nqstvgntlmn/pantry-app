@@ -16,7 +16,7 @@
 //   </div>
 
 import { state } from '../state.js';
-import { dli, dlShopItem } from '../db.js';
+import { dli, dlShopItem, svShopItem } from '../db.js';
 import { g, showNotif } from '../helpers.js';
 
 // ── Swipe gesture state ──
@@ -98,88 +98,103 @@ export function initSwipe() {
     // Prevent vertical scrolling when we're committed to a horizontal swipe
     e.preventDefault();
 
-    // 1:1 finger tracking — row follows the finger exactly with no rubber band.
-    // Clamped at 0 on the right (can't swipe the row rightward past its resting position).
-    const tx = dx >= 0 ? 0 : dx;
+    // Determine swipe direction. Left swipe = delete, right swipe = add to shopping (inv only).
+    const wrap = _swipeEl.closest(".swipe-wrap");
+    const list = wrap?.dataset.list;
+    const isRightSwipe = dx > 0 && list === "inv";
+
+    // 1:1 finger tracking. Left swipe for delete, right swipe for add-to-shopping (inv only).
+    // Shopping items can only swipe left (delete).
+    const tx = isRightSwipe ? dx : (dx >= 0 ? 0 : dx);
 
     _swipeEl.style.transform = `translateX(${tx}px)`;
 
-    // Progressive delete zone reveal — the red zone grows as the user swipes.
-    // clip-path inset reveals from right-to-left proportional to the swipe distance.
-    // Fully revealed once the swipe reaches DELETE_ZONE_WIDTH (80px).
-    const wrap = _swipeEl.closest(".swipe-wrap");
-    const del = wrap?.querySelector(".swipe-del");
-    if (del && tx < 0) {
-      const revealPct = Math.min(100, (Math.abs(tx) / DELETE_ZONE_WIDTH) * 100);
-      del.style.clipPath = `inset(0 0 0 ${100 - revealPct}%)`;
+    // Progressive zone reveal — left = red delete zone, right = green add-to-shopping zone
+    if (tx < 0) {
+      // Left swipe: reveal red delete zone from right
+      const del = wrap?.querySelector(".swipe-del");
+      if (del) {
+        const revealPct = Math.min(100, (Math.abs(tx) / DELETE_ZONE_WIDTH) * 100);
+        del.style.clipPath = `inset(0 0 0 ${100 - revealPct}%)`;
+      }
+      // Hide the add zone if visible
+      const add = wrap?.querySelector(".swipe-add");
+      if (add) add.style.clipPath = "inset(0 100% 0 0)";
+    } else if (tx > 0 && isRightSwipe) {
+      // Right swipe: reveal green add-to-shopping zone from left
+      const add = wrap?.querySelector(".swipe-add");
+      if (add) {
+        const revealPct = Math.min(100, (tx / DELETE_ZONE_WIDTH) * 100);
+        add.style.clipPath = `inset(0 ${100 - revealPct}% 0 0)`;
+      }
+      // Hide the delete zone if visible
+      const del = wrap?.querySelector(".swipe-del");
+      if (del) del.style.clipPath = "inset(0 0 0 100%)";
     }
 
-    // Trigger haptic feedback and trash lid animation at the auto-delete threshold.
-    // The haptic signals "if you release now, the item will be deleted automatically."
+    // Trigger haptic feedback at the auto-complete threshold
     const swipePct = Math.abs(tx) / _rowWidth;
     if (swipePct >= AUTO_DELETE_THRESHOLD && !_hapticFired) {
       _hapticFired = true;
-      // Haptic feedback (10ms vibration) — available on Android, silently fails on iOS
       if (navigator.vibrate) navigator.vibrate(10);
-      // Open the trash can lid to signal "ready to auto-delete"
       wrap?.classList.add("swipe-threshold");
     } else if (swipePct < AUTO_DELETE_THRESHOLD && _hapticFired) {
-      // User pulled back below auto-delete threshold — close the lid and allow re-fire
       _hapticFired = false;
       wrap?.classList.remove("swipe-threshold");
     }
   }, { passive: false }); // passive: false required for preventDefault()
 
-  // ── TOUCH END: snap open, spring back, or auto-delete based on swipe distance ──
+  // ── TOUCH END: snap open, spring back, or auto-delete/auto-add based on swipe distance ──
   document.addEventListener("touchend", () => {
     if (!_swipeEl) return;
 
     const inner = _swipeEl;
     const wrap = inner.closest(".swipe-wrap");
-    // Re-enable CSS transitions for the snap animation
     inner.classList.remove("swiping");
 
-    // Read the current horizontal offset to decide behavior
     const tx = parseFloat(inner.style.transform.replace("translateX(", "")) || 0;
     const swipePct = Math.abs(tx) / _rowWidth;
+    const list = wrap?.dataset.list;
+    const isRightSwipe = tx > 0 && list === "inv";
 
-    if (swipePct >= AUTO_DELETE_THRESHOLD) {
-      // ── AUTO-DELETE: swiped past 80% — slide out and delete ──
-      _performAutoDelete(wrap, inner);
-    } else if (swipePct >= SNAP_THRESHOLD) {
-      // ── SNAP OPEN: swiped past 40% — lock at delete zone width with spring ──
+    if (isRightSwipe && swipePct >= AUTO_DELETE_THRESHOLD) {
+      // ── AUTO-ADD TO SHOPPING: swiped right past threshold on inventory item ──
+      _performAutoAddToShopping(wrap, inner);
+    } else if (isRightSwipe && swipePct >= SNAP_THRESHOLD) {
+      // ── SNAP OPEN RIGHT: show green add zone ──
       inner.style.transition = `transform 0.4s ${SPRING_EASE}`;
-      inner.style.transform = `translateX(-${DELETE_ZONE_WIDTH}px)`;
-      // Fully reveal the delete zone
-      const del = wrap?.querySelector(".swipe-del");
-      if (del) {
-        del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
-        del.style.clipPath = "inset(0 0 0 0%)";
-      }
+      inner.style.transform = `translateX(${DELETE_ZONE_WIDTH}px)`;
+      const add = wrap?.querySelector(".swipe-add");
+      if (add) { add.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`; add.style.clipPath = "inset(0 0 0 0)"; }
       wrap?.classList.add("open");
-      wrap?.classList.add("swipe-threshold"); // Keep lid open
-      // Only one row open at a time — close any previously open row
       if (_openWrap && _openWrap !== wrap) _snapClose(_openWrap);
       _openWrap = wrap;
-      // Clean up inline transition after animation completes
+      setTimeout(() => { inner.style.transition = ""; }, 400);
+    } else if (!isRightSwipe && swipePct >= AUTO_DELETE_THRESHOLD) {
+      // ── AUTO-DELETE: swiped left past threshold ──
+      _performAutoDelete(wrap, inner);
+    } else if (!isRightSwipe && tx < 0 && swipePct >= SNAP_THRESHOLD) {
+      // ── SNAP OPEN LEFT: lock at delete zone width ──
+      inner.style.transition = `transform 0.4s ${SPRING_EASE}`;
+      inner.style.transform = `translateX(-${DELETE_ZONE_WIDTH}px)`;
+      const del = wrap?.querySelector(".swipe-del");
+      if (del) { del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`; del.style.clipPath = "inset(0 0 0 0%)"; }
+      wrap?.classList.add("open");
+      wrap?.classList.add("swipe-threshold");
+      if (_openWrap && _openWrap !== wrap) _snapClose(_openWrap);
+      _openWrap = wrap;
       setTimeout(() => { inner.style.transition = ""; }, 400);
     } else {
-      // ── SPRING BACK: didn't reach threshold — return to closed position ──
+      // ── SPRING BACK: didn't reach threshold ──
       inner.style.transition = `transform 0.35s ${SPRING_EASE}`;
       inner.style.transform = "translateX(0)";
-      // Hide the delete zone
       const del = wrap?.querySelector(".swipe-del");
-      if (del) {
-        del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
-        del.style.clipPath = "inset(0 0 0 100%)";
-      }
+      if (del) { del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`; del.style.clipPath = "inset(0 0 0 100%)"; }
+      const add = wrap?.querySelector(".swipe-add");
+      if (add) { add.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`; add.style.clipPath = "inset(0 100% 0 0)"; }
       wrap?.classList.remove("open", "swipe-threshold");
       if (_openWrap === wrap) _openWrap = null;
-      // Clean up inline transition
-      setTimeout(() => {
-        inner.style.transition = "";
-        if (del) del.style.transition = "";
-      }, 350);
+      setTimeout(() => { inner.style.transition = ""; if (del) del.style.transition = ""; if (add) add.style.transition = ""; }, 350);
     }
 
     _swipeEl = null;
@@ -246,19 +261,35 @@ export function initSwipe() {
     // Prevent text selection while dragging horizontally
     e.preventDefault();
 
-    // 1:1 cursor tracking, clamped so the row can't be dragged right past rest
-    const tx = dx >= 0 ? 0 : dx;
+    // Determine swipe direction — right swipe only allowed on inventory items
+    const wrap = _swipeEl.closest(".swipe-wrap");
+    const list = wrap?.dataset.list;
+    const isRightSwipe = dx > 0 && list === "inv";
+
+    // 1:1 cursor tracking. Left = delete, right = add-to-shopping (inv only).
+    const tx = isRightSwipe ? dx : (dx >= 0 ? 0 : dx);
     _swipeEl.style.transform = `translateX(${tx}px)`;
 
-    // Progressive delete zone reveal — same as touch
-    const wrap = _swipeEl.closest(".swipe-wrap");
-    const del = wrap?.querySelector(".swipe-del");
-    if (del && tx < 0) {
-      const revealPct = Math.min(100, (Math.abs(tx) / DELETE_ZONE_WIDTH) * 100);
-      del.style.clipPath = `inset(0 0 0 ${100 - revealPct}%)`;
+    // Progressive zone reveal — left = red delete, right = green add-to-shopping
+    if (tx < 0) {
+      const del = wrap?.querySelector(".swipe-del");
+      if (del) {
+        const revealPct = Math.min(100, (Math.abs(tx) / DELETE_ZONE_WIDTH) * 100);
+        del.style.clipPath = `inset(0 0 0 ${100 - revealPct}%)`;
+      }
+      const add = wrap?.querySelector(".swipe-add");
+      if (add) add.style.clipPath = "inset(0 100% 0 0)";
+    } else if (tx > 0 && isRightSwipe) {
+      const add = wrap?.querySelector(".swipe-add");
+      if (add) {
+        const revealPct = Math.min(100, (tx / DELETE_ZONE_WIDTH) * 100);
+        add.style.clipPath = `inset(0 ${100 - revealPct}% 0 0)`;
+      }
+      const del = wrap?.querySelector(".swipe-del");
+      if (del) del.style.clipPath = "inset(0 0 0 100%)";
     }
 
-    // Trash lid animation at auto-delete threshold — same as touch
+    // Haptic/threshold feedback — same as touch
     const swipePct = Math.abs(tx) / _rowWidth;
     if (swipePct >= AUTO_DELETE_THRESHOLD && !_hapticFired) {
       _hapticFired = true;
@@ -285,19 +316,31 @@ export function initSwipe() {
 
     const tx = parseFloat(inner.style.transform.replace("translateX(", "")) || 0;
     const swipePct = Math.abs(tx) / _rowWidth;
+    const list = wrap?.dataset.list;
+    const isRightSwipe = tx > 0 && list === "inv";
 
-    if (swipePct >= AUTO_DELETE_THRESHOLD) {
-      // Auto-delete: swiped past threshold — slide out and delete
+    if (isRightSwipe && swipePct >= AUTO_DELETE_THRESHOLD) {
+      // Auto-add to shopping: right-swiped past threshold on inventory item
+      _performAutoAddToShopping(wrap, inner);
+    } else if (isRightSwipe && swipePct >= SNAP_THRESHOLD) {
+      // Snap open right: show green add zone
+      inner.style.transition = `transform 0.4s ${SPRING_EASE}`;
+      inner.style.transform = `translateX(${DELETE_ZONE_WIDTH}px)`;
+      const add = wrap?.querySelector(".swipe-add");
+      if (add) { add.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`; add.style.clipPath = "inset(0 0 0 0)"; }
+      wrap?.classList.add("open");
+      if (_openWrap && _openWrap !== wrap) _snapClose(_openWrap);
+      _openWrap = wrap;
+      setTimeout(() => { inner.style.transition = ""; }, 400);
+    } else if (!isRightSwipe && swipePct >= AUTO_DELETE_THRESHOLD) {
+      // Auto-delete: swiped left past threshold — slide out and delete
       _performAutoDelete(wrap, inner);
-    } else if (swipePct >= SNAP_THRESHOLD) {
-      // Snap open: lock at delete zone width with spring bounce
+    } else if (!isRightSwipe && tx < 0 && swipePct >= SNAP_THRESHOLD) {
+      // Snap open left: lock at delete zone width with spring bounce
       inner.style.transition = `transform 0.4s ${SPRING_EASE}`;
       inner.style.transform = `translateX(-${DELETE_ZONE_WIDTH}px)`;
       const del = wrap?.querySelector(".swipe-del");
-      if (del) {
-        del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
-        del.style.clipPath = "inset(0 0 0 0%)";
-      }
+      if (del) { del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`; del.style.clipPath = "inset(0 0 0 0%)"; }
       wrap?.classList.add("open");
       wrap?.classList.add("swipe-threshold");
       if (_openWrap && _openWrap !== wrap) _snapClose(_openWrap);
@@ -308,16 +351,12 @@ export function initSwipe() {
       inner.style.transition = `transform 0.35s ${SPRING_EASE}`;
       inner.style.transform = "translateX(0)";
       const del = wrap?.querySelector(".swipe-del");
-      if (del) {
-        del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
-        del.style.clipPath = "inset(0 0 0 100%)";
-      }
+      if (del) { del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`; del.style.clipPath = "inset(0 0 0 100%)"; }
+      const add = wrap?.querySelector(".swipe-add");
+      if (add) { add.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`; add.style.clipPath = "inset(0 100% 0 0)"; }
       wrap?.classList.remove("open", "swipe-threshold");
       if (_openWrap === wrap) _openWrap = null;
-      setTimeout(() => {
-        inner.style.transition = "";
-        if (del) del.style.transition = "";
-      }, 350);
+      setTimeout(() => { inner.style.transition = ""; if (del) del.style.transition = ""; if (add) add.style.transition = ""; }, 350);
     }
 
     _swipeEl = null;
@@ -335,8 +374,8 @@ export function initSwipe() {
   // swipe row when the user clicks elsewhere on the page.
   document.addEventListener("mousedown", e => {
     if (!_openWrap) return;
-    // Don't close if the click was on the delete button
-    if (e.target.closest(".swipe-del")) return;
+    // Don't close if the click was on the delete or add button
+    if (e.target.closest(".swipe-del") || e.target.closest(".swipe-add")) return;
     // Don't close if the click was on the same open row
     const inner = e.target.closest(".swipe-inner");
     if (inner && inner.closest(".swipe-wrap") === _openWrap) return;
@@ -380,8 +419,8 @@ export function initSwipe() {
   // ── DISMISS: close any open swipe row when the user taps elsewhere ──
   document.addEventListener("touchstart", e => {
     if (!_openWrap) return;
-    // Don't close if the tap was on the delete button — let the click handler fire
-    if (e.target.closest(".swipe-del")) return;
+    // Don't close if the tap was on the delete or add button — let the click handler fire
+    if (e.target.closest(".swipe-del") || e.target.closest(".swipe-add")) return;
     // Don't close if the tap was on the same open row (swipe handler will manage it)
     const inner = e.target.closest(".swipe-inner");
     if (inner && inner.closest(".swipe-wrap") === _openWrap) return;
@@ -392,10 +431,11 @@ export function initSwipe() {
 }
 
 // Animates a swipe row back to the closed position with a spring bounce.
-// Resets transform, hides delete zone, and clears all state classes.
+// Resets transform, hides both delete and add zones, and clears all state classes.
 function _snapClose(wrap) {
   const inner = wrap?.querySelector(".swipe-inner");
   const del = wrap?.querySelector(".swipe-del");
+  const add = wrap?.querySelector(".swipe-add");
   if (inner) {
     inner.style.transition = `transform 0.35s ${SPRING_EASE}`;
     inner.style.transform = "translateX(0)";
@@ -405,6 +445,11 @@ function _snapClose(wrap) {
     del.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
     del.style.clipPath = "inset(0 0 0 100%)";
     setTimeout(() => { del.style.transition = ""; }, 300);
+  }
+  if (add) {
+    add.style.transition = `clip-path 0.3s ${SMOOTH_EASE}`;
+    add.style.clipPath = "inset(0 100% 0 0)";
+    setTimeout(() => { add.style.transition = ""; }, 300);
   }
   wrap?.classList.remove("open", "swipe-threshold");
 }
@@ -448,6 +493,96 @@ async function _performAutoDelete(wrap, inner) {
     await dli(id);
     showNotif("Item removed");
   }
+}
+
+// Performs the auto-add-to-shopping animation when the user right-swipes past 70%
+// on an inventory item. Slides the row off-screen to the right, collapses height,
+// then adds the item to the shopping list.
+async function _performAutoAddToShopping(wrap, inner) {
+  const id = wrap?.dataset.id;
+  if (!id) return;
+
+  // Slide row off-screen to the right (opposite of delete)
+  inner.style.transition = `transform 0.3s ${SMOOTH_EASE}`;
+  inner.style.transform = `translateX(${_rowWidth + 100}px)`;
+
+  // Slide the add zone with it for a clean exit
+  const add = wrap?.querySelector(".swipe-add");
+  if (add) {
+    add.style.transition = `transform 0.3s ${SMOOTH_EASE}`;
+    add.style.transform = `translateX(${_rowWidth + 100}px)`;
+  }
+
+  // Collapse row height for smooth list reflow
+  await new Promise(r => setTimeout(r, 280));
+  wrap.style.transition = "height 0.25s ease, opacity 0.2s ease, margin 0.25s ease";
+  wrap.style.height = wrap.offsetHeight + "px";
+  wrap.offsetHeight; // eslint-disable-line no-unused-expressions
+  wrap.style.height = "0px";
+  wrap.style.opacity = "0";
+  wrap.style.marginBottom = "0px";
+
+  if (_openWrap === wrap) _openWrap = null;
+
+  // Wait for collapse, then add to shopping list
+  await new Promise(r => setTimeout(r, 250));
+  await _addInvItemToShopping(id);
+}
+
+// Handles a tap on the green "Add to List" zone when it's snapped open.
+// Adds the inventory item to the shopping list with the same slide-out animation.
+export async function swipeAddItem(id, list) {
+  if (list !== "inv") return;
+  const wrap = g("sw-" + id);
+  if (!wrap) return;
+  const inner = wrap.querySelector(".swipe-inner");
+  const width = wrap.offsetWidth;
+
+  // Slide off-screen to the right
+  if (inner) {
+    inner.style.transition = `transform 0.3s ${SMOOTH_EASE}`;
+    inner.style.transform = `translateX(${width + 100}px)`;
+  }
+  const add = wrap.querySelector(".swipe-add");
+  if (add) {
+    add.style.transition = `transform 0.3s ${SMOOTH_EASE}`;
+    add.style.transform = `translateX(${width + 100}px)`;
+  }
+
+  // Collapse height after slide-out
+  await new Promise(r => setTimeout(r, 280));
+  wrap.style.transition = "height 0.25s ease, opacity 0.2s ease, margin 0.25s ease";
+  wrap.style.height = wrap.offsetHeight + "px";
+  wrap.offsetHeight; // eslint-disable-line no-unused-expressions
+  wrap.style.height = "0px";
+  wrap.style.opacity = "0";
+  wrap.style.marginBottom = "0px";
+
+  if (_openWrap === wrap) _openWrap = null;
+
+  await new Promise(r => setTimeout(r, 250));
+  await _addInvItemToShopping(id);
+}
+
+// Shared logic for adding an inventory item to the shopping list.
+// Checks for duplicates, creates the shopping item, and shows a notification.
+async function _addInvItemToShopping(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+
+  // Don't add duplicates — check if an unchecked shopping item with this name exists
+  const existing = state.shop.find(s => s.name.toLowerCase() === item.name.toLowerCase() && !s.checked);
+  if (existing) {
+    showNotif(`${item.name} is already on your list`);
+    return;
+  }
+
+  await svShopItem({
+    id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2),
+    name: item.name, qty: 1, checked: false,
+    brand: item.brand || "", image: item.image || null, src: "supplies"
+  });
+  showNotif(`${item.name} added to shopping list 🛒`);
 }
 
 // Handles the delete action when the user taps the revealed red delete button.
@@ -499,9 +634,9 @@ export function swipeRowTap(id, list) {
   const wrap = g("sw-" + id);
   if (wrap) {
     const inner = wrap.querySelector(".swipe-inner");
-    // Check if row is currently swiped open (shifted left by more than 10px)
+    // Check if row is currently swiped open (shifted left or right by more than 10px)
     const tx = parseFloat((inner?.style.transform || "").replace("translateX(", "")) || 0;
-    if (tx < -10) {
+    if (Math.abs(tx) > 10) {
       // Row is open — close it and absorb the tap (don't trigger any action)
       _snapClose(wrap);
       _openWrap = null;

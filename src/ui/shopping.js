@@ -7,7 +7,7 @@
 
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
 import { svShopItem, dlShopItem, dbSet, dbGet } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc
-import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR } from '../helpers.js';
+import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
 // gcat = guess category for inventory, showNotif = toast notification,
@@ -19,6 +19,51 @@ import { wDates } from '../helpers.js'; // wDates = returns array of Date object
 // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
 // To re-enable: uncomment these blocks and restore image display logic.
 // import { uploadProductImage, normalizeProductName } from '../storage.js'; // Upload custom product photos to Firebase Storage, normalizeProductName for customProducts collection keys
+
+// ── PRODUCT LOCATION PREFERENCES ─────────────────────────────────────────────
+// Remembers where a user stores each product (e.g. eggs → fridge) so next time
+// that product is added, the correct location is auto-selected.
+// Stored in Firestore at households/{hid}/productPreferences/{normalizedName}.
+
+/**
+ * _normalizeForPref(name) — Normalizes a product name for use as a Firestore
+ * document key in the productPreferences collection. Lowercases, trims, and
+ * replaces spaces/special chars with hyphens.
+ */
+export function _normalizeForPref(name) {
+  if (!name) return null;
+  return name.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 60);
+}
+
+/**
+ * _getPreferredLocation(name) — Looks up the saved preferred storage location
+ * for a product. Returns the location string ("fridge", "freezer", "pantry",
+ * "household") or null if no preference is saved.
+ */
+export async function _getPreferredLocation(name) {
+  if (!state.hid || !name) return null;
+  const key = _normalizeForPref(name);
+  if (!key) return null;
+  try {
+    const doc = await dbGet(`households/${state.hid}/productPreferences/${key}`);
+    return doc?.preferredLocation || null;
+  } catch { return null; }
+}
+
+/**
+ * _savePreferredLocation(name, location) — Saves the user's preferred storage
+ * location for a product. Fire-and-forget — errors logged but don't block UI.
+ */
+export function _savePreferredLocation(name, location) {
+  if (!state.hid || !name || !location) return;
+  const key = _normalizeForPref(name);
+  if (!key) return;
+  dbSet(`households/${state.hid}/productPreferences/${key}`, {
+    preferredLocation: location,
+    productName: name.trim(),
+    updatedAt: new Date().toISOString()
+  }).catch(e => console.warn("Failed to save product preference:", e));
+}
 
 // ── VOICE INPUT (Web Speech API) ─────────────────────────────────────────────
 // Uses the SpeechRecognition API to let users speak items into the shopping list.
@@ -186,18 +231,7 @@ export function toggleVoice() {
  * Tapping the qty badge opens an inline number input for quick editing.
  */
 
-/**
- * toTitleCase(str) — Normalizes a product name to Title Case for uniform display.
- * Capitalizes the first letter of each word, lowercases the rest.
- * Handles ALL CAPS, mixed case, and already-correct names uniformly.
- * Applied at render time so it works for existing items and newly added ones.
- */
-function toTitleCase(str) {
-  if (!str) return "";
-  return str.replace(/\S+/g, word =>
-    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-  );
-}
+// toTitleCase imported from helpers.js — used for uniform product name display
 
 /**
  * _shouldShowBrand(item) — Determines whether to display the brand name on a shopping list item.
@@ -1711,28 +1745,41 @@ export function shareList() {
   else if (navigator.clipboard) { navigator.clipboard.writeText(txt).then(() => showNotif("List copied!")); }
 }
 
+// Cached preferred locations for the current Add to Kitchen session.
+// Populated by openAddToKitchen() so the template can read them synchronously.
+let _atkPreferredLocations = {};
+
 /**
  * openAddToKitchen() — Opens the "Add to Kitchen" overlay modal.
  *
  * This flow lets the user move checked (purchased) shopping items into their
  * kitchen inventory. For each checked item, the overlay shows a row with
- * Fridge / Freezer / Pantry buttons so the user can choose the storage location.
- * The default location is guessed heuristically from the item name (e.g. "milk" -> fridge).
+ * Fridge / Freezer / Pantry / Household buttons so the user can choose the storage location.
+ * The default location checks saved product preferences first, then falls back to heuristic.
  */
-export function openAddToKitchen() {
+export async function openAddToKitchen() {
   const checked = state.shop.filter(i => i.checked);
   if (!checked.length) { showNotif("No completed items!"); return; }
+
+  // Load saved product location preferences for all checked items
+  _atkPreferredLocations = {};
+  for (const item of checked) {
+    const pref = await _getPreferredLocation(item.name);
+    if (pref) _atkPreferredLocations[item.name.toLowerCase()] = pref;
+  }
   const body = g("atk-body"); // "atk" = Add To Kitchen
   body.innerHTML = `<div style="padding:16px">
     <p style="font-size:.82rem;color:var(--mt);margin-bottom:16px">Choose where each item goes in your kitchen, then tap Add All.</p>
     ${checked.map(item => {
-      const def = guessLocation(item.name); // Heuristic default: "fridge", "freezer", or "pantry"
+      // Check for a saved product preference first, fall back to heuristic
+      const def = _atkPreferredLocations[item.name.toLowerCase()] || guessLocation(item.name);
       return `<div class="atk-item" id="atk-${item.id}" data-loc="${def}">
         <div class="atk-name">${item.name}</div>
         <div class="atk-loc">
           <button onclick="setAtkLoc('${item.id}','fridge',this)" class="${def === 'fridge' ? 'sel' : ''}">🌡 Fridge</button>
           <button onclick="setAtkLoc('${item.id}','freezer',this)" class="${def === 'freezer' ? 'sel' : ''}">🧊 Freeze</button>
           <button onclick="setAtkLoc('${item.id}','pantry',this)" class="${def === 'pantry' ? 'sel' : ''}">🥫 Pantry</button>
+          <button onclick="setAtkLoc('${item.id}','household',this)" class="${def === 'household' ? 'sel' : ''}">🏠 House</button>
         </div>
       </div>`;
     }).join("")}
@@ -1791,11 +1838,13 @@ export async function confirmAddToKitchen() {
       image: existing ? existing.image : (item.image || null),  // Preserve product image from scanned items
       source: "shopping", // Track that this item came from the shopping list
     });
+    // Save the user's location choice as a preference for next time
+    _savePreferredLocation(item.name, loc);
     await dlShopItem(item.id); // Remove from shopping list after adding to kitchen
     added++;
   }
   hideOv("atk");
-  showNotif(`${added} item${added !== 1 ? "s" : ""} added to your kitchen! 🧺`);
+  showNotif(`${added} item${added !== 1 ? "s" : ""} added to your supplies! 🧺`);
 }
 
 /**
@@ -1832,6 +1881,7 @@ export async function buildList() {
 
     // Parse the bullet list response: extract item names from lines like "- Chicken breast"
     const suggested = [];
+    const skipped = [];  // Items fully in stock (skipped by AI)
     text.split("\n").forEach(line => {
       const m = line.match(/^[-•*]\s+(.+)/); // Match lines starting with -, •, or *
       if (m) {
@@ -1841,13 +1891,37 @@ export async function buildList() {
       }
     });
 
+    // Cross-check AI suggestions against current inventory for a summary.
+    // Items the AI didn't suggest (but the recipe needs) were skipped because
+    // we already have them — count those for the user's information.
+    const allIngredients = text.split("\n").filter(l => l.match(/^[-•*]\s+/)).length;
+    const invNames = state.inv.map(i => i.name.toLowerCase());
+
+    // Check each suggested item against inventory for "have some, need more" notes
+    suggested.forEach(item => {
+      const match = state.inv.find(i => i.name.toLowerCase() === item.name.toLowerCase());
+      if (match && match.qty > 0) {
+        item.note = `Have ${match.qty} ${match.unit} — need more`;
+      }
+    });
+
     if (!suggested.length) { showNotif("Nothing new needed — you're all stocked! ✓"); return; }
 
     // Store suggestions globally so the preview modal helpers (bpTog, bpConfirm) can access them
     window._bpItems = suggested;
 
-    // Render the preview list: each item is a toggleable row with a green check circle
-    g("bpList").innerHTML = suggested.map((it, i) => `<div id="bpitem-${i}" onclick="bpTog(${i})" style="display:flex;align-items:center;gap:12px;padding:13px 16px;background:var(--card);border:1.5px solid var(--b1);border-radius:14px;cursor:pointer;transition:all .15s"><div id="bpck-${i}" style="width:24px;height:24px;border-radius:50%;background:var(--gn);border:2px solid var(--gn);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.8rem;color:#0c0c0a;transition:all .2s">✓</div><div style="font-size:.9rem;font-weight:500">${it.name}</div></div>`).join("");
+    // Build a summary banner showing inventory check results
+    const inStockCount = state.inv.length > 0 ? Math.max(0, allIngredients - suggested.length) : 0;
+    const partialCount = suggested.filter(i => i.note).length;
+    const summaryParts = [];
+    if (inStockCount > 0) summaryParts.push(`✅ ${inStockCount} already in stock`);
+    if (partialCount > 0) summaryParts.push(`⚠️ ${partialCount} partially stocked`);
+    summaryParts.push(`🛒 ${suggested.length} to add`);
+    const summaryHtml = `<div style="padding:10px 16px;background:var(--acd);border-radius:12px;margin-bottom:12px;font-size:.82rem;color:var(--tx2);line-height:1.6">${summaryParts.join("<br>")}</div>`;
+
+    // Render the preview list: each item is a toggleable row with a green check circle.
+    // Items that partially match inventory show a note below the name.
+    g("bpList").innerHTML = summaryHtml + suggested.map((it, i) => `<div id="bpitem-${i}" onclick="bpTog(${i})" style="display:flex;align-items:center;gap:12px;padding:13px 16px;background:var(--card);border:1.5px solid var(--b1);border-radius:14px;cursor:pointer;transition:all .15s"><div id="bpck-${i}" style="width:24px;height:24px;border-radius:50%;background:var(--gn);border:2px solid var(--gn);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.8rem;color:#0c0c0a;transition:all .2s">✓</div><div style="flex:1;min-width:0"><div style="font-size:.9rem;font-weight:500">${it.name}</div>${it.note ? `<div style="font-size:.72rem;color:var(--am);margin-top:2px">${it.note}</div>` : ""}</div></div>`).join("");
     bpUpdBtn(); // Update the "Add N items" button label
     g("buildPreviewM").classList.add("active"); // Show the preview modal
   } catch { showNotif("Couldn't reach Claude — check connection"); }

@@ -40,11 +40,11 @@ window.getIdToken = getIdToken;
 // so they can be attached to `window` for HTML onclick access.
 
 // Home screen: dashboard rendering, weekly/tonight views, export panel
-import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop } from './ui/home.js';
+import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection } from './ui/home.js';
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
@@ -64,7 +64,7 @@ import { sendChat, sendPill, clrChat, ar, kitCtx, importChatRecipe } from './ui/
 import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, togManual, manLookup, selRL, valAdd, addToInv, chgAQ } from './ui/scan.js';
 
 // Swipe gestures: swipe-to-delete, row tap, multi-select mode for shopping/inventory
-import { initSwipe, swipeDelItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected } from './ui/swipe.js';
+import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected } from './ui/swipe.js';
 
 // Meal planning: pick recipes for days, mark as cooked, schedule, chip-based filtering
 import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCooked, saveCooked, scheduleRecipe, schedSet, initRecChips, toggleChip, filterRecs } from './ui/mealplan.js';
@@ -134,6 +134,7 @@ window.hideOv = hideOv;
 // ── Home screen handlers ──
 window.initHome = initHome;
 window.addLowToShop = addLowToShop;   // Add a low-stock item to the shopping list
+window.toggleHomeSection = toggleHomeSection; // Collapse/expand home screen sections
 // toggleExp — toggle the export panel's visibility (show/hide)
 window.toggleExp = function() { const p = g("exppanel"); p.style.display = p.style.display === "none" ? "block" : "none"; };
 
@@ -170,6 +171,7 @@ window.closeInvItemDetail = closeInvItemDetail;         // Close inventory item 
 window.deleteInvItemImage = deleteInvItemImage;         // Remove product image from an inventory item
 window.triggerInvPhotoUpload = triggerInvPhotoUpload;   // Open file picker to upload a custom product photo for inventory
 window.handleInvPhotoSelected = handleInvPhotoSelected; // Process the selected product photo file for inventory
+window.addInvToShopping = addInvToShopping;             // Add an inventory item to the shopping list
 
 // ── Shopping screen handlers ──
 window.qadd = qadd;             // Quick-add an item to the shopping list
@@ -277,6 +279,7 @@ window.chgAQ = chgAQ;                           // Change quantity in the add-to
 
 // ── Swipe / Multi-select handlers ──
 window.swipeDelItem = swipeDelItem;   // Delete an item revealed by swipe gesture
+window.swipeAddItem = swipeAddItem;   // Add an inventory item to shopping via swipe gesture
 window.swipeRowTap = swipeRowTap;     // Handle tap on a swipeable row
 window.togShopSelect = togShopSelect; // Toggle multi-select mode on shopping list
 window.togInvSelect = togInvSelect;   // Toggle multi-select mode on inventory list

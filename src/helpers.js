@@ -6,6 +6,15 @@
 import { state } from './state.js';
 
 /**
+ * Converts a string to Title Case (first letter of each word capitalized).
+ * Used across all product name displays for consistent formatting.
+ */
+export function toTitleCase(str) {
+  if (!str) return "";
+  return str.replace(/\w\S*/g, t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase());
+}
+
+/**
  * Shorthand for document.getElementById.
  * Used everywhere to keep DOM lookups concise (e.g., g("notif") instead of
  * document.getElementById("notif")).
@@ -75,7 +84,7 @@ export function xSt(exp) {
  * Falls back to the raw key if it doesn't match any known location.
  */
 export function ll(l) {
-  return { fridge: "🌡 Fridge", freezer: "🧊 Freezer", pantry: "🥫 Pantry" }[l] || l;
+  return { fridge: "🌡 Fridge", freezer: "🧊 Freezer", pantry: "🥫 Pantry", household: "🏠 Household" }[l] || l;
 }
 
 /**

@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-DH94OgvX.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BnxzdzT8.css">
+  <script type="module" crossorigin src="/assets/index-DesQYFTp.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CDFLZ8XL.css">
 </head>
 <body>
 
@@ -145,14 +145,14 @@
       <div id="variety-nudge" style="display:none;background:var(--amd);border:1px solid var(--am);border-radius:14px;padding:12px 16px;font-size:.82rem;color:var(--tx2);line-height:1.6;margin-bottom:16px"></div>
       <div class="hsec-lbl">🗓 This Week</div>
       <div class="week-wrap"><div class="wgrd" id="wgrd"></div></div>
-      <div class="hsec-lbl">🧺 Your Kitchen</div>
+      <div class="hsec-lbl">🧺 Your Supplies</div>
       <div class="sgrd" id="sgrd"></div>
-      <div id="lowstocklbl" style="display:none" class="hsec-lbl">📉 Running Low</div>
-      <div class="expl" id="lowstocklist"></div>
+      <div id="lowstocklbl" style="display:none" class="hsec-lbl hsec-toggle" onclick="toggleHomeSection('lowstock')">📉 Running Low <span class="hsec-arrow" id="lowstock-arrow">▾</span></div>
+      <div class="expl hsec-body" id="lowstocklist"></div>
       <div id="exslbl" style="display:none" class="hsec-lbl">⚠️ Expiring Soon</div>
       <div class="expl" id="expl"></div>
-      <div id="activitylbl" style="display:none" class="hsec-lbl">📋 Recent Activity</div>
-      <div id="activityfeed"></div>
+      <div id="activitylbl" style="display:none" class="hsec-lbl hsec-toggle" onclick="toggleHomeSection('activity')">📋 Recent Activity <span class="hsec-arrow" id="activity-arrow">▾</span></div>
+      <div id="activityfeed" class="hsec-body"></div>
       <div style="height:16px"></div>
     </div>
   </div>
@@ -162,7 +162,7 @@
     <div style="flex-shrink:0">
       <!-- Clean header: title + subtitle on left, Refresh + Select on right (matches Shopping) -->
       <div class="shdr">
-        <div><div class="sttl">Inventory</div><div class="ssub" id="isub">Loading…</div></div>
+        <div><div class="sttl">Supplies</div><div class="ssub" id="isub">Loading…</div></div>
         <div style="display:flex;gap:6px">
           <button class="btn bsm bs refresh-btn" onclick="manualRefresh('inv')" title="Refresh">↻</button>
           <button class="btn bsm bs selbtn" id="inv-selbtn" onclick="togInvSelect()">Select</button>
@@ -170,16 +170,15 @@
       </div>
       <!-- Prominent add button (mirrors Shopping's "+ Add item") -->
       <div style="padding:12px 16px 0">
-        <button class="btn bp bf shop-add-btn" onclick="openInvAddSheet()">+ Add to pantry</button>
+        <button class="btn bp bf shop-add-btn" onclick="openInvAddSheet()">+ Add item</button>
         <!-- Voice listening status (shown when voice input is active) -->
         <div class="mic-status" id="inv-micstatus"><span class="mic-wave"><span class="bar"></span></span> Listening...<button class="mic-stop-btn" onclick="toggleInvVoice()">Stop</button></div>
       </div>
       <div class="itabs">
-        <div class="itab active" id="itab-all" onclick="setIT('all')">All</div>
-        <div class="itab" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
+        <div class="itab active" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
         <div class="itab" id="itab-freezer" onclick="setIT('freezer')">🧊 Freezer</div>
         <div class="itab" id="itab-pantry" onclick="setIT('pantry')">🥫 Pantry</div>
-        <div class="itab" id="itab-cat" onclick="setIT('cat')">By Type</div>
+        <div class="itab" id="itab-household" onclick="setIT('household')">🏠 Household</div>
       </div>
     </div>
     <div class="ibody" id="ibody" style="flex:1;overflow-y:auto"></div>
@@ -322,7 +321,7 @@
   <!-- NAV -->
   <div id="NAV">
     <div class="ni active" id="nav-home" onclick="showScreen('home')"><span class="ico">🏠</span><span class="lbl">Home</span></div>
-    <div class="ni" id="nav-inventory" onclick="showScreen('inventory')"><span class="ico">🧺</span><span class="lbl">Pantry</span></div>
+    <div class="ni" id="nav-inventory" onclick="showScreen('inventory')"><span class="ico">🧺</span><span class="lbl">Supplies</span></div>
     <div class="ni" id="nav-recipes" onclick="showScreen('recipes')" style="position:relative"><span class="ico">📖</span><span class="lbl">Recipes</span><span class="notif-badge" id="recipes-notif-badge" style="display:none">0</span></div>
     <div class="ni" id="nav-shopping" onclick="showScreen('shopping')"><span class="ico">🛒</span><span class="lbl">Shop</span></div>
     <div class="ni" id="nav-insights" onclick="showScreen('insights')"><span class="ico">📊</span><span class="lbl">Stats</span></div>
@@ -365,7 +364,7 @@
   <div class="bsheet-backdrop" id="invAddBackdrop" onclick="closeInvAddSheet()"></div>
   <div class="bsheet" id="invAddSheet">
     <div class="bsheet-handle"></div>
-    <div class="bsheet-title">Add to pantry</div>
+    <div class="bsheet-title">Add to supplies</div>
     <!-- Text input with live search dropdown (same UX as shopping) -->
     <div id="invAddTypeForm">
       <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>
@@ -378,13 +377,14 @@
           <button class="lbtn sel" id="invAddLoc-fridge" onclick="setInvAddLoc('fridge',this)">🌡 Fridge</button>
           <button class="lbtn" id="invAddLoc-freezer" onclick="setInvAddLoc('freezer',this)">🧊 Freezer</button>
           <button class="lbtn" id="invAddLoc-pantry" onclick="setInvAddLoc('pantry',this)">🥫 Pantry</button>
+          <button class="lbtn" id="invAddLoc-household" onclick="setInvAddLoc('household',this)">🏠 Household</button>
         </div>
       </div>
       <div style="margin-top:6px;margin-bottom:10px"><button class="sh-add-note-toggle" onclick="toggleInvAddNote()">+ Note</button></div>
       <div class="sh-add-note-wrap" id="invAddNoteWrap" style="display:none">
         <textarea class="sh-note-inp" id="invAddNoteInp" rows="2" placeholder="Add a note… (e.g. brand, store, expiry)"></textarea>
       </div>
-      <button class="btn bp bf" onclick="qaddInv()">Add to Pantry</button>
+      <button class="btn bp bf" onclick="qaddInv()">Add</button>
     </div>
     <!-- Scan and voice options below the input (same as shopping) -->
     <div class="bsheet-options" style="margin-top:12px">
@@ -480,7 +480,7 @@
           <option value="General">📦 General</option>
         </select>
       </div>
-      <div class="frow"><label class="flbl">Location</label><div class="lpick"><button class="lbtn sel" id="ml-fridge" onclick="selML('fridge',this)">🌡 Fridge</button><button class="lbtn" id="ml-freezer" onclick="selML('freezer',this)">🧊 Freezer</button><button class="lbtn" id="ml-pantry" onclick="selML('pantry',this)">🥫 Pantry</button></div></div>
+      <div class="frow"><label class="flbl">Location</label><div class="lpick"><button class="lbtn sel" id="ml-fridge" onclick="selML('fridge',this)">🌡 Fridge</button><button class="lbtn" id="ml-freezer" onclick="selML('freezer',this)">🧊 Freezer</button><button class="lbtn" id="ml-pantry" onclick="selML('pantry',this)">🥫 Pantry</button><button class="lbtn" id="ml-household" onclick="selML('household',this)">🏠 Household</button></div></div>
       <div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="chgMQ(-1)">−</button><input class="qinp" id="maq" type="number" min="1" value="1"/><button class="qbtn" onclick="chgMQ(1)">+</button></div></div>
       <div class="qrow"><span class="qlbl">Unit</span><input class="fun" id="mau" placeholder="unit, lb, oz…" value="unit"/></div>
       <div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="mae" type="date"/></div>
@@ -493,7 +493,7 @@
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('result')">←</div><div class="ovttl" id="resttl">Product Found</div></div>
     <div class="ovbody">
       <div id="resbody"></div>
-      <div class="frow"><label class="flbl">Location</label><div class="lpick"><button class="lbtn" id="rl-fridge" onclick="selRL('fridge',this)">🌡 Fridge</button><button class="lbtn" id="rl-freezer" onclick="selRL('freezer',this)">🧊 Freezer</button><button class="lbtn" id="rl-pantry" onclick="selRL('pantry',this)">🥫 Pantry</button></div></div>
+      <div class="frow"><label class="flbl">Location</label><div class="lpick"><button class="lbtn" id="rl-fridge" onclick="selRL('fridge',this)">🌡 Fridge</button><button class="lbtn" id="rl-freezer" onclick="selRL('freezer',this)">🧊 Freezer</button><button class="lbtn" id="rl-pantry" onclick="selRL('pantry',this)">🥫 Pantry</button><button class="lbtn" id="rl-household" onclick="selRL('household',this)">🏠 Household</button></div></div>
       <div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="chgAQ(-1)">−</button><input class="qinp" id="aqty" type="number" min="1" value="1"/><button class="qbtn" onclick="chgAQ(1)">+</button></div></div>
       <div class="qrow"><span class="qlbl">Unit</span><input class="fun" id="aunit" placeholder="oz, lb, unit…"/></div>
       <div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="aexp" type="date"/></div>
@@ -505,7 +505,7 @@
       <div id="scan-dest-btns">
         <div class="brow">
           <button class="btn bs" style="flex:1" onclick="resumeScanner()">← Back</button>
-          <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">📦 Add to Pantry</button>
+          <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">📦 Add to Supplies</button>
         </div>
         <button class="btn bs bf" style="margin-top:8px;border-color:var(--gn);color:var(--gn)" onclick="addScannedToList()">🛒 Add to Shopping List instead</button>
       </div>

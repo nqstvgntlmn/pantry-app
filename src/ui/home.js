@@ -10,8 +10,8 @@
 //   xSt(expiry) — returns { c: "expired"|"expiring"|"ok", l: label }
 //   ll(loc)     — human-readable storage-location label ("fridge" → "🌡 Fridge")
 
-import { state } from '../state.js';
-import { g, tk, wDates, xSt, ll, showNotif } from '../helpers.js';
+import { state, J, Js } from '../state.js';
+import { g, tk, wDates, xSt, ll, showNotif, toTitleCase } from '../helpers.js';
 import { saveMp, svShopItem, loadActivity } from '../db.js';
 
 // initHome() — called once on app boot.
@@ -70,6 +70,57 @@ export function renderHome() {
   renderTonight();  // "Tonight's Dinner" card
   renderActivityFeed(); // Recent household activity
   updExport();      // plain-text inventory export panel
+  // Apply collapsed/expanded state to collapsible sections
+  _applyAllHomeSectionStates();
+}
+
+// ── COLLAPSIBLE HOME SECTIONS ─────────────────────────────────────────────────
+// "Running Low" and "Recent Activity" can be collapsed/expanded by tapping
+// their headers. State is persisted in localStorage so it survives sessions.
+
+/**
+ * toggleHomeSection(key) — Toggles the collapsed/expanded state of a home
+ * screen section. Updates the arrow indicator and saves state to localStorage.
+ * @param {string} key — Section key: "lowstock" or "activity"
+ */
+export function toggleHomeSection(key) {
+  const lsKey = `ks-home-${key}-collapsed`;
+  const isCollapsed = J(lsKey);
+  Js(lsKey, !isCollapsed);
+
+  // Update the body visibility and arrow direction
+  _applyHomeSectionState(key);
+}
+
+/**
+ * _applyHomeSectionState(key) — Reads the collapsed state from localStorage
+ * and applies it to the DOM: hides/shows the body, rotates the arrow.
+ */
+function _applyHomeSectionState(key) {
+  const lsKey = `ks-home-${key}-collapsed`;
+  const isCollapsed = J(lsKey);
+  const arrow = g(`${key}-arrow`);
+  const bodyId = key === "lowstock" ? "lowstocklist" : "activityfeed";
+  const body = g(bodyId);
+
+  // Toggle CSS classes for arrow rotation and body collapse animation
+  if (arrow) {
+    if (isCollapsed) arrow.classList.add("collapsed");
+    else arrow.classList.remove("collapsed");
+  }
+  if (body) {
+    if (isCollapsed) body.classList.add("collapsed");
+    else body.classList.remove("collapsed");
+  }
+}
+
+/**
+ * _applyAllHomeSectionStates() — Applies collapsed/expanded state to all
+ * collapsible sections on the home screen. Called after each render.
+ */
+function _applyAllHomeSectionStates() {
+  _applyHomeSectionState("lowstock");
+  _applyHomeSectionState("activity");
 }
 
 // renderTonight() — updates the "Tonight's Dinner" card on the home screen.
@@ -224,7 +275,7 @@ export function renderExp() {
   // Items that are already expired get an extra "exp" class for red styling.
   // Each row shows the item name and its expiry label (e.g. "Expires in 2d").
   l.style.display = "flex";
-  e.innerHTML = ex.map(item => { const s = xSt(item.expiry); return `<div class="exi${s.c === "expired" ? " exp" : ""}" onclick="openAdj('${item.id}')"><div class="exn">${item.name}</div><div class="exd">${s.l}</div></div>`; }).join("");
+  e.innerHTML = ex.map(item => { const s = xSt(item.expiry); return `<div class="exi${s.c === "expired" ? " exp" : ""}" onclick="openAdj('${item.id}')"><div class="exn">${toTitleCase(item.name)}</div><div class="exd">${s.l}</div></div>`; }).join("");
 }
 
 // ─── LOW STOCK ALERTS ────────────────────────────────────────────────────────
@@ -249,14 +300,13 @@ function renderLowStock() {
   lbl.style.display = "flex";
   lst.innerHTML = low.map(item => `<div class="exi" style="border-color:var(--am)">
     <div style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer" onclick="openAdj('${item.id}')">
-      <div class="exn">${item.name}</div>
+      <div class="exn">${toTitleCase(item.name)}</div>
       <div style="font-size:.74rem;color:var(--am);font-weight:600">${item.qty} ${item.unit}</div>
     </div>
     <button class="btn bsm bs" style="flex-shrink:0;font-size:.72rem" onclick="event.stopPropagation();addLowToShop('${item.id}')">🛒 Add to list</button>
   </div>`).join("");
 
-  // Update the Pantry nav badge to show low-stock count
-  updatePantryBadge(low.length);
+  // Badge removed from Supplies tab per design — no notification dot
 }
 
 // addLowToShop(id) — adds a low-stock inventory item to the shopping list
@@ -284,23 +334,7 @@ export async function addLowToShop(id) {
   showNotif(`${item.name} added to shopping list 🛒`);
 }
 
-// updatePantryBadge(count) — shows/hides a small badge on the Pantry nav tab
-// indicating how many items are running low.
-function updatePantryBadge(count) {
-  const nav = g("nav-inventory");
-  if (!nav) return;
-  // Remove any existing badge
-  const old = nav.querySelector(".nav-badge");
-  if (old) old.remove();
-  // Add badge if count > 0
-  if (count > 0) {
-    const badge = document.createElement("span");
-    badge.className = "nav-badge";
-    badge.textContent = count;
-    badge.style.cssText = "position:absolute;top:4px;right:calc(50% - 18px);background:var(--am);color:#0c0c0a;font-size:.58rem;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px";
-    nav.appendChild(badge);
-  }
-}
+// Badge on Supplies tab removed — per design requirement, no notification dot.
 
 // ─── ACTIVITY FEED ───────────────────────────────────────────────────────────
 // Shows recent household actions (e.g. "Bushra added Milk to shopping list")
@@ -360,7 +394,7 @@ async function renderActivityFeed() {
 //   - Chicken breast: 2 lb
 export function updExport() {
   // Build one text block per storage location, skip locations with no items
-  const t = ["fridge", "freezer", "pantry"].map(loc => {
+  const t = ["fridge", "freezer", "pantry", "household"].map(loc => {
     const its = state.inv.filter(i => i.location === loc);
     // Format: location header + one "- name (brand): qty unit" line per item
     return its.length ? ll(loc).toUpperCase() + "\n" + its.map(i => `- ${i.name}${i.brand ? ` (${i.brand})` : ""}: ${i.qty} ${i.unit}`).join("\n") : "";
