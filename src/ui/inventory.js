@@ -275,36 +275,67 @@ export async function openInvItemDetail(id) {
   // Brand visibility — same rules as the list row
   const showBrand = _shouldShowInvBrand(item);
 
-  // Build the detail sheet content — no category/source tags
+  // Build the detail sheet content — all fields editable inline (no separate Adjust screen)
+  const curUnit = item.unit || "Unit";
+  const unitOpts = UNITS.map(u => `<option value="${u}"${u === curUnit ? " selected" : ""}>${u}</option>`).join("");
+  const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(curUnit);
+  const ex = xSt(item.expiry);
+
   let html = `<div class="item-detail-header">
     <div>${img}${changePhotoLink}</div>
     <div style="flex:1;min-width:0">
       <div class="item-detail-name">${toTitleCase(item.name)}</div>
       ${showBrand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
-      <div style="font-size:.7rem;color:var(--mt);margin-top:4px">${ll(item.location)}</div>
+      <div style="font-size:.7rem;color:var(--mt);margin-top:4px">Added ${item.addedAt || "—"}</div>
     </div>
-  </div>
-  <!-- [IMAGES DISABLED] Hidden file input commented out -->
-  <!-- <input type="file" id="invProductPhotoInput" accept="image/*" style="display:none"
-    onchange="handleInvPhotoSelected('${item.id}')" /> -->`;
+  </div>`;
 
-  // Quantity & unit section with inline unit selector
-  const curUnit = item.unit || "Unit";
+  // Location picker — four buttons, selected one is highlighted
+  html += `<div class="item-detail-section">
+    <div class="item-detail-label">Location</div>
+    <div class="lpick">
+      <button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="changeInvLocation('${item.id}','fridge',this)">🌡 Fridge</button>
+      <button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="changeInvLocation('${item.id}','freezer',this)">🧊 Freezer</button>
+      <button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="changeInvLocation('${item.id}','pantry',this)">🥫 Pantry</button>
+      <button class="lbtn ${item.location === "household" ? "sel" : ""}" onclick="changeInvLocation('${item.id}','household',this)">🏠 Household</button>
+    </div>
+  </div>`;
+
+  // Quantity stepper — +/- buttons with inline number input
   html += `<div class="item-detail-section">
     <div class="item-detail-label">Quantity</div>
-    <div class="item-detail-value">${item.qty} ${curUnit}</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="qbtn" onclick="changeInvQty('${item.id}',-1)">−</button>
+      <input class="qinp" id="inv-qty-${item.id}" type="number" min="0" value="${item.qty}" style="width:48px;text-align:center" onblur="changeInvQtyDirect('${item.id}')"/>
+      <button class="qbtn" onclick="changeInvQty('${item.id}',1)">+</button>
+    </div>
   </div>`;
 
   // Unit of measure selector — dropdown to change the unit
   html += `<div class="item-detail-section">
     <div class="item-detail-label">Unit of Measure</div>
     <select class="detail-select" onchange="changeInvUnit('${item.id}',this.value)">
-      ${UNITS.map(u => `<option value="${u}"${u === curUnit ? " selected" : ""}>${u}</option>`).join("")}
+      ${unitOpts}
     </select>
   </div>`;
 
+  // Expiry date picker — always shown, truly optional with clear button
+  html += `<div class="item-detail-section">
+    <div class="item-detail-label">Expiry Date <span class="otag">optional</span></div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input class="fd" id="inv-expiry-${item.id}" type="date" value="${item.expiry || ""}" onchange="changeInvExpiry('${item.id}')" style="flex:1"/>
+      <button class="qbtn" onclick="clearInvExpiry('${item.id}')" title="Clear expiry" style="font-size:.75rem;padding:6px 10px">✕ No expiry</button>
+    </div>
+    ${ex ? `<div class="etag ${ex.c}" style="margin-top:6px">${ex.l}</div>` : ""}
+  </div>`;
+
+  // Notes textarea — always visible, saves on blur
+  html += `<div class="item-detail-section">
+    <div class="item-detail-label">Notes <span class="otag">optional</span></div>
+    <textarea class="sh-note-inp" id="inv-note-${item.id}" rows="2" placeholder="Brand, store, reminders…" onblur="changeInvNote('${item.id}')">${item.note || ""}</textarea>
+  </div>`;
+
   // Restock threshold — "Restock when below [X]"
-  const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(curUnit);
   html += `<div class="item-detail-section">
     <div class="item-detail-label">Restock when below</div>
     <div style="display:flex;align-items:center;gap:8px">
@@ -323,30 +354,9 @@ export async function openInvItemDetail(id) {
     </label>
   </div>`;
 
-  // Expiry section (if present)
-  if (item.expiry) {
-    const ex = xSt(item.expiry);
-    html += `<div class="item-detail-section">
-      <div class="item-detail-label">Expiry</div>
-      <div class="item-detail-value">${item.expiry}${ex ? ` <span class="etag ${ex.c}" style="margin-left:6px">${ex.l}</span>` : ""}</div>
-    </div>`;
-  }
-
-  // Note section (if present)
-  if (item.note) {
-    html += `<div class="item-detail-section">
-      <div class="item-detail-label">Note</div>
-      <div class="item-detail-value">${item.note}</div>
-    </div>`;
-  }
-
-  // Action buttons: Add to Shopping, Adjust (full overlay), Remove, and Close
+  // Action buttons: Add to Shopping List and Remove (no separate Adjust screen needed)
   html += `<button class="btn bf" style="margin-top:12px;background:var(--gnd);color:var(--gn);border:1.5px solid var(--gn)" onclick="addInvToShopping('${item.id}')">🛒 Add to Shopping List</button>
-  <div style="display:flex;gap:8px;margin-top:8px">
-    <button class="btn bs bf" onclick="closeInvItemDetail();openAdj('${item.id}')" style="flex:1">⚙️ Adjust</button>
-    <button class="btn bd bf" onclick="closeInvItemDetail();remItem('${item.id}')" style="flex:1">Remove</button>
-  </div>
-  <button class="btn bs bf" onclick="closeInvItemDetail()" style="margin-top:8px">Close</button>`;
+  <button class="btn bd bf" onclick="closeInvItemDetail();remItem('${item.id}')" style="margin-top:8px">Remove</button>`;
 
   content.innerHTML = html;
 
@@ -745,6 +755,85 @@ export async function toggleDoNotRestock(id, checked) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
   await svi({ ...item, doNotRestock: checked });
+}
+
+// ── DETAIL SHEET INLINE HANDLERS (MERGED FROM ADJUST OVERLAY) ───────────────
+// These handlers let the user edit all item fields directly on the detail sheet
+// without needing a separate Adjust sub-screen.
+
+/**
+ * changeInvLocation(id, loc, btn) — Updates storage location from the detail sheet.
+ * Highlights the selected location button and saves the preference.
+ */
+export async function changeInvLocation(id, loc, btn) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  // Deselect all location buttons in the detail sheet, then highlight the chosen one
+  const sheet = g("invItemDetailContent");
+  if (sheet) sheet.querySelectorAll(".lbtn").forEach(b => b.classList.remove("sel"));
+  if (btn) btn.classList.add("sel");
+  await svi({ ...item, location: loc });
+  _savePreferredLocation(item.name, loc);
+}
+
+/**
+ * changeInvQty(id, delta) — Adjusts quantity by +1 or -1 from the detail sheet stepper.
+ * If quantity reaches 0, the item is removed entirely.
+ */
+export async function changeInvQty(id, delta) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const q = Math.max(0, item.qty + delta);
+  const el = g(`inv-qty-${id}`);
+  if (el) el.value = q;
+  if (q === 0) { closeInvItemDetail(); await remItem(id); return; }
+  await svi({ ...item, qty: q });
+}
+
+/**
+ * changeInvQtyDirect(id) — Saves direct keyboard input for quantity from detail sheet.
+ */
+export async function changeInvQtyDirect(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const el = g(`inv-qty-${id}`);
+  const v = parseInt(el?.value);
+  if (!isNaN(v) && v >= 0) await svi({ ...item, qty: v });
+}
+
+/**
+ * changeInvExpiry(id) — Saves a new expiry date from the detail sheet date picker.
+ */
+export async function changeInvExpiry(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const el = g(`inv-expiry-${id}`);
+  await svi({ ...item, expiry: el?.value || null });
+}
+
+/**
+ * clearInvExpiry(id) — Clears the expiry date, making it truly "no expiry".
+ * Resets the date input and saves null to Firestore.
+ */
+export async function clearInvExpiry(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const el = g(`inv-expiry-${id}`);
+  if (el) el.value = "";
+  await svi({ ...item, expiry: null });
+  // Refresh the detail sheet to remove the expiry status tag
+  openInvItemDetail(id);
+}
+
+/**
+ * changeInvNote(id) — Saves the notes textarea value on blur from the detail sheet.
+ */
+export async function changeInvNote(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const el = g(`inv-note-${id}`);
+  const v = (el?.value || "").trim();
+  await svi({ ...item, note: v || null });
 }
 
 // Switches the active inventory tab (all / fridge / freezer / pantry / cat).

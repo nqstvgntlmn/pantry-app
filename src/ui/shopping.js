@@ -312,8 +312,9 @@ export function sH(item) {
   // Default to qty 1 if the field is missing (backwards compat with old items)
   const qty = item.qty || 1;
   const unit = item.unit || "Unit";
-  // Show qty badge with unit; qty=1 gets a muted style via sh-qty-one
-  const qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}" onclick="event.stopPropagation();openShQty('${item.id}')"> × ${qty} ${unit}</span>`;
+  // Show qty badge with unit; qty=1 gets a muted style — no tap-to-edit,
+  // quantity is now edited only via the detail sheet stepper
+  const qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}"> × ${qty} ${unit}</span>`;
 
   // [IMAGES DISABLED] — Product images commented out pending decision.
   // See session notes: images caused false positives from external databases,
@@ -335,15 +336,7 @@ export function sH(item) {
         ${item.price ? `<div class="price-tag">~$${item.price}</div>` : ""}  <!-- Estimated price if available -->
         <button class="sh-note-btn" onclick="toggleShNote(event,'${item.id}')" title="Add note">✏️</button>
       </div>
-      <!-- Inline qty editor (hidden by default, toggled by openShQty) -->
-      <div class="sh-qty-edit" id="sqe-${item.id}">
-        <label class="sh-qty-lbl">Qty</label>
-        <div class="sh-qty-ctl">
-          <button class="qbtn" onclick="adjShQty('${item.id}',-1)">−</button>
-          <input class="sh-qty-inp" id="sqi-${item.id}" type="number" min="1" value="${qty}" onblur="saveShQty('${item.id}')"/>
-          <button class="qbtn" onclick="adjShQty('${item.id}',1)">+</button>
-        </div>
-      </div>
+      <!-- Inline qty editor removed — quantity is now edited via the detail sheet stepper -->
       <!-- Expandable note editor (hidden by default, toggled by toggleShNote) -->
       <div class="sh-note-edit" id="sne-${item.id}">
         <textarea class="sh-note-inp" id="sni-${item.id}" rows="2" placeholder="Add a note… (e.g. brand, size, store)" onblur="saveShNote('${item.id}')">${item.note || ""}</textarea>
@@ -1269,12 +1262,17 @@ export async function openItemDetail(id) {
   // Category/source tags removed — hyphenated category names (e.g. "plant-based-foods-and-beverages")
   // and source labels ("via reminders") added no user value and looked ugly/technical.
 
-  // Quantity section
+  // Quantity stepper — editable +/- control matching Supplies style
   const qty = item.qty || 1;
   const curUnit = item.unit || "Unit";
   html += `<div class="item-detail-section">
     <div class="item-detail-label">Quantity</div>
-    <div class="item-detail-value">× ${qty} ${curUnit}</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="qbtn" onclick="changeShopQty('${item.id}',-1)">−</button>
+      <input class="qinp" id="shop-qty-${item.id}" type="number" min="1" value="${qty}" style="width:48px;text-align:center" onblur="changeShopQtyDirect('${item.id}')"/>
+      <button class="qbtn" onclick="changeShopQty('${item.id}',1)">+</button>
+      <span style="font-size:.8rem;color:var(--mt)">${curUnit}</span>
+    </div>
   </div>`;
 
   // Unit of measure selector — dropdown to change the unit
@@ -1331,6 +1329,32 @@ export async function changeShopUnit(id, unit) {
   // Remember this unit choice so it auto-populates next time this product is added
   _savePreferredUnit(item.name, unit);
   openItemDetail(id); // refresh sheet
+}
+
+/**
+ * changeShopQty(id, delta) — Adjusts a shopping item's quantity by +1 or -1
+ * from the detail sheet stepper. Clamps to minimum of 1.
+ */
+export async function changeShopQty(id, delta) {
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+  const newQty = Math.max(1, (item.qty || 1) + delta);
+  const el = g(`shop-qty-${id}`);
+  if (el) el.value = newQty;
+  await svShopItem({ ...item, qty: newQty });
+}
+
+/**
+ * changeShopQtyDirect(id) — Saves direct keyboard input for quantity from the
+ * detail sheet stepper. Called on blur of the number input.
+ */
+export async function changeShopQtyDirect(id) {
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+  const el = g(`shop-qty-${id}`);
+  const v = Math.max(1, parseInt(el?.value, 10) || 1);
+  if (v === (item.qty || 1)) return; // No change — skip the write
+  await svShopItem({ ...item, qty: v });
 }
 
 // ── DRAG-AND-DROP IMAGE UPLOAD ────────────────────────────────────────────────

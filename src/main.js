@@ -44,11 +44,11 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvExpiry, clearInvExpiry, changeInvNote } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -158,11 +158,17 @@ window.adjUnit = adjUnit;             // Save unit of measure change from adjust
 window.adjLowThresh = adjLowThresh;   // Adjust restock threshold by +/- 1
 window.adjLowThreshD = adjLowThreshD; // Handle direct input of restock threshold
 window.adjDoNotRestock = adjDoNotRestock; // Toggle "don't add to Running Low" in adjust overlay
-// Detail sheet handlers for unit, restock threshold, and doNotRestock
+// Detail sheet handlers — all fields are now editable directly on the detail sheet
 window.changeInvUnit = changeInvUnit;                 // Change unit from inventory detail sheet
 window.changeInvThreshold = changeInvThreshold;       // Adjust restock threshold from detail sheet
 window.changeInvThresholdDirect = changeInvThresholdDirect; // Direct input of threshold from detail sheet
 window.toggleDoNotRestock = toggleDoNotRestock;       // Toggle doNotRestock from detail sheet
+window.changeInvLocation = changeInvLocation;         // Change storage location from detail sheet
+window.changeInvQty = changeInvQty;                   // Adjust quantity +/- from detail sheet stepper
+window.changeInvQtyDirect = changeInvQtyDirect;       // Direct input of quantity from detail sheet
+window.changeInvExpiry = changeInvExpiry;              // Save expiry date from detail sheet date picker
+window.clearInvExpiry = clearInvExpiry;                // Clear expiry date (set to "no expiry")
+window.changeInvNote = changeInvNote;                  // Save notes from detail sheet textarea
 // Inventory add-to-pantry bottom sheet (mirrors shopping add-item sheet)
 window.openInvAddSheet = openInvAddSheet;     // Open the add-to-pantry bottom sheet
 window.closeInvAddSheet = closeInvAddSheet;   // Close the add-to-pantry bottom sheet
@@ -211,6 +217,8 @@ window.pickInlineResult = pickInlineResult;   // Pick a product from the inline 
 window.openItemDetail = openItemDetail;       // Open product detail bottom sheet for a shopping item
 window.closeItemDetail = closeItemDetail;     // Close product detail bottom sheet
 window.changeShopUnit = changeShopUnit;       // Change unit of measure for a shopping item
+window.changeShopQty = changeShopQty;         // Adjust shopping item quantity from detail sheet stepper
+window.changeShopQtyDirect = changeShopQtyDirect; // Direct input of quantity from detail sheet stepper
 window.deleteItemImage = deleteItemImage;     // Remove product image from a shopping item (keeps other fields)
 window.triggerProductPhotoUpload = triggerProductPhotoUpload; // Open file picker to upload a custom product photo
 window.handleProductPhotoSelected = handleProductPhotoSelected; // Process the selected product photo file
