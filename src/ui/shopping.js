@@ -22,10 +22,12 @@ import { wDates } from '../helpers.js'; // wDates = returns array of Date object
 // To re-enable: uncomment these blocks and restore image display logic.
 // import { uploadProductImage, normalizeProductName } from '../storage.js'; // Upload custom product photos to Firebase Storage, normalizeProductName for customProducts collection keys
 
-// ── PRODUCT LOCATION PREFERENCES ─────────────────────────────────────────────
-// Remembers where a user stores each product (e.g. eggs → fridge) so next time
-// that product is added, the correct location is auto-selected.
+// ── PRODUCT PREFERENCES (LOCATION + UNIT) ───────────────────────────────────
+// Remembers per-product preferences so they auto-populate next time:
+//   - preferredLocation: where the user stores this product (fridge/freezer/pantry/household)
+//   - preferredUnit: which unit of measure the user last chose (e.g. "Carton" for eggs)
 // Stored in Firestore at households/{hid}/productPreferences/{normalizedName}.
+// Both Shopping and Supplies tabs share one preference doc — last write wins.
 
 /**
  * _normalizeForPref(name) — Normalizes a product name for use as a Firestore
@@ -38,33 +40,76 @@ export function _normalizeForPref(name) {
 }
 
 /**
- * _getPreferredLocation(name) — Looks up the saved preferred storage location
- * for a product. Returns the location string ("fridge", "freezer", "pantry",
- * "household") or null if no preference is saved.
+ * _getProductPreference(name) — Fetches the full product preference doc from Firestore.
+ * Returns { preferredLocation, preferredUnit, ... } or null if no preference exists.
  */
-export async function _getPreferredLocation(name) {
+export async function _getProductPreference(name) {
   if (!state.hid || !name) return null;
   const key = _normalizeForPref(name);
   if (!key) return null;
   try {
-    const doc = await dbGet(`households/${state.hid}/productPreferences/${key}`);
-    return doc?.preferredLocation || null;
+    return await dbGet(`households/${state.hid}/productPreferences/${key}`) || null;
   } catch { return null; }
 }
 
 /**
- * _savePreferredLocation(name, location) — Saves the user's preferred storage
- * location for a product. Fire-and-forget — errors logged but don't block UI.
+ * _getPreferredLocation(name) — Convenience wrapper: returns just the saved
+ * location string ("fridge", "freezer", etc.) or null.
  */
-export function _savePreferredLocation(name, location) {
-  if (!state.hid || !name || !location) return;
+export async function _getPreferredLocation(name) {
+  const pref = await _getProductPreference(name);
+  return pref?.preferredLocation || null;
+}
+
+/**
+ * _getPreferredUnit(name) — Convenience wrapper: returns just the saved
+ * unit string (e.g. "Carton", "Dozen") or null.
+ */
+export async function _getPreferredUnit(name) {
+  const pref = await _getProductPreference(name);
+  return pref?.preferredUnit || null;
+}
+
+/**
+ * _saveProductPreference(name, fields) — Merges fields into the product preference doc.
+ * Accepts any subset of { preferredLocation, preferredUnit }.
+ * Reads existing doc first so we don't overwrite the other field.
+ * Fire-and-forget — errors logged but don't block UI.
+ */
+export async function _saveProductPreference(name, fields) {
+  if (!state.hid || !name) return;
   const key = _normalizeForPref(name);
   if (!key) return;
-  dbSet(`households/${state.hid}/productPreferences/${key}`, {
-    preferredLocation: location,
-    productName: name.trim(),
-    updatedAt: new Date().toISOString()
-  }).catch(e => console.warn("Failed to save product preference:", e));
+  try {
+    // Read existing preference so we merge rather than overwrite
+    const existing = await dbGet(`households/${state.hid}/productPreferences/${key}`) || {};
+    dbSet(`households/${state.hid}/productPreferences/${key}`, {
+      ...existing,
+      ...fields,
+      productName: name.trim(),
+      updatedAt: new Date().toISOString()
+    }).catch(e => console.warn("Failed to save product preference:", e));
+  } catch (e) {
+    console.warn("Failed to read product preference for merge:", e);
+  }
+}
+
+/**
+ * _savePreferredLocation(name, location) — Convenience wrapper: saves just
+ * the location preference, preserving any existing unit preference.
+ */
+export function _savePreferredLocation(name, location) {
+  if (!location) return;
+  _saveProductPreference(name, { preferredLocation: location });
+}
+
+/**
+ * _savePreferredUnit(name, unit) — Convenience wrapper: saves just
+ * the unit preference, preserving any existing location preference.
+ */
+export function _savePreferredUnit(name, unit) {
+  if (!unit) return;
+  _saveProductPreference(name, { preferredUnit: unit });
 }
 
 // ── VOICE INPUT (Web Speech API) ─────────────────────────────────────────────
@@ -1276,12 +1321,15 @@ export function closeItemDetail() {
 
 /**
  * changeShopUnit(id, unit) — Updates the unit of measure for a shopping item.
- * Saves to Firestore and refreshes the detail sheet to reflect the change.
+ * Saves to Firestore, persists the unit as a product preference for next time,
+ * and refreshes the detail sheet to reflect the change.
  */
 export async function changeShopUnit(id, unit) {
   const item = state.shop.find(i => i.id === id);
   if (!item) return;
   await svShopItem({ ...item, unit });
+  // Remember this unit choice so it auto-populates next time this product is added
+  _savePreferredUnit(item.name, unit);
   openItemDetail(id); // refresh sheet
 }
 
@@ -1766,6 +1814,8 @@ export function shareList() {
 // Cached preferred locations for the current Add to Kitchen session.
 // Populated by openAddToKitchen() so the template can read them synchronously.
 let _atkPreferredLocations = {};
+/** Cached unit preferences for the Add To Kitchen flow — avoids extra Firestore reads */
+let _atkPreferredUnits = {};
 
 /**
  * openAddToKitchen() — Opens the "Add to Kitchen" overlay modal.
@@ -1779,11 +1829,14 @@ export async function openAddToKitchen() {
   const checked = state.shop.filter(i => i.checked);
   if (!checked.length) { showNotif("No completed items!"); return; }
 
-  // Load saved product location preferences for all checked items
+  // Load saved product preferences (location + unit) for all checked items in one pass
   _atkPreferredLocations = {};
+  _atkPreferredUnits = {};
   for (const item of checked) {
-    const pref = await _getPreferredLocation(item.name);
-    if (pref) _atkPreferredLocations[item.name.toLowerCase()] = pref;
+    const pref = await _getProductPreference(item.name);
+    const key = item.name.toLowerCase();
+    if (pref?.preferredLocation) _atkPreferredLocations[key] = pref.preferredLocation;
+    if (pref?.preferredUnit) _atkPreferredUnits[key] = pref.preferredUnit;
   }
   const body = g("atk-body"); // "atk" = Add To Kitchen
   body.innerHTML = `<div style="padding:16px">
@@ -1847,7 +1900,8 @@ export async function confirmAddToKitchen() {
       id: existing ? existing.id : "inv-" + Date.now() + "-" + Math.random().toString(36).slice(2),
       name: existing ? existing.name : item.name,
       qty: existing ? (existing.qty + shopQty) : shopQty, // Add shopping qty to existing kitchen qty
-      unit: existing ? existing.unit : "unit",
+      // Use existing inventory unit, else shopping item's unit if set, else saved preference, else default
+      unit: existing ? existing.unit : (item.unit && item.unit !== "unit" ? item.unit : (_atkPreferredUnits[item.name.toLowerCase()] || "unit")),
       location: loc,
       category: existing ? existing.category : gcat({ name: item.name }), // gcat guesses category from name
       addedAt: existing ? existing.addedAt : today,  // Preserve original add date for existing items

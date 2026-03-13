@@ -20,7 +20,7 @@ import { updExport, _defaultThreshold } from './home.js';
 // searchAndEnrich — searches product databases for text matches and shows enrichment picker
 // scoreSearchResult — relevance scoring for search results
 // _savePreferredLocation / _getPreferredLocation — remember where user stores each product
-import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferredLocation } from './shopping.js';
+import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferredLocation, _savePreferredUnit, _getPreferredUnit, _getProductPreference } from './shopping.js';
 // [IMAGES DISABLED] — Product images commented out pending decision.
 // See session notes: images caused false positives from external databases,
 // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
@@ -695,7 +695,8 @@ export async function adjDoNotRestock() {
 
 /**
  * changeInvUnit(id, unit) — Updates the unit of measure for an inventory item.
- * Also recalculates the restock threshold if the user hasn't set a custom one.
+ * Saves the unit as a product preference for next time, and recalculates
+ * the restock threshold if the user hasn't set a custom one.
  */
 export async function changeInvUnit(id, unit) {
   const item = state.inv.find(i => i.id === id);
@@ -706,6 +707,8 @@ export async function changeInvUnit(id, unit) {
     // Don't persist restockThreshold — let it stay null so smart default applies
   }
   await svi(updated);
+  // Remember this unit choice so it auto-populates next time this product is added
+  _savePreferredUnit(item.name, unit);
   openInvItemDetail(id); // refresh the sheet to show updated data
 }
 
@@ -973,16 +976,17 @@ export async function qaddInv() {
   const noteInp = g("invAddNoteInp");
   const note = noteInp ? noteInp.value.trim() : "";
 
-  // Check for a saved product location preference
-  const prefLoc = await _getPreferredLocation(name);
-  const loc = prefLoc || _invAddLocation;
+  // Check for saved product preferences (location + unit) in a single Firestore read
+  const pref = await _getProductPreference(name);
+  const loc = pref?.preferredLocation || _invAddLocation;
+  const prefUnit = pref?.preferredUnit || null;
 
   // Generate a unique ID for the new inventory item
   const id = "itm-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
 
-  // Save the item to inventory with the preferred/selected location
+  // Save the item to inventory with preferred location and unit (if saved)
   const item = {
-    id, barcode: id, name, brand: "", unit: "unit", qty,
+    id, barcode: id, name, brand: "", unit: prefUnit || "unit", qty,
     location: loc, category: gcat({ name }),
     image: null, source: "Manual",
     expiry: null, addedAt: new Date().toLocaleDateString()
@@ -1224,8 +1228,9 @@ async function _runInvSearch(query) {
  * pickInvInlineResult(index) — Called when the user taps a product in the
  * inventory search dropdown. Creates a new inventory item enriched with
  * the product's rich data (name, brand, image, category).
+ * Also applies saved unit preference if one exists.
  */
-export function pickInvInlineResult(index) {
+export async function pickInvInlineResult(index) {
   if (!_invInlineResults || !_invInlineResults[index]) return;
   const product = _invInlineResults[index];
 
@@ -1233,16 +1238,19 @@ export function pickInvInlineResult(index) {
   const noteInp = g("invAddNoteInp");
   const note = noteInp ? noteInp.value.trim() : "";
 
+  // Check for saved product preferences (location + unit) in a single read
+  const pref = await _getProductPreference(product.name);
+
   // Generate a unique ID
   const id = "itm-" + (product.name || "item").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
 
-  // Save the enriched item to inventory
+  // Save the enriched item to inventory, applying saved unit preference if available
   const item = {
     id, barcode: id,
     name: product.name,
     brand: product.brand || "",
-    unit: "unit", qty: 1,
-    location: _invAddLocation,
+    unit: pref?.preferredUnit || "unit", qty: 1,
+    location: pref?.preferredLocation || _invAddLocation,
     category: product.category || gcat({ name: product.name }),
     // [IMAGES DISABLED] — product image field commented out
     // image: product.image || null,
@@ -1344,7 +1352,7 @@ export function toggleInvVoice() {
   };
 
   // When recognition ends, commit the item to inventory
-  _invRecognition.onend = () => {
+  _invRecognition.onend = async () => {
     _invListening = false;
     _setInvMicUI(false);
     _invRecognition = null;
@@ -1359,11 +1367,14 @@ export function toggleInvVoice() {
 
     if (!text) return;
 
-    // Add to inventory with a guessed storage location
+    // Check for saved product preferences (location + unit) in a single read
+    const pref = await _getProductPreference(text);
+
+    // Add to inventory with preferred or guessed storage location and unit
     const id = "itm-" + text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
-    const loc = guessLocation(text);
+    const loc = pref?.preferredLocation || guessLocation(text);
     svi({
-      id, barcode: id, name: text, brand: "", unit: "unit", qty: 1,
+      id, barcode: id, name: text, brand: "", unit: pref?.preferredUnit || "unit", qty: 1,
       location: loc, category: gcat({ name: text }),
       image: null, source: "Voice",
       expiry: null, addedAt: new Date().toLocaleDateString()
