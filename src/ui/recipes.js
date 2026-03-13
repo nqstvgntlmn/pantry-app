@@ -13,7 +13,7 @@
 //   eid       = edit-target ID    cfg = user config/preferences
 
 import { state } from '../state.js';
-import { svr, dlr, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen } from '../db.js';
+import { svr, dlr, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview } from '../db.js';
 import { g, fmtR, showNotif, showOv, hideOv, renderStars } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
 // g = getElementById shorthand, fmtR = format AI response text to HTML,
@@ -646,12 +646,42 @@ export async function togglePublic(id) {
 }
 
 // ── COMMUNITY TAB ────────────────────────────────────────────────────────────
-// The community tab lets users browse all public recipes, search/filter
-// by cuisine or tags, save recipes to their kitchen, like, and comment.
+// The community tab lets users browse all public recipes with rich filtering,
+// search, pagination (infinite scroll), star ratings, and full detail views.
+
+// IntersectionObserver reference for infinite scroll cleanup
+let _comScrollObs = null;
+
+/**
+ * _parseMinutes — extracts the total minutes from a time string like "30 min",
+ * "1 hour", "1 hr 15 min". Returns 0 if unparseable. Used for cook time filtering.
+ */
+function _parseMinutes(str) {
+  if (!str) return 0;
+  const s = str.toLowerCase();
+  let mins = 0;
+  const hMatch = s.match(/(\d+)\s*(?:hr|hour)/);
+  const mMatch = s.match(/(\d+)\s*min/);
+  if (hMatch) mins += parseInt(hMatch[1]) * 60;
+  if (mMatch) mins += parseInt(mMatch[1]);
+  return mins;
+}
+
+/**
+ * _starDisplay — renders a compact star display string for a given rating.
+ * Returns filled/empty star characters, e.g. "★★★★☆" for 4.0.
+ */
+function _starDisplay(avg, count) {
+  const rounded = Math.round(avg || 0);
+  const stars = Array.from({ length: 5 }, (_, i) => i < rounded ? "★" : "☆").join("");
+  const label = count ? `(${count})` : "";
+  return `<span style="color:var(--ac);font-size:.74rem;letter-spacing:1px">${stars}</span><span style="font-size:.68rem;color:var(--mt);margin-left:3px">${label}</span>`;
+}
 
 /**
  * loadCommunity — fetches all public recipes and renders the community feed.
  * Called when the user taps the "Community" tab on the Recipes screen.
+ * Resets pagination to page 0 on each fresh load.
  */
 export async function loadCommunity() {
   const c = g("rbody");
@@ -659,6 +689,7 @@ export async function loadCommunity() {
 
   // Show loading state
   c.innerHTML = `<div class="es"><div class="ei">🌍</div><p>Loading community recipes…</p></div>`;
+  state.comPage = 0; // reset pagination on fresh load
 
   try {
     state.comRecs = await listPublicRecipes();
@@ -670,146 +701,427 @@ export async function loadCommunity() {
 }
 
 /**
- * setComCuisine — updates the cuisine filter for the community tab and re-renders.
+ * setComCuisine — updates the cuisine filter and resets pagination.
  */
 export function setComCuisine(val) {
   state.comCuisine = val;
+  state.comPage = 0;
   renderCommunity();
 }
 
 /**
- * setComSearch — updates the search text for the community tab and re-renders.
+ * setComSearch — updates the search text and resets pagination.
  */
 export function setComSearch(val) {
   state.comSearch = val;
+  state.comPage = 0;
   renderCommunity();
 }
 
 /**
- * renderCommunity — renders the community recipe feed into the rbody container.
- * Applies cuisine and text search filters from state.
+ * setComSort — updates the sort order (newest, popular, rated) and re-renders.
+ */
+export function setComSort(val) {
+  state.comSort = val;
+  state.comPage = 0;
+  renderCommunity();
+}
+
+/**
+ * toggleComTag — toggles a tag in the community filter and re-renders.
+ * If the tag is already selected, removes it; otherwise adds it.
+ */
+export function toggleComTag(tag) {
+  const idx = state.comTags.indexOf(tag);
+  if (idx >= 0) state.comTags.splice(idx, 1);
+  else state.comTags.push(tag);
+  state.comPage = 0;
+  renderCommunity();
+}
+
+/**
+ * setComTime — sets the cook time filter ("any", "under30", "30to60", "over60").
+ */
+export function setComTime(val) {
+  state.comTime = val;
+  state.comPage = 0;
+  renderCommunity();
+}
+
+/**
+ * setComMinRating — sets the minimum avg rating filter (0, 3, or 4).
+ */
+export function setComMinRating(val) {
+  state.comMinRating = parseInt(val) || 0;
+  state.comPage = 0;
+  renderCommunity();
+}
+
+/**
+ * renderCommunity — renders the full community recipe feed into rbody.
+ * Applies all active filters (cuisine, search, tags, cook time, rating),
+ * sorts by the selected order, and paginates with infinite scroll (20 per page).
  */
 export function renderCommunity() {
   const c = g("rbody");
   if (!c) return;
 
+  // Clean up any previous infinite scroll observer
+  if (_comScrollObs) { _comScrollObs.disconnect(); _comScrollObs = null; }
+
   let recs = [...state.comRecs];
 
-  // Apply cuisine filter if not "all"
+  // ── Apply filters ──
+
+  // Cuisine filter
   if (state.comCuisine && state.comCuisine !== "all") {
-    recs = recs.filter(r => (r.cuisine || "").toLowerCase().includes(state.comCuisine.toLowerCase()) || (r.tags || []).some(t => t.toLowerCase().includes(state.comCuisine.toLowerCase())));
+    recs = recs.filter(r =>
+      (r.cuisine || "").toLowerCase().includes(state.comCuisine.toLowerCase()) ||
+      (r.tags || []).some(t => t.toLowerCase().includes(state.comCuisine.toLowerCase()))
+    );
   }
 
-  // Apply text search filter
+  // Text search filter — matches title, tags, cuisine, and author username/name
   if (state.comSearch) {
     const q = state.comSearch.toLowerCase();
-    recs = recs.filter(r => (r.title || "").toLowerCase().includes(q) || (r.tags || []).join(" ").toLowerCase().includes(q) || (r.cuisine || "").toLowerCase().includes(q) || (r.authorName || "").toLowerCase().includes(q));
+    recs = recs.filter(r =>
+      (r.title || "").toLowerCase().includes(q) ||
+      (r.tags || []).join(" ").toLowerCase().includes(q) ||
+      (r.cuisine || "").toLowerCase().includes(q) ||
+      (r.authorUsername || "").toLowerCase().includes(q) ||
+      (r.authorName || "").toLowerCase().includes(q)
+    );
   }
 
-  // Sort by newest first
-  recs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  // Tag filter — recipe must have ALL selected tags
+  if (state.comTags.length) {
+    recs = recs.filter(r => state.comTags.every(t => (r.tags || []).includes(t)));
+  }
+
+  // Cook time filter
+  if (state.comTime && state.comTime !== "any") {
+    recs = recs.filter(r => {
+      const mins = _parseMinutes(r.cookTime || r.totalTime);
+      if (!mins) return false; // skip recipes without cook time data
+      if (state.comTime === "under30") return mins <= 30;
+      if (state.comTime === "30to60") return mins > 30 && mins <= 60;
+      if (state.comTime === "over60") return mins > 60;
+      return true;
+    });
+  }
+
+  // Minimum rating filter
+  if (state.comMinRating > 0) {
+    recs = recs.filter(r => (r.avgRating || 0) >= state.comMinRating);
+  }
+
+  // ── Sort ──
+  if (state.comSort === "popular") {
+    recs.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+  } else if (state.comSort === "rated") {
+    recs.sort((a, b) => (b.avgRating || 0) - (a.avgRating || 0));
+  } else {
+    // Default: newest first
+    recs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  }
+
+  // ── Pagination — show 20 per page ──
+  const pageSize = 20;
+  const visible = recs.slice(0, (state.comPage + 1) * pageSize);
+  const hasMore = visible.length < recs.length;
 
   // Update subtitle count
   const rsub = g("rsub");
   if (rsub) rsub.textContent = recs.length + " community recipe" + (recs.length !== 1 ? "s" : "");
 
-  // Build search/filter bar
+  // ── Build the filter panel ──
+  const cuisines = [
+    ["all", "All Cuisines"], ["turkish", "Turkish"], ["mediterranean", "Mediterranean"],
+    ["italian", "Italian"], ["mexican", "Mexican"], ["asian", "Asian"],
+    ["american", "American"], ["indian", "Indian"], ["bangladeshi", "Bangladeshi"],
+    ["japanese", "Japanese"], ["thai", "Thai"], ["french", "French"],
+    ["korean", "Korean"], ["middle eastern", "Middle Eastern"]
+  ];
+  const cuisineOpts = cuisines.map(([v, l]) =>
+    `<option value="${v}"${state.comCuisine === v ? " selected" : ""}>${l}</option>`
+  ).join("");
+
+  // Tag filter pills — highlight selected tags
+  const tagList = ["Quick", "Healthy", "Kid-Friendly", "Date Night", "Batch Cook", "Under 30 min"];
+  const tagPills = tagList.map(t => {
+    const sel = state.comTags.includes(t);
+    return `<div class="com-tag${sel ? " com-tag-sel" : ""}" onclick="toggleComTag('${t}')" style="cursor:pointer;${sel ? "background:var(--ac);color:#fff;border-color:var(--ac)" : ""}">${t}</div>`;
+  }).join("");
+
   let html = `<div style="margin-bottom:14px">
-    <input class="fi" id="com-search" placeholder="Search recipes, tags, authors…" value="${state.comSearch}" oninput="setComSearch(this.value)" style="margin-bottom:8px"/>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <select class="fsel" id="com-cuisine" onchange="setComCuisine(this.value)" style="flex:1;font-size:.8rem;padding:8px 10px">
-        <option value="all"${state.comCuisine === "all" ? " selected" : ""}>All Cuisines</option>
-        <option value="mediterranean"${state.comCuisine === "mediterranean" ? " selected" : ""}>Mediterranean</option>
-        <option value="asian"${state.comCuisine === "asian" ? " selected" : ""}>Asian</option>
-        <option value="american"${state.comCuisine === "american" ? " selected" : ""}>American</option>
-        <option value="turkish"${state.comCuisine === "turkish" ? " selected" : ""}>Turkish</option>
-        <option value="indian"${state.comCuisine === "indian" ? " selected" : ""}>Indian</option>
-        <option value="mexican"${state.comCuisine === "mexican" ? " selected" : ""}>Mexican</option>
-        <option value="italian"${state.comCuisine === "italian" ? " selected" : ""}>Italian</option>
+    <input class="fi" id="com-search" placeholder="Search recipes, tags, authors…" value="${state.comSearch.replace(/"/g, "&quot;")}" oninput="setComSearch(this.value)" style="margin-bottom:10px"/>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <select class="fsel" onchange="setComCuisine(this.value)" style="flex:1;font-size:.78rem;padding:7px 10px">${cuisineOpts}</select>
+      <select class="fsel" onchange="setComTime(this.value)" style="flex:1;font-size:.78rem;padding:7px 10px">
+        <option value="any"${state.comTime === "any" ? " selected" : ""}>Any time</option>
+        <option value="under30"${state.comTime === "under30" ? " selected" : ""}>Under 30 min</option>
+        <option value="30to60"${state.comTime === "30to60" ? " selected" : ""}>30–60 min</option>
+        <option value="over60"${state.comTime === "over60" ? " selected" : ""}>Over 1 hour</option>
       </select>
     </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <select class="fsel" onchange="setComMinRating(this.value)" style="font-size:.78rem;padding:7px 10px;flex:1">
+        <option value="0"${state.comMinRating === 0 ? " selected" : ""}>Any rating</option>
+        <option value="3"${state.comMinRating === 3 ? " selected" : ""}>3+ stars</option>
+        <option value="4"${state.comMinRating === 4 ? " selected" : ""}>4+ stars</option>
+      </select>
+      <select class="fsel" onchange="setComSort(this.value)" style="font-size:.78rem;padding:7px 10px;flex:1">
+        <option value="newest"${state.comSort === "newest" ? " selected" : ""}>Newest</option>
+        <option value="popular"${state.comSort === "popular" ? " selected" : ""}>Most popular</option>
+        <option value="rated"${state.comSort === "rated" ? " selected" : ""}>Highest rated</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">${tagPills}</div>
   </div>`;
 
+  // ── Empty state ──
   if (!recs.length) {
-    html += `<div class="es"><div class="ei">🌍</div><p>${state.comSearch || state.comCuisine !== "all" ? "No recipes match your filters." : "No community recipes yet. Be the first to share!"}</p></div>`;
+    const hasFilters = state.comSearch || state.comCuisine !== "all" || state.comTags.length || state.comTime !== "any" || state.comMinRating > 0;
+    html += `<div class="es"><div class="ei">🌍</div><p>${hasFilters ? "No recipes match your filters." : "No community recipes yet. Be the first to share!"}</p></div>`;
     c.innerHTML = html;
     return;
   }
 
-  // Render each public recipe card
-  recs.forEach(r => {
-    const tagsHtml = (r.tags || []).map(t => `<span class="com-tag">${t}</span>`).join("");
-    const date = r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "";
+  // ── Render recipe cards ──
+  visible.forEach(r => {
+    const tagsHtml = (r.tags || []).slice(0, 3).map(t => `<span class="com-tag">${t}</span>`).join("");
+    const author = r.authorUsername ? `@${r.authorUsername}` : (r.authorName || "Anonymous");
+    const timeStr = r.cookTime || r.totalTime || "";
+
+    // Cover image (if available)
+    const coverHtml = r.imageUrl
+      ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;height:160px"><img src="${r.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
+      : "";
 
     html += `<div class="rcd com-rcd" onclick="openComRecipe('${r.id}')">
+      ${coverHtml}
       <div class="rrow">
-        <div class="rnm">${r.title || "Untitled"}</div>
+        <div class="rnm" style="flex:1">${r.title || "Untitled"}</div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
           <span style="font-size:.78rem;color:var(--rd)">❤️ ${r.likes || 0}</span>
         </div>
       </div>
-      ${r.cuisine ? `<div style="font-size:.72rem;color:var(--ac);font-weight:600;margin-top:4px">${r.cuisine}</div>` : ""}
-      ${r.ingredients ? `<div class="rnot" style="color:var(--tx2);margin-top:6px">${(r.ingredients || "").substring(0, 100)}${(r.ingredients || "").length > 100 ? "…" : ""}</div>` : ""}
+      <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+        ${r.cuisine ? `<span style="font-size:.72rem;color:var(--ac);font-weight:600">${r.cuisine}</span>` : ""}
+        ${(r.avgRating || r.ratingCount) ? `<span>${_starDisplay(r.avgRating, r.ratingCount)}</span>` : ""}
+        ${timeStr ? `<span style="font-size:.7rem;color:var(--mt)">⏱ ${timeStr}</span>` : ""}
+      </div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:4px">
         <div style="display:flex;gap:4px;flex-wrap:wrap">${tagsHtml}</div>
-        <div style="font-size:.7rem;color:var(--mt)">by ${r.authorName || "Anonymous"} · ${date}</div>
+        <div style="font-size:.7rem;color:var(--mt)">by ${author}</div>
       </div>
     </div>`;
   });
 
+  // Infinite scroll sentinel — observed to load more when visible
+  if (hasMore) {
+    html += `<div id="com-scroll-sentinel" style="height:60px;display:flex;align-items:center;justify-content:center;color:var(--mt);font-size:.82rem">Loading more…</div>`;
+  }
+
   c.innerHTML = html;
+
+  // Set up IntersectionObserver for infinite scroll pagination
+  if (hasMore) {
+    const sentinel = g("com-scroll-sentinel");
+    if (sentinel) {
+      _comScrollObs = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+          state.comPage++;
+          _appendComPage(recs, c);
+        }
+      }, { rootMargin: "200px" });
+      _comScrollObs.observe(sentinel);
+    }
+  }
 }
 
 /**
- * openComRecipe — opens a detail overlay for a community recipe.
- * Shows full recipe content, like/save/comment actions.
+ * _appendComPage — appends the next page of community recipe cards.
+ * Called by the IntersectionObserver when the user scrolls to the bottom.
+ * Avoids a full re-render by inserting new cards before the sentinel.
+ */
+function _appendComPage(allRecs, container) {
+  const pageSize = 20;
+  const start = state.comPage * pageSize;
+  const end = start + pageSize;
+  const pageRecs = allRecs.slice(start, end);
+  const hasMore = end < allRecs.length;
+
+  let html = "";
+  pageRecs.forEach(r => {
+    const tagsHtml = (r.tags || []).slice(0, 3).map(t => `<span class="com-tag">${t}</span>`).join("");
+    const author = r.authorUsername ? `@${r.authorUsername}` : (r.authorName || "Anonymous");
+    const timeStr = r.cookTime || r.totalTime || "";
+    const coverHtml = r.imageUrl
+      ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;height:160px"><img src="${r.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
+      : "";
+
+    html += `<div class="rcd com-rcd" onclick="openComRecipe('${r.id}')">
+      ${coverHtml}
+      <div class="rrow">
+        <div class="rnm" style="flex:1">${r.title || "Untitled"}</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <span style="font-size:.78rem;color:var(--rd)">❤️ ${r.likes || 0}</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+        ${r.cuisine ? `<span style="font-size:.72rem;color:var(--ac);font-weight:600">${r.cuisine}</span>` : ""}
+        ${(r.avgRating || r.ratingCount) ? `<span>${_starDisplay(r.avgRating, r.ratingCount)}</span>` : ""}
+        ${timeStr ? `<span style="font-size:.7rem;color:var(--mt)">⏱ ${timeStr}</span>` : ""}
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:4px">
+        <div style="display:flex;gap:4px;flex-wrap:wrap">${tagsHtml}</div>
+        <div style="font-size:.7rem;color:var(--mt)">by ${author}</div>
+      </div>
+    </div>`;
+  });
+
+  // Remove the old sentinel, insert new cards, then add new sentinel if more exist
+  const sentinel = g("com-scroll-sentinel");
+  if (sentinel) sentinel.remove();
+  if (_comScrollObs) { _comScrollObs.disconnect(); _comScrollObs = null; }
+
+  container.insertAdjacentHTML("beforeend", html);
+
+  if (hasMore) {
+    container.insertAdjacentHTML("beforeend",
+      `<div id="com-scroll-sentinel" style="height:60px;display:flex;align-items:center;justify-content:center;color:var(--mt);font-size:.82rem">Loading more…</div>`
+    );
+    const newSentinel = g("com-scroll-sentinel");
+    if (newSentinel) {
+      _comScrollObs = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+          state.comPage++;
+          _appendComPage(allRecs, container);
+        }
+      }, { rootMargin: "200px" });
+      _comScrollObs.observe(newSentinel);
+    }
+  }
+}
+
+/**
+ * openComRecipe — opens a full detail view for a community recipe.
+ * Shows cover photo, metadata (prep/cook time, servings), structured
+ * ingredients and steps, star rating, like/save/comment actions, and
+ * publish/unpublish button for the recipe author.
  */
 export async function openComRecipe(id) {
   const r = state.comRecs.find(x => x.id === id);
   if (!r) return;
 
-  // Check if current user has liked this recipe
-  const liked = await checkMyLike(id);
-  if (liked) state.myLikes.add(id); else state.myLikes.delete(id);
+  // Fetch like status, comments, and user's review in parallel
+  const uid = getCurrentUser()?.uid;
+  const [liked, comments, myReview] = await Promise.all([
+    checkMyLike(id),
+    listComments(id).catch(() => []),
+    checkMyReview(id),
+  ]);
 
-  // Fetch comments for this recipe
-  let comments = [];
-  try { comments = await listComments(id); } catch { /* empty */ }
+  if (liked) state.myLikes.add(id); else state.myLikes.delete(id);
   comments.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
-  // Build the share link URL
+  // Share link URL
   const shareUrl = `https://pantry-app-zeta-six.vercel.app/recipe/${id}`;
 
-  // Build comments HTML
+  // Cover image
+  const coverImg = r.imageUrl
+    ? `<div style="margin:-16px -16px 16px;overflow:hidden;max-height:240px"><img src="${r.imageUrl}" alt="" style="width:100%;height:240px;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
+    : "";
+
+  // Time and servings metadata bar
+  const meta = [
+    r.prepTime ? `Prep: ${r.prepTime}` : "",
+    r.cookTime ? `Cook: ${r.cookTime}` : "",
+    r.totalTime ? `Total: ${r.totalTime}` : "",
+    r.servings ? `Serves: ${r.servings}` : "",
+  ].filter(Boolean);
+  const metaHtml = meta.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${meta.map(m => `<span style="font-size:.74rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:4px 10px">${m}</span>`).join("")}</div>` : "";
+
+  // Rating display
+  const ratingHtml = (r.ratingCount || 0) > 0
+    ? `<div style="margin-bottom:6px">${_starDisplay(r.avgRating, r.ratingCount)}</div>`
+    : "";
+
+  // Tags
+  const tagsHtml = (r.tags || []).map(t => `<span class="com-tag">${t}</span>`).join("");
+  const author = r.authorUsername ? `@${r.authorUsername}` : (r.authorName || "Anonymous");
+  const isLiked = state.myLikes.has(id);
+  const isAuthor = uid && uid === r.authorUid;
+
+  // Ingredients — prefer structured ingredientsRaw array, fall back to flat text
+  let ingredientsContent = "";
+  if (r.ingredientsRaw && r.ingredientsRaw.length) {
+    ingredientsContent = `<ul style="margin:0;padding-left:18px;font-size:.88rem;color:var(--tx2);line-height:2">${
+      r.ingredientsRaw.map(ing => `<li>${(typeof ing === "string" ? ing : (ing.amount || "") + " " + (ing.unit || "") + " " + (ing.name || "")).replace(/</g, "&lt;").replace(/>/g, "&gt;").trim()}</li>`).join("")
+    }</ul>`;
+  } else if (r.ingredients) {
+    ingredientsContent = `<div style="font-size:.88rem;color:var(--tx2);line-height:1.7;white-space:pre-wrap">${(r.ingredients || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
+  }
+
+  // Steps — prefer structured stepsRaw array, fall back to flat text
+  let stepsContent = "";
+  if (r.stepsRaw && r.stepsRaw.length) {
+    stepsContent = `<ol style="margin:0;padding-left:22px;font-size:.88rem;color:var(--tx2);line-height:1.8">${
+      r.stepsRaw.map(s => `<li style="margin-bottom:8px">${(typeof s === "string" ? s : s.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</li>`).join("")
+    }</ol>`;
+  } else if (r.steps) {
+    stepsContent = `<div style="font-size:.88rem;color:var(--tx2);line-height:1.7;white-space:pre-wrap">${(r.steps || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
+  }
+
+  // Comments HTML
   let commentsHtml = comments.map(c => `<div style="padding:10px 0;border-bottom:1px solid var(--b1)">
     <div style="display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:.78rem;font-weight:600">${c.authorName || "Anonymous"}</span>
+      <span style="font-size:.78rem;font-weight:600">${(c.authorUsername ? "@" + c.authorUsername : c.authorName) || "Anonymous"}</span>
       <span style="font-size:.68rem;color:var(--mt)">${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ""}</span>
     </div>
     <div style="font-size:.84rem;color:var(--tx2);margin-top:4px;line-height:1.5">${(c.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
   </div>`).join("");
 
-  const tagsHtml = (r.tags || []).map(t => `<span class="com-tag">${t}</span>`).join("");
-  const isLiked = state.myLikes.has(id);
+  // Star rating input for the current user's review
+  const myRating = myReview?.rating || 0;
+  const reviewStars = Array.from({ length: 5 }, (_, i) =>
+    `<span class="star${i < myRating ? " on" : ""}" onclick="submitComReview('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < myRating ? "★" : "☆"}</span>`
+  ).join("");
+
+  // Publish/unpublish button (only for the recipe author)
+  const publishBtn = isAuthor
+    ? `<button class="btn bd bsm" onclick="unpublishComRecipe('${id}')" style="margin-top:12px;width:100%">🚫 Unpublish this recipe</button>`
+    : "";
 
   g("erecbody").innerHTML = `
+    ${coverImg}
     <div style="margin-bottom:14px">
       <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:300;line-height:1.3;margin-bottom:6px">${r.title || "Untitled"}</div>
       ${r.cuisine ? `<div style="font-size:.78rem;color:var(--ac);font-weight:600;margin-bottom:6px">${r.cuisine}</div>` : ""}
-      <div style="font-size:.76rem;color:var(--mt)">by ${r.authorName || "Anonymous"} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}</div>
+      ${ratingHtml}
+      <div style="font-size:.76rem;color:var(--mt)">by ${author} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}</div>
       ${tagsHtml ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px">${tagsHtml}</div>` : ""}
     </div>
+
+    ${metaHtml}
 
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <button class="btn ${isLiked ? "bp" : "bs"} bsm" onclick="likeComRecipe('${id}')" id="com-like-btn">
         ${isLiked ? "❤️" : "🤍"} ${r.likes || 0} Like${(r.likes || 0) !== 1 ? "s" : ""}
       </button>
-      <button class="btn bs bsm" style="flex:1" onclick="saveComToKitchen('${id}')">📖 Save to my kitchen</button>
+      <button class="btn bs bsm" style="flex:1" onclick="saveComToKitchen('${id}')">📖 Save to my recipes</button>
       <button class="btn bs bsm" onclick="shareComRecipe('${id}')">📤 Share</button>
     </div>
 
-    ${r.ingredients ? `<div class="frow"><label class="flbl">Ingredients</label><div style="font-size:.88rem;color:var(--tx2);line-height:1.7;white-space:pre-wrap">${(r.ingredients || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>` : ""}
-    ${r.steps ? `<div class="frow"><label class="flbl">Steps</label><div style="font-size:.88rem;color:var(--tx2);line-height:1.7;white-space:pre-wrap">${(r.steps || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>` : ""}
+    ${ingredientsContent ? `<div class="frow"><label class="flbl">Ingredients</label>${ingredientsContent}</div>` : ""}
+    ${stepsContent ? `<div class="frow"><label class="flbl">Instructions</label>${stepsContent}</div>` : ""}
+
+    <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-top:16px">
+      <div class="flbl" style="margin-bottom:8px">Rate this recipe</div>
+      <div id="com-review-stars" style="display:flex;align-items:center;gap:2px">${reviewStars}</div>
+      ${myReview ? `<div style="font-size:.72rem;color:var(--mt);margin-top:4px">You rated this ${myReview.rating}★</div>` : ""}
+    </div>
 
     <div style="margin-top:16px">
       <div class="flbl" style="margin-bottom:10px">Comments (${comments.length})</div>
@@ -823,9 +1135,66 @@ export async function openComRecipe(id) {
     <div style="margin-top:16px;padding:12px;background:var(--card);border:1px solid var(--b1);border-radius:12px">
       <div style="font-size:.72rem;color:var(--mt);margin-bottom:6px">Share link (viewable without sign-in)</div>
       <div style="font-size:.8rem;color:var(--ac);word-break:break-all;cursor:pointer" onclick="navigator.clipboard.writeText('${shareUrl}');showNotif('Link copied!')">${shareUrl}</div>
-    </div>`;
+    </div>
+
+    ${publishBtn}`;
 
   showOv("erec");
+}
+
+/**
+ * submitComReview — submit a star rating for a community recipe.
+ * Writes/updates the review in Firestore and refreshes the star display.
+ */
+export async function submitComReview(id, rating) {
+  const user = getCurrentUser();
+  if (!user) { showNotif("Sign in to rate recipes"); return; }
+
+  try {
+    await addReview(id, rating, "");
+
+    // Update local cache so re-render reflects new rating
+    const r = state.comRecs.find(x => x.id === id);
+    if (r) {
+      // Optimistic update: re-calculate avg (this is approximate until next full load)
+      r.ratingCount = (r.ratingCount || 0) + 1;
+      r.ratingSum = (r.ratingSum || 0) + rating;
+      r.avgRating = Math.round((r.ratingSum / r.ratingCount) * 10) / 10;
+    }
+
+    // Update the star display in the detail overlay
+    const starsEl = g("com-review-stars");
+    if (starsEl) {
+      starsEl.innerHTML = Array.from({ length: 5 }, (_, i) =>
+        `<span class="star${i < rating ? " on" : ""}" onclick="submitComReview('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < rating ? "★" : "☆"}</span>`
+      ).join("");
+    }
+
+    showNotif(`Rated ${rating}★`);
+  } catch (e) {
+    console.error("submitComReview:", e);
+    showNotif("Couldn't submit rating");
+  }
+}
+
+/**
+ * unpublishComRecipe — unpublishes the current user's recipe from the community.
+ * Only callable by the recipe author. Removes from public_recipes collection.
+ */
+export async function unpublishComRecipe(id) {
+  if (!confirm("Remove this recipe from the community?")) return;
+
+  try {
+    await unpublishRecipe(id);
+    // Remove from local cache and re-render
+    state.comRecs = state.comRecs.filter(r => r.id !== id);
+    showNotif("Recipe unpublished");
+    hideOv("erec");
+    renderCommunity();
+  } catch (e) {
+    console.error("unpublishComRecipe:", e);
+    showNotif("Couldn't unpublish recipe");
+  }
 }
 
 /**
@@ -886,7 +1255,7 @@ export async function saveComToKitchen(id) {
 
 /**
  * addComComment — posts a new comment on a community recipe.
- * Reads the comment input field, persists to Firestore, and re-renders.
+ * Reads the comment input field, persists to Firestore, and appends inline.
  */
 export async function addComComment(id) {
   const user = getCurrentUser();
@@ -911,7 +1280,7 @@ export async function addComComment(id) {
       }
       container.innerHTML += `<div style="padding:10px 0;border-bottom:1px solid var(--b1)">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:.78rem;font-weight:600">${cmt.authorName}</span>
+          <span style="font-size:.78rem;font-weight:600">${state.username ? "@" + state.username : cmt.authorName}</span>
           <span style="font-size:.68rem;color:var(--mt)">${new Date().toLocaleDateString()}</span>
         </div>
         <div style="font-size:.84rem;color:var(--tx2);margin-top:4px;line-height:1.5">${cmt.text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
@@ -926,8 +1295,7 @@ export async function addComComment(id) {
 }
 
 /**
- * shareComRecipe — copies the public share link to the clipboard.
- * Uses the Web Share API on mobile if available, falls back to clipboard.
+ * shareComRecipe — shares a community recipe link via Web Share API or clipboard.
  */
 export async function shareComRecipe(id) {
   const r = state.comRecs.find(x => x.id === id);

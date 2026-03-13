@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-D896gXIW.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CYXZZmcG.css">
+  <script type="module" crossorigin src="/assets/index-B5-O2b2k.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-OJvVAGze.css">
 </head>
 <body>
 
@@ -581,6 +581,16 @@
   <div class="ov" id="ov-settings">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('settings')">←</div><div class="ovttl">Settings</div></div>
     <div class="ovbody">
+      <!-- Profile: public username displayed on community recipes -->
+      <div class="sset"><div class="ssetttl">Profile</div>
+        <div class="frow"><label class="flbl">Username</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="fi" id="setUsername" placeholder="Your public username" maxlength="20" style="flex:1"/>
+            <button class="btn bp bsm" onclick="changeUsername()">Save</button>
+          </div>
+        </div>
+        <div style="font-size:.72rem;color:var(--mt);margin-top:4px;line-height:1.5">Shown publicly on your community recipes (e.g. "Recipe by @BoraK").</div>
+      </div>
       <div class="sset"><div class="ssetttl">Household</div>
         <div class="frow"><label class="flbl">Household Name</label><input class="fi" id="setName" placeholder="e.g. The Bora Family"/></div>
 
@@ -737,6 +747,18 @@
     <div style="font-size:.88rem;color:var(--tx2);margin-bottom:12px" id="schedNm"></div>
     <div class="wgrd" id="schedWk"></div>
     <div class="brow"><button class="btn bs bf" onclick="g('schedM').classList.remove('active')">Cancel</button></div>
+  </div>
+</div>
+
+<!-- USERNAME PROMPT MODAL — shown on first launch if user has no username -->
+<div class="modal" id="usernameM">
+  <div class="minner">
+    <div class="mttl">Choose your username</div>
+    <p style="font-size:.84rem;color:var(--tx2);line-height:1.6;margin-bottom:16px">This will appear publicly on recipes you share with the community.</p>
+    <input class="fi" id="usernameInput" placeholder="e.g. BoraK" maxlength="20" style="margin-bottom:6px" onkeydown="if(event.key==='Enter')saveUsername()"/>
+    <div id="usernameStatus" style="display:none;font-size:.78rem;margin-bottom:10px;line-height:1.4"></div>
+    <div style="font-size:.7rem;color:var(--mt);margin-bottom:14px">3-20 characters. Letters, numbers, and underscores only.</div>
+    <button class="btn bp bf" id="saveUsernameBtn" onclick="saveUsername()">Save</button>
   </div>
 </div>
 

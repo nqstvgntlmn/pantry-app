@@ -18,7 +18,7 @@ import { state, CFG_DEFAULT, J, Js } from './state.js';
 // svi/dli = save/delete inventory item, svr/dlr = save/delete recipe,
 // svShopItem/dlShopItem = save/delete shopping item
 // joinHouseholdByCode: join via invite code, createHousehold/createUserProfile: first-time setup
-import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, pausePoll, resumePoll } from './db.js';
+import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, pausePoll, resumePoll, checkUsernameAvailable, setUsername, loadUsername } from './db.js';
 
 // DOM/UI helpers: g = getElementById shorthand, showNotif = toast notifications,
 // showOv/hideOv = overlay open/close, renderStars = star rating HTML, tk = tracking util
@@ -52,7 +52,7 @@ import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQt
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
-import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe } from './ui/recipes.js';
+import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe } from './ui/recipes.js';
 
 // Insights screen: usage analytics and charts
 import { renderInsights } from './ui/insights.js';
@@ -234,11 +234,17 @@ window.togglePublic = togglePublic;       // Toggle public sharing of a recipe
 window.loadCommunity = loadCommunity;     // Load and show community recipes
 window.setComCuisine = setComCuisine;     // Set cuisine filter for community tab
 window.setComSearch = setComSearch;       // Set search text for community tab
+window.setComSort = setComSort;           // Set sort order for community tab (newest/popular/rated)
+window.toggleComTag = toggleComTag;       // Toggle a tag filter on the community tab
+window.setComTime = setComTime;           // Set cook time filter for community tab
+window.setComMinRating = setComMinRating; // Set minimum rating filter for community tab
 window.openComRecipe = openComRecipe;     // Open a community recipe detail view
 window.likeComRecipe = likeComRecipe;     // Like/unlike a community recipe
 window.saveComToKitchen = saveComToKitchen; // Save a community recipe to user's kitchen
 window.addComComment = addComComment;     // Post a comment on a community recipe
 window.shareComRecipe = shareComRecipe;   // Share a community recipe link
+window.submitComReview = submitComReview; // Submit a star rating review on a community recipe
+window.unpublishComRecipe = unpublishComRecipe; // Unpublish own recipe from community
 
 // ── Chat screen handlers ──
 window.sendChat = sendChat;     // Send a chat message to the AI assistant
@@ -338,6 +344,67 @@ window.finishOnboarding = finishOnboarding; // Complete onboarding and close ove
 window.skipOnboarding = skipOnboarding;     // Skip onboarding entirely
 // getIdToken is exposed on window at the top of this file (after import)
 
+// ── Username handlers ──
+// saveUsername — validates and saves a new username from the username prompt modal.
+// Checks that the username is 3-20 chars, alphanumeric + underscores, and unique.
+window.saveUsername = async function() {
+  const input = g("usernameInput");
+  const status = g("usernameStatus");
+  const btn = g("saveUsernameBtn");
+  const raw = (input?.value || "").trim();
+
+  // Validate format: 3-20 chars, alphanumeric + underscores only
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(raw)) {
+    if (status) { status.textContent = "3-20 characters, letters, numbers, and underscores only."; status.style.color = "var(--rd)"; status.style.display = "block"; }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
+
+  // Check uniqueness against the usernames index collection
+  const available = await checkUsernameAvailable(raw);
+  if (!available) {
+    if (status) { status.textContent = `"${raw}" is already taken. Try another.`; status.style.color = "var(--rd)"; status.style.display = "block"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Save"; }
+    return;
+  }
+
+  // Save the username to Firestore (user profile + usernames index)
+  const user = getCurrentUser();
+  if (user) {
+    await setUsername(user.uid, raw);
+    showNotif("Username set to @" + raw);
+  }
+
+  // Close the username modal
+  g("usernameM")?.classList.remove("active");
+  if (btn) { btn.disabled = false; btn.textContent = "Save"; }
+};
+
+// changeUsername — saves a changed username from the settings panel.
+// Uses the same validation and uniqueness check as saveUsername.
+window.changeUsername = async function() {
+  const input = g("setUsername");
+  const raw = (input?.value || "").trim();
+
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(raw)) {
+    showNotif("3-20 chars, letters/numbers/underscores only");
+    return;
+  }
+
+  // Skip check if username hasn't changed
+  if (raw === state.username) { showNotif("Username unchanged"); return; }
+
+  const available = await checkUsernameAvailable(raw);
+  if (!available) { showNotif(`"${raw}" is already taken`); return; }
+
+  const user = getCurrentUser();
+  if (user) {
+    await setUsername(user.uid, raw);
+    showNotif("Username changed to @" + raw);
+  }
+};
+
 // ── APP START ────────────────────────────────────────────────────────────────
 // _appStart is called once after auth succeeds and a household ID is resolved.
 // It initializes the app: hides the login screen, loads data from Firestore,
@@ -429,6 +496,20 @@ window._appStart = async function(code) {
   } catch (e) {
     console.error("initial load error", e);
     ss("error");
+  }
+
+  // Load the user's public username from Firestore.
+  // If they don't have one yet, prompt them to choose one via the username modal.
+  if (user) {
+    const uname = await loadUsername(user.uid);
+    state.username = uname;
+    // Populate the settings username field if it exists
+    const setUnEl = g("setUsername");
+    if (setUnEl) setUnEl.value = uname || "";
+    // Show username prompt if user hasn't set one yet
+    if (!uname) {
+      setTimeout(() => g("usernameM")?.classList.add("active"), 600);
+    }
   }
 
   // Check if this is a first-time user and show onboarding if needed.

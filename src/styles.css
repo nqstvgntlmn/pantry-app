@@ -511,4 +511,5 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
 /* ── COMMUNITY ── */
 .com-rcd{position:relative}
-.com-tag{display:inline-block;font-size:.66rem;padding:2px 8px;border-radius:20px;background:var(--acd);color:var(--ac);border:1px solid rgba(212,168,83,.25);font-weight:600;white-space:nowrap}
+.com-tag{display:inline-block;font-size:.66rem;padding:2px 8px;border-radius:20px;background:var(--acd);color:var(--ac);border:1px solid rgba(212,168,83,.25);font-weight:600;white-space:nowrap;transition:background .15s,color .15s}
+.com-tag-sel{background:var(--ac);color:#fff;border-color:var(--ac)}

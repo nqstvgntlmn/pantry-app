@@ -57,6 +57,9 @@ export function loadCfgUI() {
   v("setNotifTime", state.cfg.notifTime || "8");
   v("setNotifDays", String(state.cfg.notifDays || 3));
 
+  // Populate the username field from state (loaded during app boot)
+  v("setUsername", state.username);
+
   // Render the list of households the user belongs to
   renderHHList();
 

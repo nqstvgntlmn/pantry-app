@@ -740,6 +740,8 @@ export async function dlShopItem(id) {
 /**
  * publishRecipe — copy a household recipe to the public_recipes collection.
  * Builds the public document from the private recipe plus author metadata.
+ * Includes full structured data (imageUrl, times, ingredients/steps arrays)
+ * so the community detail view can render rich recipe cards.
  * Returns the public recipe doc that was written.
  */
 export async function publishRecipe(recipe, authorName, householdId) {
@@ -750,11 +752,25 @@ export async function publishRecipe(recipe, authorName, householdId) {
     steps: recipe.steps || "",
     tags: recipe.tags || [],
     cuisine: recipe.cuisine || "",
+    // Structured data from AI recipe imports
+    imageUrl: recipe.imageUrl || null,
+    prepTime: recipe.prepTime || "",
+    cookTime: recipe.cookTime || "",
+    totalTime: recipe.totalTime || "",
+    servings: recipe.servings || "",
+    ingredientsRaw: recipe.ingredientsRaw || [],
+    stepsRaw: recipe.stepsRaw || [],
+    // Author metadata — both display name and public username
     authorName: authorName || "Anonymous",
+    authorUsername: state.username || "",
     authorUid: getCurrentUser()?.uid || "",
     householdId: householdId || state.hid,
     createdAt: new Date().toISOString(),
     likes: 0,
+    // Rating aggregates — updated when users submit reviews
+    ratingSum: 0,
+    ratingCount: 0,
+    avgRating: 0,
   };
   await dbSet(`public_recipes/${pubId}`, doc);
   return { id: pubId, ...doc };
@@ -852,6 +868,8 @@ export async function checkMyLike(recipeId) {
 /**
  * saveRecipeToKitchen — copy a public recipe into the user's household recipes.
  * Generates a new ID so it doesn't conflict with the original.
+ * Preserves structured fields (imageUrl, times, ingredientsRaw, stepsRaw)
+ * so the saved recipe has full detail, not just flat text.
  */
 export async function saveRecipeToKitchen(pubRecipe) {
   const newId = "rec-" + Date.now();
@@ -861,6 +879,14 @@ export async function saveRecipeToKitchen(pubRecipe) {
     description: pubRecipe.ingredients || "",
     notes: pubRecipe.steps || "",
     tags: pubRecipe.tags || [],
+    cuisine: pubRecipe.cuisine || "",
+    imageUrl: pubRecipe.imageUrl || null,
+    prepTime: pubRecipe.prepTime || "",
+    cookTime: pubRecipe.cookTime || "",
+    totalTime: pubRecipe.totalTime || "",
+    servings: pubRecipe.servings || "",
+    ingredientsRaw: pubRecipe.ingredientsRaw || [],
+    stepsRaw: pubRecipe.stepsRaw || [],
     rating: 0,
     favorited: false,
     source: "Community",
@@ -870,6 +896,115 @@ export async function saveRecipeToKitchen(pubRecipe) {
   };
   await svr(recipe);
   return recipe;
+}
+
+// ── USERNAME SYSTEM ──────────────────────────────────────────────────────────
+// Usernames are public identifiers shown on community recipes ("Recipe by @BoraK").
+// Stored on the user profile (users/{uid}.username) with a top-level index
+// collection (usernames/{lowercased}) for uniqueness checks.
+
+/**
+ * checkUsernameAvailable — checks if a username is available.
+ * Reads the usernames/{lowercased} index doc. Returns true if not taken.
+ */
+export async function checkUsernameAvailable(username) {
+  if (!username) return false;
+  const doc = await dbGet(`usernames/${username.toLowerCase()}`);
+  return !doc;
+}
+
+/**
+ * setUsername — sets or changes the current user's public username.
+ * Writes to both the user profile and the usernames index collection.
+ * If the user already had a username, deletes the old index entry first.
+ */
+export async function setUsername(uid, newUsername) {
+  // Read existing user profile to check for old username
+  const userDoc = await dbGet(`users/${uid}`);
+  const oldUsername = userDoc?.username;
+
+  // Delete old username index entry if changing
+  if (oldUsername && oldUsername.toLowerCase() !== newUsername.toLowerCase()) {
+    try { await dbDelete(`usernames/${oldUsername.toLowerCase()}`); } catch { /* ignore */ }
+  }
+
+  // Write the new username index doc (maps lowercase username -> uid)
+  await dbSet(`usernames/${newUsername.toLowerCase()}`, { uid });
+
+  // Update user profile with the new username
+  if (userDoc) {
+    await dbSet(`users/${uid}`, { ...userDoc, username: newUsername, id: undefined });
+  }
+
+  // Update in-memory state
+  state.username = newUsername;
+}
+
+/**
+ * loadUsername — reads the current user's username from their Firestore profile.
+ * Called during app boot. Returns the username string or null.
+ */
+export async function loadUsername(uid) {
+  try {
+    const userDoc = await dbGet(`users/${uid}`);
+    return userDoc?.username || null;
+  } catch { return null; }
+}
+
+// ── REVIEWS (COMMUNITY RECIPE RATINGS) ──────────────────────────────────────
+// Reviews are stored as subcollection docs: public_recipes/{id}/reviews/{uid}.
+// Each user can leave one review per recipe. Rating aggregates (ratingSum,
+// ratingCount, avgRating) are maintained on the parent public_recipes doc.
+
+/**
+ * addReview — submit or update a star rating + optional text review.
+ * After writing the review doc, re-counts all reviews to update the
+ * aggregate rating fields on the parent recipe document.
+ */
+export async function addReview(recipeId, rating, text) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid || !rating) return;
+  const reviewDoc = {
+    rating,
+    text: (text || "").trim(),
+    authorName: localStorage.getItem("ks-who") || "Anonymous",
+    authorUsername: state.username || "",
+    authorUid: uid,
+    createdAt: new Date().toISOString(),
+  };
+  await dbSet(`public_recipes/${recipeId}/reviews/${uid}`, reviewDoc);
+
+  // Re-count all reviews and update parent doc aggregates
+  const allReviews = await dbList(`public_recipes/${recipeId}/reviews`);
+  const ratingSum = allReviews.reduce((sum, r) => sum + (r.rating || 0), 0);
+  const ratingCount = allReviews.length;
+  const avgRating = ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 10) / 10 : 0;
+
+  const pubDoc = await dbGet(`public_recipes/${recipeId}`);
+  if (pubDoc) {
+    await dbSet(`public_recipes/${recipeId}`, {
+      ...pubDoc, ratingSum, ratingCount, avgRating, id: undefined
+    });
+  }
+
+  return { id: uid, ...reviewDoc };
+}
+
+/**
+ * listReviews — fetch all reviews for a public recipe.
+ */
+export async function listReviews(recipeId) {
+  return dbList(`public_recipes/${recipeId}/reviews`);
+}
+
+/**
+ * checkMyReview — check if the current user has already reviewed a recipe.
+ * Returns the review doc if it exists, or null.
+ */
+export async function checkMyReview(recipeId) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return null;
+  return dbGet(`public_recipes/${recipeId}/reviews/${uid}`);
 }
 
 // ── ACTIVITY FEED ────────────────────────────────────────────────────────────

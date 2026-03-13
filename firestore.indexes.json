@@ -1,0 +1,48 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "public_recipes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cuisine", "order": "ASCENDING" },
+        { "fieldPath": "avgRating", "order": "DESCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "public_recipes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "avgRating", "order": "DESCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "public_recipes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cookTime", "order": "ASCENDING" },
+        { "fieldPath": "avgRating", "order": "DESCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "public_recipes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cuisine", "order": "ASCENDING" },
+        { "fieldPath": "likes", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "public_recipes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cuisine", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

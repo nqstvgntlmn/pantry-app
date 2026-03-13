@@ -62,11 +62,19 @@ export const state = {
   selectMode: null,       // multi-select mode: "shop" (shopping list), "inv" (inventory), or null (off)
   selectedIds: new Set(), // set of Firestore doc IDs currently checked in multi-select mode
 
+  // ── User profile ──────────────────────────────────────────────────────
+  username: null,        // current user's public username (e.g. "BoraK"); null until loaded
+
   // ── Community / public recipes ─────────────────────────────────────────
   comRecs: [],           // community (public) recipes loaded from public_recipes collection
   comTab: "browse",      // community sub-tab: "browse" or "mine"
   comSearch: "",         // current search/filter text for community recipes
   comCuisine: "all",     // cuisine filter for community browsing
+  comSort: "newest",     // sort order: "newest", "popular", or "rated"
+  comTags: [],           // selected tag filters (e.g. ["Quick", "Healthy"])
+  comTime: "any",        // cook time filter: "any", "under30", "30to60", "over60"
+  comMinRating: 0,       // minimum avg rating filter: 0 (any), 3, or 4
+  comPage: 0,            // current page index for infinite scroll pagination
   myLikes: new Set(),    // set of public recipe IDs the current user has liked
 };
 
