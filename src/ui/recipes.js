@@ -124,7 +124,7 @@ export function renderRecs() {
   // Apply the currently selected tab filter
   if (state.rt === "fav") f = f.filter(r => r.favorited);
   else if (state.rt === "top") f = f.filter(r => r.rating >= 4).sort((a, b) => b.rating - a.rating);
-  else if (state.rt === "quick") f = f.filter(r => (r.tags || []).includes("Quick") || (r.tags || []).includes("Under 30 min"));
+  else if (state.rt === "quick") f = f.filter(r => (r.tags || []).includes("Quick"));
   else if (state.rt === "kid") f = f.filter(r => (r.tags || []).includes("Kid-Friendly"));
   else f = f.sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0)); // "all" tab — newest first
 
@@ -615,14 +615,53 @@ export function openER(id) {
   // If the recipe was imported from a URL, show a clickable link to the original
   const srcLink = r.sourceUrl ? `<div class="frow"><label class="flbl">Original</label><a href="${r.sourceUrl}" target="_blank" style="font-size:.82rem;color:var(--ac);word-break:break-all">${r.sourceUrl}</a></div>` : "";
 
-  // Build tag pills, pre-selecting any tags the recipe already has
-  const tagsHtml = `<div class="frow"><label class="flbl">Tags</label><div class="tags" id="etags">
-    <div class="tag${(r.tags || []).includes("Quick") ? " sel" : ""}" data-tag="Quick" onclick="togTag(this)">⚡ Quick</div>
-    <div class="tag kid${(r.tags || []).includes("Kid-Friendly") ? " sel" : ""}" data-tag="Kid-Friendly" onclick="togTag(this)">👶 Kid-Friendly</div>
-    <div class="tag date${(r.tags || []).includes("Date Night") ? " sel" : ""}" data-tag="Date Night" onclick="togTag(this)">🕯 Date Night</div>
-    <div class="tag batch${(r.tags || []).includes("Batch Cook") ? " sel" : ""}" data-tag="Batch Cook" onclick="togTag(this)">📦 Batch Cook</div>
-    <div class="tag${(r.tags || []).includes("Healthy") ? " sel" : ""}" data-tag="Healthy" onclick="togTag(this)">🥗 Healthy</div>
-    <div class="tag${(r.tags || []).includes("Under 30 min") ? " sel" : ""}" data-tag="Under 30 min" onclick="togTag(this)">⏱ Under 30 min</div>
+  // Build curated tag pills grouped by category, pre-selecting tags the recipe already has
+  const _t = r.tags || [];
+  const _sel = (tag) => _t.includes(tag) ? " sel" : "";
+  const tagsHtml = `<div class="frow"><label class="flbl">Tags</label><div class="tags-grid" id="etags">
+    <div class="tag-cat">Meal Type</div>
+    <div class="tag${_sel("Breakfast")}" data-tag="Breakfast" onclick="togTag(this)">🌅 Breakfast</div>
+    <div class="tag${_sel("Lunch")}" data-tag="Lunch" onclick="togTag(this)">🥪 Lunch</div>
+    <div class="tag${_sel("Dinner")}" data-tag="Dinner" onclick="togTag(this)">🍽️ Dinner</div>
+    <div class="tag${_sel("Snack")}" data-tag="Snack" onclick="togTag(this)">🍿 Snack</div>
+    <div class="tag${_sel("Dessert")}" data-tag="Dessert" onclick="togTag(this)">🎂 Dessert</div>
+    <div class="tag${_sel("Drinks")}" data-tag="Drinks" onclick="togTag(this)">🥤 Drinks</div>
+    <div class="tag-cat">Diet & Lifestyle</div>
+    <div class="tag${_sel("Vegetarian")}" data-tag="Vegetarian" onclick="togTag(this)">🌱 Vegetarian</div>
+    <div class="tag${_sel("Vegan")}" data-tag="Vegan" onclick="togTag(this)">🌿 Vegan</div>
+    <div class="tag${_sel("Pescatarian")}" data-tag="Pescatarian" onclick="togTag(this)">🐟 Pescatarian</div>
+    <div class="tag${_sel("Meat")}" data-tag="Meat" onclick="togTag(this)">🥩 Meat</div>
+    <div class="tag${_sel("Gluten-Free")}" data-tag="Gluten-Free" onclick="togTag(this)">🫘 Gluten-Free</div>
+    <div class="tag${_sel("Dairy-Free")}" data-tag="Dairy-Free" onclick="togTag(this)">🥛 Dairy-Free</div>
+    <div class="tag${_sel("Nut-Free")}" data-tag="Nut-Free" onclick="togTag(this)">🥜 Nut-Free</div>
+    <div class="tag${_sel("Sugar-Free")}" data-tag="Sugar-Free" onclick="togTag(this)">🍬 Sugar-Free</div>
+    <div class="tag${_sel("Healthy")}" data-tag="Healthy" onclick="togTag(this)">🥗 Healthy</div>
+    <div class="tag${_sel("High Protein")}" data-tag="High Protein" onclick="togTag(this)">💪 High Protein</div>
+    <div class="tag${_sel("Low Carb")}" data-tag="Low Carb" onclick="togTag(this)">🫀 Low Carb</div>
+    <div class="tag${_sel("Keto")}" data-tag="Keto" onclick="togTag(this)">🔥 Keto</div>
+    <div class="tag-cat">Cook Style</div>
+    <div class="tag${_sel("Quick")}" data-tag="Quick" onclick="togTag(this)">⚡ Quick</div>
+    <div class="tag${_sel("Kid-Friendly")}" data-tag="Kid-Friendly" onclick="togTag(this)">👨‍👩‍👧 Kid-Friendly</div>
+    <div class="tag${_sel("Date Night")}" data-tag="Date Night" onclick="togTag(this)">🌙 Date Night</div>
+    <div class="tag${_sel("Batch Cook")}" data-tag="Batch Cook" onclick="togTag(this)">📦 Batch Cook</div>
+    <div class="tag${_sel("Freezer Friendly")}" data-tag="Freezer Friendly" onclick="togTag(this)">❄️ Freezer Friendly</div>
+    <div class="tag${_sel("One Pot")}" data-tag="One Pot" onclick="togTag(this)">🥘 One Pot</div>
+    <div class="tag${_sel("Special Occasion")}" data-tag="Special Occasion" onclick="togTag(this)">🎉 Special Occasion</div>
+    <div class="tag${_sel("Budget Friendly")}" data-tag="Budget Friendly" onclick="togTag(this)">💰 Budget Friendly</div>
+    <div class="tag${_sel("Spicy")}" data-tag="Spicy" onclick="togTag(this)">🌶️ Spicy</div>
+    <div class="tag${_sel("Pasta")}" data-tag="Pasta" onclick="togTag(this)">🍝 Pasta</div>
+    <div class="tag${_sel("Salad")}" data-tag="Salad" onclick="togTag(this)">🥗 Salad</div>
+    <div class="tag${_sel("Soup & Stew")}" data-tag="Soup & Stew" onclick="togTag(this)">🍲 Soup & Stew</div>
+    <div class="tag${_sel("Grill & BBQ")}" data-tag="Grill & BBQ" onclick="togTag(this)">🔥 Grill & BBQ</div>
+    <div class="tag${_sel("Slow Cooker")}" data-tag="Slow Cooker" onclick="togTag(this)">🫕 Slow Cooker</div>
+    <div class="tag${_sel("Air Fryer")}" data-tag="Air Fryer" onclick="togTag(this)">⚡ Air Fryer</div>
+    <div class="tag${_sel("Meal Prep")}" data-tag="Meal Prep" onclick="togTag(this)">🍱 Meal Prep</div>
+    <div class="tag${_sel("World Cuisine")}" data-tag="World Cuisine" onclick="togTag(this)">🌍 World Cuisine</div>
+    <div class="tag-cat">Occasion</div>
+    <div class="tag${_sel("Holiday")}" data-tag="Holiday" onclick="togTag(this)">🎄 Holiday</div>
+    <div class="tag${_sel("Party")}" data-tag="Party" onclick="togTag(this)">🎊 Party</div>
+    <div class="tag${_sel("Summer")}" data-tag="Summer" onclick="togTag(this)">🏖️ Summer</div>
+    <div class="tag${_sel("Winter Comfort")}" data-tag="Winter Comfort" onclick="togTag(this)">❄️ Winter Comfort</div>
   </div></div>`;
 
   // ── Cover photo upload zone — shows current cover or empty upload area ──
@@ -1390,8 +1429,18 @@ export function renderCommunity() {
     `<option value="${v}"${state.comCuisine === v ? " selected" : ""}>${l}</option>`
   ).join("");
 
-  // Tag filter pills — highlight selected tags
-  const tagList = ["Quick", "Healthy", "Kid-Friendly", "Date Night", "Batch Cook", "Under 30 min"];
+  // Tag filter pills — curated fixed set matching the recipe tag system.
+  // Grouped visually but rendered inline. Each pill toggles filtering.
+  const tagList = [
+    "Breakfast", "Lunch", "Dinner", "Snack", "Dessert", "Drinks",
+    "Vegetarian", "Vegan", "Pescatarian", "Meat", "Gluten-Free",
+    "Dairy-Free", "Nut-Free", "Sugar-Free", "Healthy", "High Protein",
+    "Low Carb", "Keto", "Quick", "Kid-Friendly", "Date Night",
+    "Batch Cook", "Freezer Friendly", "One Pot", "Special Occasion",
+    "Budget Friendly", "Spicy", "Pasta", "Salad", "Soup & Stew",
+    "Grill & BBQ", "Slow Cooker", "Air Fryer", "Meal Prep", "World Cuisine",
+    "Holiday", "Party", "Summer", "Winter Comfort"
+  ];
   const tagPills = tagList.map(t => {
     const sel = state.comTags.includes(t);
     return `<div class="com-tag${sel ? " com-tag-sel" : ""}" onclick="toggleComTag('${t}')" style="cursor:pointer;${sel ? "background:var(--ac);color:#fff;border-color:var(--ac)" : ""}">${t}</div>`;

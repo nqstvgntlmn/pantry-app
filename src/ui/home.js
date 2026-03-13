@@ -122,7 +122,6 @@ function _applyHomeSectionState(key) {
 function _applyAllHomeSectionStates() {
   _applyHomeSectionState("lowstock");
   _applyHomeSectionState("activity");
-  _applyHomeSectionState("cooktonight");
 }
 
 // renderTonight() — updates the "Tonight's Dinner" card on the home screen.
@@ -146,9 +145,9 @@ export function renderTonight() {
     // stopPropagation prevents the card's onclick from also firing
     if (a) a.innerHTML = `<button class="btn bsm bp" onclick="event.stopPropagation();openCooked('${td}')">✓ Cooked</button><button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">Edit</button>`;
   } else {
-    // No meal planned: show placeholder text and shortcuts to plan or ask AI
+    // No meal planned: show placeholder text with "Find recipes" and "Ask Claude" buttons
     if (d) d.innerHTML = `<span style="font-size:.9rem;color:var(--mt);font-style:italic">No meal planned yet</span>`;
-    if (a) a.innerHTML = `<button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">+ Plan dinner</button><button class="btn bsm bs" onclick="event.stopPropagation();showScreen('chat')">Ask Claude →</button>`;
+    if (a) a.innerHTML = `<button class="btn bsm bs" onclick="event.stopPropagation();openRecipeMatch()">🔍 Find recipes</button><button class="btn bsm bs" onclick="event.stopPropagation();showScreen('chat')">Ask Claude →</button>`;
   }
 }
 
@@ -394,11 +393,12 @@ async function renderActivityFeed() {
     return days + "d ago";
   };
 
-  // Show only the 3 most recent entries — keeps the feed compact for small households
+  // Show only the 3 most recent entries — keeps the feed compact for small households.
+  // Font sizes and weights are unified with the rest of the app (DM Sans .82rem base).
   el.innerHTML = entries.slice(0, 3).map(e =>
     `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
       <div style="width:28px;height:28px;border-radius:50%;background:var(--acd);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;color:var(--ac);font-weight:700">${(e.memberName || "?")[0].toUpperCase()}</div>
-      <div style="flex:1;font-size:.82rem;color:var(--tx2);line-height:1.4"><strong style="color:var(--tx)">${(e.memberName || "Someone").replace(/</g, "&lt;")}</strong> ${(e.action || "").replace(/</g, "&lt;")} <strong>${(e.itemName || "").replace(/</g, "&lt;")}</strong></div>
+      <div style="flex:1;font-size:.82rem;color:var(--tx2);line-height:1.4;font-family:'DM Sans',sans-serif"><strong style="color:var(--tx);font-weight:600">${(e.memberName || "Someone").replace(/</g, "&lt;")}</strong> ${(e.action || "").replace(/</g, "&lt;")} <strong style="color:var(--tx);font-weight:600">${(e.itemName || "").replace(/</g, "&lt;")}</strong></div>
       <div style="font-size:.68rem;color:var(--mt);flex-shrink:0">${ago(e.timestamp)}</div>
     </div>`
   ).join("");

@@ -67,7 +67,7 @@ import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, 
 import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected } from './ui/swipe.js';
 
 // Meal planning: pick recipes for days, mark as cooked, schedule, chip-based filtering
-import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCooked, saveCooked, scheduleRecipe, schedSet, initRecChips, toggleChip, filterRecs } from './ui/mealplan.js';
+import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCooked, saveCooked, scheduleRecipe, schedSet, closeSchedM, initRecChips, toggleChip, filterRecs } from './ui/mealplan.js';
 
 // Settings: config UI, push notifications, household management, theme/dark mode
 // copyInviteCode/shareInviteCode/regenInviteCode: invite code actions
@@ -327,6 +327,7 @@ window.skipCooked = skipCooked;   // Skip the cooked confirmation (didn't cook i
 window.saveCooked = saveCooked;   // Confirm a meal was cooked (logs it, deducts inventory)
 window.scheduleRecipe = scheduleRecipe; // Schedule a recipe for a future date
 window.schedSet = schedSet;       // Set/confirm the scheduled date
+window.closeSchedM = closeSchedM; // Close the schedule recipe modal (cancel / backdrop tap)
 window.initRecChips = initRecChips; // Initialize the recipe filter chips UI
 window.toggleChip = toggleChip;   // Toggle a filter chip on/off
 window.filterRecs = filterRecs;   // Apply chip filters to the recipe list
@@ -374,6 +375,42 @@ window.manualRefresh = async function(target) {
     showNotif("Refreshed ✓");
   } catch (e) {
     console.error("manualRefresh error:", e);
+    ss("error");
+    showNotif("Refresh failed");
+  }
+};
+
+// refreshHomeData() — re-fetches all data that feeds the home screen:
+// inventory (Running Low, Expiring Soon, Your Supplies), shopping list count,
+// meal plan (Tonight's Dinner, This Week), and activity feed.
+// Triggered by the ↻ button on the home screen header.
+window.refreshHomeData = async function() {
+  // Spin the refresh button for visual feedback
+  const btn = event?.target;
+  if (btn) { btn.classList.add("spinning"); setTimeout(() => btn.classList.remove("spinning"), 600); }
+
+  ss("syncing");
+  try {
+    // Re-fetch all collections that appear on the home screen
+    const [invData, shopData, mpData, cfgData] = await Promise.allSettled([
+      dbList(`households/${state.hid}/inventory`),
+      dbList(`households/${state.hid}/shopping`),
+      dbList(`households/${state.hid}/mealplan`),
+      dbList(`households/${state.hid}/settings`),
+    ]);
+    if (invData.status === "fulfilled") state.inv = invData.value;
+    if (shopData.status === "fulfilled") state.shop = shopData.value;
+    if (mpData.status === "fulfilled") {
+      // Rebuild meal plan map from list of {id: "YYYY-MM-DD", meal: "..."} entries
+      state.mp = {};
+      mpData.value.forEach(d => { if (d.meal) state.mp[d.id] = d.meal; });
+    }
+    renderHome();
+    renderInv();
+    ss("synced");
+    showNotif("Refreshed ✓");
+  } catch (e) {
+    console.error("refreshHomeData error:", e);
     ss("error");
     showNotif("Refresh failed");
   }

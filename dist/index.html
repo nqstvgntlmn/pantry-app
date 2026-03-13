@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-D77hm8sD.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-C1TGMPhD.css">
+  <script type="module" crossorigin src="/assets/index-B5z15C0B.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-CUJ8as5m.css">
 </head>
 <body>
 
@@ -107,50 +107,30 @@
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <div class="srow" style="margin:0"><span class="sdot" id="sdot"></span><span class="slb" id="slb">Connecting…</span></div>
+          <!-- Refresh button — re-fetches all home screen data from Firestore -->
+          <button class="btn bsm bs refresh-btn" onclick="refreshHomeData()" title="Refresh" style="font-size:1rem;min-width:36px;padding:6px 8px">↻</button>
           <div class="setbtn" onclick="showOv('settings')">⚙️</div>
         </div>
       </div>
       <div class="arow">
         <button class="btn bp bsm" style="flex:1" onclick="openScanForInventory()">📷 Scan</button>
         <button class="btn bs bsm" style="flex:1" onclick="showOv('madd')">✏️ Add</button>
-        <button class="btn bs bsm" onclick="showOv('import')">↓</button>
-        <button class="btn bs bsm" onclick="toggleExp()">↗</button>
       </div>
     </div>
-    <div class="exppanel" id="exppanel"><div class="expbox" id="expbox">No items yet.</div><p style="font-size:.7rem;color:var(--mt);margin-top:6px">Paste into Claude chat as your living document.</p></div>
     <div class="hbody">
       <div class="hsec-lbl">📅 Today</div>
-      <div class="today-grid">
-        <div class="today-card tonight-card" id="tonight-main">
-          <div class="tc-icon">🍽</div>
-          <div class="tc-content">
-            <div class="tc-ttl">Tonight's Dinner</div>
-            <div id="tnd" class="tc-val"></div>
-            <div class="tna" id="tna"></div>
-          </div>
-        </div>
-        <div class="today-card" onclick="showScreen('inventory')">
-          <div class="tc-icon">⏱</div>
-          <div class="tc-ttl">Expiring Soon</div>
-          <div id="home-exp-val" class="tc-val tc-green">All fresh!</div>
-          <div id="home-exp-sub" class="tc-sub">Nothing in next 3 days</div>
-        </div>
-        <div class="today-card" onclick="showScreen('shopping')">
-          <div class="tc-icon">🛒</div>
-          <div class="tc-ttl">Shopping List</div>
-          <div id="home-shop-val" class="tc-val">0</div>
-          <div id="home-shop-sub" class="tc-sub">items to buy</div>
+      <!-- Tonight's Dinner card — full-width, shows meal name or action buttons -->
+      <div class="today-card tonight-card" id="tonight-main" style="margin-bottom:16px">
+        <div class="tc-icon">🍽</div>
+        <div class="tc-content">
+          <div class="tc-ttl">Tonight's Dinner</div>
+          <div id="tnd" class="tc-val"></div>
+          <div class="tna" id="tna"></div>
         </div>
       </div>
       <div id="variety-nudge" style="display:none;background:var(--amd);border:1px solid var(--am);border-radius:14px;padding:12px 16px;font-size:.82rem;color:var(--tx2);line-height:1.6;margin-bottom:16px"></div>
       <div class="hsec-lbl">🗓 This Week</div>
       <div class="week-wrap"><div class="wgrd" id="wgrd"></div></div>
-      <div id="cooktonightlbl" class="hsec-lbl hsec-toggle" onclick="toggleHomeSection('cooktonight')">🍳 What to Cook Tonight? <span class="hsec-arrow" id="cooktonight-arrow">▾</span></div>
-      <div class="hsec-body" id="cooktonightbody">
-        <div style="text-align:center;padding:8px 0 12px">
-          <button class="btn bp" onclick="openRecipeMatch()" style="font-size:.85rem;padding:10px 20px">🔍 Find recipes</button>
-        </div>
-      </div>
       <div class="hsec-lbl">🧺 Your Supplies</div>
       <div class="sgrd" id="sgrd"></div>
       <div id="lowstocklbl" style="display:none" class="hsec-lbl hsec-toggle" onclick="toggleHomeSection('lowstock')">📉 Running Low <span class="hsec-arrow" id="lowstock-arrow">▾</span></div>
@@ -561,14 +541,52 @@
       <div class="frow"><label class="flbl">Your rating</label><div class="sinp" id="rstars"><span class="star" onclick="setStar(1,'r')">☆</span><span class="star" onclick="setStar(2,'r')">☆</span><span class="star" onclick="setStar(3,'r')">☆</span><span class="star" onclick="setStar(4,'r')">☆</span><span class="star" onclick="setStar(5,'r')">☆</span></div></div>
       <div class="frow"><label class="flbl">Description / Ingredients <span class="otag">optional</span></label><textarea class="fta" id="rd" placeholder="Key ingredients, method…"></textarea></div>
       <div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><input class="fi" id="rnotes" placeholder="e.g. Add more garlic next time!"/></div>
+      <!-- Tags — curated fixed set, grouped by category. Tapping toggles selection. -->
       <div class="frow"><label class="flbl">Tags <span class="otag">optional</span></label>
-        <div class="tags" id="rtags">
-          <div class="tag" data-tag="Quick" onclick="togTag(this)">⚡ Quick</div>
-          <div class="tag kid" data-tag="Kid-Friendly" onclick="togTag(this)">👶 Kid-Friendly</div>
-          <div class="tag date" data-tag="Date Night" onclick="togTag(this)">🕯 Date Night</div>
-          <div class="tag batch" data-tag="Batch Cook" onclick="togTag(this)">📦 Batch Cook</div>
+        <div class="tags-grid" id="rtags">
+          <div class="tag-cat">Meal Type</div>
+          <div class="tag" data-tag="Breakfast" onclick="togTag(this)">🌅 Breakfast</div>
+          <div class="tag" data-tag="Lunch" onclick="togTag(this)">🥪 Lunch</div>
+          <div class="tag" data-tag="Dinner" onclick="togTag(this)">🍽️ Dinner</div>
+          <div class="tag" data-tag="Snack" onclick="togTag(this)">🍿 Snack</div>
+          <div class="tag" data-tag="Dessert" onclick="togTag(this)">🎂 Dessert</div>
+          <div class="tag" data-tag="Drinks" onclick="togTag(this)">🥤 Drinks</div>
+          <div class="tag-cat">Diet & Lifestyle</div>
+          <div class="tag" data-tag="Vegetarian" onclick="togTag(this)">🌱 Vegetarian</div>
+          <div class="tag" data-tag="Vegan" onclick="togTag(this)">🌿 Vegan</div>
+          <div class="tag" data-tag="Pescatarian" onclick="togTag(this)">🐟 Pescatarian</div>
+          <div class="tag" data-tag="Meat" onclick="togTag(this)">🥩 Meat</div>
+          <div class="tag" data-tag="Gluten-Free" onclick="togTag(this)">🫘 Gluten-Free</div>
+          <div class="tag" data-tag="Dairy-Free" onclick="togTag(this)">🥛 Dairy-Free</div>
+          <div class="tag" data-tag="Nut-Free" onclick="togTag(this)">🥜 Nut-Free</div>
+          <div class="tag" data-tag="Sugar-Free" onclick="togTag(this)">🍬 Sugar-Free</div>
           <div class="tag" data-tag="Healthy" onclick="togTag(this)">🥗 Healthy</div>
-          <div class="tag" data-tag="Under 30 min" onclick="togTag(this)">⏱ Under 30 min</div>
+          <div class="tag" data-tag="High Protein" onclick="togTag(this)">💪 High Protein</div>
+          <div class="tag" data-tag="Low Carb" onclick="togTag(this)">🫀 Low Carb</div>
+          <div class="tag" data-tag="Keto" onclick="togTag(this)">🔥 Keto</div>
+          <div class="tag-cat">Cook Style</div>
+          <div class="tag" data-tag="Quick" onclick="togTag(this)">⚡ Quick</div>
+          <div class="tag" data-tag="Kid-Friendly" onclick="togTag(this)">👨‍👩‍👧 Kid-Friendly</div>
+          <div class="tag" data-tag="Date Night" onclick="togTag(this)">🌙 Date Night</div>
+          <div class="tag" data-tag="Batch Cook" onclick="togTag(this)">📦 Batch Cook</div>
+          <div class="tag" data-tag="Freezer Friendly" onclick="togTag(this)">❄️ Freezer Friendly</div>
+          <div class="tag" data-tag="One Pot" onclick="togTag(this)">🥘 One Pot</div>
+          <div class="tag" data-tag="Special Occasion" onclick="togTag(this)">🎉 Special Occasion</div>
+          <div class="tag" data-tag="Budget Friendly" onclick="togTag(this)">💰 Budget Friendly</div>
+          <div class="tag" data-tag="Spicy" onclick="togTag(this)">🌶️ Spicy</div>
+          <div class="tag" data-tag="Pasta" onclick="togTag(this)">🍝 Pasta</div>
+          <div class="tag" data-tag="Salad" onclick="togTag(this)">🥗 Salad</div>
+          <div class="tag" data-tag="Soup & Stew" onclick="togTag(this)">🍲 Soup & Stew</div>
+          <div class="tag" data-tag="Grill & BBQ" onclick="togTag(this)">🔥 Grill & BBQ</div>
+          <div class="tag" data-tag="Slow Cooker" onclick="togTag(this)">🫕 Slow Cooker</div>
+          <div class="tag" data-tag="Air Fryer" onclick="togTag(this)">⚡ Air Fryer</div>
+          <div class="tag" data-tag="Meal Prep" onclick="togTag(this)">🍱 Meal Prep</div>
+          <div class="tag" data-tag="World Cuisine" onclick="togTag(this)">🌍 World Cuisine</div>
+          <div class="tag-cat">Occasion</div>
+          <div class="tag" data-tag="Holiday" onclick="togTag(this)">🎄 Holiday</div>
+          <div class="tag" data-tag="Party" onclick="togTag(this)">🎊 Party</div>
+          <div class="tag" data-tag="Summer" onclick="togTag(this)">🏖️ Summer</div>
+          <div class="tag" data-tag="Winter Comfort" onclick="togTag(this)">❄️ Winter Comfort</div>
         </div>
       </div>
       <div class="frow"><label class="flbl">Cuisine <span class="otag">optional</span></label><input class="fi" id="rcuisine" placeholder="e.g. Mediterranean, Turkish, Asian…"/></div>
@@ -720,9 +738,9 @@
 
 <!-- MODALS (outside #APP for z-index layering) -->
 
-<!-- BUILD LIST PREVIEW MODAL -->
-<div class="modal" id="buildPreviewM">
-  <div class="minner" style="max-height:80vh;display:flex;flex-direction:column">
+<!-- BUILD LIST PREVIEW MODAL — tap backdrop to close -->
+<div class="modal" id="buildPreviewM" onclick="this.classList.remove('active')">
+  <div class="minner" style="max-height:80vh;display:flex;flex-direction:column" onclick="event.stopPropagation()">
     <div class="mttl">🛒 Add to Shopping List</div>
     <div style="font-size:.78rem;color:var(--mt);margin-bottom:14px;line-height:1.5">Claude suggested these based on your meal plan. Tap to deselect anything you don't need.</div>
     <div style="display:flex;gap:8px;margin-bottom:14px">
@@ -737,9 +755,9 @@
   </div>
 </div>
 
-<!-- MEAL MODAL -->
-<div class="modal" id="mealM">
-  <div class="minner">
+<!-- MEAL MODAL — tap backdrop to close -->
+<div class="modal" id="mealM" onclick="closeMealM()">
+  <div class="minner" onclick="event.stopPropagation()">
     <div class="mttl" id="mealMttl">Plan a meal</div>
     <input class="minp" id="mealMinp" placeholder="e.g. Chicken stir fry" onkeydown="if(event.key==='Enter')saveMeal()"/>
     <div id="recPickerWrap" style="display:none;margin-top:10px">
@@ -752,9 +770,9 @@
   </div>
 </div>
 
-<!-- COOKED MODAL -->
-<div class="modal" id="cookedM">
-  <div class="minner">
+<!-- COOKED MODAL — tap backdrop to close -->
+<div class="modal" id="cookedM" onclick="this.classList.remove('active')">
+  <div class="minner" onclick="event.stopPropagation()">
     <div class="mttl">🍽 Meal Cooked!</div>
     <div style="font-family:'Fraunces',serif;font-size:1.1rem;font-weight:300;margin-bottom:4px" id="cookedNm"></div>
     <div style="font-size:.8rem;color:var(--mt);margin-bottom:16px;line-height:1.5">Log this meal and optionally save to recipes.</div>
@@ -765,19 +783,19 @@
   </div>
 </div>
 
-<!-- SCHEDULE RECIPE MODAL -->
-<div class="modal" id="schedM">
-  <div class="minner">
+<!-- SCHEDULE RECIPE MODAL — tap backdrop to close -->
+<div class="modal" id="schedM" onclick="closeSchedM()">
+  <div class="minner" onclick="event.stopPropagation()">
     <div class="mttl">📅 Schedule Recipe</div>
     <div style="font-size:.88rem;color:var(--tx2);margin-bottom:12px" id="schedNm"></div>
     <div class="wgrd" id="schedWk"></div>
-    <div class="brow"><button class="btn bs bf" onclick="g('schedM').classList.remove('active')">Cancel</button></div>
+    <div class="brow"><button class="btn bs bf" onclick="closeSchedM()">Cancel</button></div>
   </div>
 </div>
 
-<!-- USERNAME PROMPT MODAL — shown on first launch if user has no username -->
-<div class="modal" id="usernameM">
-  <div class="minner">
+<!-- USERNAME PROMPT MODAL — tap backdrop to close -->
+<div class="modal" id="usernameM" onclick="this.classList.remove('active')">
+  <div class="minner" onclick="event.stopPropagation()">
     <div class="mttl">Choose your username</div>
     <p style="font-size:.84rem;color:var(--tx2);line-height:1.6;margin-bottom:16px">This will appear publicly on recipes you share with the community.</p>
     <input class="fi" id="usernameInput" placeholder="e.g. BoraK" maxlength="20" style="margin-bottom:6px" onkeydown="if(event.key==='Enter')saveUsername()"/>

@@ -443,12 +443,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
 /* ── TAGS ── */
 .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+/* Scrollable tag grid grouped by category — used in recipe add/edit forms */
+.tags-grid{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;max-height:220px;overflow-y:auto;padding:4px 0}
+/* Category label within the tag grid (e.g. "Meal Type", "Cook Style") */
+.tag-cat{width:100%;font-size:.68rem;font-weight:600;color:var(--mt);text-transform:uppercase;letter-spacing:.06em;margin-top:6px;margin-bottom:2px}
+.tag-cat:first-child{margin-top:0}
 .tag{font-size:.68rem;padding:4px 10px;border-radius:20px;background:var(--sf);border:1.5px solid var(--b2);color:var(--mt);cursor:pointer;transition:all .15s;font-weight:500}
 .tag.sel{background:var(--acd);border-color:var(--ac);color:var(--ac)}
-.tag.kid{background:rgba(90,173,111,.12);border-color:var(--gn);color:var(--gn)}
-.tag.quick{background:rgba(56,189,248,.1);border-color:#38bdf8;color:#38bdf8}
-.tag.date{background:rgba(232,130,154,.12);border-color:#e8829a;color:#e8829a}
-.tag.batch{background:rgba(200,150,10,.12);border-color:var(--am);color:var(--am)}
 
 /* ── PRICE ── */
 .price-tag{font-size:.74rem;color:var(--gn);font-weight:700}

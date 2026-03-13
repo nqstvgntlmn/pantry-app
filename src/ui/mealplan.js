@@ -133,6 +133,9 @@ export function pickRec(recId) {
 // Closes the meal-planning modal without saving.
 export function closeMealM() { g("mealM").classList.remove("active"); }
 
+// Closes the "Schedule Recipe" modal (cancel or backdrop tap).
+export function closeSchedM() { g("schedM").classList.remove("active"); }
+
 // Saves the meal assignment for the selected day. If the user picked a saved
 // recipe (not just typed a name), this also parses the recipe's description
 // for ingredient lines and adds any missing ones to the shopping list.
