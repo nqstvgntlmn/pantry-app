@@ -6,7 +6,7 @@
 // dli = delete inventory item).
 
 import { state } from '../state.js';
-import { svi, dli, addWasteEntry, dbSet, dbGet } from '../db.js';
+import { svi, dli, addWasteEntry, dbSet, dbGet, svShopItem } from '../db.js';
 // g        – getElementById shorthand
 // xSt      – returns expiry status object { c: class, l: label } for a date
 // ll       – location label (e.g. "fridge" → "🌡 Fridge")
@@ -162,45 +162,17 @@ export function renderInv() {
   }
 }
 
-// Opens the "Adjust Item" detail overlay for a given inventory item.
-// This overlay lets the user change location, quantity, expiry, and notes,
-// or remove the item entirely. All fields auto-save on change (no submit button).
+// [ADJUST OVERLAY DISABLED] — All fields merged into detail sheet. Uncomment to restore.
+// openAdj() now redirects to the detail sheet so any remaining callers
+// (e.g. Home screen "Expiring Soon" / "Running Low" cards) still work.
 export function openAdj(id) {
-  const item = state.inv.find(i => i.id === id);
-  if (!item) return;
-
-  // Track which item the overlay is editing so the inline handlers
-  // (adjQ, adjE, updL, etc.) know which item to update
-  state.adjId = id;
-
-  // Build the product image / emoji fallback
-  const ic = CATS[gcat(item)] || "🛒";
-  // [IMAGES DISABLED] — Product images commented out pending decision.
-  // See session notes: images caused false positives from external databases,
-  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
-  // To re-enable: uncomment these blocks and restore image display logic.
-  // const img = item.image ? `<img src="${item.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">${ic}</div>`;
-  const img = `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">${ic}</div>`;
-
-  // Brand line — only show for barcode scans or brand-matched searches (same as list row)
-  const brandHtml = _shouldShowInvBrand(item) ? `<div class="pbr">${item.brand}</div>` : "";
-
-  // Inject the full overlay body: header card, location picker,
-  // quantity stepper, expiry date picker, and notes textarea.
-  // Category/source tags removed — they added no user value.
-  // Each control calls its own global handler on change (e.g. updL, adjQ).
-  // Build the unit selector options
-  const curUnit = item.unit || "Unit";
-  const unitOpts = UNITS.map(u => `<option value="${u}"${u === curUnit ? " selected" : ""}>${u}</option>`).join("");
-  // Compute the effective restock threshold (custom or smart default)
-  const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(curUnit);
-
-  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${toTitleCase(item.name)}</div>${brandHtml}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div></div></div><div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button><button class="lbtn ${item.location === "household" ? "sel" : ""}" onclick="updL('household',this)">🏠 Household</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Unit of Measure</label><select class="detail-select" id="adjunit" onchange="adjUnit()">${unitOpts}</select></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Restock when below</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${thresh}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div><div class="frow" style="display:flex;align-items:center;justify-content:space-between"><label class="flbl" style="margin-bottom:0">Don't add to Running Low</label><label class="toggle-switch"><input type="checkbox" id="adjdonotrestock" ${item.doNotRestock ? "checked" : ""} onchange="adjDoNotRestock()"/><span class="toggle-slider"></span></label></div></div>`;
-
-  // Wire the "Remove" button at the bottom of the overlay
-  g("rembtn").onclick = () => remItem(id);
-  showOv("adj");
+  openInvItemDetail(id);
 }
+// -- Original openAdj overlay code removed --
+// The old overlay duplicated every field that now lives in openInvItemDetail().
+// If you ever need the standalone overlay back, check git history for the
+// full implementation (location picker, qty stepper, unit, expiry, notes,
+// restock threshold, doNotRestock toggle).
 
 // ── INVENTORY ITEM DETAIL BOTTOM SHEET ──────────────────────────────────────
 // Mirrors the shopping list's openItemDetail() — shows product info with
@@ -319,15 +291,29 @@ export async function openInvItemDetail(id) {
     </select>
   </div>`;
 
-  // Expiry date picker — always shown, truly optional with clear button
-  html += `<div class="item-detail-section">
-    <div class="item-detail-label">Expiry Date <span class="otag">optional</span></div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <input class="fd" id="inv-expiry-${item.id}" type="date" value="${item.expiry || ""}" onchange="changeInvExpiry('${item.id}')" style="flex:1"/>
-      <button class="qbtn" onclick="clearInvExpiry('${item.id}')" title="Clear expiry" style="font-size:.75rem;padding:6px 10px">✕ No expiry</button>
-    </div>
-    ${ex ? `<div class="etag ${ex.c}" style="margin-top:6px">${ex.l}</div>` : ""}
-  </div>`;
+  // Expiry date — conditional UI: if no expiry set, show "No expiry" badge + "Set expiry" button.
+  // If expiry is set, show the date picker + "Clear" button + status tag.
+  // This avoids forcing users into the native iOS date picker unless they actively want to set one.
+  if (item.expiry) {
+    // Expiry IS set — show date picker, status tag, and clear button
+    html += `<div class="item-detail-section">
+      <div class="item-detail-label">Expiry Date <span class="otag">optional</span></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input class="fd" id="inv-expiry-${item.id}" type="date" value="${item.expiry}" onchange="changeInvExpiry('${item.id}')" style="flex:1"/>
+        <button class="inv-expiry-clear-btn" onclick="clearInvExpiry('${item.id}')" title="Clear expiry date">✕ Clear</button>
+      </div>
+      ${ex ? `<div class="etag ${ex.c}" style="margin-top:6px">${ex.l}</div>` : ""}
+    </div>`;
+  } else {
+    // No expiry set — show badge and a button to reveal the date picker
+    html += `<div class="item-detail-section">
+      <div class="item-detail-label">Expiry Date <span class="otag">optional</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="inv-no-expiry-badge">No expiry set</span>
+        <button class="inv-set-expiry-btn" onclick="setInvExpiry('${item.id}')">Set expiry</button>
+      </div>
+    </div>`;
+  }
 
   // Notes textarea — always visible, saves on blur
   html += `<div class="item-detail-section">
@@ -665,12 +651,20 @@ export async function adjNote() {
   await svi({ ...item, note: v || null });
 }
 
-// Saves a new unit of measure when the user picks one from the dropdown.
+// Saves a new unit of measure when the user picks one from the adjust overlay dropdown.
+// Also propagates the unit change to the matching shopping item (if any) and saves
+// the unit as a product preference, so all tabs stay in sync (universal unit sync).
 export async function adjUnit() {
   const item = state.inv.find(i => i.id === state.adjId);
   if (!item) return;
   const unit = g("adjunit").value;
   await svi({ ...item, unit });
+  // Remember this unit choice so it auto-populates next time this product is added
+  _savePreferredUnit(item.name, unit);
+  // Propagate unit change to matching shopping item (universal unit sync)
+  const shopItem = state.shop.find(i => i.name.toLowerCase().trim() === item.name.toLowerCase().trim());
+  if (shopItem) await svShopItem({ ...shopItem, unit });
+  showNotif("Unit updated everywhere");
 }
 
 // Adjusts the restock threshold by a delta (+1 / -1).
@@ -705,8 +699,9 @@ export async function adjDoNotRestock() {
 
 /**
  * changeInvUnit(id, unit) — Updates the unit of measure for an inventory item.
- * Saves the unit as a product preference for next time, and recalculates
- * the restock threshold if the user hasn't set a custom one.
+ * Saves the unit as a product preference for next time, recalculates the restock
+ * threshold if the user hasn't set a custom one, and propagates the change to the
+ * matching shopping item (if any) so both tabs stay in sync (universal unit sync).
  */
 export async function changeInvUnit(id, unit) {
   const item = state.inv.find(i => i.id === id);
@@ -719,6 +714,10 @@ export async function changeInvUnit(id, unit) {
   await svi(updated);
   // Remember this unit choice so it auto-populates next time this product is added
   _savePreferredUnit(item.name, unit);
+  // Propagate unit change to matching shopping item (universal unit sync)
+  const shopItem = state.shop.find(i => i.name.toLowerCase().trim() === item.name.toLowerCase().trim());
+  if (shopItem) await svShopItem({ ...shopItem, unit });
+  showNotif("Unit updated everywhere");
   openInvItemDetail(id); // refresh the sheet to show updated data
 }
 
@@ -813,15 +812,29 @@ export async function changeInvExpiry(id) {
 
 /**
  * clearInvExpiry(id) — Clears the expiry date, making it truly "no expiry".
- * Resets the date input and saves null to Firestore.
+ * Saves null to Firestore and refreshes the detail sheet to show the
+ * "No expiry set" badge instead of the date picker.
  */
 export async function clearInvExpiry(id) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
-  const el = g(`inv-expiry-${id}`);
-  if (el) el.value = "";
   await svi({ ...item, expiry: null });
-  // Refresh the detail sheet to remove the expiry status tag
+  // Refresh the detail sheet to swap from date picker to "No expiry" badge
+  openInvItemDetail(id);
+}
+
+/**
+ * setInvExpiry(id) — Transitions from "No expiry" badge to the date picker.
+ * Sets today's date as default, saves to Firestore, and refreshes the sheet
+ * so the user sees the date input and can adjust it.
+ */
+export async function setInvExpiry(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  // Default to today's date so the picker opens with a sensible value
+  const today = new Date().toISOString().split("T")[0];
+  await svi({ ...item, expiry: today });
+  // Refresh the detail sheet to show the date picker with today's date
   openInvItemDetail(id);
 }
 

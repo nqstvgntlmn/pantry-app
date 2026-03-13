@@ -521,6 +521,16 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .item-detail-badge{display:inline-block;font-size:.72rem;padding:3px 10px;border-radius:20px;background:var(--acd);color:var(--ac);border:1px solid var(--b1);margin-right:6px;margin-bottom:4px}
 /* Nutrition grid classes removed — nutrition data no longer displayed (unreliable from text search matching) */
 
+/* ── INVENTORY EXPIRY DATE CONTROLS ── */
+/* "No expiry set" badge — neutral pill shown when item has no expiry date */
+.inv-no-expiry-badge{display:inline-block;font-size:.78rem;padding:5px 12px;border-radius:20px;background:var(--s2);color:var(--mt);border:1px solid var(--b1)}
+/* "Set expiry" button — subtle outlined action to reveal the date picker */
+.inv-set-expiry-btn{font-size:.78rem;padding:5px 14px;border-radius:20px;background:transparent;color:var(--ac);border:1.5px solid var(--ac);cursor:pointer;font-weight:600;transition:background .15s,color .15s}
+.inv-set-expiry-btn:active{background:var(--ac);color:#fff}
+/* "Clear" button — used when expiry is set, removes the date */
+.inv-expiry-clear-btn{font-size:.75rem;padding:6px 12px;border-radius:20px;background:transparent;color:var(--mt);border:1.5px solid var(--b1);cursor:pointer;font-weight:500;white-space:nowrap;transition:border-color .15s,color .15s}
+.inv-expiry-clear-btn:active{border-color:var(--dn);color:var(--dn)}
+
 /* ── PRODUCT ENRICHMENT RESULTS ── */
 /* Each search result row in the enrichment bottom sheet */
 .enrich-row{display:flex;align-items:center;gap:12px;padding:14px;border-radius:14px;border:1.5px solid var(--b1);background:var(--card);cursor:pointer;transition:all .15s;margin-bottom:8px}

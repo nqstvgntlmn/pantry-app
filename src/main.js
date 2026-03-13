@@ -44,7 +44,7 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvExpiry, clearInvExpiry, changeInvNote } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
@@ -52,7 +52,7 @@ import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQt
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
-import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, openRecipeView, handleRecipeBack, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif, triggerCoverUpload, handleCoverSelected, handleCoverDrop, removeCoverPhoto, triggerStepPhotoUpload, handleStepPhotoSelected, removeStepPhoto, openPhotoViewer, closePhotoViewer, photoViewerNav, triggerCommentPhotoUpload, handleCommentPhotosSelected, removeCommentPhoto } from './ui/recipes.js';
+import { renderRecs, togFav, valR, importFromUrl, setImportMode, startBulkImport, retryBulkImport, saveRec, openER, openRecipeView, handleRecipeBack, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif, triggerCoverUpload, handleCoverSelected, handleCoverDrop, removeCoverPhoto, triggerStepPhotoUpload, handleStepPhotoSelected, removeStepPhoto, openPhotoViewer, closePhotoViewer, photoViewerNav, triggerCommentPhotoUpload, handleCommentPhotosSelected, removeCommentPhoto } from './ui/recipes.js';
 
 // Insights screen: usage analytics and charts
 import { renderInsights } from './ui/insights.js';
@@ -168,6 +168,7 @@ window.changeInvQty = changeInvQty;                   // Adjust quantity +/- fro
 window.changeInvQtyDirect = changeInvQtyDirect;       // Direct input of quantity from detail sheet
 window.changeInvExpiry = changeInvExpiry;              // Save expiry date from detail sheet date picker
 window.clearInvExpiry = clearInvExpiry;                // Clear expiry date (set to "no expiry")
+window.setInvExpiry = setInvExpiry;                    // Switch from "No expiry" badge to date picker (sets today as default)
 window.changeInvNote = changeInvNote;                  // Save notes from detail sheet textarea
 // Inventory add-to-pantry bottom sheet (mirrors shopping add-item sheet)
 window.openInvAddSheet = openInvAddSheet;     // Open the add-to-pantry bottom sheet
@@ -241,6 +242,9 @@ window.setRT = setRT;           // Set the recipe tab filter (e.g. "all", "favor
 window.togFav = togFav;         // Toggle a recipe's favorite status
 window.valR = valR;             // Validate the add/edit recipe form
 window.importFromUrl = importFromUrl; // Import a recipe from a URL (scrape)
+window.setImportMode = setImportMode;   // Toggle between single/bulk import tabs
+window.startBulkImport = startBulkImport; // Start the bulk recipe import flow
+window.retryBulkImport = retryBulkImport; // Retry a single failed bulk import URL
 window.saveRec = saveRec;       // Save a new recipe
 window.openER = openER;         // Open the edit-recipe overlay for an existing recipe
 window.updR = updR;             // Update (save changes to) an existing recipe

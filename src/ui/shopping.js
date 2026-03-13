@@ -253,8 +253,9 @@ export function toggleVoice() {
       const inp = g("shi");
       if (inp) inp.value = "";
 
+      // [SEARCH DISABLED] — uncomment to re-enable
       // Trigger enrichment search for the voice-added item
-      searchAndEnrich(item.id, name, "shop");
+      // searchAndEnrich(item.id, name, "shop");
     }
   };
 
@@ -573,22 +574,28 @@ const _CACHE_MAX = 30;             // Max cached queries
  * character. Clears the dropdown if the input is too short (< 2 chars).
  */
 export function onShopInput() {
-  // Clear any pending search timer so only the last keystroke triggers a search
-  if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+  // [SEARCH DISABLED] — uncomment to re-enable
+  // Text search on keystroke is disabled. The input field still works for
+  // plain-text adds via qadd(). Debounce and _runInlineSearch calls are
+  // commented out so no API calls fire while typing.
+  return;
 
-  const inp = g("shi");
-  const query = inp ? inp.value.trim() : "";
-  const dropdown = g("shopSearchDropdown");
-
-  // If input is too short, hide the dropdown and bail
-  if (!query || query.length < 2) {
-    if (dropdown) { dropdown.classList.remove("active"); dropdown.innerHTML = ""; }
-    _inlineSearchResults = null;
-    return;
-  }
-
-  // Wait 350ms after the user stops typing before searching (debounce)
-  _searchDebounceTimer = setTimeout(() => _runInlineSearch(query), 350);
+  // // Clear any pending search timer so only the last keystroke triggers a search
+  // if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+  //
+  // const inp = g("shi");
+  // const query = inp ? inp.value.trim() : "";
+  // const dropdown = g("shopSearchDropdown");
+  //
+  // // If input is too short, hide the dropdown and bail
+  // if (!query || query.length < 2) {
+  //   if (dropdown) { dropdown.classList.remove("active"); dropdown.innerHTML = ""; }
+  //   _inlineSearchResults = null;
+  //   return;
+  // }
+  //
+  // // Wait 350ms after the user stops typing before searching (debounce)
+  // _searchDebounceTimer = setTimeout(() => _runInlineSearch(query), 350);
 }
 
 // ── RECIPE/DISH NAME DETECTION (client-side mirror of server logic) ──────────
@@ -754,58 +761,63 @@ export function scoreSearchResult(name, query) {
  * @returns {Promise<Array>} Scored and sorted product results
  */
 async function _fetchAndScoreResults(query) {
-  const cacheKey = query.toLowerCase();
+  // [SEARCH DISABLED] — uncomment to re-enable
+  // The text search API call and scoring pipeline are disabled. Returns an
+  // empty array so all callers that depend on results gracefully no-op.
+  return [];
 
-  // Check cache first — avoids re-hitting the API for repeated searches
-  const cached = _searchCache.get(cacheKey);
-  if (cached && Date.now() - cached.ts < _CACHE_TTL) {
-    return cached.scored;
-  }
-
-  // Fetch from the text search API (product enrichment waterfall).
-  // Pass the household ID so the API can check the custom product image database
-  // first — user-uploaded photos take priority over all external sources.
-  const hidParam = state.hid ? `&hid=${encodeURIComponent(state.hid)}` : "";
-  console.log(`[ShopSearch] Fetching /api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
-  const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
-  const data = await r.json();
-
-  // [IMAGES DISABLED] — Product images commented out pending decision.
-  // See session notes: images caused false positives from external databases,
-  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
-  // To re-enable: uncomment these blocks and restore image display logic.
-  // if (data.imageDismissed) {
-  //   console.log(`[ShopSearch] imageDismissed for "${query}" — stripping images from results`);
+  // const cacheKey = query.toLowerCase();
+  //
+  // // Check cache first — avoids re-hitting the API for repeated searches
+  // const cached = _searchCache.get(cacheKey);
+  // if (cached && Date.now() - cached.ts < _CACHE_TTL) {
+  //   return cached.scored;
   // }
-  let results = data.results || [];
-
-  // Filter: at least one query word must appear in the product name
-  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
-  results = results.filter(p => {
-    const nameLower = (p.name || "").toLowerCase();
-    return queryWords.some(w => nameLower.includes(w));
-  });
-
-  // Score by relevance and STRICTLY filter: only results where the query is
-  // a primary/leading word in the product name pass (score > 0).
-  // Score each result by relevance. Drop anything scoring below 20 — these are
-  // heavily modified variants (e.g. "Hershey's Chocolate Milk" for "milk") that
-  // clutter the dropdown. Keep only the top 5 best matches.
-  const scored = results
-    .map(p => ({ ...p, _score: scoreSearchResult(p.name || "", query) }))
-    .filter(p => p._score >= 20)
-    .sort((a, b) => b._score - a._score)
-    .slice(0, 5);
-
-  // Cache the scored results
-  _searchCache.set(cacheKey, { scored, ts: Date.now() });
-  // Evict oldest entries if cache is full
-  if (_searchCache.size > _CACHE_MAX) {
-    const oldest = _searchCache.keys().next().value;
-    _searchCache.delete(oldest);
-  }
-
-  return scored;
+  //
+  // // Fetch from the text search API (product enrichment waterfall).
+  // // Pass the household ID so the API can check the custom product image database
+  // // first — user-uploaded photos take priority over all external sources.
+  // const hidParam = state.hid ? `&hid=${encodeURIComponent(state.hid)}` : "";
+  // console.log(`[ShopSearch] Fetching /api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
+  // const r = await fetch(`/api/text-search?q=${encodeURIComponent(query)}${hidParam}`);
+  // const data = await r.json();
+  //
+  // // [IMAGES DISABLED] — Product images commented out pending decision.
+  // // See session notes: images caused false positives from external databases,
+  // // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // // To re-enable: uncomment these blocks and restore image display logic.
+  // // if (data.imageDismissed) {
+  // //   console.log(`[ShopSearch] imageDismissed for "${query}" — stripping images from results`);
+  // // }
+  // let results = data.results || [];
+  //
+  // // Filter: at least one query word must appear in the product name
+  // const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+  // results = results.filter(p => {
+  //   const nameLower = (p.name || "").toLowerCase();
+  //   return queryWords.some(w => nameLower.includes(w));
+  // });
+  //
+  // // Score by relevance and STRICTLY filter: only results where the query is
+  // // a primary/leading word in the product name pass (score > 0).
+  // // Score each result by relevance. Drop anything scoring below 20 — these are
+  // // heavily modified variants (e.g. "Hershey's Chocolate Milk" for "milk") that
+  // // clutter the dropdown. Keep only the top 5 best matches.
+  // const scored = results
+  //   .map(p => ({ ...p, _score: scoreSearchResult(p.name || "", query) }))
+  //   .filter(p => p._score >= 20)
+  //   .sort((a, b) => b._score - a._score)
+  //   .slice(0, 5);
+  //
+  // // Cache the scored results
+  // _searchCache.set(cacheKey, { scored, ts: Date.now() });
+  // // Evict oldest entries if cache is full
+  // if (_searchCache.size > _CACHE_MAX) {
+  //   const oldest = _searchCache.keys().next().value;
+  //   _searchCache.delete(oldest);
+  // }
+  //
+  // return scored;
 }
 
 /**
@@ -912,63 +924,69 @@ async function _checkCustomProductLocal(query) {
  * @param {string} query — The text to search for
  */
 async function _runInlineSearch(query) {
-  const dropdown = g("shopSearchDropdown");
-  if (!dropdown) return;
+  // [SEARCH DISABLED] — uncomment to re-enable
+  // The inline search pipeline (custom product lookup + API fetch + dropdown
+  // rendering) is disabled. Function signature kept so callers don't break.
+  // Plain-text add via qadd() still works normally.
+  return;
 
-  // Show loading indicator
-  dropdown.innerHTML = '<div class="search-hint">Searching…</div>';
-  dropdown.classList.add("active");
-
-  try {
-    // Phase 1: Instant client-side customProduct lookup (no API round-trip).
-    // Fire this AND the API call in parallel — custom result renders immediately
-    // if found, API results merge in when they arrive.
-    const customPromise = _checkCustomProductLocal(query);
-    const apiPromise = _fetchAndScoreResults(query);
-
-    // Show custom product result instantly if available
-    const customResult = await customPromise;
-    if (customResult) {
-      // Bail if user changed the input while we were checking
-      const curQuery = g("shi") ? g("shi").value.trim() : "";
-      if (curQuery.toLowerCase() === query.toLowerCase()) {
-        console.log(`[ShopSearch] Instant custom product match for "${query}"`);
-        _renderShopDropdown([customResult]);
-      }
-    }
-
-    // Phase 2: Wait for the full API results from external databases
-    const apiResults = await apiPromise;
-
-    // Bail if the input changed while we were fetching (stale response)
-    const currentQuery = g("shi") ? g("shi").value.trim() : "";
-    if (currentQuery.toLowerCase() !== query.toLowerCase()) return;
-
-    // Merge: prepend the custom product (if found) ahead of API results,
-    // deduplicating by normalized name so it doesn't appear twice.
-    let merged = apiResults;
-    if (customResult) {
-      const customNorm = normalizeProductName(customResult.name);
-      const deduped = apiResults.filter(r => normalizeProductName(r.name) !== customNorm);
-      merged = [customResult, ...deduped].slice(0, 5);
-    }
-
-    if (!merged.length) {
-      dropdown.classList.remove("active");
-      dropdown.innerHTML = "";
-      _inlineSearchResults = null;
-      return;
-    }
-
-    _renderShopDropdown(merged);
-
-  } catch (e) {
-    // Search failed silently — user can still add as plain text via Enter
-    console.warn("Inline search failed:", e);
-    dropdown.classList.remove("active");
-    dropdown.innerHTML = "";
-    _inlineSearchResults = null;
-  }
+  // const dropdown = g("shopSearchDropdown");
+  // if (!dropdown) return;
+  //
+  // // Show loading indicator
+  // dropdown.innerHTML = '<div class="search-hint">Searching…</div>';
+  // dropdown.classList.add("active");
+  //
+  // try {
+  //   // Phase 1: Instant client-side customProduct lookup (no API round-trip).
+  //   // Fire this AND the API call in parallel — custom result renders immediately
+  //   // if found, API results merge in when they arrive.
+  //   const customPromise = _checkCustomProductLocal(query);
+  //   const apiPromise = _fetchAndScoreResults(query);
+  //
+  //   // Show custom product result instantly if available
+  //   const customResult = await customPromise;
+  //   if (customResult) {
+  //     // Bail if user changed the input while we were checking
+  //     const curQuery = g("shi") ? g("shi").value.trim() : "";
+  //     if (curQuery.toLowerCase() === query.toLowerCase()) {
+  //       console.log(`[ShopSearch] Instant custom product match for "${query}"`);
+  //       _renderShopDropdown([customResult]);
+  //     }
+  //   }
+  //
+  //   // Phase 2: Wait for the full API results from external databases
+  //   const apiResults = await apiPromise;
+  //
+  //   // Bail if the input changed while we were fetching (stale response)
+  //   const currentQuery = g("shi") ? g("shi").value.trim() : "";
+  //   if (currentQuery.toLowerCase() !== query.toLowerCase()) return;
+  //
+  //   // Merge: prepend the custom product (if found) ahead of API results,
+  //   // deduplicating by normalized name so it doesn't appear twice.
+  //   let merged = apiResults;
+  //   if (customResult) {
+  //     const customNorm = normalizeProductName(customResult.name);
+  //     const deduped = apiResults.filter(r => normalizeProductName(r.name) !== customNorm);
+  //     merged = [customResult, ...deduped].slice(0, 5);
+  //   }
+  //
+  //   if (!merged.length) {
+  //     dropdown.classList.remove("active");
+  //     dropdown.innerHTML = "";
+  //     _inlineSearchResults = null;
+  //     return;
+  //   }
+  //
+  //   _renderShopDropdown(merged);
+  //
+  // } catch (e) {
+  //   // Search failed silently — user can still add as plain text via Enter
+  //   console.warn("Inline search failed:", e);
+  //   dropdown.classList.remove("active");
+  //   dropdown.innerHTML = "";
+  //   _inlineSearchResults = null;
+  // }
 }
 
 /**
@@ -1095,75 +1113,81 @@ export function enrichRemindersItems() {
  * @param {string} list — "shop" for shopping list, "inv" for inventory
  */
 export async function searchAndEnrich(itemId, query, list) {
-  // Skip enrichment for very short queries (likely abbreviations, not product names)
-  if (!query || query.length < 2) return;
+  // [SEARCH DISABLED] — uncomment to re-enable
+  // The enrichment bottom sheet (API search + result picker) is disabled.
+  // Items added via voice or manual input are saved as plain text without
+  // product enrichment. Function signature kept so callers don't break.
+  return;
 
-  const resultsEl = g("enrichResults");
-  const titleEl = g("enrichTitle");
-  if (!resultsEl) return;
-
-  // Show loading state in the enrichment sheet
-  if (titleEl) titleEl.textContent = `Finding "${query}"…`;
-  resultsEl.innerHTML = '<div class="enrich-loading"><div class="spin" style="width:28px;height:28px;margin:0 auto 8px"></div>Searching products…</div>';
-
-  // Open the enrichment bottom sheet
-  const backdrop = g("enrichBackdrop");
-  const sheet = g("enrichSheet");
-  if (backdrop) backdrop.classList.add("active");
-  if (sheet) sheet.classList.add("active");
-
-  try {
-    // Use the shared fetch-and-score pipeline (with caching) for consistent
-    // relevance ranking across inline search and post-add enrichment
-    let results = await _fetchAndScoreResults(query);
-
-    // If no relevant matches, silently close — item is already saved as plain text
-    if (!results.length) {
-      closeEnrichSheet();
-      return;
-    }
-
-    // Update the title and render the results
-    if (titleEl) titleEl.textContent = "Choose a match";
-
-    // Build results HTML with consistent layout: image LEFT, text RIGHT.
-    // On image error, swap to placeholder so alignment never breaks.
-    let html = results.map((p, i) => {
-      // [IMAGES DISABLED] — Product images commented out pending decision.
-      // See session notes: images caused false positives from external databases,
-      // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
-      // To re-enable: uncomment these blocks and restore image display logic.
-      // const img = p.image
-      //   ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.outerHTML='<div class=\\'enrich-img-ph\\'>🛒</div>'">`
-      //   : `<div class="enrich-img-ph">🛒</div>`;
-      const img = `<div class="enrich-img-ph">🛒</div>`;
-      const cat = p.category && p.category !== "General"
-        ? `<div class="enrich-cat">${p.category}</div>` : "";
-      return `<div class="enrich-row" onclick="pickEnrichResult(${i})">
-        ${img}
-        <div class="enrich-text">
-          <div class="enrich-name">${p.name}</div>
-          ${cat}
-        </div>
-      </div>`;
-    }).join("");
-
-    // "Just add as typed" fallback option at the bottom
-    html += `<button class="enrich-fallback" onclick="closeEnrichSheet()">
-      <span style="font-size:1.1rem">📝</span>
-      Just add "${query}" as typed
-    </button>`;
-
-    resultsEl.innerHTML = html;
-
-    // Store results and context in a temporary global for the click handler
-    window._enrichCtx = { itemId, query, list, results };
-
-  } catch (e) {
-    // On error, silently close — the item is already saved as plain text
-    console.warn("Text search failed:", e);
-    closeEnrichSheet();
-  }
+  // // Skip enrichment for very short queries (likely abbreviations, not product names)
+  // if (!query || query.length < 2) return;
+  //
+  // const resultsEl = g("enrichResults");
+  // const titleEl = g("enrichTitle");
+  // if (!resultsEl) return;
+  //
+  // // Show loading state in the enrichment sheet
+  // if (titleEl) titleEl.textContent = `Finding "${query}"…`;
+  // resultsEl.innerHTML = '<div class="enrich-loading"><div class="spin" style="width:28px;height:28px;margin:0 auto 8px"></div>Searching products…</div>';
+  //
+  // // Open the enrichment bottom sheet
+  // const backdrop = g("enrichBackdrop");
+  // const sheet = g("enrichSheet");
+  // if (backdrop) backdrop.classList.add("active");
+  // if (sheet) sheet.classList.add("active");
+  //
+  // try {
+  //   // Use the shared fetch-and-score pipeline (with caching) for consistent
+  //   // relevance ranking across inline search and post-add enrichment
+  //   let results = await _fetchAndScoreResults(query);
+  //
+  //   // If no relevant matches, silently close — item is already saved as plain text
+  //   if (!results.length) {
+  //     closeEnrichSheet();
+  //     return;
+  //   }
+  //
+  //   // Update the title and render the results
+  //   if (titleEl) titleEl.textContent = "Choose a match";
+  //
+  //   // Build results HTML with consistent layout: image LEFT, text RIGHT.
+  //   // On image error, swap to placeholder so alignment never breaks.
+  //   let html = results.map((p, i) => {
+  //     // [IMAGES DISABLED] — Product images commented out pending decision.
+  //     // See session notes: images caused false positives from external databases,
+  //     // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  //     // To re-enable: uncomment these blocks and restore image display logic.
+  //     // const img = p.image
+  //     //   ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.outerHTML='<div class=\\'enrich-img-ph\\'>🛒</div>'">`
+  //     //   : `<div class="enrich-img-ph">🛒</div>`;
+  //     const img = `<div class="enrich-img-ph">🛒</div>`;
+  //     const cat = p.category && p.category !== "General"
+  //       ? `<div class="enrich-cat">${p.category}</div>` : "";
+  //     return `<div class="enrich-row" onclick="pickEnrichResult(${i})">
+  //       ${img}
+  //       <div class="enrich-text">
+  //         <div class="enrich-name">${p.name}</div>
+  //         ${cat}
+  //       </div>
+  //     </div>`;
+  //   }).join("");
+  //
+  //   // "Just add as typed" fallback option at the bottom
+  //   html += `<button class="enrich-fallback" onclick="closeEnrichSheet()">
+  //     <span style="font-size:1.1rem">📝</span>
+  //     Just add "${query}" as typed
+  //   </button>`;
+  //
+  //   resultsEl.innerHTML = html;
+  //
+  //   // Store results and context in a temporary global for the click handler
+  //   window._enrichCtx = { itemId, query, list, results };
+  //
+  // } catch (e) {
+  //   // On error, silently close — the item is already saved as plain text
+  //   console.warn("Text search failed:", e);
+  //   closeEnrichSheet();
+  // }
 }
 
 /**
@@ -1320,7 +1344,8 @@ export function closeItemDetail() {
 /**
  * changeShopUnit(id, unit) — Updates the unit of measure for a shopping item.
  * Saves to Firestore, persists the unit as a product preference for next time,
- * and refreshes the detail sheet to reflect the change.
+ * and propagates the change to the matching inventory item (if any) so both
+ * tabs always show the same unit for the same product.
  */
 export async function changeShopUnit(id, unit) {
   const item = state.shop.find(i => i.id === id);
@@ -1328,6 +1353,10 @@ export async function changeShopUnit(id, unit) {
   await svShopItem({ ...item, unit });
   // Remember this unit choice so it auto-populates next time this product is added
   _savePreferredUnit(item.name, unit);
+  // Propagate unit change to matching inventory item (universal unit sync)
+  const invItem = state.inv.find(i => i.name.toLowerCase().trim() === item.name.toLowerCase().trim());
+  if (invItem) await svi({ ...invItem, unit });
+  showNotif("Unit updated everywhere");
   openItemDetail(id); // refresh sheet
 }
 

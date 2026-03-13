@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-CDCpFOeT.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-CUJ8as5m.css">
+  <script type="module" crossorigin src="/assets/index-CjgNlTX4.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-Dj1dU0pV.css">
 </head>
 <body>
 
@@ -520,14 +520,30 @@
   <div class="ov" id="ov-arec">
     <div class="ovhdr"><div class="bkbtn" onclick="hideOv('arec')">←</div><div class="ovttl">Save Recipe</div></div>
     <div class="ovbody">
+      <!-- Recipe import card — two modes: single URL or bulk import -->
       <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:16px">
         <div style="font-size:.78rem;color:var(--mt);margin-bottom:8px;font-weight:500">🔗 Import from a website</div>
-        <div style="font-size:.74rem;color:var(--mt);margin-bottom:10px;line-height:1.5">Paste any recipe URL — AllRecipes, NYT Cooking, Bon Appétit, any site — and Claude will read it for you.</div>
-        <div style="display:flex;gap:8px">
-          <input class="fi" id="rurl" placeholder="https://www.allrecipes.com/recipe/…" style="flex:1;font-size:.82rem"/>
-          <button class="btn bp bsm" id="rimportbtn" onclick="importFromUrl()">Import</button>
+        <!-- Two-tab switcher: toggle between single and bulk import modes -->
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn bsm" id="importOneTab" onclick="setImportMode('one')" style="flex:1;background:var(--ac);color:var(--bg)">Import one</button>
+          <button class="btn bsm" id="importManyTab" onclick="setImportMode('many')" style="flex:1">Import many</button>
         </div>
-        <div id="rurlstatus" style="font-size:.74rem;margin-top:8px;display:none"></div>
+        <!-- Single URL import pane (shown by default) -->
+        <div id="importOnePane">
+          <div style="font-size:.74rem;color:var(--mt);margin-bottom:10px;line-height:1.5">Paste any recipe URL — AllRecipes, NYT Cooking, Bon Appétit, any site — and Claude will read it for you.</div>
+          <div style="display:flex;gap:8px">
+            <input class="fi" id="rurl" placeholder="https://www.allrecipes.com/recipe/…" style="flex:1;font-size:.82rem"/>
+            <button class="btn bp bsm" id="rimportbtn" onclick="importFromUrl()">Import</button>
+          </div>
+          <div id="rurlstatus" style="font-size:.74rem;margin-top:8px;display:none"></div>
+        </div>
+        <!-- Bulk import pane (hidden by default) — paste multiple URLs at once -->
+        <div id="importManyPane" style="display:none">
+          <div style="font-size:.74rem;color:var(--mt);margin-bottom:10px;line-height:1.5">Paste URLs here — one per line, or mixed text. We'll find the URLs and import them all as private recipes.</div>
+          <textarea class="fta" id="bulkUrls" placeholder="https://www.allrecipes.com/recipe/…&#10;https://www.bonappetit.com/recipe/…&#10;https://www.seriouseats.com/…" style="min-height:120px"></textarea>
+          <button class="btn bp bf" id="bulkImportBtn" onclick="startBulkImport()" style="margin-top:8px">Scan & Import</button>
+          <div id="bulkImportProgress" style="display:none;margin-top:12px"></div>
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin:4px 0 14px"><div style="flex:1;height:1px;background:var(--b1)"></div><span style="font-size:.7rem;color:var(--mt);text-transform:uppercase;letter-spacing:.08em">or add manually</span><div style="flex:1;height:1px;background:var(--b1)"></div></div>
       <!-- Cover photo upload zone — tap or drag-and-drop to add a cover image -->

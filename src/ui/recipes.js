@@ -256,6 +256,305 @@ export async function importFromUrl() {
   btn.disabled = false;
 }
 
+// ── BULK IMPORT ─────────────────────────────────────────────────────────────
+
+/**
+ * setImportMode — toggles between "Import one" and "Import many" panes.
+ * Highlights the active tab and shows/hides the corresponding pane.
+ * @param {string} mode - "one" for single URL, "many" for bulk import
+ */
+export function setImportMode(mode) {
+  const onePane = g("importOnePane");
+  const manyPane = g("importManyPane");
+  const oneTab = g("importOneTab");
+  const manyTab = g("importManyTab");
+
+  // Toggle pane visibility based on selected mode
+  if (onePane) onePane.style.display = mode === "one" ? "block" : "none";
+  if (manyPane) manyPane.style.display = mode === "many" ? "block" : "none";
+
+  // Highlight the active tab, reset the inactive one
+  if (oneTab) {
+    oneTab.style.background = mode === "one" ? "var(--ac)" : "";
+    oneTab.style.color = mode === "one" ? "var(--bg)" : "";
+  }
+  if (manyTab) {
+    manyTab.style.background = mode === "many" ? "var(--ac)" : "";
+    manyTab.style.color = mode === "many" ? "var(--bg)" : "";
+  }
+}
+
+/**
+ * _extractUrls — extracts all valid HTTP/HTTPS URLs from free-form text.
+ * Handles messy input: URLs mixed with prose, one per line, comma-separated, etc.
+ * @param {string} text - raw input text that may contain URLs
+ * @returns {string[]} array of unique URL strings found in the text
+ */
+function _extractUrls(text) {
+  // Match http:// or https:// followed by non-whitespace characters
+  const urlRegex = /https?:\/\/[^\s<>"'`,;)}\]]+/gi;
+  const matches = text.match(urlRegex) || [];
+
+  // Strip trailing punctuation that's likely not part of the URL (period, comma, etc.)
+  const cleaned = matches.map(u => u.replace(/[.,;:!?)}\]]+$/, ""));
+
+  // Deduplicate URLs while preserving order
+  return [...new Set(cleaned)];
+}
+
+/**
+ * _classifyUrl — pre-validates a URL before attempting import.
+ * Flags video platforms (can't scrape) and paywalled sites (may fail).
+ * @param {string} url - the URL to classify
+ * @returns {{ status: "ok"|"video"|"paywall", reason: string }}
+ */
+function _classifyUrl(url) {
+  const lower = url.toLowerCase();
+
+  // Video platforms — these don't have scrapable recipe text
+  const videoPatterns = [
+    { pattern: /youtube\.com|youtu\.be/, name: "YouTube" },
+    { pattern: /tiktok\.com/, name: "TikTok" },
+    { pattern: /instagram\.com\/reel/, name: "Instagram Reel" },
+    { pattern: /vimeo\.com/, name: "Vimeo" },
+    { pattern: /twitter\.com|x\.com/, name: "X/Twitter" },
+  ];
+  for (const v of videoPatterns) {
+    if (v.pattern.test(lower)) {
+      return { status: "video", reason: `${v.name} video — can't extract recipe text` };
+    }
+  }
+
+  // Paywall sites — may work but likely to fail or return partial data
+  const paywallPatterns = [
+    { pattern: /cooking\.nytimes\.com/, name: "NYT Cooking" },
+    { pattern: /food52\.com/, name: "Food52" },
+  ];
+  for (const p of paywallPatterns) {
+    if (p.pattern.test(lower)) {
+      return { status: "paywall", reason: `${p.name} — may be paywalled` };
+    }
+  }
+
+  return { status: "ok", reason: "" };
+}
+
+/**
+ * startBulkImport — main bulk import flow. Extracts URLs from the textarea,
+ * classifies them (ok / video / paywall), then imports them sequentially.
+ * Each imported recipe is saved directly as a private recipe (no form review).
+ * Shows real-time progress and a final summary with retry options for failures.
+ */
+export async function startBulkImport() {
+  const textarea = g("bulkUrls");
+  const rawText = textarea ? textarea.value.trim() : "";
+  if (!rawText) return;
+
+  // Extract and deduplicate all URLs from the raw text
+  const allUrls = _extractUrls(rawText);
+  if (!allUrls.length) {
+    showNotif("No URLs found in the text");
+    return;
+  }
+
+  // Pre-classify each URL to flag videos and paywalled sites
+  const classified = allUrls.map(url => ({ url, ...(_classifyUrl(url)) }));
+  const okUrls = classified.filter(c => c.status === "ok");
+  const paywallUrls = classified.filter(c => c.status === "paywall");
+  const videoUrls = classified.filter(c => c.status === "video");
+
+  // Show the progress area and disable the button to prevent double-submits
+  const progress = g("bulkImportProgress");
+  if (!progress) return;
+  progress.style.display = "block";
+
+  const btn = g("bulkImportBtn");
+  if (btn) btn.disabled = true;
+
+  // Include paywall URLs (they might work) but skip video URLs entirely
+  const toImport = [...okUrls, ...paywallUrls];
+
+  // Track results for the final summary
+  const results = { success: [], failed: [], skipped: videoUrls };
+
+  // Import each URL sequentially to avoid overwhelming the API
+  for (let i = 0; i < toImport.length; i++) {
+    const entry = toImport[i];
+    const paywallWarn = entry.status === "paywall" ? " — may be paywalled" : "";
+
+    // Update progress indicator with current URL index
+    progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Importing ${i + 1} of ${toImport.length}…${paywallWarn}</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
+
+    try {
+      // Call the same AI-powered import endpoint used by single import
+      const r = await fetch("/api/import-recipe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: entry.url })
+      });
+      const data = await r.json();
+
+      if (data.success && data.recipe) {
+        const recipe = data.recipe;
+
+        // Build a formatted description from structured ingredients + steps
+        const desc = _buildDescription(recipe);
+
+        // Generate a unique ID for this recipe
+        const id = "rec-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+
+        // Save the recipe directly — bulk imports are ALWAYS private (no publishedId)
+        await svr({
+          id,
+          name: recipe.title || "Untitled Recipe",
+          description: desc,
+          notes: recipe.notes || "",
+          rating: 0,
+          favorited: false,
+          sourceUrl: entry.url,
+          source: "AI Import",
+          imageUrl: recipe.imageUrl || null,
+          ingredientsRaw: recipe.ingredients || [],
+          stepsRaw: recipe.steps || [],
+          prepTime: recipe.prepTime || "",
+          cookTime: recipe.cookTime || "",
+          totalTime: recipe.totalTime || "",
+          servings: recipe.servings || "",
+          tags: recipe.tags || [],
+          savedAt: new Date().toLocaleDateString(),
+        });
+
+        results.success.push({ url: entry.url, name: recipe.title });
+      } else {
+        results.failed.push({ url: entry.url, error: data.error || "Unknown error" });
+      }
+    } catch (e) {
+      results.failed.push({ url: entry.url, error: e.message });
+    }
+  }
+
+  // Show the final summary with success/fail/skip counts
+  _renderBulkSummary(progress, results);
+  if (btn) btn.disabled = false;
+}
+
+/**
+ * _renderBulkSummary — renders the final results of a bulk import into
+ * the progress container. Shows success count, skipped videos, and
+ * failed URLs with individual retry buttons.
+ * @param {HTMLElement} container - the DOM element to render into
+ * @param {Object} results - { success[], failed[], skipped[] }
+ */
+function _renderBulkSummary(container, results) {
+  let html = "";
+
+  // Successful imports — green summary
+  if (results.success.length) {
+    html += `<div style="color:var(--gn);font-size:.78rem;margin-bottom:6px">✓ ${results.success.length} recipe${results.success.length > 1 ? "s" : ""} imported</div>`;
+    html += `<div style="font-size:.72rem;color:var(--mt);margin-bottom:10px;line-height:1.6">`;
+    results.success.forEach(s => {
+      html += `<div>• ${s.name || s.url}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Skipped video links — yellow warning
+  if (results.skipped.length) {
+    html += `<div style="color:var(--yw,orange);font-size:.78rem;margin-bottom:6px">⚠ ${results.skipped.length} skipped — video links</div>`;
+    html += `<div style="font-size:.72rem;color:var(--mt);margin-bottom:10px;line-height:1.6">`;
+    results.skipped.forEach(s => {
+      html += `<div>• ${s.url} <span style="color:var(--mt);font-size:.68rem">(${s.reason})</span></div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Failed imports — red with retry buttons for each URL
+  if (results.failed.length) {
+    html += `<div style="color:var(--rd);font-size:.78rem;margin-bottom:6px">✗ ${results.failed.length} failed</div>`;
+    html += `<div style="font-size:.72rem;margin-bottom:10px;line-height:1.8">`;
+    results.failed.forEach(f => {
+      html += `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">`;
+      html += `<span style="color:var(--mt);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.url}</span>`;
+      html += `<button class="btn bsm" onclick="retryBulkImport('${f.url.replace(/'/g, "\\'")}')">Retry</button>`;
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Handle edge case: nothing was imported at all
+  if (!results.success.length && !results.failed.length && !results.skipped.length) {
+    html = `<div style="font-size:.78rem;color:var(--mt)">No URLs were processed.</div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+/**
+ * retryBulkImport — retries importing a single failed URL from the bulk summary.
+ * Runs the same import + save flow, then updates the summary in place.
+ * @param {string} url - the URL to retry
+ */
+export async function retryBulkImport(url) {
+  const progress = g("bulkImportProgress");
+  if (!progress) return;
+
+  // Show a spinner for this specific retry
+  const prevHtml = progress.innerHTML;
+  progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Retrying ${url}…</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
+
+  try {
+    // Call the AI-powered import endpoint
+    const r = await fetch("/api/import-recipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    const data = await r.json();
+
+    if (data.success && data.recipe) {
+      const recipe = data.recipe;
+      const desc = _buildDescription(recipe);
+      const id = "rec-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+
+      // Save as private recipe (no publishedId)
+      await svr({
+        id,
+        name: recipe.title || "Untitled Recipe",
+        description: desc,
+        notes: recipe.notes || "",
+        rating: 0,
+        favorited: false,
+        sourceUrl: url,
+        source: "AI Import",
+        imageUrl: recipe.imageUrl || null,
+        ingredientsRaw: recipe.ingredients || [],
+        stepsRaw: recipe.steps || [],
+        prepTime: recipe.prepTime || "",
+        cookTime: recipe.cookTime || "",
+        totalTime: recipe.totalTime || "",
+        servings: recipe.servings || "",
+        tags: recipe.tags || [],
+        savedAt: new Date().toLocaleDateString(),
+      });
+
+      showNotif(`Imported: ${recipe.title || "Recipe"}`);
+
+      // Remove the retry button for this URL and show success instead
+      progress.innerHTML = prevHtml.replace(
+        new RegExp(`<div style="display:flex[^]*?${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^]*?</div>\\s*</div>`),
+        `<div style="color:var(--gn);font-size:.72rem">✓ ${recipe.title || url} — imported</div>`
+      );
+    } else {
+      // Still failed — restore previous summary
+      showNotif("Import failed: " + (data.error || "Unknown error"));
+      progress.innerHTML = prevHtml;
+    }
+  } catch (e) {
+    showNotif("Import failed: " + e.message);
+    progress.innerHTML = prevHtml;
+  }
+}
+
 /**
  * _buildDescription — converts structured ingredient and step arrays into
  * a formatted text string for the description field. Keeps ingredients with
