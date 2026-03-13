@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-BbivMilH.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-kYnyra0K.css">
+  <script type="module" crossorigin src="/assets/index-D77hm8sD.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-C1TGMPhD.css">
 </head>
 <body>
 
@@ -145,6 +145,12 @@
       <div id="variety-nudge" style="display:none;background:var(--amd);border:1px solid var(--am);border-radius:14px;padding:12px 16px;font-size:.82rem;color:var(--tx2);line-height:1.6;margin-bottom:16px"></div>
       <div class="hsec-lbl">🗓 This Week</div>
       <div class="week-wrap"><div class="wgrd" id="wgrd"></div></div>
+      <div id="cooktonightlbl" class="hsec-lbl hsec-toggle" onclick="toggleHomeSection('cooktonight')">🍳 What to Cook Tonight? <span class="hsec-arrow" id="cooktonight-arrow">▾</span></div>
+      <div class="hsec-body" id="cooktonightbody">
+        <div style="text-align:center;padding:8px 0 12px">
+          <button class="btn bp" onclick="openRecipeMatch()" style="font-size:.85rem;padding:10px 20px">🔍 Find recipes</button>
+        </div>
+      </div>
       <div class="hsec-lbl">🧺 Your Supplies</div>
       <div class="sgrd" id="sgrd"></div>
       <div id="lowstocklbl" style="display:none" class="hsec-lbl hsec-toggle" onclick="toggleHomeSection('lowstock')">📉 Running Low <span class="hsec-arrow" id="lowstock-arrow">▾</span></div>
@@ -175,7 +181,8 @@
         <div class="mic-status" id="inv-micstatus"><span class="mic-wave"><span class="bar"></span></span> Listening...<button class="mic-stop-btn" onclick="toggleInvVoice()">Stop</button></div>
       </div>
       <div class="itabs">
-        <div class="itab active" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
+        <div class="itab active" id="itab-all" onclick="setIT('all')">All</div>
+        <div class="itab" id="itab-fridge" onclick="setIT('fridge')">🌡 Fridge</div>
         <div class="itab" id="itab-freezer" onclick="setIT('freezer')">🧊 Freezer</div>
         <div class="itab" id="itab-pantry" onclick="setIT('pantry')">🥫 Pantry</div>
         <div class="itab" id="itab-household" onclick="setIT('household')">🏠 Household</div>
@@ -422,6 +429,17 @@
     <div class="bsheet-handle"></div>
     <div class="bsheet-title" id="enrichTitle">Choose a match</div>
     <div id="enrichResults"></div>
+  </div>
+
+  <!-- FULLSCREEN: RECIPE MATCH (What to Cook Tonight?) -->
+  <div class="ov" id="ov-recipematch">
+    <div style="padding:20px 16px env(safe-area-inset-bottom);height:100%;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0">
+        <div class="sttl" style="font-size:1.1rem">What to Cook Tonight?</div>
+        <button class="btn bs bsm" onclick="hideOv('recipematch')">✕ Close</button>
+      </div>
+      <div id="recipeMatchResults" style="flex:1;overflow-y:auto"></div>
+    </div>
   </div>
 
   <!-- OVERLAY: ADD TO KITCHEN -->

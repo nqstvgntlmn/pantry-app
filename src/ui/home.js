@@ -11,8 +11,8 @@
 //   ll(loc)     — human-readable storage-location label ("fridge" → "🌡 Fridge")
 
 import { state, J, Js } from '../state.js';
-import { g, tk, wDates, xSt, ll, showNotif, toTitleCase } from '../helpers.js';
-import { saveMp, svShopItem, loadActivity } from '../db.js';
+import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase } from '../helpers.js';
+import { saveMp, svShopItem, loadActivity, dbList } from '../db.js';
 
 // initHome() — called once on app boot.
 // Sets the time-aware greeting ("Good morning/afternoon/evening"), displays
@@ -100,8 +100,9 @@ function _applyHomeSectionState(key) {
   const lsKey = `ks-home-${key}-collapsed`;
   const isCollapsed = J(lsKey);
   const arrow = g(`${key}-arrow`);
-  const bodyId = key === "lowstock" ? "lowstocklist" : "activityfeed";
-  const body = g(bodyId);
+  // Map section keys to their body element IDs
+  const bodyMap = { lowstock: "lowstocklist", activity: "activityfeed", cooktonight: "cooktonightbody" };
+  const body = g(bodyMap[key] || key);
 
   // Toggle CSS classes for arrow rotation and body collapse animation
   if (arrow) {
@@ -121,6 +122,7 @@ function _applyHomeSectionState(key) {
 function _applyAllHomeSectionStates() {
   _applyHomeSectionState("lowstock");
   _applyHomeSectionState("activity");
+  _applyHomeSectionState("cooktonight");
 }
 
 // renderTonight() — updates the "Tonight's Dinner" card on the home screen.
@@ -282,12 +284,35 @@ export function renderExp() {
 // Shows items that are at or below their low-stock threshold on the home screen.
 // Each item can be added to the shopping list with one tap.
 
+// Units that typically come in single-count containers — threshold 1
+const _THRESH_ONE = new Set(["Bottle","Jar","Can","Carton","Bunch","Head","Loaf","Dozen","Tube","Roll","Gallon","Half Gallon","Liter"]);
+// Units that typically come in multi-count — threshold 2
+const _THRESH_TWO = new Set(["Piece","Unit","Pack","Box","Bag","Pound","Oz","Clove"]);
+
+/**
+ * _defaultThreshold(unit) — Returns the smart default restock threshold
+ * based on the unit of measure. Container-type units default to 1,
+ * quantity-type units default to 2.
+ */
+export function _defaultThreshold(unit) {
+  if (!unit) return 2; // default "Unit" → threshold 2
+  if (_THRESH_ONE.has(unit)) return 1;
+  if (_THRESH_TWO.has(unit)) return 2;
+  return 2; // fallback
+}
+
 // renderLowStock() — renders the "Running Low" section on the home screen.
-// Items are considered low when qty <= item.lowStockThreshold (default: 1).
-// Sorted by quantity ascending so the most urgent items appear first.
+// Items are considered low when qty <= their restock threshold (smart defaults by unit).
+// Items with doNotRestock:true are excluded. Sorted by quantity ascending.
 function renderLowStock() {
   const low = state.inv
-    .filter(i => i.qty <= (i.lowStockThreshold || 1))
+    .filter(i => {
+      // Skip items marked as "don't restock"
+      if (i.doNotRestock) return false;
+      // Use item's custom threshold, or smart default based on unit type
+      const thresh = i.restockThreshold != null ? i.restockThreshold : _defaultThreshold(i.unit);
+      return i.qty <= thresh;
+    })
     .sort((a, b) => a.qty - b.qty);
 
   const lbl = g("lowstocklbl");
@@ -298,15 +323,14 @@ function renderLowStock() {
   if (!low.length) { lbl.style.display = "none"; lst.innerHTML = ""; return; }
 
   lbl.style.display = "flex";
-  lst.innerHTML = low.map(item => `<div class="exi" style="border-color:var(--am)">
-    <div style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer" onclick="openAdj('${item.id}')">
+  // Layout: item name + qty/unit on left, compact add button on right
+  lst.innerHTML = low.map(item => `<div class="exi" style="border-color:var(--am)" onclick="openAdj('${item.id}')">
+    <div style="flex:1;min-width:0">
       <div class="exn">${toTitleCase(item.name)}</div>
-      <div style="font-size:.74rem;color:var(--am);font-weight:600">${item.qty} ${item.unit}</div>
+      <div style="font-size:.7rem;color:var(--am);font-weight:600;margin-top:1px">${item.qty} ${item.unit || "Unit"}</div>
     </div>
-    <button class="btn bsm bs" style="flex-shrink:0;font-size:.72rem" onclick="event.stopPropagation();addLowToShop('${item.id}')">🛒 Add to list</button>
+    <button class="low-add-btn" onclick="event.stopPropagation();addLowToShop('${item.id}')">🛒 Add</button>
   </div>`).join("");
-
-  // Badge removed from Supplies tab per design — no notification dot
 }
 
 // addLowToShop(id) — adds a low-stock inventory item to the shopping list
@@ -378,6 +402,187 @@ async function renderActivityFeed() {
       <div style="font-size:.68rem;color:var(--mt);flex-shrink:0">${ago(e.timestamp)}</div>
     </div>`
   ).join("");
+}
+
+// ─── RECIPE MATCHING ("WHAT TO COOK TONIGHT?") ─────────────────────────────
+// Matches community recipes against current Supplies inventory.
+// Opens a full-screen overlay showing recipes sorted by ingredient match %.
+
+/** How many recipes to show per page */
+const _MATCH_PAGE_SIZE = 5;
+/** All matched recipes (cached after first fetch per session) */
+let _matchedRecipes = [];
+/** How many are currently displayed */
+let _matchShown = 0;
+
+/**
+ * _normalizeIngredient(name) — Normalizes an ingredient name for fuzzy matching.
+ * Lowercases, trims, removes common quantity words and plurals so
+ * "2 large eggs" matches inventory item "Egg".
+ */
+function _normalizeIngredient(name) {
+  return (name || "")
+    .toLowerCase()
+    .trim()
+    // Strip leading numbers, fractions, and common measurement words
+    .replace(/^[\d\s\/\.½¼¾⅓⅔]+/, "")
+    .replace(/\b(cups?|tbsp?|tsp?|tablespoons?|teaspoons?|ounces?|oz|lbs?|pounds?|grams?|g|kg|ml|liters?|cloves?|cans?|large|small|medium|fresh|dried|chopped|minced|sliced|diced|to taste|optional|about)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    // Remove trailing 's' for basic plural handling
+    .replace(/s$/, "");
+}
+
+/**
+ * _matchRecipeToInventory(recipe, invNames) — Calculates what percentage
+ * of a recipe's ingredients are available in the current inventory.
+ * Returns { matchPct, matchCount, totalCount, missing[] }
+ */
+function _matchRecipeToInventory(recipe, invNames) {
+  // Get recipe ingredients — supports both array and raw string formats
+  let ingredients = [];
+  if (recipe.ingredientsRaw && Array.isArray(recipe.ingredientsRaw)) {
+    ingredients = recipe.ingredientsRaw;
+  } else if (recipe.ingredients) {
+    // Handle string format: split by newlines or semicolons
+    ingredients = recipe.ingredients.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
+  }
+  if (!ingredients.length) return { matchPct: 0, matchCount: 0, totalCount: 0, missing: [] };
+
+  const missing = [];
+  let matchCount = 0;
+  const totalCount = ingredients.length;
+
+  for (const ing of ingredients) {
+    const norm = _normalizeIngredient(ing);
+    if (!norm) { matchCount++; continue; } // skip empty/measurement-only ingredients
+
+    // Check if any inventory item name matches (substring or vice versa)
+    const found = invNames.some(invName => {
+      return invName.includes(norm) || norm.includes(invName);
+    });
+    if (found) matchCount++;
+    else missing.push(ing);
+  }
+
+  const matchPct = totalCount > 0 ? Math.round((matchCount / totalCount) * 100) : 0;
+  return { matchPct, matchCount, totalCount, missing };
+}
+
+/**
+ * openRecipeMatch() — Fetches community recipes and matches them against
+ * the user's current Supplies inventory. Opens a full-screen overlay
+ * showing the best matches sorted by match percentage.
+ */
+export async function openRecipeMatch() {
+  const el = g("recipeMatchResults");
+  if (!el) return;
+
+  showOv("recipematch");
+  el.innerHTML = '<div style="text-align:center;padding:40px 0"><div class="spin" style="width:32px;height:32px;margin:0 auto 12px"></div><div style="font-size:.85rem;color:var(--mt)">Matching recipes to your supplies…</div></div>';
+
+  try {
+    // Build a normalized set of inventory item names for matching
+    const invNames = state.inv.map(i => _normalizeIngredient(i.name)).filter(Boolean);
+
+    // Fetch community recipes from public_recipes collection
+    const publicRecs = await dbList("public_recipes");
+    if (!publicRecs.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--mt)">No community recipes available yet.<br/>Publish some recipes first!</div>';
+      return;
+    }
+
+    // Score each recipe by how well it matches current inventory
+    _matchedRecipes = publicRecs
+      .map(recipe => {
+        const match = _matchRecipeToInventory(recipe, invNames);
+        return { ...recipe, ...match };
+      })
+      .filter(r => r.matchPct >= 60) // Only show recipes with >= 60% ingredient match
+      .sort((a, b) => b.matchPct - a.matchPct); // Best matches first
+
+    _matchShown = 0;
+    _renderMatchPage(el);
+
+  } catch (e) {
+    console.error("Recipe match error:", e);
+    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--rd)">Something went wrong. Try again.</div>';
+  }
+}
+
+/**
+ * _renderMatchPage(el) — Renders the next page of matched recipe cards.
+ * Shows 5 recipes at a time with a "Show 5 more" button for pagination.
+ */
+function _renderMatchPage(el) {
+  if (!_matchedRecipes.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--mt)">No recipes match 60% or more of your supplies.<br/>Try adding more items to your pantry!</div>';
+    return;
+  }
+
+  const batch = _matchedRecipes.slice(_matchShown, _matchShown + _MATCH_PAGE_SIZE);
+  _matchShown += batch.length;
+
+  // Build HTML for this batch of recipe cards
+  const cards = batch.map(recipe => {
+    // Color-coded match percentage badge
+    let color, label;
+    if (recipe.matchPct === 100) { color = "var(--gn)"; label = "Ready to cook!"; }
+    else if (recipe.matchPct >= 80) { color = "var(--am)"; label = "Almost there"; }
+    else { color = "#e67e22"; label = "Need a few things"; }
+
+    // Cover photo or placeholder
+    const coverImg = recipe.imageUrl
+      ? `<img src="${recipe.imageUrl}" style="width:100%;height:140px;object-fit:cover;border-radius:12px 12px 0 0" alt="" onerror="this.style.display='none'"/>`
+      : `<div style="width:100%;height:80px;background:var(--sf);border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:center;font-size:2rem">🍽</div>`;
+
+    // Missing ingredients list
+    const missingHtml = recipe.missing.length
+      ? `<div style="margin-top:8px"><div style="font-size:.7rem;color:var(--mt);font-weight:600;margin-bottom:4px">Missing (${recipe.missing.length}):</div>${recipe.missing.map(m => `<span style="display:inline-block;font-size:.68rem;padding:2px 8px;border-radius:8px;background:var(--rdd);color:var(--rd);margin:2px 3px 2px 0">${m}</span>`).join("")}</div>`
+      : "";
+
+    // Recipe metadata (cook time, cuisine)
+    const meta = [recipe.cookTime, recipe.cuisine].filter(Boolean).join(" · ");
+
+    return `<div style="background:var(--card);border:1.5px solid var(--b1);border-radius:14px;margin-bottom:12px;overflow:hidden;cursor:pointer" onclick="openComRecipe('${recipe.id}')">
+      ${coverImg}
+      <div style="padding:12px 14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="font-family:'Fraunces',serif;font-size:1rem;font-weight:400;flex:1;line-height:1.3">${recipe.title || recipe.name || "Untitled"}</div>
+          <div style="flex-shrink:0;font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:20px;background:${color}22;color:${color}">${recipe.matchPct}%</div>
+        </div>
+        <div style="font-size:.7rem;color:${color};font-weight:600;margin-top:3px">${label}</div>
+        ${meta ? `<div style="font-size:.7rem;color:var(--mt);margin-top:4px">${meta}</div>` : ""}
+        ${missingHtml}
+      </div>
+    </div>`;
+  }).join("");
+
+  // Append or replace content
+  if (_matchShown <= _MATCH_PAGE_SIZE) {
+    el.innerHTML = cards;
+  } else {
+    // Remove old "Show more" button before appending
+    const oldBtn = el.querySelector(".match-more-btn");
+    if (oldBtn) oldBtn.remove();
+    el.insertAdjacentHTML("beforeend", cards);
+  }
+
+  // Add "Show 5 more" button if there are more results
+  if (_matchShown < _matchedRecipes.length) {
+    el.insertAdjacentHTML("beforeend", `<div style="text-align:center;padding:12px 0"><button class="btn bs match-more-btn" onclick="showMoreMatches()">Show 5 more (${_matchedRecipes.length - _matchShown} remaining)</button></div>`);
+  } else if (_matchShown > 0) {
+    el.insertAdjacentHTML("beforeend", `<div style="text-align:center;padding:12px 0;font-size:.75rem;color:var(--mt)">Showing all ${_matchShown} matching recipes</div>`);
+  }
+}
+
+/**
+ * showMoreMatches() — Loads the next page of matched recipes.
+ * Called when user taps "Show 5 more" button.
+ */
+export function showMoreMatches() {
+  const el = g("recipeMatchResults");
+  if (el) _renderMatchPage(el);
 }
 
 // updExport() — builds a plain-text summary of the entire inventory, grouped by

@@ -15,7 +15,8 @@ import { svi, dli, addWasteEntry, dbSet, dbGet } from '../db.js';
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
 import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
-import { updExport } from './home.js';
+// _defaultThreshold returns the smart restock threshold based on unit type
+import { updExport, _defaultThreshold } from './home.js';
 // searchAndEnrich — searches product databases for text matches and shows enrichment picker
 // scoreSearchResult — relevance scoring for search results
 // _savePreferredLocation / _getPreferredLocation — remember where user stores each product
@@ -25,6 +26,15 @@ import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferr
 // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
 // To re-enable: uncomment these blocks and restore image display logic.
 // import { uploadProductImage, normalizeProductName } from '../storage.js';
+
+// ── UNITS OF MEASURE ────────────────────────────────────────────────────────
+// Shared list of available units for both Shopping and Supplies items.
+// Exported so shopping.js can use the same list.
+export const UNITS = [
+  "Piece","Unit","Pack","Box","Bag","Bottle","Jar","Can","Bunch","Head",
+  "Loaf","Dozen","Carton","Tube","Roll","Gallon","Half Gallon","Liter",
+  "Pound","Oz","Clove"
+];
 
 // toTitleCase imported from helpers.js — used for uniform product name display
 
@@ -92,9 +102,10 @@ export function iH(item) {
           ${item.note ? `<div class="shnote" style="margin-top:2px">📝 ${item.note}</div>` : ""}
           ${et}
         </div>
-        <div style="text-align:right">
+        <div style="text-align:right;flex-shrink:0">
           <div class="iqt">${item.qty}</div>
-          <div class="iun">${item.unit}</div>
+          <div class="iun">${item.unit || "Unit"}</div>
+          ${item.doNotRestock ? '<div style="font-size:.55rem;color:var(--mt);margin-top:1px;opacity:.7">No restock</div>' : ""}
         </div>
       </div>
     </div>
@@ -118,17 +129,20 @@ export function iH(item) {
 
 // Full re-render of the inventory list (#ibody).
 // The active tab (state.it) controls which sub-tab is shown:
+//   "all" – all items from all locations, sorted alphabetically
 //   "fridge"/"freezer"/"pantry"/"household" – flat list filtered to one location
 export function renderInv() {
   // Alphabetical sort comparator
   const az = (a, b) => a.name.localeCompare(b.name);
 
-  // Filter items by the selected location sub-tab
-  const f = state.inv.filter(i => i.location === state.it).slice().sort(az);
+  // Filter items by the selected location sub-tab; "all" shows everything
+  const f = state.it === "all"
+    ? state.inv.slice().sort(az)
+    : state.inv.filter(i => i.location === state.it).slice().sort(az);
 
   // Update the subtitle text (e.g. "12 fridge items")
   const isub = g("isub");
-  const labels = { fridge: "fridge items", freezer: "frozen items", pantry: "pantry items", household: "household items" };
+  const labels = { all: "items", fridge: "fridge items", freezer: "frozen items", pantry: "pantry items", household: "household items" };
   if (isub) isub.textContent = f.length + " " + (labels[state.it] || "items");
 
   // Keep the export feature on the home screen in sync with current data
@@ -175,7 +189,13 @@ export function openAdj(id) {
   // quantity stepper, expiry date picker, and notes textarea.
   // Category/source tags removed — they added no user value.
   // Each control calls its own global handler on change (e.g. updL, adjQ).
-  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${toTitleCase(item.name)}</div>${brandHtml}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div></div></div><div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button><button class="lbtn ${item.location === "household" ? "sel" : ""}" onclick="updL('household',this)">🏠 Household</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Low stock alert at</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${item.lowStockThreshold || 1}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div></div>`;
+  // Build the unit selector options
+  const curUnit = item.unit || "Unit";
+  const unitOpts = UNITS.map(u => `<option value="${u}"${u === curUnit ? " selected" : ""}>${u}</option>`).join("");
+  // Compute the effective restock threshold (custom or smart default)
+  const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(curUnit);
+
+  g("adjbody").innerHTML = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${toTitleCase(item.name)}</div>${brandHtml}<div style="font-size:.7rem;color:var(--mt);margin-top:2px">Added ${item.addedAt}</div></div></div><div class="frow" style="margin-top:14px"><label class="flbl">Location</label><div class="lpick"><button class="lbtn ${item.location === "fridge" ? "sel" : ""}" onclick="updL('fridge',this)">🌡 Fridge</button><button class="lbtn ${item.location === "freezer" ? "sel" : ""}" onclick="updL('freezer',this)">🧊 Freezer</button><button class="lbtn ${item.location === "pantry" ? "sel" : ""}" onclick="updL('pantry',this)">🥫 Pantry</button><button class="lbtn ${item.location === "household" ? "sel" : ""}" onclick="updL('household',this)">🏠 Household</button></div></div><div class="qrow"><span class="qlbl">Quantity</span><div class="qctl"><button class="qbtn" onclick="adjQ(-1)">−</button><input class="qinp" id="adjqty" type="number" min="0" value="${item.qty}" oninput="adjQD()"/><button class="qbtn" onclick="adjQ(1)">+</button></div></div><div class="frow"><label class="flbl">Unit of Measure</label><select class="detail-select" id="adjunit" onchange="adjUnit()">${unitOpts}</select></div><div class="frow"><label class="flbl">Expiry Date <span class="otag">optional</span></label><input class="fd" id="adjexp" type="date" value="${item.expiry || ""}" onchange="adjE()"/></div><div class="frow"><label class="flbl">Notes <span class="otag">optional</span></label><textarea class="sh-note-inp" id="adjnote" rows="2" placeholder="Brand, store, reminders…" onblur="adjNote()">${item.note || ""}</textarea></div><div class="qrow"><span class="qlbl">Restock when below</span><div class="qctl"><button class="qbtn" onclick="adjLowThresh(-1)">−</button><input class="qinp" id="adjlowthresh" type="number" min="0" value="${thresh}" oninput="adjLowThreshD()"/><button class="qbtn" onclick="adjLowThresh(1)">+</button></div></div><div class="frow" style="display:flex;align-items:center;justify-content:space-between"><label class="flbl" style="margin-bottom:0">Don't add to Running Low</label><label class="toggle-switch"><input type="checkbox" id="adjdonotrestock" ${item.doNotRestock ? "checked" : ""} onchange="adjDoNotRestock()"/><span class="toggle-slider"></span></label></div></div>`;
 
   // Wire the "Remove" button at the bottom of the overlay
   g("rembtn").onclick = () => remItem(id);
@@ -268,10 +288,39 @@ export async function openInvItemDetail(id) {
   <!-- <input type="file" id="invProductPhotoInput" accept="image/*" style="display:none"
     onchange="handleInvPhotoSelected('${item.id}')" /> -->`;
 
-  // Quantity & unit section
+  // Quantity & unit section with inline unit selector
+  const curUnit = item.unit || "Unit";
   html += `<div class="item-detail-section">
     <div class="item-detail-label">Quantity</div>
-    <div class="item-detail-value">${item.qty} ${item.unit || "unit"}</div>
+    <div class="item-detail-value">${item.qty} ${curUnit}</div>
+  </div>`;
+
+  // Unit of measure selector — dropdown to change the unit
+  html += `<div class="item-detail-section">
+    <div class="item-detail-label">Unit of Measure</div>
+    <select class="detail-select" onchange="changeInvUnit('${item.id}',this.value)">
+      ${UNITS.map(u => `<option value="${u}"${u === curUnit ? " selected" : ""}>${u}</option>`).join("")}
+    </select>
+  </div>`;
+
+  // Restock threshold — "Restock when below [X]"
+  const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(curUnit);
+  html += `<div class="item-detail-section">
+    <div class="item-detail-label">Restock when below</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="qbtn" onclick="changeInvThreshold('${item.id}',-1)">−</button>
+      <input class="qinp" id="inv-thresh-${item.id}" type="number" min="0" value="${thresh}" style="width:48px;text-align:center" onblur="changeInvThresholdDirect('${item.id}')"/>
+      <button class="qbtn" onclick="changeInvThreshold('${item.id}',1)">+</button>
+    </div>
+  </div>`;
+
+  // Don't Restock toggle
+  html += `<div class="item-detail-section" style="display:flex;align-items:center;justify-content:space-between">
+    <div class="item-detail-label" style="margin-bottom:0">Don't add to Running Low</div>
+    <label class="toggle-switch">
+      <input type="checkbox" ${item.doNotRestock ? "checked" : ""} onchange="toggleDoNotRestock('${item.id}',this.checked)"/>
+      <span class="toggle-slider"></span>
+    </label>
   </div>`;
 
   // Expiry section (if present)
@@ -606,22 +655,93 @@ export async function adjNote() {
   await svi({ ...item, note: v || null });
 }
 
-// Adjusts the low-stock alert threshold by a delta (+1 / -1).
+// Saves a new unit of measure when the user picks one from the dropdown.
+export async function adjUnit() {
+  const item = state.inv.find(i => i.id === state.adjId);
+  if (!item) return;
+  const unit = g("adjunit").value;
+  await svi({ ...item, unit });
+}
+
+// Adjusts the restock threshold by a delta (+1 / -1).
 // When qty drops to or below this threshold, the item appears in "Running Low".
 export async function adjLowThresh(d) {
   const item = state.inv.find(i => i.id === state.adjId);
   if (!item) return;
-  const v = Math.max(0, (item.lowStockThreshold || 1) + d);
+  const cur = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(item.unit);
+  const v = Math.max(0, cur + d);
   g("adjlowthresh").value = v;
-  await svi({ ...item, lowStockThreshold: v });
+  await svi({ ...item, restockThreshold: v });
 }
 
-// Handles direct input into the low-stock threshold field (free-type).
+// Handles direct input into the restock threshold field (free-type).
 export async function adjLowThreshD() {
   const item = state.inv.find(i => i.id === state.adjId);
   if (!item) return;
   const v = parseInt(g("adjlowthresh").value);
-  if (!isNaN(v) && v >= 0) await svi({ ...item, lowStockThreshold: v });
+  if (!isNaN(v) && v >= 0) await svi({ ...item, restockThreshold: v });
+}
+
+// Toggles the "Don't add to Running Low" flag in the adjust overlay.
+export async function adjDoNotRestock() {
+  const item = state.inv.find(i => i.id === state.adjId);
+  if (!item) return;
+  const checked = g("adjdonotrestock")?.checked || false;
+  await svi({ ...item, doNotRestock: checked });
+}
+
+// ── DETAIL SHEET INLINE HANDLERS ────────────────────────────────────────────
+// These are called from onclick/onchange attributes in the inventory detail sheet.
+
+/**
+ * changeInvUnit(id, unit) — Updates the unit of measure for an inventory item.
+ * Also recalculates the restock threshold if the user hasn't set a custom one.
+ */
+export async function changeInvUnit(id, unit) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const updated = { ...item, unit };
+  // If no custom threshold was set, let it follow the smart default
+  if (item.restockThreshold == null) {
+    // Don't persist restockThreshold — let it stay null so smart default applies
+  }
+  await svi(updated);
+  openInvItemDetail(id); // refresh the sheet to show updated data
+}
+
+/**
+ * changeInvThreshold(id, delta) — Adjusts the restock threshold by +1 or -1.
+ * Saves the custom threshold to Firestore so it overrides the smart default.
+ */
+export async function changeInvThreshold(id, delta) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const cur = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(item.unit);
+  const v = Math.max(0, cur + delta);
+  const el = g(`inv-thresh-${id}`);
+  if (el) el.value = v;
+  await svi({ ...item, restockThreshold: v });
+}
+
+/**
+ * changeInvThresholdDirect(id) — Saves direct keyboard input for restock threshold.
+ */
+export async function changeInvThresholdDirect(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const el = g(`inv-thresh-${id}`);
+  const v = parseInt(el?.value);
+  if (!isNaN(v) && v >= 0) await svi({ ...item, restockThreshold: v });
+}
+
+/**
+ * toggleDoNotRestock(id, checked) — Toggles the "don't add to Running Low" flag.
+ * When true, item never appears in Running Low regardless of quantity.
+ */
+export async function toggleDoNotRestock(id, checked) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  await svi({ ...item, doNotRestock: checked });
 }
 
 // Switches the active inventory tab (all / fridge / freezer / pantry / cat).

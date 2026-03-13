@@ -40,15 +40,15 @@ window.getIdToken = getIdToken;
 // so they can be attached to `window` for HTML onclick access.
 
 // Home screen: dashboard rendering, weekly/tonight views, export panel
-import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection } from './ui/home.js';
+import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection, openRecipeMatch, showMoreMatches } from './ui/home.js';
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -135,6 +135,8 @@ window.hideOv = hideOv;
 window.initHome = initHome;
 window.addLowToShop = addLowToShop;   // Add a low-stock item to the shopping list
 window.toggleHomeSection = toggleHomeSection; // Collapse/expand home screen sections
+window.openRecipeMatch = openRecipeMatch;     // Open "What to Cook Tonight?" recipe matching overlay
+window.showMoreMatches = showMoreMatches;     // Load next batch of matched recipes
 // toggleExp — toggle the export panel's visibility (show/hide)
 window.toggleExp = function() { const p = g("exppanel"); p.style.display = p.style.display === "none" ? "block" : "none"; };
 
@@ -152,8 +154,15 @@ window.chgMQ = chgMQ;           // Change quantity in the manual-add form
 window.selML = selML;           // Select a location in the manual-add form
 window.remItem = remItem;       // Remove (delete) an inventory item
 window.importDoc = importDoc;   // Import inventory items from a document/file
-window.adjLowThresh = adjLowThresh;   // Adjust low-stock threshold by +/- 1
-window.adjLowThreshD = adjLowThreshD; // Handle direct input of low-stock threshold
+window.adjUnit = adjUnit;             // Save unit of measure change from adjust overlay
+window.adjLowThresh = adjLowThresh;   // Adjust restock threshold by +/- 1
+window.adjLowThreshD = adjLowThreshD; // Handle direct input of restock threshold
+window.adjDoNotRestock = adjDoNotRestock; // Toggle "don't add to Running Low" in adjust overlay
+// Detail sheet handlers for unit, restock threshold, and doNotRestock
+window.changeInvUnit = changeInvUnit;                 // Change unit from inventory detail sheet
+window.changeInvThreshold = changeInvThreshold;       // Adjust restock threshold from detail sheet
+window.changeInvThresholdDirect = changeInvThresholdDirect; // Direct input of threshold from detail sheet
+window.toggleDoNotRestock = toggleDoNotRestock;       // Toggle doNotRestock from detail sheet
 // Inventory add-to-pantry bottom sheet (mirrors shopping add-item sheet)
 window.openInvAddSheet = openInvAddSheet;     // Open the add-to-pantry bottom sheet
 window.closeInvAddSheet = closeInvAddSheet;   // Close the add-to-pantry bottom sheet
@@ -201,6 +210,7 @@ window.onShopInput = onShopInput;             // Debounced live search as user t
 window.pickInlineResult = pickInlineResult;   // Pick a product from the inline search dropdown
 window.openItemDetail = openItemDetail;       // Open product detail bottom sheet for a shopping item
 window.closeItemDetail = closeItemDetail;     // Close product detail bottom sheet
+window.changeShopUnit = changeShopUnit;       // Change unit of measure for a shopping item
 window.deleteItemImage = deleteItemImage;     // Remove product image from a shopping item (keeps other fields)
 window.triggerProductPhotoUpload = triggerProductPhotoUpload; // Open file picker to upload a custom product photo
 window.handleProductPhotoSelected = handleProductPhotoSelected; // Process the selected product photo file

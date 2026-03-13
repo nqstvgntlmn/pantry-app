@@ -13,6 +13,8 @@ import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, to
 // gcat = guess category for inventory, showNotif = toast notification,
 // showOv/hideOv = show/hide overlay modals, fmtR = format helper
 import { svi } from '../db.js';       // svi = save/upsert an inventory item to Firestore
+// UNITS list shared with inventory for consistent unit-of-measure options
+import { UNITS } from './inventory.js';
 import { wDates } from '../helpers.js'; // wDates = returns array of Date objects for the current week (Mon–Sun)
 // [IMAGES DISABLED] — Product images commented out pending decision.
 // See session notes: images caused false positives from external databases,
@@ -264,8 +266,9 @@ function _shouldShowBrand(item) {
 export function sH(item) {
   // Default to qty 1 if the field is missing (backwards compat with old items)
   const qty = item.qty || 1;
-  // Always show the qty badge so users can tap to edit; qty=1 gets a muted style via sh-qty-one
-  const qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}" onclick="event.stopPropagation();openShQty('${item.id}')"> × ${qty}</span>`;
+  const unit = item.unit || "Unit";
+  // Show qty badge with unit; qty=1 gets a muted style via sh-qty-one
+  const qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}" onclick="event.stopPropagation();openShQty('${item.id}')"> × ${qty} ${unit}</span>`;
 
   // [IMAGES DISABLED] — Product images commented out pending decision.
   // See session notes: images caused false positives from external databases,
@@ -1223,12 +1226,19 @@ export async function openItemDetail(id) {
 
   // Quantity section
   const qty = item.qty || 1;
-  if (qty > 1) {
-    html += `<div class="item-detail-section">
-      <div class="item-detail-label">Quantity</div>
-      <div class="item-detail-value">× ${qty}</div>
-    </div>`;
-  }
+  const curUnit = item.unit || "Unit";
+  html += `<div class="item-detail-section">
+    <div class="item-detail-label">Quantity</div>
+    <div class="item-detail-value">× ${qty} ${curUnit}</div>
+  </div>`;
+
+  // Unit of measure selector — dropdown to change the unit
+  html += `<div class="item-detail-section">
+    <div class="item-detail-label">Unit of Measure</div>
+    <select class="detail-select" onchange="changeShopUnit('${item.id}',this.value)">
+      ${UNITS.map(u => `<option value="${u}"${u === curUnit ? " selected" : ""}>${u}</option>`).join("")}
+    </select>
+  </div>`;
 
   // Note section (if present)
   if (item.note) {
@@ -1237,9 +1247,6 @@ export async function openItemDetail(id) {
       <div class="item-detail-value">${item.note}</div>
     </div>`;
   }
-
-  // Nutrition section removed — text search enrichment often matches the wrong
-  // product, making calorie/protein/fat/carb data unreliable and misleading.
 
   // Close button at the bottom
   html += `<button class="btn bs bf" onclick="closeItemDetail()" style="margin-top:8px">Close</button>`;
@@ -1265,6 +1272,17 @@ export function closeItemDetail() {
   const sheet = g("itemDetailSheet");
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
+}
+
+/**
+ * changeShopUnit(id, unit) — Updates the unit of measure for a shopping item.
+ * Saves to Firestore and refreshes the detail sheet to reflect the change.
+ */
+export async function changeShopUnit(id, unit) {
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+  await svShopItem({ ...item, unit });
+  openItemDetail(id); // refresh sheet
 }
 
 // ── DRAG-AND-DROP IMAGE UPLOAD ────────────────────────────────────────────────
