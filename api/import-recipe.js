@@ -50,6 +50,20 @@ function getFirebaseApp() {
   };
 }
 
+// ── CLASSIFIED ERROR ─────────────────────────────────────────────────────────
+
+/**
+ * ClassifiedError — custom error class that carries a specific error reason
+ * code alongside the message. Used to pass structured error info back to the
+ * client so it can display specific failure reasons (timeout, rate limit, etc.)
+ */
+class ClassifiedError extends Error {
+  constructor(message, reason) {
+    super(message);
+    this.reason = reason;
+  }
+}
+
 // ── HTML FETCHER ─────────────────────────────────────────────────────────────
 
 /**
@@ -69,7 +83,14 @@ async function fetchPageHtml(url) {
   });
 
   if (!resp.ok) {
-    throw new Error(`Failed to fetch URL (HTTP ${resp.status})`);
+    // Classify HTTP errors for specific user-facing messages
+    if (resp.status === 403 || resp.status === 401) {
+      throw new ClassifiedError(`Page blocked access (HTTP ${resp.status})`, "page_blocked");
+    } else if (resp.status === 404) {
+      throw new ClassifiedError(`Page not found (HTTP ${resp.status})`, "page_not_found");
+    } else {
+      throw new ClassifiedError(`Failed to fetch URL (HTTP ${resp.status})`, "fetch_error");
+    }
   }
 
   let html = await resp.text();
@@ -155,9 +176,14 @@ Rules:
 
   const data = await resp.json();
 
-  // Handle API errors (rate limit, invalid key, etc.)
+  // Handle API errors — classify rate limits (429) separately so the client
+  // can auto-retry with backoff instead of immediately marking as failed
   if (data.error) {
-    throw new Error(`Claude API error: ${data.error.message || JSON.stringify(data.error)}`);
+    const msg = data.error.message || JSON.stringify(data.error);
+    if (data.error.type === "rate_limit_error" || resp.status === 429) {
+      throw new ClassifiedError(`Rate limit hit — ${msg}`, "rate_limit");
+    }
+    throw new ClassifiedError(`Claude API error: ${msg}`, "api_error");
   }
 
   // Extract text from Claude's response content blocks
@@ -364,9 +390,13 @@ export default async function handler(req, res) {
     try {
       html = await fetchPageHtml(url);
     } catch (e) {
+      // Classify fetch failures: timeout vs blocked vs generic
+      const reason = e.reason || (e.name === "TimeoutError" || e.message.includes("timed out")
+        ? "timeout" : "page_inaccessible");
       return res.status(200).json({
         success: false,
         error: `Couldn't access ${new URL(url).hostname} — ${e.message}`,
+        reason,
       });
     }
 
@@ -375,7 +405,7 @@ export default async function handler(req, res) {
 
     // If Claude couldn't find a recipe in the HTML, report the error
     if (recipe.error) {
-      return res.status(200).json({ success: false, error: recipe.error });
+      return res.status(200).json({ success: false, error: recipe.error, reason: "no_recipe" });
     }
 
     // Attach metadata that came from the request, not from parsing
@@ -435,9 +465,19 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     console.error("import-recipe error:", e);
-    return res.status(500).json({
+
+    // Return the classified reason if available, otherwise derive from the error
+    const reason = e.reason || "unknown";
+    const errorMsg = e.reason === "rate_limit"
+      ? "Rate limit hit — too many requests, please wait and retry"
+      : e.reason === "timeout"
+        ? "Request timed out — the recipe page took too long to process"
+        : `Server error (${reason}) — ${e.message || "please try again"}`;
+
+    return res.status(reason === "rate_limit" ? 429 : 500).json({
       success: false,
-      error: "Server error while importing recipe — please try again",
+      error: errorMsg,
+      reason,
     });
   }
 }

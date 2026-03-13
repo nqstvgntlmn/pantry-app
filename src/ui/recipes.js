@@ -304,9 +304,10 @@ function _extractUrls(text) {
 
 /**
  * _classifyUrl — pre-validates a URL before attempting import.
- * Flags video platforms (can't scrape) and paywalled sites (may fail).
+ * Flags video platforms (can't scrape), paywalled sites (may fail),
+ * and private/inaccessible sources (Evernote, Google Docs, etc.)
  * @param {string} url - the URL to classify
- * @returns {{ status: "ok"|"video"|"paywall", reason: string }}
+ * @returns {{ status: "ok"|"video"|"paywall"|"private", reason: string }}
  */
 function _classifyUrl(url) {
   const lower = url.toLowerCase();
@@ -322,6 +323,23 @@ function _classifyUrl(url) {
   for (const v of videoPatterns) {
     if (v.pattern.test(lower)) {
       return { status: "video", reason: `${v.name} video — can't extract recipe text` };
+    }
+  }
+
+  // Private / inaccessible sources — these require login or return empty content
+  const privatePatterns = [
+    { pattern: /evernote\.com/, name: "Evernote" },
+    { pattern: /docs\.google\.com/, name: "Google Docs" },
+    { pattern: /drive\.google\.com/, name: "Google Drive" },
+    { pattern: /dropbox\.com/, name: "Dropbox" },
+    { pattern: /notion\.so/, name: "Notion" },
+    { pattern: /onenote\.com|onedrive\.live\.com/, name: "OneDrive/OneNote" },
+    { pattern: /icloud\.com/, name: "iCloud" },
+    { pattern: /keep\.google\.com/, name: "Google Keep" },
+  ];
+  for (const p of privatePatterns) {
+    if (p.pattern.test(lower)) {
+      return { status: "private", reason: `${p.name} — private or inaccessible link` };
     }
   }
 
@@ -357,11 +375,12 @@ export async function startBulkImport() {
     return;
   }
 
-  // Pre-classify each URL to flag videos and paywalled sites
+  // Pre-classify each URL to flag videos, private links, and paywalled sites
   const classified = allUrls.map(url => ({ url, ...(_classifyUrl(url)) }));
   const okUrls = classified.filter(c => c.status === "ok");
   const paywallUrls = classified.filter(c => c.status === "paywall");
   const videoUrls = classified.filter(c => c.status === "video");
+  const privateUrls = classified.filter(c => c.status === "private");
 
   // Show the progress area and disable the button to prevent double-submits
   const progress = g("bulkImportProgress");
@@ -371,28 +390,30 @@ export async function startBulkImport() {
   const btn = g("bulkImportBtn");
   if (btn) btn.disabled = true;
 
-  // Include paywall URLs (they might work) but skip video URLs entirely
+  // Include paywall URLs (they might work) but skip video + private URLs entirely
   const toImport = [...okUrls, ...paywallUrls];
 
-  // Track results for the final summary
-  const results = { success: [], failed: [], skipped: videoUrls };
+  // Track results for the final summary — private links go to skipped alongside videos
+  const results = { success: [], failed: [], skipped: [...videoUrls, ...privateUrls] };
 
-  // Import each URL sequentially to avoid overwhelming the API
+  // Import each URL sequentially with a delay to avoid API rate limits
   for (let i = 0; i < toImport.length; i++) {
     const entry = toImport[i];
     const paywallWarn = entry.status === "paywall" ? " — may be paywalled" : "";
+
+    // 3-second delay between imports to avoid hitting Anthropic rate limits
+    // (skip delay before the very first import)
+    if (i > 0) {
+      progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Waiting before next import… (${i + 1} of ${toImport.length})</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
+      await new Promise(r => setTimeout(r, 3000));
+    }
 
     // Update progress indicator with current URL index
     progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Importing ${i + 1} of ${toImport.length}…${paywallWarn}</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
 
     try {
-      // Call the same AI-powered import endpoint used by single import
-      const r = await fetch("/api/import-recipe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: entry.url })
-      });
-      const data = await r.json();
+      // Call the AI-powered import endpoint; _importWithRetry handles 429s
+      const data = await _importWithRetry(entry.url, progress, i, toImport.length);
 
       if (data.success && data.recipe) {
         const recipe = data.recipe;
@@ -426,7 +447,9 @@ export async function startBulkImport() {
 
         results.success.push({ url: entry.url, name: recipe.title });
       } else {
-        results.failed.push({ url: entry.url, error: data.error || "Unknown error" });
+        // Use specific error reason from the API if available
+        const errorMsg = _friendlyError(data.reason, data.error);
+        results.failed.push({ url: entry.url, error: errorMsg });
       }
     } catch (e) {
       results.failed.push({ url: entry.url, error: e.message });
@@ -436,6 +459,63 @@ export async function startBulkImport() {
   // Show the final summary with success/fail/skip counts
   _renderBulkSummary(progress, results);
   if (btn) btn.disabled = false;
+}
+
+/**
+ * _importWithRetry — calls the import-recipe API and auto-retries once
+ * on rate limit (429) errors with a 10-second backoff. This prevents
+ * rate limit failures from immediately marking the URL as failed.
+ * @param {string} url - the recipe URL to import
+ * @param {HTMLElement} progress - the progress DOM element for status updates
+ * @param {number} idx - current index in the import queue (for display)
+ * @param {number} total - total number of URLs being imported (for display)
+ * @returns {Object} the parsed API response (success/error)
+ */
+async function _importWithRetry(url, progress, idx, total) {
+  const r = await fetch("/api/import-recipe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url })
+  });
+  const data = await r.json();
+
+  // If rate limited (429 or reason flag), wait 10s and retry once
+  if (r.status === 429 || data.reason === "rate_limit") {
+    progress.innerHTML = `<div style="font-size:.78rem;color:var(--yw,orange)">Rate limited — waiting 10s before retry… (${idx + 1} of ${total})</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
+    await new Promise(r => setTimeout(r, 10000));
+
+    progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Retrying ${idx + 1} of ${total}…</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
+    const r2 = await fetch("/api/import-recipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    return await r2.json();
+  }
+
+  return data;
+}
+
+/**
+ * _friendlyError — converts API error reason codes into human-readable
+ * messages for the bulk import summary. Falls back to the raw error string
+ * if no specific reason code is provided.
+ * @param {string} reason - error reason code from the API (e.g. "rate_limit", "timeout")
+ * @param {string} fallback - raw error message to use if no reason code
+ * @returns {string} user-friendly error description
+ */
+function _friendlyError(reason, fallback) {
+  const messages = {
+    rate_limit: "Rate limit hit — too many requests",
+    timeout: "Timed out — page took too long to load",
+    page_blocked: "Page blocked access (login required or bot detection)",
+    page_not_found: "Page not found (404)",
+    page_inaccessible: "Page not accessible",
+    no_recipe: "No recipe content found on page",
+    api_error: "AI parsing error",
+    fetch_error: "Could not fetch page",
+  };
+  return messages[reason] || fallback || "Unknown error";
 }
 
 /**
@@ -458,9 +538,9 @@ function _renderBulkSummary(container, results) {
     html += `</div>`;
   }
 
-  // Skipped video links — yellow warning
+  // Skipped links (video, private/inaccessible) — yellow warning
   if (results.skipped.length) {
-    html += `<div style="color:var(--yw,orange);font-size:.78rem;margin-bottom:6px">⚠ ${results.skipped.length} skipped — video links</div>`;
+    html += `<div style="color:var(--yw,orange);font-size:.78rem;margin-bottom:6px">⚠ ${results.skipped.length} skipped</div>`;
     html += `<div style="font-size:.72rem;color:var(--mt);margin-bottom:10px;line-height:1.6">`;
     results.skipped.forEach(s => {
       html += `<div>• ${s.url} <span style="color:var(--mt);font-size:.68rem">(${s.reason})</span></div>`;
@@ -468,13 +548,14 @@ function _renderBulkSummary(container, results) {
     html += `</div>`;
   }
 
-  // Failed imports — red with retry buttons for each URL
+  // Failed imports — red with specific error reason and retry buttons
   if (results.failed.length) {
     html += `<div style="color:var(--rd);font-size:.78rem;margin-bottom:6px">✗ ${results.failed.length} failed</div>`;
     html += `<div style="font-size:.72rem;margin-bottom:10px;line-height:1.8">`;
     results.failed.forEach(f => {
       html += `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">`;
       html += `<span style="color:var(--mt);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.url}</span>`;
+      html += `<span style="color:var(--rd);font-size:.66rem;white-space:nowrap">${f.error}</span>`;
       html += `<button class="btn bsm" onclick="retryBulkImport('${f.url.replace(/'/g, "\\'")}')">Retry</button>`;
       html += `</div>`;
     });
