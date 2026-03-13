@@ -7,7 +7,7 @@
 
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
 import { svShopItem, dlShopItem, dbSet, dbGet } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc
-import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase } from '../helpers.js';
+import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
 // gcat = guess category for inventory, showNotif = toast notification,
@@ -313,9 +313,10 @@ export function sH(item) {
   // Default to qty 1 if the field is missing (backwards compat with old items)
   const qty = item.qty || 1;
   const unit = item.unit || "Unit";
-  // Show qty badge with unit; qty=1 gets a muted style — no tap-to-edit,
-  // quantity is now edited only via the detail sheet stepper
-  const qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}"> × ${qty} ${unit}</span>`;
+  // Show qty badge with unit using fraction display; qty=1 gets a muted style.
+  // Quantity is edited only via the detail sheet stepper, not inline.
+  const qtyDisplay = formatQty(qty);
+  const qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}"> × ${qtyDisplay} ${unit}</span>`;
 
   // [IMAGES DISABLED] — Product images commented out pending decision.
   // See session notes: images caused false positives from external databases,
@@ -1286,15 +1287,22 @@ export async function openItemDetail(id) {
   // Category/source tags removed — hyphenated category names (e.g. "plant-based-foods-and-beverages")
   // and source labels ("via reminders") added no user value and looked ugly/technical.
 
-  // Quantity stepper — editable +/- control matching Supplies style
+  // Quantity stepper — whole number +/- stepper on left, fraction picker on right.
+  // Stored as a single decimal in Firestore (e.g. 5.5), split here for UI display.
   const qty = item.qty || 1;
   const curUnit = item.unit || "Unit";
+  const { whole: shopWhole, frac: shopFrac } = splitQty(qty);
   html += `<div class="item-detail-section">
     <div class="item-detail-label">Quantity</div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <button class="qbtn" onclick="changeShopQty('${item.id}',-1)">−</button>
-      <input class="qinp" id="shop-qty-${item.id}" type="number" min="1" value="${qty}" style="width:48px;text-align:center" onblur="changeShopQtyDirect('${item.id}')"/>
-      <button class="qbtn" onclick="changeShopQty('${item.id}',1)">+</button>
+    <div class="qty-combo">
+      <div class="qty-group">
+        <button class="qbtn" onclick="changeShopQty('${item.id}',-1)">−</button>
+        <input class="qinp" id="shop-qty-${item.id}" type="number" min="0" max="99" value="${shopWhole}" style="width:48px;text-align:center" onblur="changeShopQtyDirect('${item.id}')"/>
+        <button class="qbtn" onclick="changeShopQty('${item.id}',1)">+</button>
+      </div>
+      <div class="frac-group">
+        ${renderFracSelect(`shop-frac-${item.id}`, shopFrac).replace('<select', '<select onchange="changeShopFrac(\'' + item.id + '\')"')}
+      </div>
       <span style="font-size:.8rem;color:var(--mt)">${curUnit}</span>
     </div>
   </div>`;
@@ -1361,29 +1369,59 @@ export async function changeShopUnit(id, unit) {
 }
 
 /**
- * changeShopQty(id, delta) — Adjusts a shopping item's quantity by +1 or -1
- * from the detail sheet stepper. Clamps to minimum of 1.
+ * changeShopQty(id, delta) — Adjusts the WHOLE part of a shopping item's quantity
+ * by +1 or -1. Reads fraction from dropdown, combines into decimal.
+ * Does nothing if already at minimum and delta is negative.
  */
 export async function changeShopQty(id, delta) {
   const item = state.shop.find(i => i.id === id);
   if (!item) return;
-  const newQty = Math.max(1, (item.qty || 1) + delta);
   const el = g(`shop-qty-${id}`);
-  if (el) el.value = newQty;
-  await svShopItem({ ...item, qty: newQty });
+  const fracEl = g(`shop-frac-${id}`);
+  const curWhole = parseInt(el?.value, 10) || 0;
+  const curFrac = parseFloat(fracEl?.value) || 0;
+  // If at minimum and trying to go lower, do nothing
+  if (delta < 0 && combineQty(curWhole, curFrac) <= 0.25) return;
+  const newWhole = Math.max(0, Math.min(99, curWhole + delta));
+  const combined = combineQty(newWhole, curFrac);
+  if (el) el.value = Math.floor(combined);
+  // If whole went to 0 and no fraction, auto-set fraction to smallest
+  if (newWhole === 0 && curFrac === 0 && fracEl) fracEl.value = "0.25";
+  await svShopItem({ ...item, qty: combined });
 }
 
 /**
- * changeShopQtyDirect(id) — Saves direct keyboard input for quantity from the
- * detail sheet stepper. Called on blur of the number input.
+ * changeShopQtyDirect(id) — Saves direct keyboard input for the whole part of
+ * shopping quantity. Reads fraction from dropdown, combines, enforces minimum.
  */
 export async function changeShopQtyDirect(id) {
   const item = state.shop.find(i => i.id === id);
   if (!item) return;
   const el = g(`shop-qty-${id}`);
-  const v = Math.max(1, parseInt(el?.value, 10) || 1);
-  if (v === (item.qty || 1)) return; // No change — skip the write
-  await svShopItem({ ...item, qty: v });
+  const fracEl = g(`shop-frac-${id}`);
+  const w = parseInt(el?.value, 10);
+  const f = parseFloat(fracEl?.value) || 0;
+  if (isNaN(w) || w < 0) return;
+  const combined = combineQty(w, f);
+  if (combined === (item.qty || 1)) return; // No change — skip the write
+  await svShopItem({ ...item, qty: combined });
+}
+
+/**
+ * changeShopFrac(id) — Handles fraction dropdown change for shopping quantity.
+ * Reads whole number from input, combines with new fraction, saves.
+ */
+export async function changeShopFrac(id) {
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+  const el = g(`shop-qty-${id}`);
+  const fracEl = g(`shop-frac-${id}`);
+  const w = parseInt(el?.value, 10) || 0;
+  const f = parseFloat(fracEl?.value) || 0;
+  const combined = combineQty(w, f);
+  // If user sets fraction to None while whole is 0, bump whole to 1
+  if (f === 0 && w === 0 && el) el.value = 1;
+  await svShopItem({ ...item, qty: combined });
 }
 
 // ── DRAG-AND-DROP IMAGE UPLOAD ────────────────────────────────────────────────
@@ -1851,10 +1889,10 @@ export function setSHT(t) {
 export function shareList() {
   const items = state.shop.filter(i => !i.checked); // Only share items not yet bought
   if (!items.length) { showNotif("List is empty!"); return; }
-  // Include quantity in the shared text when > 1, e.g. "• Apples × 3"
+  // Include quantity in the shared text when > 1, e.g. "• Apples × 5 ½"
   const lines = items.map(i => {
     let line = "• " + i.name;
-    if ((i.qty || 1) > 1) line += " × " + i.qty;
+    if ((i.qty || 1) > 1) line += " × " + formatQty(i.qty);
     if (i.price) line += " (~$" + i.price + ")";
     return line;
   });
@@ -1991,8 +2029,8 @@ export async function buildList() {
   const ms = wDates().map(d => { const k = d.toISOString().split("T")[0]; return state.mp[k] ? `${d.toLocaleDateString("en-US", { weekday: "short" })}: ${state.mp[k]}` : ""; }).filter(Boolean).join(", ");
   if (!ms) { showNotif("No meals planned yet!"); return; }
 
-  // Build a string of current inventory, e.g. "Milk (1 gallon), Eggs (12 unit)"
-  const is = state.inv.map(i => `${i.name} (${i.qty} ${i.unit})`).join(", ");
+  // Build a string of current inventory, e.g. "Milk (1 ½ gallon), Eggs (12 unit)"
+  const is = state.inv.map(i => `${i.name} (${formatQtyWithUnit(i.qty, i.unit)})`).join(", ");
 
   // Show loading state on the button
   const btn = document.querySelector('[onclick="buildList()"]');
@@ -2026,7 +2064,7 @@ export async function buildList() {
     suggested.forEach(item => {
       const match = state.inv.find(i => i.name.toLowerCase() === item.name.toLowerCase());
       if (match && match.qty > 0) {
-        item.note = `Have ${match.qty} ${match.unit} — need more`;
+        item.note = `Have ${formatQtyWithUnit(match.qty, match.unit)} — need more`;
       }
     });
 

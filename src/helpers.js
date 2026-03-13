@@ -5,6 +5,101 @@
 
 import { state } from './state.js';
 
+// ── FRACTION / QUANTITY UTILITIES ─────────────────────────────────────────────
+// Quantities are stored as decimals in Firestore (e.g. 5.5, 0.25) but displayed
+// as mixed fractions in the UI (e.g. "5 1/2", "1/4"). These helpers convert
+// between the two representations and render the fraction picker controls.
+
+/** Map of supported fraction decimals → display labels */
+const FRAC_MAP = { 0: "None", 0.25: "1/4", [1/3]: "1/3", 0.5: "1/2", [2/3]: "2/3", 0.75: "3/4" };
+
+/** Fraction options for <select> dropdowns — value is the decimal stored in Firestore */
+export const FRAC_OPTIONS = [
+  { value: 0,    label: "None" },
+  { value: 0.25, label: "¼" },
+  { value: 1/3,  label: "⅓" },
+  { value: 0.5,  label: "½" },
+  { value: 2/3,  label: "⅔" },
+  { value: 0.75, label: "¾" }
+];
+
+/**
+ * splitQty(decimal) — Splits a decimal quantity into whole and fraction parts.
+ * Snaps the fractional remainder to the nearest supported fraction value.
+ * @param {number} qty - Decimal quantity (e.g. 5.5, 0.25, 3)
+ * @returns {{ whole: number, frac: number }} e.g. { whole: 5, frac: 0.5 }
+ */
+export function splitQty(qty) {
+  const n = Number(qty) || 0;
+  const whole = Math.floor(n);
+  const remainder = n - whole;
+  // Snap to the nearest supported fraction by finding the closest match
+  const snapped = FRAC_OPTIONS.reduce((best, opt) =>
+    Math.abs(opt.value - remainder) < Math.abs(best - remainder) ? opt.value : best
+  , 0);
+  return { whole, frac: snapped };
+}
+
+/**
+ * combineQty(whole, frac) — Combines whole + fraction into a single decimal.
+ * Enforces minimum of 0.25 (cannot have 0 whole + no fraction).
+ * @param {number} whole - Whole number part (0–99)
+ * @param {number} frac - Fraction part as decimal (0, 0.25, 0.333..., 0.5, 0.666..., 0.75)
+ * @returns {number} Combined decimal, minimum 0.25
+ */
+export function combineQty(whole, frac) {
+  const w = Math.max(0, Math.min(99, Math.floor(Number(whole) || 0)));
+  const f = Number(frac) || 0;
+  const total = w + f;
+  // Enforce minimum: if whole is 0 and no fraction, bump to smallest fraction
+  return total <= 0 ? 0.25 : total;
+}
+
+/**
+ * formatQty(qty) — Formats a decimal quantity as a display string with fractions.
+ * Rules:
+ *   - 0.5  → "1/2"       (no leading zero)
+ *   - 5    → "5"          (no fraction shown)
+ *   - 5.5  → "5 1/2"     (mixed number)
+ *   - 0.25 → "1/4"
+ * @param {number} qty - Decimal quantity from Firestore
+ * @returns {string} Human-readable fraction string
+ */
+export function formatQty(qty) {
+  const { whole, frac } = splitQty(qty);
+  // Look up the Unicode fraction glyph for the fractional part
+  const fracLabel = frac > 0 ? (FRAC_OPTIONS.find(o => Math.abs(o.value - frac) < 0.01) || {}).label : "";
+  if (whole === 0 && fracLabel) return fracLabel;       // e.g. "½"
+  if (whole > 0 && fracLabel) return `${whole} ${fracLabel}`; // e.g. "5 ½"
+  return `${whole || 1}`;                                // integer only, minimum display "1"
+}
+
+/**
+ * formatQtyWithUnit(qty, unit) — Formats quantity + unit for display.
+ * Combines formatQty() output with the unit string.
+ * @param {number} qty - Decimal quantity
+ * @param {string} unit - Unit of measure (e.g. "Gallon", "Piece")
+ * @returns {string} e.g. "5 ½ Gallons", "½ Gallon"
+ */
+export function formatQtyWithUnit(qty, unit) {
+  return `${formatQty(qty)} ${unit || "Unit"}`;
+}
+
+/**
+ * renderFracSelect(idPrefix, selectedFrac) — Returns an HTML <select> for fraction picking.
+ * The select fires an onchange event using the idPrefix to identify the control.
+ * @param {string} idPrefix - ID prefix for the select element (e.g. "inv-frac-{id}")
+ * @param {number} selectedFrac - Currently selected fraction as decimal
+ * @returns {string} HTML string for the fraction <select>
+ */
+export function renderFracSelect(idPrefix, selectedFrac) {
+  const opts = FRAC_OPTIONS.map(o => {
+    const sel = Math.abs(o.value - selectedFrac) < 0.01 ? " selected" : "";
+    return `<option value="${o.value}"${sel}>${o.label}</option>`;
+  }).join("");
+  return `<select class="frac-select" id="${idPrefix}">${opts}</select>`;
+}
+
 /**
  * Converts a string to Title Case (first letter of each word capitalized).
  * Used across all product name displays for consistent formatting.

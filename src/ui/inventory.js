@@ -13,7 +13,7 @@ import { svi, dli, addWasteEntry, dbSet, dbGet, svShopItem } from '../db.js';
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 // _defaultThreshold returns the smart restock threshold based on unit type
 import { updExport, _defaultThreshold } from './home.js';
@@ -103,7 +103,7 @@ export function iH(item) {
           ${et}
         </div>
         <div style="text-align:right;flex-shrink:0">
-          <div class="iqt">${item.qty}</div>
+          <div class="iqt">${formatQty(item.qty)}</div>
           <div class="iun">${item.unit || "Unit"}</div>
           ${item.doNotRestock ? '<div style="font-size:.55rem;color:var(--mt);margin-top:1px;opacity:.7">No restock</div>' : ""}
         </div>
@@ -273,13 +273,20 @@ export async function openInvItemDetail(id) {
     </div>
   </div>`;
 
-  // Quantity stepper — +/- buttons with inline number input
+  // Quantity stepper — whole number +/- stepper on left, fraction picker on right.
+  // Stored as a single decimal in Firestore (e.g. 5.5), split here for UI display.
+  const { whole: invWhole, frac: invFrac } = splitQty(item.qty);
   html += `<div class="item-detail-section">
     <div class="item-detail-label">Quantity</div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <button class="qbtn" onclick="changeInvQty('${item.id}',-1)">−</button>
-      <input class="qinp" id="inv-qty-${item.id}" type="number" min="0" value="${item.qty}" style="width:48px;text-align:center" onblur="changeInvQtyDirect('${item.id}')"/>
-      <button class="qbtn" onclick="changeInvQty('${item.id}',1)">+</button>
+    <div class="qty-combo">
+      <div class="qty-group">
+        <button class="qbtn" onclick="changeInvQty('${item.id}',-1)">−</button>
+        <input class="qinp" id="inv-qty-${item.id}" type="number" min="0" max="99" value="${invWhole}" style="width:48px;text-align:center" onblur="changeInvQtyDirect('${item.id}')"/>
+        <button class="qbtn" onclick="changeInvQty('${item.id}',1)">+</button>
+      </div>
+      <div class="frac-group">
+        ${renderFracSelect(`inv-frac-${item.id}`, invFrac).replace('<select', '<select onchange="changeInvFrac(\'' + item.id + '\')"')}
+      </div>
     </div>
   </div>`;
 
@@ -321,13 +328,20 @@ export async function openInvItemDetail(id) {
     <textarea class="sh-note-inp" id="inv-note-${item.id}" rows="2" placeholder="Brand, store, reminders…" onblur="changeInvNote('${item.id}')">${item.note || ""}</textarea>
   </div>`;
 
-  // Restock threshold — "Restock when below [X]"
+  // Restock threshold — "Restock when below [X]" with whole + fraction picker.
+  // Thresholds are also stored as decimals for accurate comparison against fractional quantities.
+  const { whole: threshWhole, frac: threshFrac } = splitQty(thresh);
   html += `<div class="item-detail-section">
     <div class="item-detail-label">Restock when below</div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <button class="qbtn" onclick="changeInvThreshold('${item.id}',-1)">−</button>
-      <input class="qinp" id="inv-thresh-${item.id}" type="number" min="0" value="${thresh}" style="width:48px;text-align:center" onblur="changeInvThresholdDirect('${item.id}')"/>
-      <button class="qbtn" onclick="changeInvThreshold('${item.id}',1)">+</button>
+    <div class="qty-combo">
+      <div class="qty-group">
+        <button class="qbtn" onclick="changeInvThreshold('${item.id}',-1)">−</button>
+        <input class="qinp" id="inv-thresh-${item.id}" type="number" min="0" max="99" value="${threshWhole}" style="width:48px;text-align:center" onblur="changeInvThresholdDirect('${item.id}')"/>
+        <button class="qbtn" onclick="changeInvThreshold('${item.id}',1)">+</button>
+      </div>
+      <div class="frac-group">
+        ${renderFracSelect(`inv-threshfrac-${item.id}`, threshFrac).replace('<select', '<select onchange="changeInvThreshFrac(\'' + item.id + '\')"')}
+      </div>
     </div>
   </div>`;
 
@@ -615,13 +629,13 @@ export async function updL(loc, btn) {
 }
 
 // Adjusts quantity by a delta (d): +1 or -1 from the stepper buttons.
-// If quantity reaches 0, the item is removed entirely.
+// Does nothing if already at minimum — deletion only via swipe or Remove button.
 export async function adjQ(d) {
   const item = state.inv.find(i => i.id === state.adjId);
   if (!item) return;
-  const q = Math.max(0, item.qty + d);
+  const q = Math.max(0, (item.qty || 1) + d);
+  if (q <= 0) return; // Don't delete via stepper — minimum qty is enforced
   g("adjqty").value = q;
-  if (q === 0) { await remItem(state.adjId); return; }
   await svi({ ...item, qty: q });
 }
 
@@ -722,28 +736,50 @@ export async function changeInvUnit(id, unit) {
 }
 
 /**
- * changeInvThreshold(id, delta) — Adjusts the restock threshold by +1 or -1.
- * Saves the custom threshold to Firestore so it overrides the smart default.
+ * changeInvThreshold(id, delta) — Adjusts the WHOLE part of the restock threshold by +1 or -1.
+ * Reads fraction from the threshold fraction dropdown and combines into decimal.
  */
 export async function changeInvThreshold(id, delta) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
-  const cur = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(item.unit);
-  const v = Math.max(0, cur + delta);
   const el = g(`inv-thresh-${id}`);
-  if (el) el.value = v;
-  await svi({ ...item, restockThreshold: v });
+  const fracEl = g(`inv-threshfrac-${id}`);
+  const curWhole = parseInt(el?.value, 10) || 0;
+  const curFrac = parseFloat(fracEl?.value) || 0;
+  const newWhole = Math.max(0, curWhole + delta);
+  // Threshold CAN be 0 (meaning "never show as running low" effectively)
+  const combined = newWhole + curFrac;
+  if (el) el.value = newWhole;
+  await svi({ ...item, restockThreshold: Math.max(0, combined) });
 }
 
 /**
- * changeInvThresholdDirect(id) — Saves direct keyboard input for restock threshold.
+ * changeInvThresholdDirect(id) — Saves direct keyboard input for restock threshold whole part.
+ * Reads fraction from dropdown and combines.
  */
 export async function changeInvThresholdDirect(id) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
   const el = g(`inv-thresh-${id}`);
-  const v = parseInt(el?.value);
-  if (!isNaN(v) && v >= 0) await svi({ ...item, restockThreshold: v });
+  const fracEl = g(`inv-threshfrac-${id}`);
+  const w = parseInt(el?.value, 10);
+  const f = parseFloat(fracEl?.value) || 0;
+  if (isNaN(w) || w < 0) return;
+  await svi({ ...item, restockThreshold: Math.max(0, w + f) });
+}
+
+/**
+ * changeInvThreshFrac(id) — Handles fraction dropdown change for restock threshold.
+ * Reads whole number from input, combines with new fraction, saves.
+ */
+export async function changeInvThreshFrac(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const el = g(`inv-thresh-${id}`);
+  const fracEl = g(`inv-threshfrac-${id}`);
+  const w = parseInt(el?.value, 10) || 0;
+  const f = parseFloat(fracEl?.value) || 0;
+  await svi({ ...item, restockThreshold: Math.max(0, w + f) });
 }
 
 /**
@@ -776,28 +812,59 @@ export async function changeInvLocation(id, loc, btn) {
 }
 
 /**
- * changeInvQty(id, delta) — Adjusts quantity by +1 or -1 from the detail sheet stepper.
- * If quantity reaches 0, the item is removed entirely.
+ * changeInvQty(id, delta) — Adjusts the WHOLE part of quantity by +1 or -1.
+ * Reads the current fraction from the dropdown and combines both into a decimal.
+ * Does nothing if already at minimum (whole=0 with a fraction, or whole=1 with none).
+ * Deletion only happens via swipe-to-delete or the Remove button — never by stepper.
  */
 export async function changeInvQty(id, delta) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
-  const q = Math.max(0, item.qty + delta);
   const el = g(`inv-qty-${id}`);
-  if (el) el.value = q;
-  if (q === 0) { closeInvItemDetail(); await remItem(id); return; }
-  await svi({ ...item, qty: q });
+  const fracEl = g(`inv-frac-${id}`);
+  const curWhole = parseInt(el?.value, 10) || 0;
+  const curFrac = parseFloat(fracEl?.value) || 0;
+  const newWhole = Math.max(0, Math.min(99, curWhole + delta));
+  const combined = combineQty(newWhole, curFrac);
+  // If combined is at minimum (0.25) and delta is negative, do nothing
+  if (delta < 0 && combineQty(curWhole, curFrac) <= 0.25) return;
+  if (el) el.value = Math.floor(combined);
+  // If whole went to 0 and no fraction, auto-set fraction to smallest
+  if (newWhole === 0 && curFrac === 0 && fracEl) fracEl.value = "0.25";
+  await svi({ ...item, qty: combined });
 }
 
 /**
- * changeInvQtyDirect(id) — Saves direct keyboard input for quantity from detail sheet.
+ * changeInvQtyDirect(id) — Saves direct keyboard input for the whole part of quantity.
+ * Reads fraction from the dropdown, combines into decimal, enforces minimum.
  */
 export async function changeInvQtyDirect(id) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
   const el = g(`inv-qty-${id}`);
-  const v = parseInt(el?.value);
-  if (!isNaN(v) && v >= 0) await svi({ ...item, qty: v });
+  const fracEl = g(`inv-frac-${id}`);
+  const w = parseInt(el?.value, 10);
+  const f = parseFloat(fracEl?.value) || 0;
+  if (isNaN(w) || w < 0) return;
+  const combined = combineQty(w, f);
+  await svi({ ...item, qty: combined });
+}
+
+/**
+ * changeInvFrac(id) — Handles fraction dropdown change for inventory quantity.
+ * Reads the whole number from the input, combines with the new fraction, saves.
+ */
+export async function changeInvFrac(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const el = g(`inv-qty-${id}`);
+  const fracEl = g(`inv-frac-${id}`);
+  const w = parseInt(el?.value, 10) || 0;
+  const f = parseFloat(fracEl?.value) || 0;
+  const combined = combineQty(w, f);
+  // If user sets fraction to None while whole is 0, bump whole to 1
+  if (f === 0 && w === 0 && el) el.value = 1;
+  await svi({ ...item, qty: combined });
 }
 
 /**

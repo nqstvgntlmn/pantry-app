@@ -5,7 +5,7 @@
 // and renders the chat UI bubbles.
 
 import { state } from '../state.js';
-import { g, tk, wDates, xSt, ll, showNotif } from '../helpers.js';
+import { g, tk, wDates, xSt, ll, showNotif, formatQtyWithUnit } from '../helpers.js';
 import { svr } from '../db.js';
 // g      = getElementById shorthand
 // tk     = token/key helper
@@ -23,7 +23,7 @@ export function kitCtx() {
   // Empty sections are filtered out so we don't waste prompt tokens.
   const sec = ["fridge", "freezer", "pantry"].map(loc => {
     const its = state.inv.filter(i => i.location === loc);
-    return its.length ? ll(loc).toUpperCase() + ": " + its.map(i => `${i.name} (${i.qty} ${i.unit})`).join(", ") : "";
+    return its.length ? ll(loc).toUpperCase() + ": " + its.map(i => `${i.name} (${formatQtyWithUnit(i.qty, i.unit)})`).join(", ") : "";
   }).filter(Boolean).join("\n");
 
   // Collect items that are expiring soon or already expired so Claude can

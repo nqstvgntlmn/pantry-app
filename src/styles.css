@@ -356,6 +356,14 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .qbtn:active{background:var(--b1);transform:scale(.93)}
 .qinp{width:68px;background:var(--sf);border:1.5px solid var(--b2);border-radius:10px;padding:7px 8px;color:var(--tx);font-size:1.15rem;font-family:"Fraunces",serif;text-align:center;font-weight:300}
 .qinp:focus{outline:none;border-color:var(--ac)}
+/* Fraction picker dropdown — sits beside the whole-number stepper */
+.frac-select{background:var(--sf);border:1.5px solid var(--b2);border-radius:10px;padding:7px 8px;color:var(--tx);font-size:.92rem;font-family:"DM Sans",sans-serif;font-weight:500;cursor:pointer;min-width:68px;text-align:center;-webkit-appearance:none;appearance:none;transition:border-color .15s}
+.frac-select:focus{outline:none;border-color:var(--ac)}
+/* Container for whole stepper + fraction picker side by side */
+.qty-combo{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.qty-combo .qty-group{display:flex;align-items:center;gap:6px}
+.qty-combo .frac-group{display:flex;align-items:center;gap:6px}
+.qty-combo .frac-group .frac-label{font-size:.72rem;color:var(--mt);white-space:nowrap}
 .lpick{display:flex;gap:8px}
 .lbtn{flex:1;padding:11px 6px;border-radius:11px;border:1.5px solid var(--b2);background:var(--sf);color:var(--mt);font-family:"DM Sans",sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
 .lbtn.sel{background:var(--ac);color:#0c0c0a;border-color:var(--ac)}

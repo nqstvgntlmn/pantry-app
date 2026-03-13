@@ -11,7 +11,7 @@
 //   ll(loc)     — human-readable storage-location label ("fridge" → "🌡 Fridge")
 
 import { state, J, Js } from '../state.js';
-import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase } from '../helpers.js';
+import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase, formatQtyWithUnit } from '../helpers.js';
 import { saveMp, svShopItem, loadActivity, dbList } from '../db.js';
 
 // initHome() — called once on app boot.
@@ -328,7 +328,7 @@ function renderLowStock() {
   lst.innerHTML = low.map(item => `<div class="exi" style="border-color:var(--am)" onclick="openAdj('${item.id}')">
     <div style="flex:1;min-width:0">
       <div class="exn">${toTitleCase(item.name)}</div>
-      <div style="font-size:.7rem;color:var(--am);font-weight:600;margin-top:1px">${item.qty} ${item.unit || "Unit"}</div>
+      <div style="font-size:.7rem;color:var(--am);font-weight:600;margin-top:1px">${formatQtyWithUnit(item.qty, item.unit)}</div>
     </div>
     <button class="low-add-btn" onclick="event.stopPropagation();addLowToShop('${item.id}')">🛒 Add</button>
   </div>`).join("");
@@ -604,7 +604,7 @@ export function updExport() {
   const t = ["fridge", "freezer", "pantry", "household"].map(loc => {
     const its = state.inv.filter(i => i.location === loc);
     // Format: location header + one "- name (brand): qty unit" line per item
-    return its.length ? ll(loc).toUpperCase() + "\n" + its.map(i => `- ${i.name}${i.brand ? ` (${i.brand})` : ""}: ${i.qty} ${i.unit}`).join("\n") : "";
+    return its.length ? ll(loc).toUpperCase() + "\n" + its.map(i => `- ${i.name}${i.brand ? ` (${i.brand})` : ""}: ${formatQtyWithUnit(i.qty, i.unit)}`).join("\n") : "";
   }).filter(Boolean).join("\n\n"); // separate location blocks with a blank line
 
   const el = g("expbox"); // the <textarea> or <pre> that displays the export

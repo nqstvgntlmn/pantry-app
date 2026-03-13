@@ -14,7 +14,7 @@
 
 import { state, J, Js } from '../state.js';
 import { svr, dlr, dbSet, dbList, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
-import { g, fmtR, showNotif, showOv, hideOv, renderStars } from '../helpers.js';
+import { g, fmtR, showNotif, showOv, hideOv, renderStars, formatQtyWithUnit } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
 import { uploadRecipeCover, uploadStepPhoto, uploadCommentPhoto, deleteRecipeStorageFile } from '../storage.js';
 // g = getElementById shorthand, fmtR = format AI response text to HTML,
@@ -2173,7 +2173,7 @@ export async function whatCanIMake() {
   if (rsub) rsub.textContent = "Thinking…"; // temporary subtitle while waiting
 
   // Build a comma-separated inventory string like "chicken (2 lbs), rice (1 bag)"
-  const is = state.inv.map(i => `${i.name} (${i.qty} ${i.unit})`).join(", ");
+  const is = state.inv.map(i => `${i.name} (${formatQtyWithUnit(i.qty, i.unit)})`).join(", ");
 
   // Include saved recipe names so Claude can suggest ones the user already has
   const saved = state.recs.map(r => r.name).join(", ");
