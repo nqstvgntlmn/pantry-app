@@ -626,6 +626,10 @@ export function openER(id) {
     <div class="tag${_sel("Snack")}" data-tag="Snack" onclick="togTag(this)">🍿 Snack</div>
     <div class="tag${_sel("Dessert")}" data-tag="Dessert" onclick="togTag(this)">🎂 Dessert</div>
     <div class="tag${_sel("Drinks")}" data-tag="Drinks" onclick="togTag(this)">🥤 Drinks</div>
+    <div class="tag${_sel("Brunch")}" data-tag="Brunch" onclick="togTag(this)">🥣 Brunch</div>
+    <div class="tag${_sel("Bread & Baking")}" data-tag="Bread & Baking" onclick="togTag(this)">🍞 Bread & Baking</div>
+    <div class="tag${_sel("Sauce & Condiment")}" data-tag="Sauce & Condiment" onclick="togTag(this)">🫙 Sauce & Condiment</div>
+    <div class="tag${_sel("Preserve & Pickle")}" data-tag="Preserve & Pickle" onclick="togTag(this)">🥫 Preserve & Pickle</div>
     <div class="tag-cat">Diet & Lifestyle</div>
     <div class="tag${_sel("Vegetarian")}" data-tag="Vegetarian" onclick="togTag(this)">🌱 Vegetarian</div>
     <div class="tag${_sel("Vegan")}" data-tag="Vegan" onclick="togTag(this)">🌿 Vegan</div>
@@ -639,6 +643,14 @@ export function openER(id) {
     <div class="tag${_sel("High Protein")}" data-tag="High Protein" onclick="togTag(this)">💪 High Protein</div>
     <div class="tag${_sel("Low Carb")}" data-tag="Low Carb" onclick="togTag(this)">🫀 Low Carb</div>
     <div class="tag${_sel("Keto")}" data-tag="Keto" onclick="togTag(this)">🔥 Keto</div>
+    <div class="tag${_sel("Heart Healthy")}" data-tag="Heart Healthy" onclick="togTag(this)">🫀 Heart Healthy</div>
+    <div class="tag${_sel("Pregnancy-Safe")}" data-tag="Pregnancy-Safe" onclick="togTag(this)">🤰 Pregnancy-Safe</div>
+    <div class="tag${_sel("Baby & Toddler")}" data-tag="Baby & Toddler" onclick="togTag(this)">👶 Baby & Toddler</div>
+    <div class="tag${_sel("Halal")}" data-tag="Halal" onclick="togTag(this)">🍽️ Halal</div>
+    <div class="tag${_sel("Kosher")}" data-tag="Kosher" onclick="togTag(this)">✡️ Kosher</div>
+    <div class="tag${_sel("Paleo")}" data-tag="Paleo" onclick="togTag(this)">🌾 Paleo</div>
+    <div class="tag${_sel("Egg-Free")}" data-tag="Egg-Free" onclick="togTag(this)">🥚 Egg-Free</div>
+    <div class="tag${_sel("Mediterranean")}" data-tag="Mediterranean" onclick="togTag(this)">🌊 Mediterranean</div>
     <div class="tag-cat">Cook Style</div>
     <div class="tag${_sel("Quick")}" data-tag="Quick" onclick="togTag(this)">⚡ Quick</div>
     <div class="tag${_sel("Kid-Friendly")}" data-tag="Kid-Friendly" onclick="togTag(this)">👨‍👩‍👧 Kid-Friendly</div>
@@ -657,11 +669,56 @@ export function openER(id) {
     <div class="tag${_sel("Air Fryer")}" data-tag="Air Fryer" onclick="togTag(this)">⚡ Air Fryer</div>
     <div class="tag${_sel("Meal Prep")}" data-tag="Meal Prep" onclick="togTag(this)">🍱 Meal Prep</div>
     <div class="tag${_sel("World Cuisine")}" data-tag="World Cuisine" onclick="togTag(this)">🌍 World Cuisine</div>
+    <div class="tag${_sel("Fermented & Preserved")}" data-tag="Fermented & Preserved" onclick="togTag(this)">🫙 Fermented & Preserved</div>
+    <div class="tag${_sel("Stovetop")}" data-tag="Stovetop" onclick="togTag(this)">🍳 Stovetop</div>
+    <div class="tag${_sel("Wrap & Sandwich")}" data-tag="Wrap & Sandwich" onclick="togTag(this)">🫔 Wrap & Sandwich</div>
+    <div class="tag${_sel("Street Food")}" data-tag="Street Food" onclick="togTag(this)">🥙 Street Food</div>
+    <div class="tag${_sel("Raw & No-Cook")}" data-tag="Raw & No-Cook" onclick="togTag(this)">🍣 Raw & No-Cook</div>
+    <div class="tag${_sel("Camping & Outdoors")}" data-tag="Camping & Outdoors" onclick="togTag(this)">🏕️ Camping & Outdoors</div>
     <div class="tag-cat">Occasion</div>
     <div class="tag${_sel("Holiday")}" data-tag="Holiday" onclick="togTag(this)">🎄 Holiday</div>
     <div class="tag${_sel("Party")}" data-tag="Party" onclick="togTag(this)">🎊 Party</div>
     <div class="tag${_sel("Summer")}" data-tag="Summer" onclick="togTag(this)">🏖️ Summer</div>
     <div class="tag${_sel("Winter Comfort")}" data-tag="Winter Comfort" onclick="togTag(this)">❄️ Winter Comfort</div>
+    <div class="tag${_sel("Halloween")}" data-tag="Halloween" onclick="togTag(this)">🎃 Halloween</div>
+    <div class="tag${_sel("Thanksgiving")}" data-tag="Thanksgiving" onclick="togTag(this)">🦃 Thanksgiving</div>
+    <div class="tag${_sel("Easter")}" data-tag="Easter" onclick="togTag(this)">🐣 Easter</div>
+    <div class="tag${_sel("Valentine's Day")}" data-tag="Valentine's Day" onclick="togTag(this)">💝 Valentine's Day</div>
+    <div class="tag${_sel("Game Day")}" data-tag="Game Day" onclick="togTag(this)">🏈 Game Day</div>
+    <div class="tag${_sel("Graduation")}" data-tag="Graduation" onclick="togTag(this)">🎓 Graduation</div>
+    <div class="tag${_sel("Brunch Party")}" data-tag="Brunch Party" onclick="togTag(this)">🍳 Brunch Party</div>
+    <div class="tag${_sel("Ramadan")}" data-tag="Ramadan" onclick="togTag(this)">🌿 Ramadan</div>
+    <div class="tag${_sel("Hanukkah")}" data-tag="Hanukkah" onclick="togTag(this)">🕎 Hanukkah</div>
+    <!-- Cuisine — regional/cultural food origin tags -->
+    <div class="tag-cat">Cuisine</div>
+    <div class="tag${_sel("Italian")}" data-tag="Italian" onclick="togTag(this)">🇮🇹 Italian</div>
+    <div class="tag${_sel("Mexican")}" data-tag="Mexican" onclick="togTag(this)">🇲🇽 Mexican</div>
+    <div class="tag${_sel("Japanese")}" data-tag="Japanese" onclick="togTag(this)">🇯🇵 Japanese</div>
+    <div class="tag${_sel("Chinese")}" data-tag="Chinese" onclick="togTag(this)">🇨🇳 Chinese</div>
+    <div class="tag${_sel("Indian")}" data-tag="Indian" onclick="togTag(this)">🇮🇳 Indian</div>
+    <div class="tag${_sel("Thai")}" data-tag="Thai" onclick="togTag(this)">🇹🇭 Thai</div>
+    <div class="tag${_sel("Greek")}" data-tag="Greek" onclick="togTag(this)">🇬🇷 Greek</div>
+    <div class="tag${_sel("French")}" data-tag="French" onclick="togTag(this)">🇫🇷 French</div>
+    <div class="tag${_sel("Middle Eastern")}" data-tag="Middle Eastern" onclick="togTag(this)">🇱🇧 Middle Eastern</div>
+    <div class="tag${_sel("Korean")}" data-tag="Korean" onclick="togTag(this)">🇰🇷 Korean</div>
+    <div class="tag${_sel("Spanish")}" data-tag="Spanish" onclick="togTag(this)">🇪🇸 Spanish</div>
+    <div class="tag${_sel("Vietnamese")}" data-tag="Vietnamese" onclick="togTag(this)">🇻🇳 Vietnamese</div>
+    <div class="tag${_sel("American")}" data-tag="American" onclick="togTag(this)">🇺🇸 American</div>
+    <div class="tag${_sel("African")}" data-tag="African" onclick="togTag(this)">🌍 African</div>
+    <div class="tag${_sel("Latin American")}" data-tag="Latin American" onclick="togTag(this)">🌎 Latin American</div>
+    <div class="tag${_sel("Turkish")}" data-tag="Turkish" onclick="togTag(this)">🇹🇷 Turkish</div>
+    <div class="tag${_sel("Mediterranean Cuisine")}" data-tag="Mediterranean Cuisine" onclick="togTag(this)">🫔 Mediterranean</div>
+    <!-- Protein — main protein source tags -->
+    <div class="tag-cat">Protein</div>
+    <div class="tag${_sel("Chicken")}" data-tag="Chicken" onclick="togTag(this)">🐔 Chicken</div>
+    <div class="tag${_sel("Beef")}" data-tag="Beef" onclick="togTag(this)">🥩 Beef</div>
+    <div class="tag${_sel("Pork")}" data-tag="Pork" onclick="togTag(this)">🐷 Pork</div>
+    <div class="tag${_sel("Fish")}" data-tag="Fish" onclick="togTag(this)">🐟 Fish</div>
+    <div class="tag${_sel("Seafood")}" data-tag="Seafood" onclick="togTag(this)">🦐 Seafood</div>
+    <div class="tag${_sel("Eggs")}" data-tag="Eggs" onclick="togTag(this)">🥚 Eggs</div>
+    <div class="tag${_sel("Beans & Legumes")}" data-tag="Beans & Legumes" onclick="togTag(this)">🫘 Beans & Legumes</div>
+    <div class="tag${_sel("Nuts & Seeds")}" data-tag="Nuts & Seeds" onclick="togTag(this)">🌰 Nuts & Seeds</div>
+    <div class="tag${_sel("Cheese")}" data-tag="Cheese" onclick="togTag(this)">🧀 Cheese</div>
   </div></div>`;
 
   // ── Cover photo upload zone — shows current cover or empty upload area ──
@@ -1418,12 +1475,15 @@ export function renderCommunity() {
   if (rsub) rsub.textContent = recs.length + " community recipe" + (recs.length !== 1 ? "s" : "");
 
   // ── Build the filter panel ──
+  // Cuisine dropdown options — matches the new Cuisine tag category plus legacy values
   const cuisines = [
-    ["all", "All Cuisines"], ["turkish", "Turkish"], ["mediterranean", "Mediterranean"],
-    ["italian", "Italian"], ["mexican", "Mexican"], ["asian", "Asian"],
-    ["american", "American"], ["indian", "Indian"], ["bangladeshi", "Bangladeshi"],
-    ["japanese", "Japanese"], ["thai", "Thai"], ["french", "French"],
-    ["korean", "Korean"], ["middle eastern", "Middle Eastern"]
+    ["all", "All Cuisines"], ["italian", "Italian"], ["mexican", "Mexican"],
+    ["japanese", "Japanese"], ["chinese", "Chinese"], ["indian", "Indian"],
+    ["thai", "Thai"], ["greek", "Greek"], ["french", "French"],
+    ["middle eastern", "Middle Eastern"], ["korean", "Korean"], ["spanish", "Spanish"],
+    ["vietnamese", "Vietnamese"], ["american", "American"], ["african", "African"],
+    ["latin american", "Latin American"], ["turkish", "Turkish"],
+    ["mediterranean", "Mediterranean"], ["asian", "Asian"], ["bangladeshi", "Bangladeshi"]
   ];
   const cuisineOpts = cuisines.map(([v, l]) =>
     `<option value="${v}"${state.comCuisine === v ? " selected" : ""}>${l}</option>`
@@ -1431,15 +1491,34 @@ export function renderCommunity() {
 
   // Tag filter pills — curated fixed set matching the recipe tag system.
   // Grouped visually but rendered inline. Each pill toggles filtering.
+  // Includes all 6 categories: Meal Type, Diet & Lifestyle, Cook Style, Occasion, Cuisine, Protein
   const tagList = [
+    // Meal Type
     "Breakfast", "Lunch", "Dinner", "Snack", "Dessert", "Drinks",
+    "Brunch", "Bread & Baking", "Sauce & Condiment", "Preserve & Pickle",
+    // Diet & Lifestyle
     "Vegetarian", "Vegan", "Pescatarian", "Meat", "Gluten-Free",
     "Dairy-Free", "Nut-Free", "Sugar-Free", "Healthy", "High Protein",
-    "Low Carb", "Keto", "Quick", "Kid-Friendly", "Date Night",
+    "Low Carb", "Keto", "Heart Healthy", "Pregnancy-Safe", "Baby & Toddler",
+    "Halal", "Kosher", "Paleo", "Egg-Free", "Mediterranean",
+    // Cook Style
+    "Quick", "Kid-Friendly", "Date Night",
     "Batch Cook", "Freezer Friendly", "One Pot", "Special Occasion",
     "Budget Friendly", "Spicy", "Pasta", "Salad", "Soup & Stew",
     "Grill & BBQ", "Slow Cooker", "Air Fryer", "Meal Prep", "World Cuisine",
-    "Holiday", "Party", "Summer", "Winter Comfort"
+    "Fermented & Preserved", "Stovetop", "Wrap & Sandwich", "Street Food",
+    "Raw & No-Cook", "Camping & Outdoors",
+    // Occasion
+    "Holiday", "Party", "Summer", "Winter Comfort",
+    "Halloween", "Thanksgiving", "Easter", "Valentine's Day",
+    "Game Day", "Graduation", "Brunch Party", "Ramadan", "Hanukkah",
+    // Cuisine
+    "Italian", "Mexican", "Japanese", "Chinese", "Indian", "Thai",
+    "Greek", "French", "Middle Eastern", "Korean", "Spanish", "Vietnamese",
+    "American", "African", "Latin American", "Turkish", "Mediterranean Cuisine",
+    // Protein
+    "Chicken", "Beef", "Pork", "Fish", "Seafood", "Eggs",
+    "Beans & Legumes", "Nuts & Seeds", "Cheese"
   ];
   const tagPills = tagList.map(t => {
     const sel = state.comTags.includes(t);

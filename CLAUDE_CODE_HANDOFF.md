@@ -226,7 +226,7 @@ Bottom navigation (left to right):
 - **Shop ingredients:** adds recipe ingredients to shopping list
 - **Tags:** curated fixed set, grouped by category, no free-form entry
   - If no tags selected, tags section hidden entirely
-  - Tag categories: Meal Type, Diet & Lifestyle, Cook Style, Occasion
+  - Tag categories: Meal Type, Diet & Lifestyle, Cook Style, Occasion, Cuisine, Protein
 - **Community tab:** browse/search `public_recipes`
   - Filters: cuisine, tags, cook time, rating, sort order
   - Recipe cards: cover photo, name, author username, avg rating, cook time

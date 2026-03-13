@@ -124,7 +124,13 @@ Return this exact JSON shape:
 Rules:
 - For ingredients: split each into name, amount, and unit. If no amount/unit, leave them as empty strings.
 - For steps: return as an array of strings, one per step, numbered order.
-- For tags: infer from content. Choose from: Quick, Healthy, Kid-Friendly, Date Night, Batch Cook, Under 30 min, Comfort Food, One-Pot, Vegetarian, Vegan, Gluten-Free.
+- For tags: infer from content. Choose from these curated tags ONLY:
+  Meal Type: Breakfast, Lunch, Dinner, Snack, Dessert, Drinks, Brunch, Bread & Baking, Sauce & Condiment, Preserve & Pickle
+  Diet & Lifestyle: Vegetarian, Vegan, Pescatarian, Meat, Gluten-Free, Dairy-Free, Nut-Free, Sugar-Free, Healthy, High Protein, Low Carb, Keto, Heart Healthy, Pregnancy-Safe, Baby & Toddler, Halal, Kosher, Paleo, Egg-Free, Mediterranean
+  Cook Style: Quick, Kid-Friendly, Date Night, Batch Cook, Freezer Friendly, One Pot, Special Occasion, Budget Friendly, Spicy, Pasta, Salad, Soup & Stew, Grill & BBQ, Slow Cooker, Air Fryer, Meal Prep, World Cuisine, Fermented & Preserved, Stovetop, Wrap & Sandwich, Street Food, Raw & No-Cook, Camping & Outdoors
+  Occasion: Holiday, Party, Summer, Winter Comfort, Halloween, Thanksgiving, Easter, Valentine's Day, Game Day, Graduation, Brunch Party, Ramadan, Hanukkah
+  Cuisine: Italian, Mexican, Japanese, Chinese, Indian, Thai, Greek, French, Middle Eastern, Korean, Spanish, Vietnamese, American, African, Latin American, Turkish, Mediterranean Cuisine
+  Protein: Chicken, Beef, Pork, Fish, Seafood, Eggs, Beans & Legumes, Nuts & Seeds, Cheese
 - For imageUrl: find the primary/hero recipe image URL. Prefer og:image, then the largest recipe photo. Return full absolute URL.
 - For times: use human-readable format like "15 min", "1 hour 30 min".
 - If a field is not available, use an empty string or empty array.`;
