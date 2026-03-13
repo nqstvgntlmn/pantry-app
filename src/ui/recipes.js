@@ -393,27 +393,45 @@ export async function startBulkImport() {
   // Include paywall URLs (they might work) but skip video + private URLs entirely
   const toImport = [...okUrls, ...paywallUrls];
 
-  // Track results for the final summary — private links go to skipped alongside videos
-  const results = { success: [], failed: [], skipped: [...videoUrls, ...privateUrls] };
+  // Check each importable URL against existing recipes in state.recs (sourced from Firestore)
+  // to avoid re-importing duplicates. Matches on the sourceUrl field.
+  const dupes = [];
+  const toActuallyImport = toImport.filter(entry => {
+    const existingRecipe = state.recs.find(r => r.sourceUrl && r.sourceUrl === entry.url);
+    if (existingRecipe) {
+      dupes.push({ url: entry.url, name: existingRecipe.name || existingRecipe.url });
+      return false;
+    }
+    return true;
+  });
+
+  // Track results for the final summary — 4 categories:
+  // success, duplicates (already imported), skipped (video/private), failed
+  const results = {
+    success: [],
+    duplicates: dupes,
+    failed: [],
+    skipped: [...videoUrls, ...privateUrls],
+  };
 
   // Import each URL sequentially with a delay to avoid API rate limits
-  for (let i = 0; i < toImport.length; i++) {
-    const entry = toImport[i];
+  for (let i = 0; i < toActuallyImport.length; i++) {
+    const entry = toActuallyImport[i];
     const paywallWarn = entry.status === "paywall" ? " — may be paywalled" : "";
 
     // 3-second delay between imports to avoid hitting Anthropic rate limits
     // (skip delay before the very first import)
     if (i > 0) {
-      progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Waiting before next import… (${i + 1} of ${toImport.length})</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
+      progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Waiting before next import… (${i + 1} of ${toActuallyImport.length})</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
       await new Promise(r => setTimeout(r, 3000));
     }
 
     // Update progress indicator with current URL index
-    progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Importing ${i + 1} of ${toImport.length}…${paywallWarn}</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
+    progress.innerHTML = `<div style="font-size:.78rem;color:var(--mt)">Importing ${i + 1} of ${toActuallyImport.length}…${paywallWarn}</div><div class="spin" style="width:24px;height:24px;margin:8px auto"></div>`;
 
     try {
       // Call the AI-powered import endpoint; _importWithRetry handles 429s
-      const data = await _importWithRetry(entry.url, progress, i, toImport.length);
+      const data = await _importWithRetry(entry.url, progress, i, toActuallyImport.length);
 
       if (data.success && data.recipe) {
         const recipe = data.recipe;
@@ -520,17 +538,17 @@ function _friendlyError(reason, fallback) {
 
 /**
  * _renderBulkSummary — renders the final results of a bulk import into
- * the progress container. Shows success count, skipped videos, and
- * failed URLs with individual retry buttons.
+ * the progress container. Shows 4 categories: imported, duplicates (already
+ * in collection), skipped (video/private), and failed (with retry buttons).
  * @param {HTMLElement} container - the DOM element to render into
- * @param {Object} results - { success[], failed[], skipped[] }
+ * @param {Object} results - { success[], duplicates[], failed[], skipped[] }
  */
 function _renderBulkSummary(container, results) {
   let html = "";
 
   // Successful imports — green summary
   if (results.success.length) {
-    html += `<div style="color:var(--gn);font-size:.78rem;margin-bottom:6px">✓ ${results.success.length} recipe${results.success.length > 1 ? "s" : ""} imported</div>`;
+    html += `<div style="color:var(--gn);font-size:.78rem;margin-bottom:6px">✓ ${results.success.length} imported successfully</div>`;
     html += `<div style="font-size:.72rem;color:var(--mt);margin-bottom:10px;line-height:1.6">`;
     results.success.forEach(s => {
       html += `<div>• ${s.name || s.url}</div>`;
@@ -538,9 +556,19 @@ function _renderBulkSummary(container, results) {
     html += `</div>`;
   }
 
+  // Duplicate recipes — blue info, already in collection
+  if (results.duplicates.length) {
+    html += `<div style="color:var(--ac);font-size:.78rem;margin-bottom:6px">● ${results.duplicates.length} already in your collection — skipped</div>`;
+    html += `<div style="font-size:.72rem;color:var(--mt);margin-bottom:10px;line-height:1.6">`;
+    results.duplicates.forEach(d => {
+      html += `<div>• ${d.name || d.url}</div>`;
+    });
+    html += `</div>`;
+  }
+
   // Skipped links (video, private/inaccessible) — yellow warning
   if (results.skipped.length) {
-    html += `<div style="color:var(--yw,orange);font-size:.78rem;margin-bottom:6px">⚠ ${results.skipped.length} skipped</div>`;
+    html += `<div style="color:var(--yw,orange);font-size:.78rem;margin-bottom:6px">⚠ ${results.skipped.length} skipped — video or inaccessible links</div>`;
     html += `<div style="font-size:.72rem;color:var(--mt);margin-bottom:10px;line-height:1.6">`;
     results.skipped.forEach(s => {
       html += `<div>• ${s.url} <span style="color:var(--mt);font-size:.68rem">(${s.reason})</span></div>`;
@@ -563,7 +591,7 @@ function _renderBulkSummary(container, results) {
   }
 
   // Handle edge case: nothing was imported at all
-  if (!results.success.length && !results.failed.length && !results.skipped.length) {
+  if (!results.success.length && !results.failed.length && !results.skipped.length && !results.duplicates.length) {
     html = `<div style="font-size:.78rem;color:var(--mt)">No URLs were processed.</div>`;
   }
 
@@ -578,6 +606,13 @@ function _renderBulkSummary(container, results) {
 export async function retryBulkImport(url) {
   const progress = g("bulkImportProgress");
   if (!progress) return;
+
+  // Check if this URL was already imported (e.g. between first attempt and retry)
+  const existing = state.recs.find(r => r.sourceUrl && r.sourceUrl === url);
+  if (existing) {
+    showNotif(`Already imported: ${existing.name || url}`);
+    return;
+  }
 
   // Show a spinner for this specific retry
   const prevHtml = progress.innerHTML;
