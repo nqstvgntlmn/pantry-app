@@ -52,7 +52,7 @@ import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQt
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
-import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe } from './ui/recipes.js';
+import { renderRecs, togFav, valR, importFromUrl, saveRec, openER, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif } from './ui/recipes.js';
 
 // Insights screen: usage analytics and charts
 import { renderInsights } from './ui/insights.js';
@@ -245,6 +245,14 @@ window.addComComment = addComComment;     // Post a comment on a community recip
 window.shareComRecipe = shareComRecipe;   // Share a community recipe link
 window.submitComReview = submitComReview; // Submit a star rating review on a community recipe
 window.unpublishComRecipe = unpublishComRecipe; // Unpublish own recipe from community
+window.rateComRecipe = rateComRecipe;             // Rate a community recipe 1-5 stars (new rating system)
+window.deleteComComment = deleteComComment;       // Delete a comment on a community recipe
+window.openReportSheet = openReportSheet;         // Open the report reason bottom sheet
+window.closeReportSheet = closeReportSheet;       // Close the report bottom sheet
+window.submitComReport = submitComReport;         // Submit a report with selected reason
+window.loadMoreComments = loadMoreComments;       // Load next 20 comments (pagination)
+window.openNotifications = openNotifications;     // Open the notifications list
+window.openComRecipeFromNotif = openComRecipeFromNotif; // Open a recipe from a notification tap
 
 // ── Chat screen handlers ──
 window.sendChat = sendChat;     // Send a chat message to the AI assistant
@@ -511,6 +519,10 @@ window._appStart = async function(code) {
       setTimeout(() => g("usernameM")?.classList.add("active"), 600);
     }
   }
+
+  // Check for unread notifications and update the badge on the Recipes tab.
+  // Slight delay so it doesn't block initial render.
+  setTimeout(updateNotifBadge, 800);
 
   // Check if this is a first-time user and show onboarding if needed.
   // Slight delay ensures the main UI is visible first.

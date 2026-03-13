@@ -767,7 +767,8 @@ export async function publishRecipe(recipe, authorName, householdId) {
     householdId: householdId || state.hid,
     createdAt: new Date().toISOString(),
     likes: 0,
-    // Rating aggregates — updated when users submit reviews
+    commentCount: 0,
+    // Rating aggregates — updated when users submit ratings
     ratingSum: 0,
     ratingCount: 0,
     avgRating: 0,
@@ -834,14 +835,40 @@ export async function toggleLike(recipeId, currentlyLiked) {
 export async function addComment(recipeId, text, authorName) {
   const uid = getCurrentUser()?.uid;
   if (!uid || !text.trim()) return;
+  // Enforce 500-character limit on comment text
+  const trimmed = text.trim().slice(0, 500);
   const commentId = "cmt-" + Date.now().toString(36) + Math.random().toString(36).slice(2);
   const doc = {
-    text: text.trim(),
+    text: trimmed,
     authorName: authorName || "Anonymous",
+    authorUsername: state.username || "",
     authorUid: uid,
     createdAt: new Date().toISOString(),
   };
   await dbSet(`public_recipes/${recipeId}/comments/${commentId}`, doc);
+
+  // Update comment count on parent recipe doc and notify the author
+  try {
+    const pubDoc = await dbGet(`public_recipes/${recipeId}`);
+    if (pubDoc) {
+      // Re-count comments for accuracy
+      const allComments = await dbList(`public_recipes/${recipeId}/comments`);
+      await dbSet(`public_recipes/${recipeId}`, {
+        ...pubDoc, commentCount: allComments.length, id: undefined
+      });
+
+      // Notify the recipe author (if commenter is not the author)
+      if (pubDoc.authorUid && pubDoc.authorUid !== uid) {
+        await addNotification(pubDoc.authorUid, {
+          type: "comment",
+          recipeId,
+          recipeName: pubDoc.title || "a recipe",
+          commenterUsername: state.username || authorName || "Someone",
+        });
+      }
+    }
+  } catch { /* notifications and count updates are best-effort */ }
+
   return { id: commentId, ...doc };
 }
 
@@ -1070,3 +1097,188 @@ export async function loadActivity() {
  * Used as a date key for meal plan entries, cook log, and waste log.
  */
 function tk() { return new Date().toISOString().split("T")[0]; }
+
+// ── RATINGS (1-5 star system) ────────────────────────────────────────────
+// Ratings are stored per-user: public_recipes/{id}/ratings/{uid}.
+// Each user gets one rating per recipe. Aggregate fields (ratingSum,
+// ratingCount, avgRating) live on the parent public_recipes doc and are
+// re-calculated from the subcollection after every write.
+
+/**
+ * submitRating — save or update the current user's star rating on a recipe.
+ * Prevents recipe authors from rating their own recipes.
+ * Re-counts all ratings to keep the aggregate accurate.
+ */
+export async function submitRating(recipeId, rating) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid || !rating || rating < 1 || rating > 5) return null;
+
+  // Block self-rating — the recipe's authorUid is on the parent doc
+  const pubDoc = await dbGet(`public_recipes/${recipeId}`);
+  if (pubDoc && pubDoc.authorUid === uid) return null;
+
+  const now = new Date().toISOString();
+  // Check if the user already rated (for updatedAt vs createdAt)
+  const existing = await dbGet(`public_recipes/${recipeId}/ratings/${uid}`);
+  const ratingDoc = {
+    rating,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  };
+  await dbSet(`public_recipes/${recipeId}/ratings/${uid}`, ratingDoc);
+
+  // Re-count all ratings and update parent doc aggregate fields
+  const allRatings = await dbList(`public_recipes/${recipeId}/ratings`);
+  const ratingSum = allRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
+  const ratingCount = allRatings.length;
+  const avgRating = ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 10) / 10 : 0;
+
+  if (pubDoc) {
+    await dbSet(`public_recipes/${recipeId}`, {
+      ...pubDoc, ratingSum, ratingCount, avgRating, id: undefined
+    });
+  }
+
+  return { ...ratingDoc, ratingSum, ratingCount, avgRating };
+}
+
+/**
+ * getMyRating — check if the current user has rated a recipe.
+ * Returns the rating doc (with .rating field) or null.
+ */
+export async function getMyRating(recipeId) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return null;
+  return dbGet(`public_recipes/${recipeId}/ratings/${uid}`);
+}
+
+// ── COMMENTS (enhanced with delete support) ──────────────────────────────
+// Comments include authorUsername for display. Authors of the recipe can
+// delete any comment; users can delete their own comments.
+
+/**
+ * deleteComment — remove a comment from a public recipe.
+ * Only the comment author or the recipe author should call this.
+ */
+export async function deleteComment(recipeId, commentId) {
+  await dbDelete(`public_recipes/${recipeId}/comments/${commentId}`);
+
+  // Update comment count on parent recipe doc
+  try {
+    const pubDoc = await dbGet(`public_recipes/${recipeId}`);
+    if (pubDoc) {
+      const allComments = await dbList(`public_recipes/${recipeId}/comments`);
+      await dbSet(`public_recipes/${recipeId}`, {
+        ...pubDoc, commentCount: allComments.length, id: undefined
+      });
+    }
+  } catch { /* count update is best-effort */ }
+}
+
+// ── REPORTS ──────────────────────────────────────────────────────────────
+// Reports are stored in a top-level `reports` collection. Each report has
+// a type (recipe or comment), the target ID, the reporter's UID, a reason
+// category, and a status ("pending" by default). The reported user is NOT
+// notified — reports are reviewed by a moderator.
+
+/**
+ * submitReport — file a report against a recipe or comment.
+ * Checks if the user already reported this target to prevent duplicates.
+ * @param {"recipe"|"comment"} type — what kind of content is being reported
+ * @param {string} targetId — the Firestore ID of the recipe or comment
+ * @param {string} reason — one of the predefined reason categories
+ * @param {string} recipeId — the parent recipe ID (same as targetId for recipe reports)
+ */
+export async function submitReport(type, targetId, reason, recipeId) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return null;
+
+  // Check for existing report from this user on this target
+  const existing = await dbList("reports");
+  const dupe = existing.find(r => r.reportedBy === uid && r.targetId === targetId && r.type === type);
+  if (dupe) return "duplicate";
+
+  const reportId = "rpt-" + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const doc = {
+    type,
+    targetId,
+    recipeId: recipeId || targetId,
+    reportedBy: uid,
+    reason,
+    createdAt: new Date().toISOString(),
+    status: "pending",
+  };
+  await dbSet(`reports/${reportId}`, doc);
+  return { id: reportId, ...doc };
+}
+
+// ── NOTIFICATIONS ────────────────────────────────────────────────────────
+// Notifications are stored per-user: users/{uid}/notifications/{id}.
+// Currently used for comment notifications — when someone comments on a
+// user's recipe, the recipe author gets a notification with a link back
+// to the recipe detail view.
+
+/**
+ * addNotification — create a notification for a user.
+ * Called internally when someone comments on another user's recipe.
+ * @param {string} targetUid — the user to notify (recipe author)
+ * @param {object} data — notification payload (type, recipeId, recipeName, etc.)
+ */
+export async function addNotification(targetUid, data) {
+  if (!targetUid) return;
+  const notifId = "ntf-" + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const doc = {
+    ...data,
+    createdAt: new Date().toISOString(),
+    read: false,
+  };
+  await dbSet(`users/${targetUid}/notifications/${notifId}`, doc);
+}
+
+/**
+ * listNotifications — fetch all notifications for the current user.
+ * Returns an array sorted newest-first.
+ */
+export async function listNotifications() {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return [];
+  const notifs = await dbList(`users/${uid}/notifications`);
+  return notifs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
+/**
+ * markNotificationRead — mark a single notification as read.
+ */
+export async function markNotificationRead(notifId) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return;
+  const doc = await dbGet(`users/${uid}/notifications/${notifId}`);
+  if (doc) {
+    await dbSet(`users/${uid}/notifications/${notifId}`, { ...doc, read: true, id: undefined });
+  }
+}
+
+/**
+ * markAllNotificationsRead — mark all notifications as read for the current user.
+ */
+export async function markAllNotificationsRead() {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return;
+  const notifs = await dbList(`users/${uid}/notifications`);
+  for (const n of notifs) {
+    if (!n.read) {
+      await dbSet(`users/${uid}/notifications/${n.id}`, { ...n, read: true, id: undefined });
+    }
+  }
+}
+
+/**
+ * getUnreadNotifCount — returns the count of unread notifications.
+ * Used for the badge on the Recipes tab.
+ */
+export async function getUnreadNotifCount() {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return 0;
+  const notifs = await dbList(`users/${uid}/notifications`);
+  return notifs.filter(n => !n.read).length;
+}

@@ -13,7 +13,7 @@
 //   eid       = edit-target ID    cfg = user config/preferences
 
 import { state } from '../state.js';
-import { svr, dlr, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview } from '../db.js';
+import { svr, dlr, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
 import { g, fmtR, showNotif, showOv, hideOv, renderStars } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
 // g = getElementById shorthand, fmtR = format AI response text to HTML,
@@ -898,12 +898,16 @@ export function renderCommunity() {
       ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;height:160px"><img src="${r.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
       : "";
 
+    // Comment count badge on the card
+    const cmtCount = r.commentCount || 0;
+
     html += `<div class="rcd com-rcd" onclick="openComRecipe('${r.id}')">
       ${coverHtml}
       <div class="rrow">
         <div class="rnm" style="flex:1">${r.title || "Untitled"}</div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
           <span style="font-size:.78rem;color:var(--rd)">❤️ ${r.likes || 0}</span>
+          ${cmtCount ? `<span style="font-size:.78rem;color:var(--mt)">💬 ${cmtCount}</span>` : ""}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
@@ -957,6 +961,7 @@ function _appendComPage(allRecs, container) {
     const tagsHtml = (r.tags || []).slice(0, 3).map(t => `<span class="com-tag">${t}</span>`).join("");
     const author = r.authorUsername ? `@${r.authorUsername}` : (r.authorName || "Anonymous");
     const timeStr = r.cookTime || r.totalTime || "";
+    const cmtCount = r.commentCount || 0;
     const coverHtml = r.imageUrl
       ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;height:160px"><img src="${r.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
       : "";
@@ -967,6 +972,7 @@ function _appendComPage(allRecs, container) {
         <div class="rnm" style="flex:1">${r.title || "Untitled"}</div>
         <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
           <span style="font-size:.78rem;color:var(--rd)">❤️ ${r.likes || 0}</span>
+          ${cmtCount ? `<span style="font-size:.78rem;color:var(--mt)">💬 ${cmtCount}</span>` : ""}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
@@ -1008,23 +1014,32 @@ function _appendComPage(allRecs, container) {
 /**
  * openComRecipe — opens a full detail view for a community recipe.
  * Shows cover photo, metadata (prep/cook time, servings), structured
- * ingredients and steps, star rating, like/save/comment actions, and
- * publish/unpublish button for the recipe author.
+ * ingredients and steps, star rating (1-5 with per-user persistence),
+ * like/save/comment actions, report button, comment delete, pagination,
+ * and publish/unpublish button for the recipe author.
  */
 export async function openComRecipe(id) {
   const r = state.comRecs.find(x => x.id === id);
   if (!r) return;
 
-  // Fetch like status, comments, and user's review in parallel
+  // Store which community recipe is open (for report/comment/rating handlers)
+  state._openComId = id;
+
+  // Fetch like status, comments, user's rating, and review in parallel
   const uid = getCurrentUser()?.uid;
-  const [liked, comments, myReview] = await Promise.all([
+  const [liked, comments, myRating, myReview] = await Promise.all([
     checkMyLike(id),
     listComments(id).catch(() => []),
+    getMyRating(id).catch(() => null),
     checkMyReview(id),
   ]);
 
   if (liked) state.myLikes.add(id); else state.myLikes.delete(id);
+  // Sort comments chronologically (oldest first) for natural reading order
   comments.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+  // Cache comments for pagination — show first 20, "Load more" for the rest
+  state._comComments = comments;
 
   // Share link URL
   const shareUrl = `https://pantry-app-zeta-six.vercel.app/recipe/${id}`;
@@ -1043,7 +1058,7 @@ export async function openComRecipe(id) {
   ].filter(Boolean);
   const metaHtml = meta.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">${meta.map(m => `<span style="font-size:.74rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:4px 10px">${m}</span>`).join("")}</div>` : "";
 
-  // Rating display
+  // Rating display — show aggregate rating with star icons
   const ratingHtml = (r.ratingCount || 0) > 0
     ? `<div style="margin-bottom:6px">${_starDisplay(r.avgRating, r.ratingCount)}</div>`
     : "";
@@ -1074,30 +1089,35 @@ export async function openComRecipe(id) {
     stepsContent = `<div style="font-size:.88rem;color:var(--tx2);line-height:1.7;white-space:pre-wrap">${(r.steps || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
   }
 
-  // Comments HTML
-  let commentsHtml = comments.map(c => `<div style="padding:10px 0;border-bottom:1px solid var(--b1)">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <span style="font-size:.78rem;font-weight:600">${(c.authorUsername ? "@" + c.authorUsername : c.authorName) || "Anonymous"}</span>
-      <span style="font-size:.68rem;color:var(--mt)">${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ""}</span>
-    </div>
-    <div style="font-size:.84rem;color:var(--tx2);margin-top:4px;line-height:1.5">${(c.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
-  </div>`).join("");
+  // Build comments HTML with pagination (first 20) and delete/report buttons
+  const commentsHtml = _buildCommentsHtml(comments.slice(0, 20), id, uid, isAuthor);
+  const hasMoreComments = comments.length > 20;
 
-  // Star rating input for the current user's review
-  const myRating = myReview?.rating || 0;
-  const reviewStars = Array.from({ length: 5 }, (_, i) =>
-    `<span class="star${i < myRating ? " on" : ""}" onclick="submitComReview('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < myRating ? "★" : "☆"}</span>`
-  ).join("");
+  // Star rating input — allows user to rate 1-5 (disabled for recipe author)
+  const myRatingVal = myRating?.rating || 0;
+  const ratingStars = isAuthor
+    ? `<div style="font-size:.78rem;color:var(--mt);font-style:italic">You can't rate your own recipe</div>`
+    : Array.from({ length: 5 }, (_, i) =>
+        `<span class="star${i < myRatingVal ? " on" : ""}" onclick="rateComRecipe('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < myRatingVal ? "★" : "☆"}</span>`
+      ).join("");
 
   // Publish/unpublish button (only for the recipe author)
   const publishBtn = isAuthor
     ? `<button class="btn bd bsm" onclick="unpublishComRecipe('${id}')" style="margin-top:12px;width:100%">🚫 Unpublish this recipe</button>`
     : "";
 
+  // Report button for the recipe (subtle, not shown to author)
+  const reportRecipeBtn = !isAuthor && uid
+    ? `<button class="btn-report" onclick="openReportSheet('recipe','${id}','${id}')" title="Report recipe">🚩 Report</button>`
+    : "";
+
   g("erecbody").innerHTML = `
     ${coverImg}
     <div style="margin-bottom:14px">
-      <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:300;line-height:1.3;margin-bottom:6px">${r.title || "Untitled"}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:300;line-height:1.3;margin-bottom:6px;flex:1">${r.title || "Untitled"}</div>
+        ${reportRecipeBtn}
+      </div>
       ${r.cuisine ? `<div style="font-size:.78rem;color:var(--ac);font-weight:600;margin-bottom:6px">${r.cuisine}</div>` : ""}
       ${ratingHtml}
       <div style="font-size:.76rem;color:var(--mt)">by ${author} · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}</div>
@@ -1119,17 +1139,19 @@ export async function openComRecipe(id) {
 
     <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-top:16px">
       <div class="flbl" style="margin-bottom:8px">Rate this recipe</div>
-      <div id="com-review-stars" style="display:flex;align-items:center;gap:2px">${reviewStars}</div>
-      ${myReview ? `<div style="font-size:.72rem;color:var(--mt);margin-top:4px">You rated this ${myReview.rating}★</div>` : ""}
+      <div id="com-rating-stars" style="display:flex;align-items:center;gap:2px">${ratingStars}</div>
+      ${myRatingVal ? `<div id="com-rating-label" style="font-size:.72rem;color:var(--mt);margin-top:4px">You rated this ${myRatingVal}★</div>` : '<div id="com-rating-label"></div>'}
     </div>
 
     <div style="margin-top:16px">
       <div class="flbl" style="margin-bottom:10px">Comments (${comments.length})</div>
       <div id="com-comments">${commentsHtml || '<div style="font-size:.82rem;color:var(--mt);padding:8px 0">No comments yet.</div>'}</div>
+      ${hasMoreComments ? `<button class="btn bs bsm" id="com-load-more" onclick="loadMoreComments()" style="width:100%;margin-top:8px">Load more comments (${comments.length - 20} remaining)</button>` : ""}
       <div style="display:flex;gap:8px;margin-top:12px">
-        <input class="fi" id="com-cmt-input" placeholder="Add a comment…" style="flex:1" onkeydown="if(event.key==='Enter')addComComment('${id}')"/>
+        <input class="fi" id="com-cmt-input" placeholder="Add a comment…" maxlength="500" style="flex:1" onkeydown="if(event.key==='Enter')addComComment('${id}')"/>
         <button class="btn bp bsm" onclick="addComComment('${id}')">Post</button>
       </div>
+      <div style="font-size:.68rem;color:var(--mt);margin-top:4px;text-align:right" id="com-cmt-counter">0 / 500</div>
     </div>
 
     <div style="margin-top:16px;padding:12px;background:var(--card);border:1px solid var(--b1);border-radius:12px">
@@ -1139,40 +1161,63 @@ export async function openComRecipe(id) {
 
     ${publishBtn}`;
 
+  // Wire up the character counter on the comment input
+  const cmtInput = g("com-cmt-input");
+  if (cmtInput) {
+    cmtInput.addEventListener("input", () => {
+      const counter = g("com-cmt-counter");
+      if (counter) counter.textContent = `${cmtInput.value.length} / 500`;
+    });
+  }
+
   showOv("erec");
 }
 
 /**
- * submitComReview — submit a star rating for a community recipe.
- * Writes/updates the review in Firestore and refreshes the star display.
+ * submitComReview — submit a star rating for a community recipe (legacy wrapper).
+ * Now delegates to rateComRecipe which uses the new ratings subcollection.
  */
 export async function submitComReview(id, rating) {
+  return rateComRecipe(id, rating);
+}
+
+/**
+ * rateComRecipe — submit or update a 1-5 star rating on a community recipe.
+ * Uses the per-user ratings subcollection (public_recipes/{id}/ratings/{uid}).
+ * Recipe authors cannot rate their own recipes (enforced by submitRating in db.js).
+ */
+export async function rateComRecipe(id, rating) {
   const user = getCurrentUser();
   if (!user) { showNotif("Sign in to rate recipes"); return; }
 
   try {
-    await addReview(id, rating, "");
+    const result = await submitRating(id, rating);
 
-    // Update local cache so re-render reflects new rating
+    // submitRating returns null if the user is the recipe author
+    if (!result) { showNotif("You can't rate your own recipe"); return; }
+
+    // Update local cache with the new aggregate values
     const r = state.comRecs.find(x => x.id === id);
     if (r) {
-      // Optimistic update: re-calculate avg (this is approximate until next full load)
-      r.ratingCount = (r.ratingCount || 0) + 1;
-      r.ratingSum = (r.ratingSum || 0) + rating;
-      r.avgRating = Math.round((r.ratingSum / r.ratingCount) * 10) / 10;
+      r.ratingSum = result.ratingSum;
+      r.ratingCount = result.ratingCount;
+      r.avgRating = result.avgRating;
     }
 
     // Update the star display in the detail overlay
-    const starsEl = g("com-review-stars");
+    const starsEl = g("com-rating-stars");
     if (starsEl) {
       starsEl.innerHTML = Array.from({ length: 5 }, (_, i) =>
-        `<span class="star${i < rating ? " on" : ""}" onclick="submitComReview('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < rating ? "★" : "☆"}</span>`
+        `<span class="star${i < rating ? " on" : ""}" onclick="rateComRecipe('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < rating ? "★" : "☆"}</span>`
       ).join("");
     }
+    // Update the "You rated" label
+    const labelEl = g("com-rating-label");
+    if (labelEl) labelEl.textContent = `You rated this ${rating}★`;
 
     showNotif(`Rated ${rating}★`);
   } catch (e) {
-    console.error("submitComReview:", e);
+    console.error("rateComRecipe:", e);
     showNotif("Couldn't submit rating");
   }
 }
@@ -1255,7 +1300,8 @@ export async function saveComToKitchen(id) {
 
 /**
  * addComComment — posts a new comment on a community recipe.
- * Reads the comment input field, persists to Firestore, and appends inline.
+ * Enforces 500-character limit, persists to Firestore, and appends inline.
+ * Also notifies the recipe author (handled by addComment in db.js).
  */
 export async function addComComment(id) {
   const user = getCurrentUser();
@@ -1265,27 +1311,37 @@ export async function addComComment(id) {
   const text = input?.value?.trim();
   if (!text) return;
 
+  // Enforce 500-character limit
+  if (text.length > 500) {
+    showNotif("Comment must be 500 characters or less");
+    return;
+  }
+
   const authorName = user.displayName || localStorage.getItem("ks-who") || "Anonymous";
 
   try {
     const cmt = await addComment(id, text, authorName);
     input.value = "";
+    // Reset character counter
+    const counter = g("com-cmt-counter");
+    if (counter) counter.textContent = "0 / 500";
 
     // Append the new comment to the DOM without a full reload
     const container = g("com-comments");
+    const r = state.comRecs.find(x => x.id === id);
+    const isAuthor = user.uid === r?.authorUid;
+
     if (container && cmt) {
       // Remove "no comments" placeholder if present
       if (container.querySelector("div[style*='color:var(--mt)']") && !container.querySelector("div[style*='border-bottom']")) {
         container.innerHTML = "";
       }
-      container.innerHTML += `<div style="padding:10px 0;border-bottom:1px solid var(--b1)">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:.78rem;font-weight:600">${state.username ? "@" + state.username : cmt.authorName}</span>
-          <span style="font-size:.68rem;color:var(--mt)">${new Date().toLocaleDateString()}</span>
-        </div>
-        <div style="font-size:.84rem;color:var(--tx2);margin-top:4px;line-height:1.5">${cmt.text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
-      </div>`;
+      // Build comment HTML with delete button (user can always delete own comments)
+      container.innerHTML += _buildSingleCommentHtml(cmt, id, user.uid, isAuthor);
     }
+
+    // Add to cached comments array
+    if (state._comComments) state._comComments.push(cmt);
 
     showNotif("Comment posted!");
   } catch (e) {
@@ -1314,5 +1370,283 @@ export async function shareComRecipe(id) {
     showNotif("Link copied!");
   } catch {
     showNotif("Couldn't copy link");
+  }
+}
+
+// ── COMMENT HELPERS ──────────────────────────────────────────────────────
+// Build HTML for a single comment row and for the paginated comments list.
+
+/**
+ * _buildSingleCommentHtml — renders one comment with author, date, text,
+ * and action buttons (delete for author/recipe-owner, report for others).
+ */
+function _buildSingleCommentHtml(c, recipeId, currentUid, isRecipeAuthor) {
+  const displayName = (c.authorUsername ? "@" + c.authorUsername : c.authorName) || "Anonymous";
+  const dateStr = c.createdAt ? new Date(c.createdAt).toLocaleDateString() : "";
+  const escapedText = (c.text || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Show delete if the current user wrote this comment OR is the recipe author
+  const canDelete = currentUid && (c.authorUid === currentUid || isRecipeAuthor);
+  // Show report if signed in, not the comment author, and not the recipe author
+  const canReport = currentUid && c.authorUid !== currentUid;
+
+  let actions = "";
+  if (canDelete) {
+    actions += `<button class="btn-report" onclick="deleteComComment('${recipeId}','${c.id}')" title="Delete comment" style="font-size:.7rem">🗑</button>`;
+  }
+  if (canReport) {
+    actions += `<button class="btn-report" onclick="openReportSheet('comment','${c.id}','${recipeId}')" title="Report comment" style="font-size:.7rem">🚩</button>`;
+  }
+
+  return `<div class="com-comment-row" id="cmt-${c.id}" style="padding:10px 0;border-bottom:1px solid var(--b1)">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:.78rem;font-weight:600">${displayName}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        ${actions}
+        <span style="font-size:.68rem;color:var(--mt)">${dateStr}</span>
+      </div>
+    </div>
+    <div style="font-size:.84rem;color:var(--tx2);margin-top:4px;line-height:1.5">${escapedText}</div>
+  </div>`;
+}
+
+/**
+ * _buildCommentsHtml — renders the first page of comments (up to 20).
+ * Each comment gets delete/report action buttons based on permissions.
+ */
+function _buildCommentsHtml(comments, recipeId, currentUid, isRecipeAuthor) {
+  if (!comments.length) return "";
+  return comments.map(c => _buildSingleCommentHtml(c, recipeId, currentUid, isRecipeAuthor)).join("");
+}
+
+/**
+ * loadMoreComments — loads the next batch of 20 comments and appends them.
+ * Called by the "Load more" button in the comment section.
+ */
+export function loadMoreComments() {
+  const id = state._openComId;
+  const uid = getCurrentUser()?.uid;
+  const r = state.comRecs.find(x => x.id === id);
+  const isAuthor = uid && uid === r?.authorUid;
+  const container = g("com-comments");
+  if (!container || !state._comComments) return;
+
+  // Count how many comments are currently displayed
+  const displayed = container.querySelectorAll(".com-comment-row").length;
+  const nextBatch = state._comComments.slice(displayed, displayed + 20);
+
+  if (nextBatch.length) {
+    const html = nextBatch.map(c => _buildSingleCommentHtml(c, id, uid, isAuthor)).join("");
+    container.insertAdjacentHTML("beforeend", html);
+  }
+
+  // Update or remove the "Load more" button
+  const remaining = state._comComments.length - displayed - nextBatch.length;
+  const btn = g("com-load-more");
+  if (btn) {
+    if (remaining > 0) {
+      btn.textContent = `Load more comments (${remaining} remaining)`;
+    } else {
+      btn.remove();
+    }
+  }
+}
+
+/**
+ * deleteComComment — deletes a comment from a community recipe.
+ * Allowed for comment author or recipe author. Removes from DOM and Firestore.
+ */
+export async function deleteComComment(recipeId, commentId) {
+  if (!confirm("Delete this comment?")) return;
+
+  try {
+    await deleteComment(recipeId, commentId);
+
+    // Remove from DOM
+    const el = document.getElementById("cmt-" + commentId);
+    if (el) el.remove();
+
+    // Remove from cached comments
+    if (state._comComments) {
+      state._comComments = state._comComments.filter(c => c.id !== commentId);
+    }
+
+    showNotif("Comment deleted");
+  } catch (e) {
+    console.error("deleteComComment:", e);
+    showNotif("Couldn't delete comment");
+  }
+}
+
+// ── REPORT SYSTEM ────────────────────────────────────────────────────────
+// Report sheet shows a bottom sheet with reason options. After submission,
+// a report doc is created in the top-level reports collection.
+
+/**
+ * openReportSheet — shows the report reason bottom sheet for a recipe or comment.
+ * Stores the target info in state so submitComReport can read it.
+ */
+export function openReportSheet(type, targetId, recipeId) {
+  const user = getCurrentUser();
+  if (!user) { showNotif("Sign in to report content"); return; }
+
+  // Store report context for the submit handler
+  state._reportTarget = { type, targetId, recipeId };
+
+  // Show the report bottom sheet and its backdrop
+  const sheet = g("report-sheet");
+  const backdrop = g("reportBackdrop");
+  if (sheet) sheet.classList.add("active");
+  if (backdrop) backdrop.classList.add("active");
+}
+
+/**
+ * closeReportSheet — hides the report bottom sheet.
+ */
+export function closeReportSheet() {
+  const sheet = g("report-sheet");
+  const backdrop = g("reportBackdrop");
+  if (sheet) sheet.classList.remove("active");
+  if (backdrop) backdrop.classList.remove("active");
+  state._reportTarget = null;
+}
+
+/**
+ * submitComReport — submits a report with the selected reason.
+ * Called when the user picks a reason from the report sheet.
+ */
+export async function submitComReport(reason) {
+  const target = state._reportTarget;
+  if (!target) return;
+
+  try {
+    const result = await submitReport(target.type, target.targetId, reason, target.recipeId);
+
+    if (result === "duplicate") {
+      showNotif("You've already reported this");
+    } else {
+      showNotif("Thanks for your report");
+    }
+  } catch (e) {
+    console.error("submitComReport:", e);
+    showNotif("Couldn't submit report");
+  }
+
+  closeReportSheet();
+}
+
+// ── NOTIFICATIONS ────────────────────────────────────────────────────────
+// Notification badge on the Recipes tab, notification list, and read handling.
+
+/**
+ * updateNotifBadge — checks for unread notifications and shows/hides the
+ * badge on the Recipes nav tab. Called on app boot and after actions.
+ */
+export async function updateNotifBadge() {
+  try {
+    const count = await getUnreadNotifCount();
+    const badgeText = count > 9 ? "9+" : String(count);
+    const show = count > 0;
+
+    // Update the nav tab badge
+    const badge = g("recipes-notif-badge");
+    if (badge) {
+      badge.textContent = badgeText;
+      badge.style.display = show ? "flex" : "none";
+    }
+    // Update the header bell badge
+    const hdrBadge = g("recipes-notif-badge-hdr");
+    if (hdrBadge) {
+      hdrBadge.textContent = badgeText;
+      hdrBadge.style.display = show ? "flex" : "none";
+    }
+  } catch { /* best-effort badge update */ }
+}
+
+/**
+ * openNotifications — opens the notification list overlay.
+ * Fetches all notifications and renders them as a list.
+ */
+export async function openNotifications() {
+  const user = getCurrentUser();
+  if (!user) { showNotif("Sign in to view notifications"); return; }
+
+  try {
+    const notifs = await listNotifications();
+
+    // Mark all as read (fire-and-forget)
+    markAllNotificationsRead().then(() => updateNotifBadge());
+
+    const body = g("erecbody");
+    if (!body) return;
+
+    let html = `<div style="margin-bottom:14px">
+      <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:300;margin-bottom:6px">Notifications</div>
+      <div style="font-size:.76rem;color:var(--mt)">${notifs.length ? notifs.length + " notification" + (notifs.length !== 1 ? "s" : "") : "No notifications yet"}</div>
+    </div>`;
+
+    if (!notifs.length) {
+      html += `<div class="es"><div class="ei">🔔</div><p>When someone comments on your recipe, you'll see it here.</p></div>`;
+    } else {
+      notifs.forEach(n => {
+        const isUnread = !n.read;
+        const dateStr = n.createdAt ? new Date(n.createdAt).toLocaleDateString() : "";
+
+        if (n.type === "comment") {
+          html += `<div class="rcd" style="${isUnread ? "border-left:3px solid var(--ac);" : ""}" onclick="openComRecipeFromNotif('${n.recipeId}')">
+            <div style="font-size:.84rem;font-weight:${isUnread ? "600" : "400"};line-height:1.5">
+              <span style="color:var(--ac)">${(n.commenterUsername || "Someone").replace(/</g, "&lt;")}</span> commented on your recipe
+              <span style="font-weight:600">${(n.recipeName || "").replace(/</g, "&lt;")}</span>
+            </div>
+            <div style="font-size:.68rem;color:var(--mt);margin-top:4px">${dateStr}</div>
+          </div>`;
+        }
+      });
+    }
+
+    body.innerHTML = html;
+    showOv("erec");
+  } catch (e) {
+    console.error("openNotifications:", e);
+    showNotif("Couldn't load notifications");
+  }
+}
+
+/**
+ * openComRecipeFromNotif — opens a community recipe from a notification tap.
+ * Fetches the recipe if not already in local cache, then opens the detail view.
+ */
+export async function openComRecipeFromNotif(recipeId) {
+  hideOv("erec");
+
+  // Ensure community recipes are loaded
+  if (!state.comRecs.length) {
+    try {
+      state.comRecs = await listPublicRecipes();
+    } catch { /* will fail gracefully in openComRecipe */ }
+  }
+
+  // If recipe is in cache, open it directly
+  if (state.comRecs.find(x => x.id === recipeId)) {
+    // Switch to community tab first
+    state.rt = "community";
+    document.querySelectorAll(".rtab").forEach(x => x.classList.remove("active"));
+    const el = g("rtab-community");
+    if (el) el.classList.add("active");
+
+    setTimeout(() => openComRecipe(recipeId), 100);
+  } else {
+    // Recipe not in cache — try fetching it directly
+    try {
+      const r = await getPublicRecipe(recipeId);
+      if (r) {
+        state.comRecs.push({ id: recipeId, ...r });
+        state.rt = "community";
+        setTimeout(() => openComRecipe(recipeId), 100);
+      } else {
+        showNotif("Recipe no longer available");
+      }
+    } catch {
+      showNotif("Couldn't load recipe");
+    }
   }
 }

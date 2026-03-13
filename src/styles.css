@@ -513,3 +513,15 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .com-rcd{position:relative}
 .com-tag{display:inline-block;font-size:.66rem;padding:2px 8px;border-radius:20px;background:var(--acd);color:var(--ac);border:1px solid rgba(212,168,83,.25);font-weight:600;white-space:nowrap;transition:background .15s,color .15s}
 .com-tag-sel{background:var(--ac);color:#fff;border-color:var(--ac)}
+
+/* Notification badge — small red circle with count, used on nav tabs and header buttons */
+.notif-badge{position:absolute;top:-2px;right:-2px;background:var(--rd);color:#fff;font-size:.6rem;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px;pointer-events:none;z-index:5}
+/* Inline variant for the bell button in the recipes header */
+.notif-badge-inline{position:absolute;top:-4px;right:-6px;font-size:.55rem;min-width:14px;height:14px;border-radius:7px}
+
+/* Report button — subtle flag/report action that doesn't draw attention */
+.btn-report{background:none;border:none;color:var(--mt);font-size:.76rem;padding:4px 6px;cursor:pointer;border-radius:6px;transition:background .15s,color .15s;min-width:28px;min-height:28px;display:inline-flex;align-items:center;justify-content:center}
+.btn-report:hover,.btn-report:active{background:var(--b1);color:var(--tx2)}
+
+/* Comment row — used for delete animation */
+.com-comment-row{transition:opacity .2s,max-height .2s}
