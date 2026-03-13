@@ -3,401 +3,341 @@
 
 ---
 
-## Who You Are Working With
-
-**User:** Bora (born January 23, 1990)
-**Household:** Bora + Bushra (wife), 1 toddler (age 3)
-**Dietary:** No pork, no shellfish, Bangladeshi / Turkish / Mediterranean / American cuisine
-**Communication style:** Direct, trusting, wants things done properly. Treats Claude as a senior software engineer / co-founder. Does not want to be walked through every detail — just build it right and explain key decisions.
-
----
-
 ## Project Overview
 
-**Kitchen** is a PWA (Progressive Web App) for household kitchen management. It started as a personal app for Bora's family and is now being scaled into a multi-household product that other families can sign up for and use.
-
-### Core Features (all built and working)
-- **Inventory** — fridge, freezer, pantry tracking with expiry alerts, barcode scanning, photos
-- **Recipes** — save, tag, filter, scale, schedule to meal plan, "what can I make now?" (AI)
-- **Shopping List** — swipe-to-delete, multi-select, aisle grouping, deal search (AI), share list
-- **Meal Planner** — weekly calendar, drag recipes in, "build shopping list from meal plan"
-- **Insights** — cook log, waste log, variety tracking
-- **AI Chat** — Claude-powered kitchen assistant with full household context
-- **Add to Kitchen** — check off shopping items → moves to inventory with location picker (fridge/freezer/pantry)
-- **Notes** — inline notes on shopping items (✏️ icon) and inventory items (in adjust overlay)
-- **Deals** — Claude searches for grocery deals based on shopping list
-- **Barcode Scanner** — photo-based, uses Quagga + Edamam + Open Food Facts + UPC Item DB
-- **Themes** — light/dark mode + color themes
-- **Apple Reminders Sync** — personal automation via iOS Shortcut + `/api/sync-reminders` (stays as a power-user hidden feature, not scaled)
+**App name:** Kitchen (PWA)
+**Repo:** https://github.com/nqstvgntlmn/pantry-app
+**Live URL:** https://pantry-app-zeta-six.vercel.app
+**Firebase project:** `family-pantry-c65d6`
+**Household ID:** `x5Gz5ydc1UTAkXu0zYuRK5Xmjhm1`
+**Developer:** Bora Isguder (byisguder@gmail.com)
+**Household members:** Bora Isguder (owner), Bushra Isguder (member)
+**Stack:** Vanilla JS PWA, Vercel serverless functions, Firebase Firestore + Storage + Auth
+**CLI alias:** Start Claude Code with `kc`
 
 ---
 
-## Current Tech Stack
+## Absolute Rules — NEVER Violate
 
-| Layer | Technology |
-|---|---|
-| Frontend | Single `index.html` (~3,200 lines), vanilla JS ES modules, CSS custom properties |
-| Backend | Vercel serverless functions (`/api/`) |
-| Database | Firestore (via `/api/db.js` proxy) |
-| AI | Anthropic Claude API (via `/api/proxy.js`) |
-| Auth | **None yet** — household code in localStorage (`ks-h`) |
-| Hosting | Vercel |
-| Repo | https://github.com/nqstvgntlmn/pantry-app |
-| Deployed | https://pantry-app-zeta-six.vercel.app |
-| Firebase project | `family-pantry-c65d6` |
+1. **NEVER modify `api/sync-reminders.js` or `api/completed-items.js`** under any circumstances, unless a change being made directly impacts these files and Bora has explicitly approved it.
+2. **ALWAYS add clear, utilitarian comments** to every function and every major code block — this is non-negotiable.
+3. **Always double-check with Bora** before making changes that affect both Shopping and Supplies tabs — ask "Should this apply to both tabs?"
+4. **Always send `.html` files** when relevant.
+5. **Bora pushes to GitHub himself.** Deliver files, never push.
+6. **Never break existing features** when adding new ones.
+7. **Mobile-first (iPhone).** 44px tap targets, safe area insets, smooth animations.
+8. **Design quality matters.** DM Sans font, CSS custom properties, card-based UI, `border-radius: 14px`.
+9. **Firestore is the source of truth.** localStorage is only for device-specific settings.
+10. **When in doubt, ask before building.** One clarifying question is better than building the wrong thing.
 
 ---
 
-## Firestore Collections (current structure)
+## Firestore Data Model
 
 ```
-households/{hid}/inventory/{id}
-households/{hid}/recipes/{id}
-households/{hid}/shopping/{id}
-households/{hid}/mealplan/{YYYY-MM-DD}
-households/{hid}/settings/config
-households/{hid}/cooklog/{id}
-households/{hid}/wastelog/{id}
+households/{hid}                              — household document
+  activity/                                   — activity feed entries
+  completed_items/                            — DO NOT TOUCH
+  customProducts/{normalizedName}             — custom product photos
+    fields: imageUrl, imageDismissed, name, updatedAt, updatedBy
+  settings/                                   — household settings
+  shopping/{itemId}                           — shopping list items
+  inventory/{itemId}                          — supplies/pantry items
+  recipes/{recipeId}                          — household recipes
+  productPreferences/{normalizedName}         — preferred location per product
+
+household_codes/{code}                        — invite code index
+
+public_recipes/{recipeId}                     — community recipes
+  ratings/{uid}                               — user ratings
+  comments/{commentId}                        — comments with optional photos
+  likes/{uid}                                 — likes
+
+users/{uid}                                   — user profiles
+  notifications/{notificationId}              — author notifications
+
+reports/{reportId}                            — content reports
 ```
 
-**Note:** `hid` is currently just the household code string (e.g. "bora-family"). After auth is added, it becomes a proper Firestore document ID under a `households` collection with membership control.
+---
+
+## Firebase Storage Structure
+
+```
+households/{hid}/customProducts/{name}.jpg    — custom product photos
+recipes/{recipeId}/cover.jpg                  — recipe cover photos
+recipes/{recipeId}/steps/{stepNumber}.jpg     — step photos
+recipes/{recipeId}/comments/{commentId}/{photoIndex}.jpg — comment photos
+```
 
 ---
 
-## localStorage Keys (device-only, not synced)
-
-| Key | Value |
-|---|---|
-| `ks-h` | household code |
-| `ks-who` | user's first name |
-| `ks-hhs` | array of household codes this device has used |
-| `ks-theme` | active theme key |
-| `ks-mode` | `"light"` or `"dark"` |
-| `ks-lastnotif` | last notification timestamp |
-
----
-
-## API Routes (Vercel `/api/`)
+## API Endpoints (Vercel Serverless)
 
 | Route | Purpose |
 |---|---|
-| `/api/db.js` | Firestore CRUD proxy (list, set, delete ops) |
-| `/api/proxy.js` | Anthropic Claude API proxy |
-| `/api/sync-reminders.js` | Apple Reminders → shopping list sync (personal, not scaled) |
+| `api/text-search.js` | Product text search — 4-database parallel pipeline (see Search Pipeline below) |
+| `api/barcode.js` | Barcode/UPC lookup |
+| `api/db.js` | Firestore proxy for client operations |
+| `api/import-recipe.js` | Claude AI-powered recipe importer (uses `claude-sonnet-4-20250514`) |
+| `api/sync-reminders.js` | **DO NOT TOUCH** |
+| `api/completed-items.js` | **DO NOT TOUCH** |
+
+### api/text-search.js Details
+
+- **Tier 1 (parallel, 1.5s timeout):** Spoonacular + Kroger + USDA + Open Food Facts
+- **Tier 2:** UPC Item DB + Open Beauty Facts + Open Pet Food Facts
+- **Short-circuit:** If 3+ results with images found after Tier 1, skip Tier 2
+- Custom products checked FIRST via Firebase Admin SDK
+- `imageDismissed` flag respected — returns results but with `image: null`
+
+### api/import-recipe.js Details
+
+- Uses `claude-sonnet-4-20250514` to parse any recipe website
+- Downloads and stores cover image to Firebase Storage
+- Can publish to `public_recipes` if user opts in
 
 ---
 
-## Firestore Client Helpers
+## Environment Variables (Set in Vercel)
 
-```js
-_db(op, path, data)   // base POST to /api/db — checks content-type before .json()
-dbList(path)          // returns [] on empty/error (never throws)
-dbSet(path, data)     // upsert
-dbDelete(path)        // delete
-```
-
-**Important:** `poll()` uses `Promise.allSettled` so one failing collection never crashes the sync. `loadFirestoreData()` uses sequential `dbList()` calls with a top-level try/catch.
-
----
-
-## Key Global State Variables
-
-```js
-let hid        // household ID / code
-let inv = []   // inventory items
-let shop = []  // shopping list items
-let recs = []  // recipes
-let mp = {}    // meal plan { "YYYY-MM-DD": "Meal Name" }
-let cfg = {}   // household config (merged with CFG_DEFAULT)
-let cookLog = []
-let wasteLog = []
-```
-
----
-
-## Config Defaults
-
-```js
-CFG_DEFAULT = {
-  name: "The Bora Family",
-  adults: "Bora",
-  kids: "1 toddler (age 3)",
-  nopork: true,
-  noshellfish: false,
-  vegetarian: false,
-  glutenfree: false,
-  cuisines: "Bangladeshi, Turkish, Mediterranean, American",
-  cookTime: "40-60 min"
-}
-```
-
----
-
-## App Entry Point Flow
-
-1. User enters household code + name on login screen
-2. `_appStart(code)` is called
-3. `loadFirestoreData()` — loads mp, cfg, cookLog, wasteLog
-4. `loadCfgUI()` — populates settings screen
-5. `initHome()` — renders home screen
-6. `poll()` starts — fetches ALL 7 collections every 6 seconds
-
----
-
-## Screens
-
-| Screen ID | Name | Key functions |
-|---|---|---|
-| `home` | Home | `renderHome()`, `renderWeek()`, `renderSum()`, `renderExp()`, `renderTonight()` |
-| `inv` | Inventory | `renderInv()`, `iH(item)`, `openAdj(id)` |
-| `recipes` | Recipes | `renderRecs()`, `openER(id)`, `saveRec()` |
-| `shop` | Shopping | `renderShop()`, `sH(item)`, `svShopItem()`, `dlShopItem()` |
-| `insights` | Insights | `renderInsights()` |
-| `chat` | AI Chat | `kitCtx()` builds context, sends to `/api/proxy` |
-
----
-
-## Overlays
-
-| Overlay ID | Purpose |
+| Variable | Notes |
 |---|---|
-| `ov-atk` | Add to Kitchen (checked shopping items → inventory) |
-| `ov-scan` | Barcode scanner |
-| `ov-result` | Scan result / add to inventory |
-| `ov-madd` | Manual add to inventory |
-| `ov-adj` | Adjust inventory item (qty, location, expiry, notes) |
-| `ov-rec` | Recipe editor |
-| `ov-er` | View/cook a recipe |
-| `mealM` | Meal planner day modal |
-| `cookedM` | "I cooked this" modal |
+| `ANTHROPIC_API_KEY` | Claude API |
+| `SPOONACULAR_API_KEY` | 150 req/day free tier |
+| `KROGER_CLIENT_ID` | Kroger product search |
+| `KROGER_CLIENT_SECRET` | Kroger product search |
+| `USDA_API_KEY` | USDA FoodData Central |
+| `FIREBASE_API_KEY` | Firebase Web API |
+| `FIREBASE_CLIENT_EMAIL` | Firebase Admin SDK |
+| `FIREBASE_PRIVATE_KEY` | Firebase Admin SDK |
+| `FIREBASE_PROJECT_ID` | `family-pantry-c65d6` |
 
 ---
 
-## Swipe-to-Delete Implementation
+## Search Pipeline Details
 
-- `.swipe-wrap` — outer container, `overflow:hidden`, `border-radius:14px`
-- `.swipe-inner` — visible row, slides left via `translateX`
-- `.swipe-del` — red delete panel behind row, revealed via `clip-path`
-- `_openWrap` — tracks currently open row
-- `_snapClose(wrap)` — snaps row back closed
-- `swipeDelItem(id, list)` — called from red panel, calls `dlShopItem` or `dli`
-- `swipeRowTap(id, list)` — handles both normal tap and multi-select tap
-
----
-
-## Multi-Select Mode
-
-- `selectMode` — `"shop"` | `"inv"` | `null`
-- `selectedIds` — `Set` of selected IDs
-- `togShopSelect()` / `togInvSelect()` — enter select mode
-- `cancelSelect()` — exit
-- `deleteSelected()` — `Promise.all` delete
-- `#multi-bar` — fixed bottom bar, slides up when items selected
-- `.swipe-wrap.selecting` — class added in select mode, disables swipe
+- **350ms debounce** on frontend
+- **In-memory cache:** 5min TTL, 30 query max
+- **`scoreSearchResult()`:** exact match 100pts, starts-with 50pts, first-word 40pts, position bonus, short-name bonus, cutoff at 20pts
+- **Recipe name filter:** rejects recipe/dish names for ingredient searches unless the query itself contains recipe words
+- **Non-food results** (beauty, pet) deprioritized when food results exist but never excluded entirely — app covers all grocery store products
+- **`imageDismissed: true`** → search results returned normally, `image: null`
 
 ---
 
-## Notes Feature
+## Product Images — DISABLED
 
-**Shopping items:** ✏️ icon on each row opens inline textarea (`.sh-note-edit`). Saves on `onblur` via `saveShNote(id)`. Note displays as `📝 note text` under item name.
+Product images in Shopping and Supplies tabs have been **commented out (NOT deleted)** for the following reasons:
 
-**Inventory items:** Notes textarea in the `ov-adj` overlay. Saves on `onblur` via `adjNote()`. Note displays under item name in inventory row.
+1. External database images produced too many false positives
+2. Inconsistent images (some with photos, some without) looks worse than no images
+3. Unnecessary API costs and Firebase Storage usage
 
-Both store `note` field on the item object in Firestore.
-
----
-
-## Barcode Lookup Chain
-
-1. **Edamam** (`tryE`) — food database, includes nutrition
-2. **Open Food Facts** (`tryO`) — open source product DB
-3. **UPC Item DB** (`tryU`) — general products
-4. Falls back to manual entry if all fail
-
----
-
-## AI Integration
-
-`kitCtx()` builds a rich context string including:
-- Household config (name, dietary restrictions, cuisines)
-- Current inventory (by location)
-- Recent cook log
-- Current shopping list
-- Tonight's meal plan
-
-This context is prepended to every Claude chat message and used for: chat, recipe suggestions, deal search, "what can I make now?", barcode product enrichment.
-
----
-
-## What Has Been Decided for the Rebuild
-
-### Phase 1 — Refactor (first task)
-
-The single `index.html` must be broken into a proper project structure:
-
+The entire image pipeline code is preserved as comments tagged with:
 ```
-pantry-app/
-├── index.html              (shell only, ~50 lines)
-├── src/
-│   ├── main.js             (entry point, _appStart, poll)
-│   ├── auth.js             (all Firebase Auth logic — NEW)
-│   ├── db.js               (Firestore helpers: _db, dbList, dbSet, dbDelete)
-│   ├── state.js            (global state: inv, shop, recs, mp, cfg, etc.)
-│   ├── ui/
-│   │   ├── home.js         (renderHome, renderWeek, renderSum, renderExp, renderTonight)
-│   │   ├── inventory.js    (renderInv, iH, openAdj, svi, dli)
-│   │   ├── shopping.js     (renderShop, sH, svShopItem, dlShopItem, openAddToKitchen)
-│   │   ├── recipes.js      (renderRecs, openER, saveRec, scaleRec, whatCanIMake)
-│   │   ├── insights.js     (renderInsights, cookLog, wasteLog)
-│   │   ├── chat.js         (kitCtx, chat UI)
-│   │   ├── scan.js         (barcode scanner, lkup, tryE/O/U)
-│   │   └── swipe.js        (swipe-to-delete, multi-select)
-│   └── styles.css          (all CSS extracted from index.html)
-├── api/
-│   ├── db.js               (existing Firestore proxy)
-│   ├── auth.js             (NEW — Firebase Admin SDK for auth verification)
-│   ├── proxy.js            (existing Claude proxy)
-│   └── sync-reminders.js   (existing, stays as-is)
-├── vercel.json
-└── package.json
+// [IMAGES DISABLED] — see session notes for context
 ```
 
-**Build tool: Vite** — proper bundling, ES module imports, hot reload in dev. No framework (stays vanilla JS).
+**To re-enable:** Uncomment all `[IMAGES DISABLED]` blocks across the codebase.
 
-### Phase 2 — Authentication
-
-**Firebase Auth with three providers:**
-1. Sign in with Apple (requires Apple Developer account — Bora has one)
-2. Sign in with Google
-3. Email / Password
-
-**New data model:**
-
-```
-users/{uid}
-  → name, email, createdAt, householdIds[]
-
-households/{hid}
-  → name, ownerUid, members[{uid, name, role}], inviteCode, createdAt
-  → /inventory/{id}
-  → /recipes/{id}
-  → /shopping/{id}
-  → /mealplan/{date}
-  → /settings/config
-  → /cooklog/{id}
-  → /wastelog/{id}
-```
-
-**User flow:**
-1. Open app → sign in / sign up screen
-2. First time: "Create your kitchen" → household auto-created → invite code generated
-3. Returning user → straight to their kitchen
-4. Joining another household → enter invite code (must be logged in first)
-5. Multiple households per user supported
-
-**Firestore security rules:** Only authenticated members of a household can read/write its data.
-
-**Migration:** Bora's existing household data (`bora-family` or whatever the current code is) gets migrated to the new structure automatically on first login.
-
-### Phase 3 — Voice Input
-Web Speech API mic button on shopping list. "Add milk, eggs, and bread" → items added. No setup required for users.
-
-### Phase 4 — Shareability
-Public recipe library. Share recipe between households. Shareable shopping list link.
-
-### Phase 5 — Monetization
-Stripe integration. Free tier (basic features) vs Premium tier (AI features: chat, deals, "what can I make", recipe scaling). Usage limits on free tier.
+**NOT affected:** Recipe images, barcode scan images, community recipe photos.
 
 ---
 
-## Standing Rules — Read These Every Session
+## Tabs & Navigation
 
-1. **Bora pushes to GitHub himself.** Always deliver the final file(s) for download. Never try to push to GitHub directly.
-2. **Every function must have clear comments** explaining what it does and why.
-3. **Never break existing features** when adding new ones. Test mentally before delivering.
-4. **Mobile-first.** This is primarily used on iPhone. All interactions must feel native iOS — tap targets minimum 44px, safe area insets respected, smooth animations.
-5. **Design quality matters.** The app uses `DM Sans` font, CSS custom properties for theming, card-based UI with `border-radius: 14px`. Don't introduce inconsistent UI patterns.
-6. **Firestore is the source of truth.** localStorage is only for device-specific settings (theme, household code, user name).
-7. **The Reminders Shortcut feature stays as-is** — it's a personal automation that hits `/api/sync-reminders`. Don't modify or remove it.
-8. **When in doubt, ask before building.** One clarifying question is better than building the wrong thing.
+Bottom navigation (left to right):
 
----
-
-## Product Images — Disabled
-
-Product images in the shopping list and pantry have been **disabled** (code preserved as comments, not deleted) for the following reasons:
-
-1. **False positives** — External database images (Spoonacular, Kroger, Open Food Facts) frequently returned wrong product photos for the search query.
-2. **Inconsistent UX** — Some items had photos and some didn't, making the UI look broken and half-finished.
-3. **Unnecessary costs** — Firebase Storage uploads + external API calls for every product added friction and expense.
-4. **Complexity** — The custom photo upload/compress/upload pipeline added maintenance burden without reliable results.
-
-**What's commented out:**
-- `src/ui/shopping.js` — image display in dropdown, list items, detail sheet, Add/Change/Delete photo buttons, imageDismissed logic, drag-and-drop upload
-- `src/ui/inventory.js` — same as above for pantry
-- `src/storage.js` — `uploadProductImage()`, `lookupCustomProductImage()`, `compressImage()`
-- `api/text-search.js` — IMAGE_LOOKUP table (~1000 entries), `lookupImage()`, `lookupCustomProduct()`, Firebase Admin SDK for image lookups, image priority/fallback logic in handler
-- `src/styles.css` — CSS for `.sh-thumb`, `.pimg`, `.item-detail-img-*`, `.drop-zone-*`, `.enrich-img-*`
-
-**NOT affected:**
-- Recipe images (community recipe photos are a separate feature)
-- Barcode scan product images (those are shown in the scan result overlay, not in the shopping/inventory list)
-- Product NAME/BRAND/CATEGORY search still works — only the image display and upload is disabled
-
-**To re-enable:** Search for `[IMAGES DISABLED]` across the codebase and uncomment all marked blocks.
+| Icon | Tab | Key screens |
+|---|---|---|
+| 🏠 | HOME | Greeting, Tonight's Dinner, This Week, What to Cook Tonight, Running Low, Recent Activity, Your Supplies |
+| 🧺 | SUPPLIES | Sub-tabs: All / Fridge / Freezer / Pantry / Household |
+| 📖 | RECIPES | My Recipes + Community tab |
+| 🛒 | SHOP | Shopping list with search, voice, barcode |
+| 📊 | STATS | Insights and logs |
+| ✨ | CLAUDE | AI chat assistant |
 
 ---
 
-## Environment Variables (Vercel)
+## Home Tab Features
 
-These are set in Vercel dashboard — do NOT hardcode:
-- `ANTHROPIC_API_KEY`
-- `FIREBASE_PROJECT_ID` → `family-pantry-c65d6`
-- `FIREBASE_CLIENT_EMAIL`
-- `FIREBASE_PRIVATE_KEY`
-- `EDAMAM_APP_ID`
-- `EDAMAM_APP_KEY`
-
-For Phase 2, add:
-- `FIREBASE_WEB_API_KEY` (for client-side Firebase Auth)
+- Greeting with user name and date
+- **Scan + Add + Refresh** buttons in header
+- **Tonight's Dinner** card: `[Find recipes]` `[Ask Claude →]` buttons
+- **This Week:** 7-day calendar for meal planning
+- **What to Cook Tonight?** — collapsible section
+  - Finds community recipes matching Supplies inventory
+  - 60%+ match threshold
+  - Color coded: 🟢 100% = ready to cook, 🟡 80-99% = almost there, 🟠 60-79% = need a few things
+- **Running Low** — collapsible, respects `doNotRestock` flag and thresholds
+- **Recent Activity** — collapsible, shows last 3 actions
+- **Your Supplies** — summary view
+- All collapsible sections remember state in localStorage
 
 ---
 
-## Firebase Console Setup Needed Before Phase 2
+## Supplies Tab Features
 
-Bora needs to do this (takes ~15 min):
+- **Sub-tabs:** All | Fridge | Freezer | Pantry | Household
+- **Swipe left** to delete (10% threshold to reveal, 70-75% to auto-delete)
+- **Swipe right** to add to shopping list
+- **Slim circle** on each item: tap to mark done, tap row to open detail
+- **Detail sheet:** quantity, unit, location, restock threshold, doNotRestock toggle, Add to Shopping List button
+- **Product preferences:** remembers preferred location per product via `productPreferences` collection
+- **Units:** Piece, Unit, Pack, Box, Bag, Bottle, Jar, Can, Bunch, Head, Loaf, Dozen, Carton, Tube, Roll, Gallon, Half Gallon, Liter, Pound, Oz, Clove
+- **Default restock thresholds by unit:**
+  - Threshold 1: Bottle, Jar, Can, Carton, Bunch, Head, Loaf, Dozen, Tube, Roll, Gallon, Half Gallon, Liter
+  - Threshold 2: Piece, Unit, Pack, Box, Bag, Pound, Oz, Clove
+- **doNotRestock toggle:** item never appears in Running Low
+- **Font:** Title Case, uniform size and weight throughout
+- **Mouse drag support** for swipe gestures on desktop
 
-**In Firebase Console (console.firebase.google.com → family-pantry-c65d6):**
-1. Authentication → Sign-in method → Enable **Email/Password**
-2. Authentication → Sign-in method → Enable **Google** (set project support email)
-3. Authentication → Sign-in method → Enable **Apple**
-   - Get Team ID from developer.apple.com → Account → Membership
-   - Create Service ID (e.g. `com.borafamily.kitchen`) at developer.apple.com → Identifiers
-   - Enable "Sign in with Apple" on the Service ID
-   - Set return URL: `https://family-pantry-c65d6.firebaseapp.com/__/auth/handler`
-   - Create a Key with Sign in with Apple enabled → download it (one chance only)
-   - Enter Key ID + Team ID + uploaded key in Firebase console
+---
 
-**In Firebase Console → Project Settings → General:**
-- Copy the Web App Firebase config object (needed for client-side auth SDK)
+## Shopping Tab Features
+
+- **Swipe left** to delete (same thresholds as Supplies)
+- **Slim circle:** tap to mark bought, tap row for detail sheet
+- **Add item sheet:** text search with 350ms debounce, inline dropdown, location picker, Scan barcode, Voice input
+- **Add button behavior:**
+  - 1 result → Add grabs it automatically
+  - Multiple results → Add adds plain text, tap result for enriched
+  - No results → Add adds plain text
+  - Tap specific result → always adds that enriched result
+- **Brand name:** only shown if user searched by brand name or barcode scan
+- **By category sort**
+- **Build from meal plan:** checks Supplies first
+  - Sufficient quantity → skip
+  - Partial quantity → add with note "Have X, need Y more"
+  - Not found → add normally
+- **Mouse drag support** for swipe gestures on desktop
+
+---
+
+## Recipe Tab Features
+
+- **Import from any website** via Claude AI (`api/import-recipe.js`)
+- **Read-only view** by default, Edit button to enter edit mode
+- **Cover photo:** full width header, tap to upload/change
+- **Step photos:** optional per step, tap to expand full screen
+- **Scale serving size:** ½x, 1x, 2x, 3x
+- **Schedule recipe:** tap day in week view
+- **Shop ingredients:** adds recipe ingredients to shopping list
+- **Tags:** curated fixed set, grouped by category, no free-form entry
+  - If no tags selected, tags section hidden entirely
+  - Tag categories: Meal Type, Diet & Lifestyle, Cook Style, Occasion
+- **Community tab:** browse/search `public_recipes`
+  - Filters: cuisine, tags, cook time, rating, sort order
+  - Recipe cards: cover photo, name, author username, avg rating, cook time
+- **Ratings:** 1-5 stars, one per user, authors cannot rate own recipes
+- **Comments:** 500 char limit, optional photos in 3-column grid, tap to expand full screen, swipe to navigate
+- **Report button:** recipe and comment level
+- **Author notifications:** comment alerts with unread badge
+
+---
+
+## Barcode Scan
+
+- Works in both Shop and Supplies tabs
+- **Shop context:** shows "Add to Shopping List" only
+- **Supplies context:** shows "Add to Pantry" primary, "Add to Shopping" secondary
+- **Searches:** Open Food Facts, Open Beauty Facts, UPC Item DB
+- Brand name always shown for barcode-scanned items
+
+---
+
+## Voice Input
+
+- Stop button commits interim transcript (does not discard)
+- `_manualStop` flag prevents discarding speech on stop
+
+---
+
+## Swipe to Delete
+
+- Touch events AND mouse events (desktop drag support)
+- **10% left swipe** → red zone with animated trashcan reveals
+- **10-70% release** → snaps open, tap trashcan to confirm
+- **70-75%+** → auto-deletes with slide-out animation
+- Springs back if released before 10%
+- Only one row open at a time
+- Haptic feedback at snap point (`navigator.vibrate(10)`)
+- Applied to: Shopping list items, Supplies items
+
+---
+
+## What to Cook Tonight Engine
+
+- Fetches `public_recipes` from Firestore
+- Normalizes ingredient names (lowercase, trim)
+- Calculates: `(matching ingredients / total recipe ingredients) * 100`
+- Minimum 60% match threshold
+- Shows top 5, "Show 5 more" button for more
+- Color coded by match percentage
+
+---
+
+## Community Recipe Database
+
+- `public_recipes` collection (Firestore rules already configured)
+- User profiles: `displayName` (private) + `username` (public)
+- Username chosen on first launch, must be unique
+- "Recipe by [username]" attribution on all public recipes
+- Report system: stores to `reports/{reportId}` with `status: "pending"`
+- Pagination: 20 recipes per page, infinite scroll
+
+---
+
+## Build from Meal Plan
+
+- Checks `households/{hid}/inventory` before adding to shopping
+- Shows summary: "X added, Y skipped, Z partial"
+
+---
+
+## Global UI Rules
+
+- All product/item names: **Title Case**, uniform font size and weight
+- All bottom sheets/modals: **tap outside to close** (backdrop captures taps)
+- Edit box dismisses on tap outside (document-level listener)
+- **Dark theme** throughout, gold (`#C9A84C`) accent color
+- **DM Sans** font consistent across ALL tabs including Home, Recipes, Claude, Stats
+- Card-based UI with `border-radius: 14px`
+- Mobile-first (iPhone), 44px tap targets, safe area insets
+
+---
+
+## Decisions Made — DO NOT Reverse Without Asking Bora
+
+1. **Product images disabled** (commented out, not deleted) — external database images caused too many false positives
+2. **Edamam removed** from search pipeline — consistently slow (3s+)
+3. **Google Custom Search and Bing Image Search removed** — APIs closed/retired
+4. **Nutrition data removed** from product detail sheets — unreliable
+5. **All category/source tags removed** from product detail sheets
+6. **Import/Export buttons removed** — app has surpassed Excel phase
+7. **"+ Plan Dinner" button removed** — accessible via This Week calendar
+8. **"Expiring Soon" and "Shopping List" widgets removed** from home screen
+
+---
+
+## Known Pending Issues
+
+- Manwich still showing no image — check Vercel logs for `text-search` response when searching "Manwich"
+- Recipe import tested on recipetineats.com/beef-stroganoff — worked successfully with Claude AI parser
+- Community recipe features (Phase 2 + 3) recently added — needs thorough testing
+- "What to Cook Tonight" requires community recipes to exist in `public_recipes` to show results
 
 ---
 
 ## Session History Summary
 
-This app was built entirely in Claude.ai Chat over multiple sessions. Key milestones:
+This app was built over multiple coding sessions. Major milestones:
 
-- **Session 1-N:** Core app built — inventory, recipes, shopping, meal plan, insights, AI chat
-- **Recent sessions:**
-  - Added swipe-to-delete (iOS style) on shopping + inventory
-  - Added multi-select mode with floating delete bar
-  - Added alphabetical sorting on both lists
-  - Added "Add to Kitchen" feature (checked shopping items → inventory with location picker)
-  - Added notes on shopping items (inline ✏️) and inventory items (adjust overlay)
-  - Fixed Firestore sync errors (`_db` content-type check, `dbList` silent fallback, `poll` uses `allSettled`)
-  - Fixed CFG_DEFAULT duplicate declaration bug
-
-**Current file:** `index.html` at ~3,200 lines, 73 functions. All features working on production at https://pantry-app-zeta-six.vercel.app
+- **Session 1:** Core PWA, Firebase setup, Shopping + Pantry basics
+- **Session 2:** Search infrastructure (9-database waterfall → 4-database parallel), barcode scanner, voice input
+- **Session 3:** UI polish, swipe-to-delete, product enrichment pipeline, image infrastructure (now disabled)
+- **Session 4:** Supplies tab rename, sub-tabs, recipe import engine, community recipe database, What to Cook Tonight, tag overhaul, home screen cleanup
 
 ---
 
@@ -406,6 +346,9 @@ This app was built entirely in Claude.ai Chat over multiple sessions. Key milest
 ```
 Hey Claude Code — I'm working on a kitchen management PWA called Kitchen.
 Please read CLAUDE_CODE_HANDOFF.md first for full context, then let's [task].
-```
 
-The handoff doc is in the repo root. Always read it before starting work.
+Do NOT modify api/sync-reminders.js or api/completed-items.js unless directly
+and unavoidably impacted by this change, and only after confirming with Bora first.
+Apply our standing comments rule to all changes: add clear, utilitarian comments
+to every function and every major code block — this is non-negotiable.
+```
