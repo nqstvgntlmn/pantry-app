@@ -1159,6 +1159,35 @@ export async function getMyRating(recipeId) {
   return dbGet(`public_recipes/${recipeId}/ratings/${uid}`);
 }
 
+/**
+ * deleteRating — removes the current user's rating from a community recipe.
+ * Deletes the rating doc and recalculates the parent doc's aggregate fields.
+ * Returns the updated aggregate { ratingSum, ratingCount, avgRating }.
+ */
+export async function deleteRating(recipeId) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return null;
+
+  // Delete the user's rating doc
+  await dbDelete(`public_recipes/${recipeId}/ratings/${uid}`);
+
+  // Recalculate aggregates from remaining ratings
+  const allRatings = await dbList(`public_recipes/${recipeId}/ratings`);
+  const ratingSum = allRatings.reduce((sum, r) => sum + (r.rating || 0), 0);
+  const ratingCount = allRatings.length;
+  const avgRating = ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 10) / 10 : 0;
+
+  // Update parent doc with new aggregates
+  const pubDoc = await dbGet(`public_recipes/${recipeId}`);
+  if (pubDoc) {
+    await dbSet(`public_recipes/${recipeId}`, {
+      ...pubDoc, ratingSum, ratingCount, avgRating, id: undefined
+    });
+  }
+
+  return { ratingSum, ratingCount, avgRating };
+}
+
 // ── COMMENTS (enhanced with delete support) ──────────────────────────────
 // Comments include authorUsername for display. Authors of the recipe can
 // delete any comment; users can delete their own comments.

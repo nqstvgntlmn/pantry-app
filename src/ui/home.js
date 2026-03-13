@@ -85,7 +85,8 @@ export function renderHome() {
  */
 export function toggleHomeSection(key) {
   const lsKey = `ks-home-${key}-collapsed`;
-  const isCollapsed = J(lsKey);
+  // Default to collapsed (true) if never toggled before
+  const isCollapsed = J(lsKey) !== false;
   Js(lsKey, !isCollapsed);
 
   // Update the body visibility and arrow direction
@@ -98,7 +99,8 @@ export function toggleHomeSection(key) {
  */
 function _applyHomeSectionState(key) {
   const lsKey = `ks-home-${key}-collapsed`;
-  const isCollapsed = J(lsKey);
+  // Default to collapsed if localStorage has no value (first visit)
+  const isCollapsed = J(lsKey) !== false;
   const arrow = g(`${key}-arrow`);
   // Map section keys to their body element IDs
   const bodyMap = { lowstock: "lowstocklist", activity: "activityfeed", cooktonight: "cooktonightbody" };

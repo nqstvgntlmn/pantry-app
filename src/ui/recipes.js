@@ -13,7 +13,7 @@
 //   eid       = edit-target ID    cfg = user config/preferences
 
 import { state, J, Js } from '../state.js';
-import { svr, dlr, dbSet, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
+import { svr, dlr, dbSet, dbList, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
 import { g, fmtR, showNotif, showOv, hideOv, renderStars } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
 import { uploadRecipeCover, uploadStepPhoto, uploadCommentPhoto, deleteRecipeStorageFile } from '../storage.js';
@@ -705,8 +705,8 @@ export function renderRecs() {
     return;
   }
 
-  // Render search/sort + filter panel + all matching recipe cards
-  c.innerHTML = searchSortHtml + f.map(rH).join("");
+  // Render search/sort + filter panel + all matching recipe cards in responsive grid
+  c.innerHTML = searchSortHtml + `<div class="recipe-grid">${f.map(rH).join("")}</div>`;
 }
 
 // ── FAVORITE TOGGLE ──────────────────────────────────────────────────────────
@@ -1446,6 +1446,29 @@ export async function saveRec() {
     isPublic,
   };
 
+  // Auto-generate summary via Claude if recipe has no summary and has content
+  if (!recipe.summary && (recipe.name || recipe.description)) {
+    try {
+      showNotif("Generating summary…");
+      const ingredients = recipe.ingredientsRaw?.join(", ") || recipe.description || "";
+      const resp = await fetch("/api/proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 200,
+          messages: [{ role: "user", content: `Write a 2-sentence summary for this recipe. First sentence: what the dish is. Second sentence: what makes it special or notable. Max 200 characters total. Be concise.\n\nTitle: ${recipe.name}\nCuisine: ${recipe.cuisine || ""}\nIngredients: ${ingredients.substring(0, 500)}` }]
+        })
+      });
+      const data = await resp.json();
+      const aiSummary = data.content?.[0]?.text?.trim() || "";
+      if (aiSummary) recipe.summary = aiSummary;
+    } catch (e) {
+      console.error("Auto-summary generation failed:", e);
+      // Non-blocking — save recipe without summary if AI fails
+    }
+  }
+
   // If publishing, create a fully independent copy in the community collection
   // and store the publicId on the private recipe for future unpublish
   if (isPublic) {
@@ -1682,10 +1705,20 @@ export function openRecipeView(id) {
  * If in edit mode, goes back to read-only view. If in read-only, closes the overlay.
  */
 export function handleRecipeBack() {
+  // If editing a community recipe, go back to its detail view
+  if (_recipeViewMode === "edit" && state._editingComId) {
+    const comId = state._editingComId;
+    state._editingComId = null;
+    openComRecipe(comId);
+    return;
+  }
+  // If editing a private recipe, go back to read-only view
   if (_recipeViewMode === "edit" && state.eid) {
-    // Go back to read-only view instead of closing
     openRecipeView(state.eid);
   } else {
+    // Reset title when closing the overlay entirely
+    const titleEl = g("erecTitle");
+    if (titleEl) titleEl.textContent = "Recipe";
     hideOv("erec");
   }
 }
@@ -2001,11 +2034,92 @@ export async function updR() {
   const difficulty = getDifficulty("ediff") || "";
   const recipeYield = g("eyield") ? g("eyield").value.trim() : (r.recipeYield || "");
   const storageInstructions = g("estorage") ? g("estorage").value.trim() : (r.storageInstructions || "");
-  const summary = g("esummary") ? g("esummary").value.trim() : (r.summary || "");
+  let summary = g("esummary") ? g("esummary").value.trim() : (r.summary || "");
 
-  // Spread the original recipe and override only the editable fields
-  await svr({ ...r, name: g("ern").value.trim(), rating: rt2, description: g("erd").value.trim(), notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine, imageUrl, stepPhotos, prepTime, cookTime, totalTime, servings, difficulty, recipeYield, storageInstructions, summary });
-  showNotif("Recipe updated!"); hideOv("erec");
+  // Detect significant content changes that may warrant a summary refresh
+  const newName = g("ern").value.trim();
+  const newDesc = g("erd").value.trim();
+  const nameChanged = newName !== r.name;
+  const descChanged = newDesc !== (r.description || "") && Math.abs(newDesc.length - (r.description || "").length) > 20;
+  const cuisineChanged = cuisine !== (r.cuisine || "");
+
+  // If the user didn't manually edit the summary AND there are significant changes,
+  // ask Claude if the summary should be regenerated
+  if (summary === (r.summary || "") && (nameChanged || descChanged || cuisineChanged)) {
+    try {
+      const resp = await fetch("/api/proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 250,
+          messages: [{ role: "user", content: `A recipe was edited. Decide if the summary needs updating. If yes, write a new 2-sentence summary (first sentence: what the dish is, second: what makes it special). Max 200 chars. Return JSON only: {"shouldUpdate":true/false,"newSummary":"..."}\n\nOld title: ${r.name}\nNew title: ${newName}\nOld cuisine: ${r.cuisine || ""}\nNew cuisine: ${cuisine}\nNew description (first 300 chars): ${newDesc.substring(0, 300)}\nOld summary: ${summary || "(none)"}` }]
+        })
+      });
+      const data = await resp.json();
+      const text = data.content?.[0]?.text?.trim() || "";
+      // Parse the JSON response from Claude
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (parsed.shouldUpdate && parsed.newSummary) {
+          summary = parsed.newSummary;
+          showNotif("Summary updated");
+        }
+      }
+    } catch (e) {
+      // Non-blocking — save with existing summary if AI check fails
+      console.error("Summary update check failed:", e);
+    }
+  }
+
+  // Build the updated recipe object — spread original and override edited fields
+  const updatedRecipe = { ...r, name: newName, rating: rt2, description: newDesc, notes: g("erno").value.trim(), favorited: g("etog").classList.contains("on"), tags, cuisine, imageUrl, stepPhotos, prepTime, cookTime, totalTime, servings, difficulty, recipeYield, storageInstructions, summary };
+
+  await svr(updatedRecipe);
+  showNotif("Recipe updated!");
+  hideOv("erec");
+
+  // Community sync reminder — if this recipe has a published community version,
+  // prompt the user to push changes to it (never auto-sync without confirmation)
+  if (r.publicId) {
+    // Small delay so the overlay closes and notif shows before the confirm dialog
+    setTimeout(async () => {
+      if (confirm("You edited a recipe that's also published to the community. Push these changes to the community version?")) {
+        try {
+          // Build the public recipe update from the edited fields
+          const pubUpdate = {
+            title: updatedRecipe.name,
+            summary: updatedRecipe.summary,
+            cuisine: updatedRecipe.cuisine,
+            tags: updatedRecipe.tags,
+            description: updatedRecipe.description,
+            ingredients: updatedRecipe.description, // flat text fallback
+            ingredientsRaw: updatedRecipe.ingredientsRaw || [],
+            stepsRaw: updatedRecipe.stepsRaw || [],
+            prepTime: updatedRecipe.prepTime,
+            cookTime: updatedRecipe.cookTime,
+            totalTime: updatedRecipe.totalTime,
+            servings: updatedRecipe.servings,
+            difficulty: updatedRecipe.difficulty,
+            imageUrl: updatedRecipe.imageUrl,
+          };
+          // Fetch existing public doc and merge changes
+          const existingPub = state.comRecs?.find(x => x.id === r.publicId);
+          if (existingPub) {
+            await dbSet(`public_recipes/${r.publicId}`, { ...existingPub, ...pubUpdate, id: undefined });
+          } else {
+            // If not in cache, do a blind update with just our fields
+            await dbSet(`public_recipes/${r.publicId}`, pubUpdate);
+          }
+          showNotif("Community version updated!");
+        } catch (e) {
+          console.error("Community sync failed:", e);
+          showNotif("Couldn't update community version");
+        }
+      }
+    }, 300);
+  }
 }
 
 // ── DELETE RECIPE ────────────────────────────────────────────────────────────
@@ -2697,9 +2811,20 @@ export function renderCommunity() {
   const rsub = g("rsub");
   if (rsub) rsub.textContent = recs.length + " community recipe" + (recs.length !== 1 ? "s" : "");
 
-  // ── Build the unified filter panel (search + collapsible filters) ──
+  // ── Build the unified filter panel (search + sort dropdown + collapsible filters) ──
+  // Sort dropdown is always visible above filters for easy access on all platforms
+  const _comSortVal = state.comSort || "newest";
   let html = `<div style="margin-bottom:14px">
-    <input class="fi" id="com-search" placeholder="Search recipes, tags, authors…" value="${state.comSearch.replace(/"/g, "&quot;")}" oninput="setComSearch(this.value)" style="margin-bottom:10px"/>
+    <input class="fi" id="com-search" placeholder="Search recipes, tags, authors…" value="${state.comSearch.replace(/"/g, "&quot;")}" oninput="setComSearch(this.value)" style="margin-bottom:8px"/>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <select class="fsel" onchange="setComSort(this.value)" style="font-size:.78rem;padding:7px 10px;flex:1">
+        <option value="newest"${_comSortVal === "newest" ? " selected" : ""}>Newest first</option>
+        <option value="az"${_comSortVal === "az" ? " selected" : ""}>A → Z</option>
+        <option value="rated"${_comSortVal === "rated" ? " selected" : ""}>Highest rated</option>
+        <option value="popular"${_comSortVal === "popular" ? " selected" : ""}>Most popular</option>
+        <option value="cooktime"${_comSortVal === "cooktime" ? " selected" : ""}>Cook time</option>
+      </select>
+    </div>
     ${_buildFilterPanelHtml("com")}
   </div>`;
 
@@ -2711,7 +2836,8 @@ export function renderCommunity() {
     return;
   }
 
-  // ── Render recipe cards ──
+  // ── Render recipe cards in responsive grid ──
+  html += `<div class="recipe-grid" id="com-recipe-grid">`;
   visible.forEach(r => {
     const tagsHtml = (r.tags || []).slice(0, 3).map(t => `<span class="com-tag">${t}</span>`).join("");
     const author = r.authorUsername ? `@${r.authorUsername}` : (r.authorName || "Anonymous");
@@ -2746,7 +2872,9 @@ export function renderCommunity() {
     </div>`;
   });
 
-  // Infinite scroll sentinel — observed to load more when visible
+  html += `</div>`; // close recipe-grid
+
+  // Infinite scroll sentinel — observed to load more when visible (outside grid)
   if (hasMore) {
     html += `<div id="com-scroll-sentinel" style="height:60px;display:flex;align-items:center;justify-content:center;color:var(--mt);font-size:.82rem">Loading more…</div>`;
   }
@@ -2811,12 +2939,18 @@ function _appendComPage(allRecs, container) {
     </div>`;
   });
 
-  // Remove the old sentinel, insert new cards, then add new sentinel if more exist
+  // Remove the old sentinel, insert new cards into the grid, then add new sentinel
   const sentinel = g("com-scroll-sentinel");
   if (sentinel) sentinel.remove();
   if (_comScrollObs) { _comScrollObs.disconnect(); _comScrollObs = null; }
 
-  container.insertAdjacentHTML("beforeend", html);
+  // Append new cards into the grid container (not directly into the outer container)
+  const grid = g("com-recipe-grid");
+  if (grid) {
+    grid.insertAdjacentHTML("beforeend", html);
+  } else {
+    container.insertAdjacentHTML("beforeend", html);
+  }
 
   if (hasMore) {
     container.insertAdjacentHTML("beforeend",
@@ -2919,13 +3053,15 @@ export async function openComRecipe(id) {
   const commentsHtml = _buildCommentsHtml(comments.slice(0, 20), id, uid, isAuthor);
   const hasMoreComments = comments.length > 20;
 
-  // Star rating input — allows user to rate 1-5 (disabled for recipe author)
+  // Star rating input — allows user to rate 1-5 (hidden entirely for recipe author)
   const myRatingVal = myRating?.rating || 0;
+  // Build interactive stars + small grey ✕ clear button (only shown after rating)
+  const clearBtn = myRatingVal > 0 ? `<span onclick="clearComRating('${id}')" style="cursor:pointer;font-size:.8rem;color:var(--mt);margin-left:6px;vertical-align:middle" title="Clear rating">✕</span>` : "";
   const ratingStars = isAuthor
-    ? `<div style="font-size:.78rem;color:var(--mt);font-style:italic">You can't rate your own recipe</div>`
+    ? "" // hide stars entirely for the author
     : Array.from({ length: 5 }, (_, i) =>
         `<span class="star${i < myRatingVal ? " on" : ""}" onclick="rateComRecipe('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < myRatingVal ? "★" : "☆"}</span>`
-      ).join("");
+      ).join("") + clearBtn;
 
   // Author action buttons: edit community version + unpublish
   // Non-authors can only fork (save to their own recipes)
@@ -2966,11 +3102,12 @@ export async function openComRecipe(id) {
     ${ingredientsContent ? `<div class="frow"><label class="flbl">Ingredients</label>${ingredientsContent}</div>` : ""}
     ${stepsContent ? `<div class="frow"><label class="flbl">Instructions</label>${stepsContent}</div>` : ""}
 
-    <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-top:16px">
+    ${!isAuthor ? `<div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-top:16px">
       <div class="flbl" style="margin-bottom:8px">Rate this recipe</div>
       <div id="com-rating-stars" style="display:flex;align-items:center;gap:2px">${ratingStars}</div>
       ${myRatingVal ? `<div id="com-rating-label" style="font-size:.72rem;color:var(--mt);margin-top:4px">You rated this ${myRatingVal}★</div>` : '<div id="com-rating-label"></div>'}
-    </div>
+      ${(r.ratingCount || 0) > 0 ? `<div style="font-size:.72rem;color:var(--mt);margin-top:6px">${_starDisplay(r.avgRating, r.ratingCount)} avg</div>` : ""}
+    </div>` : ""}
 
     <div style="margin-top:16px">
       <div class="flbl" style="margin-bottom:10px">Comments (${comments.length})</div>
@@ -3036,12 +3173,12 @@ export async function rateComRecipe(id, rating) {
       r.avgRating = result.avgRating;
     }
 
-    // Update the star display in the detail overlay
+    // Update the star display in the detail overlay (with clear button)
     const starsEl = g("com-rating-stars");
     if (starsEl) {
       starsEl.innerHTML = Array.from({ length: 5 }, (_, i) =>
         `<span class="star${i < rating ? " on" : ""}" onclick="rateComRecipe('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < rating ? "★" : "☆"}</span>`
-      ).join("");
+      ).join("") + `<span onclick="clearComRating('${id}')" style="cursor:pointer;font-size:.8rem;color:var(--mt);margin-left:6px;vertical-align:middle" title="Clear rating">✕</span>`;
     }
     // Update the "You rated" label
     const labelEl = g("com-rating-label");
@@ -3051,6 +3188,43 @@ export async function rateComRecipe(id, rating) {
   } catch (e) {
     console.error("rateComRecipe:", e);
     showNotif("Couldn't submit rating");
+  }
+}
+
+/**
+ * clearComRating — removes the current user's rating from a community recipe.
+ * Deletes the rating doc, recalculates aggregates, and updates the star UI.
+ */
+export async function clearComRating(id) {
+  const user = getCurrentUser();
+  if (!user) return;
+
+  try {
+    const result = await deleteRating(id);
+    if (!result) return;
+
+    // Update local cache with recalculated aggregates
+    const r = state.comRecs.find(x => x.id === id);
+    if (r) {
+      r.ratingSum = result.ratingSum;
+      r.ratingCount = result.ratingCount;
+      r.avgRating = result.avgRating;
+    }
+
+    // Reset star display to empty (no selection, no clear button)
+    const starsEl = g("com-rating-stars");
+    if (starsEl) {
+      starsEl.innerHTML = Array.from({ length: 5 }, (_, i) =>
+        `<span class="star" onclick="rateComRecipe('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">☆</span>`
+      ).join("");
+    }
+    const labelEl = g("com-rating-label");
+    if (labelEl) labelEl.textContent = "";
+
+    showNotif("Rating cleared");
+  } catch (e) {
+    console.error("clearComRating:", e);
+    showNotif("Couldn't clear rating");
   }
 }
 
@@ -3478,6 +3652,11 @@ export async function saveComRecipeEdit() {
 
     // Update local cache with the new values
     Object.assign(r, { title, summary, cuisine, servings, tags, ingredients, steps, prepTime, cookTime });
+
+    // Reset title and editing state so it doesn't persist on next overlay open
+    state._editingComId = null;
+    const titleEl = g("erecTitle");
+    if (titleEl) titleEl.textContent = "Recipe";
 
     showNotif("Community recipe updated!");
     hideOv("erec");

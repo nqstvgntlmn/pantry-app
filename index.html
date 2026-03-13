@@ -852,12 +852,8 @@
       <div class="sset"><div class="ssetttl">Utilities</div>
         <button class="btn bs bf" id="bulkPubBtn" onclick="bulkPublishAll()" style="width:100%;margin-bottom:8px;display:none">📤 Publish all recipes to community</button>
         <div id="bulkPubProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-bottom:8px"></div>
-        <button class="btn bs bf" id="enrichBtn" onclick="enrichExistingItems()" style="width:100%">🔍 Enrich existing items</button>
-        <div style="font-size:.72rem;color:var(--mt);margin-top:6px;line-height:1.5">Scans all shopping list and pantry items that lack an image or brand, and tries to match them against product databases (Edamam, Open Food Facts). Items with no match are left unchanged.</div>
-        <div id="enrichProgress" style="display:none;margin-top:10px">
-          <div style="font-size:.82rem;color:var(--tx);margin-bottom:6px" id="enrichStatus">Processing…</div>
-          <div style="height:6px;border-radius:3px;background:var(--b2);overflow:hidden"><div id="enrichBar" style="height:100%;background:var(--ac);width:0%;transition:width .3s;border-radius:3px"></div></div>
-        </div>
+        <button class="btn bs bf" id="regenSumBtn" onclick="regenAllSummaries()" style="width:100%;margin-top:8px">🔄 Regenerate all summaries</button>
+        <div id="regenSumProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-top:6px"></div>
       </div>
       <div class="brow"><button class="btn bp bf" onclick="saveSettings()">Save Settings</button></div>
       <div style="margin-top:16px;display:flex;justify-content:center">

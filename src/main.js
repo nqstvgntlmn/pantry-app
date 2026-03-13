@@ -52,7 +52,7 @@ import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQt
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
-import { renderRecs, togFav, valR, importFromUrl, setImportMode, startBulkImport, retryBulkImport, saveRec, openER, openRecipeView, handleRecipeBack, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif, triggerCoverUpload, handleCoverSelected, handleCoverDrop, removeCoverPhoto, triggerStepPhotoUpload, handleStepPhotoSelected, removeStepPhoto, openPhotoViewer, closePhotoViewer, photoViewerNav, triggerCommentPhotoUpload, handleCommentPhotosSelected, removeCommentPhoto, recipeTimeChanged, markTotalTimeManual, selectDifficulty, setRecSearch, setRecSort, toggleFilterPanel, setRecDifficulty, setRecCookTime, setRecServes, toggleRecProtein, toggleRecTag, toggleRecTagsExpand, clearRecFilters, toggleComTagsPanel, clearComFilters, setViewStar, editComRecipe, saveComRecipeEdit } from './ui/recipes.js';
+import { renderRecs, togFav, valR, importFromUrl, setImportMode, startBulkImport, retryBulkImport, saveRec, openER, openRecipeView, handleRecipeBack, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, clearComRating, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif, triggerCoverUpload, handleCoverSelected, handleCoverDrop, removeCoverPhoto, triggerStepPhotoUpload, handleStepPhotoSelected, removeStepPhoto, openPhotoViewer, closePhotoViewer, photoViewerNav, triggerCommentPhotoUpload, handleCommentPhotosSelected, removeCommentPhoto, recipeTimeChanged, markTotalTimeManual, selectDifficulty, setRecSearch, setRecSort, toggleFilterPanel, setRecDifficulty, setRecCookTime, setRecServes, toggleRecProtein, toggleRecTag, toggleRecTagsExpand, clearRecFilters, toggleComTagsPanel, clearComFilters, setViewStar, editComRecipe, saveComRecipeEdit } from './ui/recipes.js';
 
 // Insights screen: usage analytics and charts
 import { renderInsights } from './ui/insights.js';
@@ -72,7 +72,7 @@ import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCook
 // Settings: config UI, push notifications, household management, theme/dark mode
 // copyInviteCode/shareInviteCode/regenInviteCode: invite code actions
 // removeMemberFromHH: owner removes a member
-import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, enrichExistingItems, bulkPublishAll } from './ui/settings.js';
+import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, enrichExistingItems, bulkPublishAll, regenAllSummaries } from './ui/settings.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
@@ -273,6 +273,7 @@ window.shareComRecipe = shareComRecipe;   // Share a community recipe link
 window.submitComReview = submitComReview; // Submit a star rating review on a community recipe
 window.unpublishComRecipe = unpublishComRecipe; // Unpublish own recipe from community
 window.rateComRecipe = rateComRecipe;             // Rate a community recipe 1-5 stars (new rating system)
+window.clearComRating = clearComRating;           // Clear user's rating on a community recipe
 window.deleteComComment = deleteComComment;       // Delete a comment on a community recipe
 window.openReportSheet = openReportSheet;         // Open the report reason bottom sheet
 window.closeReportSheet = closeReportSheet;       // Close the report bottom sheet
@@ -382,7 +383,8 @@ window.shareInviteCode = shareInviteCode;   // Share invite code via Web Share A
 window.regenInviteCode = regenInviteCode;   // Regenerate a new invite code (owner only)
 window.removeMemberFromHH = removeMemberFromHH; // Remove a member from the household (owner only)
 window.enrichExistingItems = enrichExistingItems; // Retroactive product enrichment for all items
-window.bulkPublishAll = bulkPublishAll;           // One-time publish all recipes to community (Feature 4)
+window.bulkPublishAll = bulkPublishAll;           // One-time publish all recipes to community
+window.regenAllSummaries = regenAllSummaries;     // Regenerate AI summaries for all recipes
 
 // manualRefresh(target) — Safety valve to force re-fetch all items from Firestore.
 // Triggered by the subtle ↻ button on Shopping/Inventory screens when real-time

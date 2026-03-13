@@ -700,3 +700,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .photo-viewer-overlay .pv-prev,.photo-viewer-overlay .pv-next{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;border:none;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
 .photo-viewer-overlay .pv-prev{left:8px}
 .photo-viewer-overlay .pv-next{right:8px}
+
+/* ── RESPONSIVE RECIPE GRID ── */
+/* Single column on mobile (default), 2-col on tablet, 3-col on desktop */
+.recipe-grid{display:grid;grid-template-columns:1fr;gap:10px}
+.recipe-grid>.rcd{margin-bottom:0}
+/* Ensure cards have consistent height with uniform cover photos */
+.recipe-grid>.rcd img{height:140px;object-fit:cover}
+@media(min-width:768px){.recipe-grid{grid-template-columns:1fr 1fr}}
+@media(min-width:1200px){.recipe-grid{grid-template-columns:1fr 1fr 1fr}}

@@ -787,3 +787,93 @@ export function showBulkPublishBtn() {
     }
   }
 }
+
+// ── REGENERATE ALL SUMMARIES ─────────────────────────────────────────────────
+// Utility that loops through all household and authored public recipes,
+// sends each to Claude to rewrite the summary in the standard 2-sentence format.
+
+/**
+ * regenAllSummaries — sends every recipe to Claude to regenerate its summary.
+ * Covers both household recipes (state.recs) and public_recipes authored by the
+ * current user. Can be run multiple times — does NOT disable after use.
+ */
+export async function regenAllSummaries() {
+  const user = getCurrentUser();
+  if (!user) { showNotif("Sign in first"); return; }
+
+  // Gather household recipes
+  const privateRecs = [...state.recs];
+
+  // Gather public recipes authored by this user
+  let publicRecs = [];
+  try {
+    const allPublic = await dbList("public_recipes");
+    publicRecs = allPublic.filter(r => r.authorUid === user.uid);
+  } catch (e) {
+    console.error("Failed to load public recipes:", e);
+  }
+
+  const allRecs = [...privateRecs, ...publicRecs];
+  const total = allRecs.length;
+
+  if (!total) { showNotif("No recipes to process"); return; }
+  if (!confirm(`Regenerate summaries for ${total} recipes using Claude AI? This will overwrite existing summaries.`)) return;
+
+  const progressEl = g("regenSumProgress");
+  const btn = g("regenSumBtn");
+  if (progressEl) { progressEl.style.display = "block"; progressEl.textContent = `Regenerating 0 of ${total}…`; }
+  if (btn) btn.disabled = true;
+
+  let updated = 0;
+
+  for (let i = 0; i < allRecs.length; i++) {
+    const rec = allRecs[i];
+    const title = rec.title || rec.name || "Untitled";
+    const ingredients = rec.ingredientsRaw?.join(", ") || rec.ingredients || rec.description || "";
+    const steps = rec.stepsRaw?.join(". ") || rec.steps || "";
+
+    try {
+      // Call Claude to generate a standard 2-sentence summary
+      const resp = await fetch("/api/proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 200,
+          messages: [{ role: "user", content: `Write a 2-sentence summary for this recipe. First sentence: what the dish is. Second sentence: what makes it special or notable. Max 200 characters total. Be concise.\n\nTitle: ${title}\nIngredients: ${ingredients.substring(0, 500)}\nInstructions: ${steps.substring(0, 500)}` }]
+        })
+      });
+      const data = await resp.json();
+      const newSummary = data.content?.[0]?.text?.trim() || "";
+
+      if (newSummary) {
+        // Determine if this is a private or public recipe and save accordingly
+        const isPublic = publicRecs.some(r => r.id === rec.id);
+        if (isPublic) {
+          // Update public recipe via dbSet
+          await dbSet(`public_recipes/${rec.id}`, { ...rec, summary: newSummary, id: undefined });
+        } else {
+          // Update private recipe via dbSet (household recipes path)
+          const privPath = `households/${state.hid}/recipes/${rec.id}`;
+          await dbSet(privPath, { ...rec, summary: newSummary, id: undefined });
+          // Also update local state
+          const local = state.recs.find(r => r.id === rec.id);
+          if (local) local.summary = newSummary;
+        }
+        updated++;
+      }
+    } catch (e) {
+      console.error("Summary regen failed for:", title, e);
+    }
+
+    // Update progress
+    if (progressEl) progressEl.textContent = `Regenerating ${i + 1} of ${total}…`;
+
+    // Small delay to avoid rate-limiting
+    await _sleep(300);
+  }
+
+  if (progressEl) progressEl.textContent = `Done — ${updated} summaries updated.`;
+  if (btn) btn.disabled = false;
+  showNotif(`${updated} summaries regenerated!`);
+}
