@@ -323,6 +323,31 @@ Stripe integration. Free tier (basic features) vs Premium tier (AI features: cha
 
 ---
 
+## Product Images — Disabled
+
+Product images in the shopping list and pantry have been **disabled** (code preserved as comments, not deleted) for the following reasons:
+
+1. **False positives** — External database images (Spoonacular, Kroger, Open Food Facts) frequently returned wrong product photos for the search query.
+2. **Inconsistent UX** — Some items had photos and some didn't, making the UI look broken and half-finished.
+3. **Unnecessary costs** — Firebase Storage uploads + external API calls for every product added friction and expense.
+4. **Complexity** — The custom photo upload/compress/upload pipeline added maintenance burden without reliable results.
+
+**What's commented out:**
+- `src/ui/shopping.js` — image display in dropdown, list items, detail sheet, Add/Change/Delete photo buttons, imageDismissed logic, drag-and-drop upload
+- `src/ui/inventory.js` — same as above for pantry
+- `src/storage.js` — `uploadProductImage()`, `lookupCustomProductImage()`, `compressImage()`
+- `api/text-search.js` — IMAGE_LOOKUP table (~1000 entries), `lookupImage()`, `lookupCustomProduct()`, Firebase Admin SDK for image lookups, image priority/fallback logic in handler
+- `src/styles.css` — CSS for `.sh-thumb`, `.pimg`, `.item-detail-img-*`, `.drop-zone-*`, `.enrich-img-*`
+
+**NOT affected:**
+- Recipe images (community recipe photos are a separate feature)
+- Barcode scan product images (those are shown in the scan result overlay, not in the shopping/inventory list)
+- Product NAME/BRAND/CATEGORY search still works — only the image display and upload is disabled
+
+**To re-enable:** Search for `[IMAGES DISABLED]` across the codebase and uncomment all marked blocks.
+
+---
+
 ## Environment Variables (Vercel)
 
 These are set in Vercel dashboard — do NOT hardcode:

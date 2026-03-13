@@ -19,8 +19,11 @@ import { updExport } from './home.js';
 // searchAndEnrich — searches product databases for text matches and shows enrichment picker
 // scoreSearchResult — relevance scoring for search results
 import { searchAndEnrich, scoreSearchResult } from './shopping.js';
-// Upload custom product photos to Firebase Storage, normalizeProductName for customProducts collection keys
-import { uploadProductImage, normalizeProductName } from '../storage.js';
+// [IMAGES DISABLED] — Product images commented out pending decision.
+// See session notes: images caused false positives from external databases,
+// inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+// To re-enable: uncomment these blocks and restore image display logic.
+// import { uploadProductImage, normalizeProductName } from '../storage.js';
 
 /**
  * toTitleCase(str) — Normalizes a product name to Title Case for uniform display.
@@ -66,8 +69,11 @@ function _shouldShowInvBrand(item) {
 export function iH(item) {
   // Resolve the category emoji; fall back to a shopping-cart icon
   const ic = CATS[gcat(item)] || "🛒";
-  // Build product thumbnail or emoji fallback
-  const thumb = item.image ? `<img src="${item.image}" class="sh-thumb" alt="" onerror="this.style.display='none'"/>` : "";
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  // const thumb = item.image ? `<img src="${item.image}" class="sh-thumb" alt="" onerror="this.style.display='none'"/>` : "";
 
   // Determine expiry status (expired / expiring-soon / OK)
   const ex = xSt(item.expiry),
@@ -89,7 +95,6 @@ export function iH(item) {
         <div class="sel-cb">✓</div>
         <!-- Slim outlined circle: tapping opens detail sheet -->
         <div class="shck" onclick="event.stopPropagation();openInvItemDetail('${item.id}')"></div>
-        ${thumb}
         <div style="flex:1;min-width:0;cursor:pointer" onclick="event.stopPropagation();openInvItemDetail('${item.id}')">
           <div class="inm">${toTitleCase(item.name)}</div>
           ${brandHtml}
@@ -185,8 +190,13 @@ export function openAdj(id) {
   state.adjId = id;
 
   // Build the product image / emoji fallback
-  const ic = CATS[gcat(item)] || "🛒",
-    img = item.image ? `<img src="${item.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">${ic}</div>`;
+  const ic = CATS[gcat(item)] || "🛒";
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  // const img = item.image ? `<img src="${item.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">${ic}</div>`;
+  const img = `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">${ic}</div>`;
 
   // Brand line — only show for barcode scans or brand-matched searches (same as list row)
   const brandHtml = _shouldShowInvBrand(item) ? `<div class="pbr">${item.brand}</div>` : "";
@@ -230,51 +240,47 @@ export async function openInvItemDetail(id) {
   const content = g("invItemDetailContent");
   if (!content) return;
 
-  // ── Custom product image lookup ──
-  // Check the shared customProducts collection for a household-wide image.
-  // This is the source of truth for product images across shopping and pantry.
-  // If the item already has an image on it, we still check customProducts in case
-  // the user uploaded a newer image from the other screen.
-  let displayImage = item.image;
-  let dismissed = item.imageDismissed || false;
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  //
+  // // ── Custom product image lookup ──
+  // let displayImage = item.image;
+  // let dismissed = item.imageDismissed || false;
+  // if (state.hid && item.name) {
+  //   const normalized = normalizeProductName(item.name);
+  //   if (normalized) {
+  //     const cpDoc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
+  //     if (cpDoc) {
+  //       if (cpDoc.imageDismissed) { displayImage = null; dismissed = true; }
+  //       else if (cpDoc.imageUrl) { displayImage = cpDoc.imageUrl; dismissed = false; }
+  //     }
+  //   }
+  // }
+  //
+  // const img = displayImage
+  //   ? `<div class="item-detail-img-wrap drop-zone" data-item-id="${item.id}" data-list="inv">
+  //       <img src="${displayImage}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
+  //       <button class="item-detail-img-del" onclick="deleteInvItemImage('${item.id}')" title="Remove image">×</button>
+  //     </div>`
+  //   : `<div class="item-detail-img-ph drop-zone" data-item-id="${item.id}" data-list="inv" onclick="triggerInvPhotoUpload('${item.id}')" style="cursor:pointer">
+  //       <div style="text-align:center">
+  //         <div style="font-size:1.3rem;margin-bottom:2px;opacity:.45">📷</div>
+  //         <div style="font-size:.6rem;color:var(--mt);opacity:.7">Add photo</div>
+  //       </div>
+  //     </div>`;
+  //
+  // const changePhotoLink = displayImage
+  //   ? `<div class="item-detail-change-photo" onclick="triggerInvPhotoUpload('${item.id}')">Change photo</div>`
+  //   : "";
 
-  if (state.hid && item.name) {
-    const normalized = normalizeProductName(item.name);
-    if (normalized) {
-      const cpDoc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
-      if (cpDoc) {
-        // If imageDismissed is set in customProducts, respect it — show placeholder
-        if (cpDoc.imageDismissed) {
-          displayImage = null;
-          dismissed = true;
-        } else if (cpDoc.imageUrl) {
-          // Custom image exists and is not dismissed — use it
-          displayImage = cpDoc.imageUrl;
-          dismissed = false;
-        }
-      }
-    }
-  }
-
-  // Build the product image or placeholder. Both serve as drag-and-drop zones.
-  // If item has image: show it with a small "×" delete button overlaid.
-  // If no image: show camera icon + "Add photo" hint as tap target and drop zone.
-  const img = displayImage
-    ? `<div class="item-detail-img-wrap drop-zone" data-item-id="${item.id}" data-list="inv">
-        <img src="${displayImage}" class="item-detail-img" alt="" onerror="this.style.display='none'"/>
-        <button class="item-detail-img-del" onclick="deleteInvItemImage('${item.id}')" title="Remove image">×</button>
-      </div>`
-    : `<div class="item-detail-img-ph drop-zone" data-item-id="${item.id}" data-list="inv" onclick="triggerInvPhotoUpload('${item.id}')" style="cursor:pointer">
-        <div style="text-align:center">
-          <div style="font-size:1.3rem;margin-bottom:2px;opacity:.45">📷</div>
-          <div style="font-size:.6rem;color:var(--mt);opacity:.7">Add photo</div>
-        </div>
-      </div>`;
-
-  // "Change photo" link when item already has an image
-  const changePhotoLink = displayImage
-    ? `<div class="item-detail-change-photo" onclick="triggerInvPhotoUpload('${item.id}')">Change photo</div>`
-    : "";
+  // No-image display: simple category emoji placeholder
+  const ic = CATS[gcat(item)] || "🛒";
+  const img = `<div class="item-detail-img-ph" style="display:flex;align-items:center;justify-content:center">
+    <div style="font-size:1.6rem">${ic}</div>
+  </div>`;
+  const changePhotoLink = "";
 
   // Brand visibility — same rules as the list row
   const showBrand = _shouldShowInvBrand(item);
@@ -288,9 +294,9 @@ export async function openInvItemDetail(id) {
       <div style="font-size:.7rem;color:var(--mt);margin-top:4px">${ll(item.location)}</div>
     </div>
   </div>
-  <!-- Hidden file input for product photo uploads — triggered by Add/Change photo buttons -->
-  <input type="file" id="invProductPhotoInput" accept="image/*" style="display:none"
-    onchange="handleInvPhotoSelected('${item.id}')" />`;
+  <!-- [IMAGES DISABLED] Hidden file input commented out -->
+  <!-- <input type="file" id="invProductPhotoInput" accept="image/*" style="display:none"
+    onchange="handleInvPhotoSelected('${item.id}')" /> -->`;
 
   // Quantity & unit section
   html += `<div class="item-detail-section">
@@ -330,9 +336,9 @@ export async function openInvItemDetail(id) {
   if (backdrop) backdrop.classList.add("active");
   if (sheet) sheet.classList.add("active");
 
-  // Attach drag-and-drop listeners to the image area for desktop/mobile image drops
-  const dropZone = content.querySelector(".drop-zone");
-  if (dropZone) _setupInvDropZone(dropZone, item.id);
+  // [IMAGES DISABLED] — Drag-and-drop listeners commented out
+  // const dropZone = content.querySelector(".drop-zone");
+  // if (dropZone) _setupInvDropZone(dropZone, item.id);
 }
 
 /**
@@ -354,39 +360,24 @@ export function closeInvItemDetail() {
  * the same compress → upload pipeline as the file picker.
  */
 function _setupInvDropZone(el, itemId) {
-  // Track enter/leave depth so nested children don't flicker the highlight
-  let dragDepth = 0;
-
-  el.addEventListener("dragenter", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragDepth++;
-    el.classList.add("drop-zone-active");
-  });
-
-  el.addEventListener("dragover", (e) => {
-    // Must preventDefault to allow drop — browser default is to reject
-    e.preventDefault();
-    e.stopPropagation();
-  });
-
-  el.addEventListener("dragleave", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragDepth--;
-    if (dragDepth <= 0) {
-      dragDepth = 0;
-      el.classList.remove("drop-zone-active");
-    }
-  });
-
-  el.addEventListener("drop", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragDepth = 0;
-    el.classList.remove("drop-zone-active");
-    _handleInvDrop(e.dataTransfer, itemId);
-  });
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  return;
+  // let dragDepth = 0;
+  // el.addEventListener("dragenter", (e) => {
+  //   e.preventDefault(); e.stopPropagation(); dragDepth++; el.classList.add("drop-zone-active");
+  // });
+  // el.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); });
+  // el.addEventListener("dragleave", (e) => {
+  //   e.preventDefault(); e.stopPropagation(); dragDepth--;
+  //   if (dragDepth <= 0) { dragDepth = 0; el.classList.remove("drop-zone-active"); }
+  // });
+  // el.addEventListener("drop", (e) => {
+  //   e.preventDefault(); e.stopPropagation(); dragDepth = 0;
+  //   el.classList.remove("drop-zone-active"); _handleInvDrop(e.dataTransfer, itemId);
+  // });
 }
 
 /**
@@ -394,39 +385,27 @@ function _setupInvDropZone(el, itemId) {
  * Handles file drops and URL drops (dragged from browser tabs).
  */
 async function _handleInvDrop(dt, itemId) {
-  const item = state.inv.find(i => i.id === itemId);
-  if (!item) return;
-
-  // Case 1: Direct file drop (Finder, Photos app, file manager)
-  if (dt.files && dt.files.length > 0) {
-    const file = dt.files[0];
-    if (file.type && file.type.startsWith("image/")) {
-      await _processInvDroppedImage(file, item);
-      return;
-    }
-  }
-
-  // Case 2: Image dragged from a browser tab or Google Images
-  const uriList = dt.getData("text/uri-list");
-  const plainText = dt.getData("text/plain");
-  const imgUrl = uriList || plainText || "";
-
-  if (imgUrl && /^https?:\/\/.+\.(jpe?g|png|gif|webp|bmp)/i.test(imgUrl)) {
-    await _fetchAndUploadInvImageUrl(imgUrl, item);
-    return;
-  }
-
-  // Also check text/html for <img src="..."> tags (Google Images wraps URLs in HTML)
-  const htmlData = dt.getData("text/html");
-  if (htmlData) {
-    const match = htmlData.match(/<img[^>]+src=["']([^"']+)["']/i);
-    if (match && match[1] && /^https?:\/\//.test(match[1])) {
-      await _fetchAndUploadInvImageUrl(match[1], item);
-      return;
-    }
-  }
-
-  console.warn("[InvDropZone] Dropped data didn't contain a usable image");
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  return;
+  // const item = state.inv.find(i => i.id === itemId);
+  // if (!item) return;
+  // if (dt.files && dt.files.length > 0) {
+  //   const file = dt.files[0];
+  //   if (file.type && file.type.startsWith("image/")) { await _processInvDroppedImage(file, item); return; }
+  // }
+  // const uriList = dt.getData("text/uri-list");
+  // const plainText = dt.getData("text/plain");
+  // const imgUrl = uriList || plainText || "";
+  // if (imgUrl && /^https?:\/\/.+\.(jpe?g|png|gif|webp|bmp)/i.test(imgUrl)) { await _fetchAndUploadInvImageUrl(imgUrl, item); return; }
+  // const htmlData = dt.getData("text/html");
+  // if (htmlData) {
+  //   const match = htmlData.match(/<img[^>]+src=["']([^"']+)["']/i);
+  //   if (match && match[1] && /^https?:\/\//.test(match[1])) { await _fetchAndUploadInvImageUrl(match[1], item); return; }
+  // }
+  // console.warn("[InvDropZone] Dropped data didn't contain a usable image");
 }
 
 /**
@@ -434,34 +413,28 @@ async function _handleInvDrop(dt, itemId) {
  * Same pipeline as the file picker: compress → upload → save → refresh detail sheet.
  */
 async function _processInvDroppedImage(file, item) {
-  // Show uploading indicator in the image area
-  const content = g("invItemDetailContent");
-  if (content) {
-    const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
-    if (imgWrap) {
-      imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0">
-        <div style="font-size:1.2rem">⏳</div>
-        <div style="font-size:.65rem;color:var(--mt);margin-top:2px">Uploading…</div>
-      </div>`;
-    }
-  }
-
-  try {
-    const downloadUrl = await uploadProductImage(file, item.name);
-    // Save image and clear imageDismissed — user is explicitly adding a new photo
-    const updated = { ...item, image: downloadUrl, imageDismissed: false };
-    await svi(updated);
-
-    // Persist to customProducts so the image is shared across shopping and pantry
-    _saveCustomProductImage(item.name, downloadUrl);
-
-    showNotif("Photo saved ✓");
-    openInvItemDetail(item.id);
-  } catch (e) {
-    console.error("[InvDropZone] Upload failed:", e);
-    showNotif("Upload failed — try again");
-    openInvItemDetail(item.id);
-  }
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  return;
+  // const content = g("invItemDetailContent");
+  // if (content) {
+  //   const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
+  //   if (imgWrap) { imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0"><div style="font-size:1.2rem">⏳</div><div style="font-size:.65rem;color:var(--mt);margin-top:2px">Uploading…</div></div>`; }
+  // }
+  // try {
+  //   const downloadUrl = await uploadProductImage(file, item.name);
+  //   const updated = { ...item, image: downloadUrl, imageDismissed: false };
+  //   await svi(updated);
+  //   _saveCustomProductImage(item.name, downloadUrl);
+  //   showNotif("Photo saved ✓");
+  //   openInvItemDetail(item.id);
+  // } catch (e) {
+  //   console.error("[InvDropZone] Upload failed:", e);
+  //   showNotif("Upload failed — try again");
+  //   openInvItemDetail(item.id);
+  // }
 }
 
 /**
@@ -469,31 +442,28 @@ async function _processInvDroppedImage(file, item) {
  * Google Images), converts to File, then uploads through the standard pipeline.
  */
 async function _fetchAndUploadInvImageUrl(url, item) {
-  const content = g("invItemDetailContent");
-  if (content) {
-    const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
-    if (imgWrap) {
-      imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0">
-        <div style="font-size:1.2rem">⏳</div>
-        <div style="font-size:.65rem;color:var(--mt);margin-top:2px">Fetching image…</div>
-      </div>`;
-    }
-  }
-
-  try {
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const blob = await resp.blob();
-    if (!blob.type || !blob.type.startsWith("image/")) {
-      throw new Error("Fetched resource is not an image");
-    }
-    const file = new File([blob], "dropped-image.jpg", { type: blob.type });
-    await _processInvDroppedImage(file, item);
-  } catch (e) {
-    console.warn("[InvDropZone] Could not fetch dropped image URL:", e);
-    showNotif("Couldn't load that image — try saving it first");
-    openInvItemDetail(item.id);
-  }
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  return;
+  // const content = g("invItemDetailContent");
+  // if (content) {
+  //   const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
+  //   if (imgWrap) { imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0"><div style="font-size:1.2rem">⏳</div><div style="font-size:.65rem;color:var(--mt);margin-top:2px">Fetching image…</div></div>`; }
+  // }
+  // try {
+  //   const resp = await fetch(url);
+  //   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  //   const blob = await resp.blob();
+  //   if (!blob.type || !blob.type.startsWith("image/")) throw new Error("Fetched resource is not an image");
+  //   const file = new File([blob], "dropped-image.jpg", { type: blob.type });
+  //   await _processInvDroppedImage(file, item);
+  // } catch (e) {
+  //   console.warn("[InvDropZone] Could not fetch dropped image URL:", e);
+  //   showNotif("Couldn't load that image — try saving it first");
+  //   openInvItemDetail(item.id);
+  // }
 }
 
 /**
@@ -503,15 +473,20 @@ async function _fetchAndUploadInvImageUrl(url, item) {
  * Fire-and-forget — errors are logged but don't block the UI.
  */
 function _saveCustomProductImage(name, downloadUrl) {
-  if (!state.hid || !name) return;
-  const normalized = normalizeProductName(name);
-  if (!normalized) return;
-  dbSet(`households/${state.hid}/customProducts/${normalized}`, {
-    name: name.trim(),
-    imageUrl: downloadUrl,
-    imageDismissed: false,
-    updatedAt: new Date().toISOString()
-  }).catch(e => console.warn("Failed to save custom product image:", e));
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  return;
+  // if (!state.hid || !name) return;
+  // const normalized = normalizeProductName(name);
+  // if (!normalized) return;
+  // dbSet(`households/${state.hid}/customProducts/${normalized}`, {
+  //   name: name.trim(),
+  //   imageUrl: downloadUrl,
+  //   imageDismissed: false,
+  //   updatedAt: new Date().toISOString()
+  // }).catch(e => console.warn("Failed to save custom product image:", e));
 }
 
 /**
@@ -520,28 +495,25 @@ function _saveCustomProductImage(name, downloadUrl) {
  * Persists imageDismissed to customProducts collection for cross-item persistence.
  */
 export async function deleteInvItemImage(id) {
-  const item = state.inv.find(i => i.id === id);
-  if (!item) return;
-
-  // Clear image and set imageDismissed flag
-  const updated = { ...item, image: null, imageDismissed: true };
-  await svi(updated);
-
-  // Persist imageDismissed to customProducts so it survives item deletion/re-add
-  if (state.hid && item.name) {
-    const normalized = normalizeProductName(item.name);
-    if (normalized) {
-      dbSet(`households/${state.hid}/customProducts/${normalized}`, {
-        name: item.name.trim(),
-        imageDismissed: true,
-        imageUrl: null,
-        updatedAt: new Date().toISOString()
-      }).catch(e => console.warn("Failed to save imageDismissed to customProducts:", e));
-    }
-  }
-
-  // Re-open detail sheet to show the placeholder
-  openInvItemDetail(id);
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  return;
+  // const item = state.inv.find(i => i.id === id);
+  // if (!item) return;
+  // const updated = { ...item, image: null, imageDismissed: true };
+  // await svi(updated);
+  // if (state.hid && item.name) {
+  //   const normalized = normalizeProductName(item.name);
+  //   if (normalized) {
+  //     dbSet(`households/${state.hid}/customProducts/${normalized}`, {
+  //       name: item.name.trim(), imageDismissed: true, imageUrl: null,
+  //       updatedAt: new Date().toISOString()
+  //     }).catch(e => console.warn("Failed to save imageDismissed to customProducts:", e));
+  //   }
+  // }
+  // openInvItemDetail(id);
 }
 
 /**
@@ -549,12 +521,14 @@ export async function deleteInvItemImage(id) {
  * Stores the target item ID so the onchange handler knows which item to update.
  */
 export function triggerInvPhotoUpload(id) {
-  window._invUploadTargetId = id;
-  const input = document.getElementById("invProductPhotoInput");
-  if (input) {
-    input.value = "";
-    input.click();
-  }
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  return;
+  // window._invUploadTargetId = id;
+  // const input = document.getElementById("invProductPhotoInput");
+  // if (input) { input.value = ""; input.click(); }
 }
 
 /**
@@ -562,41 +536,33 @@ export function triggerInvPhotoUpload(id) {
  * Compresses the image, uploads to Firebase Storage, saves URL to item, refreshes sheet.
  */
 export async function handleInvPhotoSelected(id) {
-  const input = document.getElementById("invProductPhotoInput");
-  if (!input || !input.files || !input.files[0]) return;
-
-  const file = input.files[0];
-  const item = state.inv.find(i => i.id === id);
-  if (!item) return;
-
-  // Show uploading indicator
-  const content = g("invItemDetailContent");
-  if (content) {
-    const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
-    if (imgWrap) {
-      imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0">
-        <div style="font-size:1.2rem">⏳</div>
-        <div style="font-size:.65rem;color:var(--mt);margin-top:2px">Uploading…</div>
-      </div>`;
-    }
-  }
-
-  try {
-    const downloadUrl = await uploadProductImage(file, item.name);
-    // Save the new image URL and clear imageDismissed
-    const updated = { ...item, image: downloadUrl, imageDismissed: false };
-    await svi(updated);
-
-    // Persist to customProducts so the image is shared across shopping and pantry
-    _saveCustomProductImage(item.name, downloadUrl);
-
-    showNotif("Photo saved ✓");
-    openInvItemDetail(id);
-  } catch (e) {
-    console.error("Inventory photo upload failed:", e);
-    showNotif("Upload failed — try again");
-    openInvItemDetail(id);
-  }
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  return;
+  // const input = document.getElementById("invProductPhotoInput");
+  // if (!input || !input.files || !input.files[0]) return;
+  // const file = input.files[0];
+  // const item = state.inv.find(i => i.id === id);
+  // if (!item) return;
+  // const content = g("invItemDetailContent");
+  // if (content) {
+  //   const imgWrap = content.querySelector(".item-detail-img-wrap, .item-detail-img-ph");
+  //   if (imgWrap) { imgWrap.innerHTML = `<div style="text-align:center;padding:16px 0"><div style="font-size:1.2rem">⏳</div><div style="font-size:.65rem;color:var(--mt);margin-top:2px">Uploading…</div></div>`; }
+  // }
+  // try {
+  //   const downloadUrl = await uploadProductImage(file, item.name);
+  //   const updated = { ...item, image: downloadUrl, imageDismissed: false };
+  //   await svi(updated);
+  //   _saveCustomProductImage(item.name, downloadUrl);
+  //   showNotif("Photo saved ✓");
+  //   openInvItemDetail(id);
+  // } catch (e) {
+  //   console.error("Inventory photo upload failed:", e);
+  //   showNotif("Upload failed — try again");
+  //   openInvItemDetail(id);
+  // }
 }
 
 // Removes an inventory item from the database and closes the adjust overlay.
@@ -1005,9 +971,14 @@ function _renderInvDropdown(results) {
   // Matches shopping dropdown layout — no brand shown (often irrelevant in text search).
   // On image error, swap to placeholder so the row layout stays aligned.
   dropdown.innerHTML = results.map((p, i) => {
-    const img = p.image
-      ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.outerHTML='<div class=\\'enrich-img-ph\\'>🛒</div>'">`
-      : `<div class="enrich-img-ph">🛒</div>`;
+    // [IMAGES DISABLED] — Product images commented out pending decision.
+    // See session notes: images caused false positives from external databases,
+    // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+    // To re-enable: uncomment these blocks and restore image display logic.
+    // const img = p.image
+    //   ? `<img src="${p.image}" class="enrich-img" alt="" onerror="this.outerHTML='<div class=\\'enrich-img-ph\\'>🛒</div>'">`
+    //   : `<div class="enrich-img-ph">🛒</div>`;
+    const img = `<div class="enrich-img-ph">🛒</div>`;
     const cat = p.category && p.category !== "General"
       ? `<div class="enrich-cat">${p.category}</div>` : "";
     return `<div class="enrich-row" onclick="pickInvInlineResult(${i})">
@@ -1029,23 +1000,21 @@ function _renderInvDropdown(results) {
  * or null. Avoids the api/text-search.js round-trip for known custom products.
  */
 async function _checkInvCustomProductLocal(query) {
-  if (!state.hid || !query) return null;
-  const normalized = normalizeProductName(query);
-  if (!normalized) return null;
-
-  const cpDoc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
-  if (!cpDoc || cpDoc.imageDismissed || !cpDoc.imageUrl) return null;
-
-  // Build a result matching the shape expected by _renderInvDropdown
-  const displayName = query.trim().replace(/\b\w/g, c => c.toUpperCase());
-  return {
-    name: displayName,
-    image: cpDoc.imageUrl,
-    brand: "",
-    category: cpDoc.category || "",
-    source: "customProduct",
-    _score: 100,
-  };
+  // [IMAGES DISABLED] — Product images commented out pending decision.
+  // See session notes: images caused false positives from external databases,
+  // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
+  // To re-enable: uncomment these blocks and restore image display logic.
+  return null;
+  // if (!state.hid || !query) return null;
+  // const normalized = normalizeProductName(query);
+  // if (!normalized) return null;
+  // const cpDoc = await dbGet(`households/${state.hid}/customProducts/${normalized}`);
+  // if (!cpDoc || cpDoc.imageDismissed || !cpDoc.imageUrl) return null;
+  // const displayName = query.trim().replace(/\b\w/g, c => c.toUpperCase());
+  // return {
+  //   name: displayName, image: cpDoc.imageUrl, brand: "",
+  //   category: cpDoc.category || "", source: "customProduct", _score: 100,
+  // };
 }
 
 /**
@@ -1177,7 +1146,8 @@ export function pickInvInlineResult(index) {
     unit: "unit", qty: 1,
     location: _invAddLocation,
     category: product.category || gcat({ name: product.name }),
-    image: product.image || null,
+    // [IMAGES DISABLED] — product image field commented out
+    // image: product.image || null,
     source: product.source || "search",
     expiry: null,
     addedAt: new Date().toLocaleDateString()
