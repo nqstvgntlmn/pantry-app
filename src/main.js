@@ -18,7 +18,7 @@ import { state, CFG_DEFAULT, J, Js } from './state.js';
 // svi/dli = save/delete inventory item, svr/dlr = save/delete recipe,
 // svShopItem/dlShopItem = save/delete shopping item
 // joinHouseholdByCode: join via invite code, createHousehold/createUserProfile: first-time setup
-import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, pausePoll, resumePoll, checkUsernameAvailable, setUsername, loadUsername } from './db.js';
+import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, pausePoll, resumePoll, checkUsernameAvailable, setUsername, loadUsername, checkMembershipValid } from './db.js';
 
 // DOM/UI helpers: g = getElementById shorthand, showNotif = toast notifications,
 // showOv/hideOv = overlay open/close, renderStars = star rating HTML, tk = tracking util
@@ -70,9 +70,9 @@ import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togI
 import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCooked, saveCooked, scheduleRecipe, schedSet, closeSchedM, initRecChips, toggleChip, filterRecs } from './ui/mealplan.js';
 
 // Settings: config UI, push notifications, household management, theme/dark mode
-// copyInviteCode/shareInviteCode/regenInviteCode: invite code actions
-// removeMemberFromHH: owner removes a member
-import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, enrichExistingItems, bulkPublishAll, regenAllSummaries } from './ui/settings.js';
+// Household member management: remove, transfer ownership, leave/delete household
+// checkMembershipOnInteraction: verifies user still belongs to household (kick detection)
+import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries } from './ui/settings.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
@@ -385,6 +385,8 @@ window.copyInviteCode = copyInviteCode;     // Copy household invite code to cli
 window.shareInviteCode = shareInviteCode;   // Share invite code via Web Share API
 window.regenInviteCode = regenInviteCode;   // Regenerate a new invite code (owner only)
 window.removeMemberFromHH = removeMemberFromHH; // Remove a member from the household (owner only)
+window.transferOwnershipUI = transferOwnershipUI; // Transfer ownership to another member (owner only)
+window.leaveHousehold = leaveHousehold;           // Leave the household (member) or delete it (owner, sole member)
 window.enrichExistingItems = enrichExistingItems; // Retroactive product enrichment for all items
 window.bulkPublishAll = bulkPublishAll;           // One-time publish all recipes to community
 window.regenAllSummaries = regenAllSummaries;     // Regenerate AI summaries for all recipes
@@ -530,6 +532,20 @@ window.changeUsername = async function() {
 window._appStart = async function(code) {
   // Store the active household ID in global state so all modules can reference it
   state.hid = code;
+
+  // ── Membership check ──
+  // Before loading any data, verify the user is still a member of this household.
+  // This catches the case where a member was removed by the owner since their last visit.
+  // If invalid, clears local state and redirects to onboarding (join/create screen).
+  const currentUser = getCurrentUser();
+  if (currentUser) {
+    const membershipValid = await checkMembershipValid(state.hid, currentUser.uid);
+    if (!membershipValid) {
+      // User was removed from this household — clear state and redirect
+      checkMembershipOnInteraction();
+      return; // Stop app boot — redirect will handle the rest
+    }
+  }
 
   // Hide the login screen ("LS") and show the main app container ("APP")
   g("LS").style.display = "none";

@@ -145,7 +145,8 @@ export async function createHousehold(uid, name) {
     members: [{
       uid,
       name: user?.displayName || user?.email?.split("@")[0] || "Owner",
-      role: "owner"
+      role: "owner",
+      joinedAt: new Date().toISOString() // Track when the owner created the household
     }],
     // Flat array of just UIDs — used by Firestore security rules for fast
     // membership checks (`request.auth.uid in resource.data.memberUids`).
@@ -196,7 +197,8 @@ export async function joinHouseholdByCode(code, user) {
     members.push({
       uid: user.uid,
       name: user.displayName || user.email?.split("@")[0] || "Member",
-      role: "member"
+      role: "member",
+      joinedAt: new Date().toISOString() // Track when the member joined for display in settings
     });
     if (!memberUids.includes(user.uid)) memberUids.push(user.uid);
     await dbSet(`households/${hid}`, { ...hhDoc, members, memberUids, id: undefined });
@@ -260,6 +262,87 @@ export async function removeMember(hid, memberUid) {
       await dbSet(`users/${memberUid}`, { ...userDoc, householdIds: hids, id: undefined });
     }
   } catch { /* member profile may not be accessible */ }
+}
+
+/**
+ * transferOwnership — transfers household ownership to another member.
+ * Updates the household doc: sets the new ownerUid and swaps roles in the
+ * members array (old owner becomes "member", new owner becomes "owner").
+ * Both users must already be members of the household.
+ */
+export async function transferOwnership(hid, newOwnerUid) {
+  const hhDoc = await dbGet(`households/${hid}`);
+  if (!hhDoc) throw new Error("Household not found");
+
+  // Update roles in the members array
+  const members = (hhDoc.members || []).map(m => ({
+    ...m,
+    role: m.uid === newOwnerUid ? "owner" : (m.uid === hhDoc.ownerUid ? "member" : m.role)
+  }));
+
+  // Set the new ownerUid and updated members array
+  await dbSet(`households/${hid}`, {
+    ...hhDoc,
+    ownerUid: newOwnerUid,
+    members,
+    id: undefined
+  });
+}
+
+/**
+ * deleteHousehold — permanently deletes a household and all its subcollections.
+ * Only the owner can do this, and only when they are the sole remaining member.
+ * Removes the household from the owner's user profile and deletes the invite code index.
+ * Subcollections (inventory, recipes, shopping, etc.) are deleted doc-by-doc.
+ */
+export async function deleteHousehold(hid, ownerUid) {
+  const hhDoc = await dbGet(`households/${hid}`);
+  if (!hhDoc) return;
+
+  // Delete all docs in each subcollection
+  const collections = ["inventory", "recipes", "shopping", "mealplan", "settings", "cooklog", "wastelog", "activity"];
+  for (const col of collections) {
+    try {
+      const docs = await dbList(`households/${hid}/${col}`);
+      for (const doc of docs) {
+        await dbDelete(`households/${hid}/${col}/${doc.id}`);
+      }
+    } catch { /* best-effort: some subcollections may not exist */ }
+  }
+
+  // Delete the invite code index entry so the code can't be used to join
+  if (hhDoc.inviteCode) {
+    try { await dbDelete(`household_codes/${hhDoc.inviteCode}`); } catch { /* ignore */ }
+  }
+
+  // Delete the household document itself
+  await dbDelete(`households/${hid}`);
+
+  // Remove the household from the owner's user profile
+  try {
+    const userDoc = await dbGet(`users/${ownerUid}`);
+    if (userDoc) {
+      const hids = (userDoc.householdIds || []).filter(h => h !== hid);
+      await dbSet(`users/${ownerUid}`, { ...userDoc, householdIds: hids, id: undefined });
+    }
+  } catch { /* best-effort */ }
+}
+
+/**
+ * checkMembershipValid — checks if the current user is still a member of the
+ * given household. Returns true if valid, false if the user has been removed.
+ * Used to detect when a member has been kicked and should be redirected.
+ */
+export async function checkMembershipValid(hid, uid) {
+  try {
+    const hhDoc = await dbGet(`households/${hid}`);
+    if (!hhDoc) return false;
+    // Check the flat memberUids array for fast lookup
+    return (hhDoc.memberUids || []).includes(uid);
+  } catch {
+    // If we can't fetch the doc, assume membership is invalid
+    return false;
+  }
 }
 
 /**

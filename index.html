@@ -779,11 +779,14 @@
           </div>
         </div>
 
-        <!-- Members list (populated dynamically) -->
+        <!-- Members list (populated dynamically — shows all members with role/date) -->
         <div style="margin-top:14px">
           <label class="flbl">Members</label>
           <div id="hhMembers" style="margin-top:6px"></div>
         </div>
+
+        <!-- Leave/Delete Household button (text and behavior set dynamically by renderHouseholdInfo) -->
+        <button class="btn bs bf" id="leaveHouseholdBtn" onclick="leaveHousehold()" style="display:none;margin-top:14px;width:100%;color:var(--rd);border-color:var(--rd)">🚪 Leave Household</button>
       </div>
 
       <div class="sset"><div class="ssetttl">Other Households</div>

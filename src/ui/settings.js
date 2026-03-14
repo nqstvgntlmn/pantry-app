@@ -11,7 +11,7 @@ import { state, J, Js } from '../state.js';
 // joinHouseholdByCode: join a household via invite code lookup
 // regenerateInviteCode: generate a new 6-char invite code (owner only)
 // removeMember: remove a member from a household (owner only)
-import { saveCfg, dbGet, dbSet, dbList, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished } from '../db.js';
+import { saveCfg, dbGet, dbSet, dbList, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
 import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
@@ -213,6 +213,8 @@ function getHouseholdIds() { return J("ks-hhs") || [state.hid]; }
  * renderHouseholdInfo() — Populates the invite code display and members list
  * for the current active household in the settings overlay.
  * Fetches the household doc from Firestore to get up-to-date invite code and members.
+ * All members can see the member list; only the owner sees Remove and Transfer buttons.
+ * Non-owners see a "Leave Household" button instead.
  */
 async function renderHouseholdInfo() {
   const user = getCurrentUser();
@@ -238,24 +240,64 @@ async function renderHouseholdInfo() {
     const regenBtn = g("regenCodeBtn");
     if (regenBtn) regenBtn.style.display = isOwner ? "" : "none";
 
-    // Render the members list
+    // Render the members list — visible to all household members
+    // Enrich member objects with usernames from user profiles (best-effort)
     const membersEl = g("hhMembers");
     if (membersEl && hhDoc.members) {
-      membersEl.innerHTML = hhDoc.members.map(m => {
+      // Fetch usernames for all members in parallel
+      const enrichedMembers = await Promise.all(hhDoc.members.map(async m => {
+        try {
+          const userDoc = await dbGet(`users/${m.uid}`);
+          return { ...m, username: userDoc?.username || null };
+        } catch { return { ...m, username: null }; }
+      }));
+
+      membersEl.innerHTML = enrichedMembers.map(m => {
         const isMe = m.uid === user.uid;
-        const roleLabel = m.role === "owner" ? "Owner" : "Member";
-        // Owner can remove non-owner members; nobody can remove themselves here
-        const removeBtn = isOwner && !isMe
-          ? `<button onclick="event.stopPropagation();removeMemberFromHH('${m.uid}')" style="background:none;border:none;color:var(--rd);cursor:pointer;font-size:.78rem;padding:4px 8px">Remove</button>`
-          : "";
+        const isMemberOwner = m.role === "owner";
+
+        // Crown icon for the household owner
+        const crownIcon = isMemberOwner ? ' 👑' : '';
+
+        // Fetch username from the member object if available
+        const usernameLabel = m.username ? `@${m.username}` : '';
+
+        // Format join date if available (from joinedAt field)
+        const joinDate = m.joinedAt
+          ? new Date(m.joinedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          : '';
+
+        // Build the subtitle line: username, role, join date
+        const subtitleParts = [];
+        if (usernameLabel) subtitleParts.push(usernameLabel);
+        subtitleParts.push(isMemberOwner ? "Owner" : "Member");
+        if (joinDate) subtitleParts.push(`Joined ${joinDate}`);
+
+        // Owner sees action buttons for non-owner members
+        let actionBtns = '';
+        if (isOwner && !isMe) {
+          actionBtns = `<div style="display:flex;gap:4px;flex-shrink:0">
+            <button onclick="event.stopPropagation();transferOwnershipUI('${m.uid}','${m.name.replace(/'/g, "\\'")}')" style="background:none;border:1px solid var(--b2);color:var(--ac);cursor:pointer;font-size:.72rem;padding:4px 8px;border-radius:8px" title="Transfer ownership">👑 Transfer</button>
+            <button onclick="event.stopPropagation();removeMemberFromHH('${m.uid}','${m.name.replace(/'/g, "\\'")}')" style="background:none;border:1px solid var(--b2);color:var(--rd);cursor:pointer;font-size:.72rem;padding:4px 8px;border-radius:8px">Remove</button>
+          </div>`;
+        }
+
         return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--card);border:1px solid var(--b2);border-radius:10px;margin-bottom:6px">
-          <div>
-            <div style="font-size:.86rem;font-weight:500;color:var(--tx)">${m.name}${isMe ? " (you)" : ""}</div>
-            <div style="font-size:.7rem;color:var(--mt);margin-top:2px">${roleLabel}</div>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:.86rem;font-weight:500;color:var(--tx)">${m.name}${isMe ? " (you)" : ""}${crownIcon}</div>
+            <div style="font-size:.7rem;color:var(--mt);margin-top:2px">${subtitleParts.join(" · ")}</div>
           </div>
-          ${removeBtn}
+          ${actionBtns}
         </div>`;
       }).join("");
+    }
+
+    // Show/hide the "Leave Household" button based on ownership status
+    const leaveBtn = g("leaveHouseholdBtn");
+    if (leaveBtn) {
+      // Non-owners see "Leave Household"; owners see a different message handled in leaveHousehold()
+      leaveBtn.style.display = "block";
+      leaveBtn.textContent = isOwner ? "🗑 Delete or Leave Household" : "🚪 Leave Household";
     }
   } catch (err) {
     console.error("renderHouseholdInfo error:", err);
@@ -324,19 +366,145 @@ export async function regenInviteCode() {
 
 /**
  * removeMemberFromHH() — Removes a member from the current household.
- * Only available to the household owner. Confirms before proceeding.
+ * Only available to the household owner. Shows a confirmation with the member's name.
+ * Their historical activity feed entries remain in the household feed.
  * @param {string} memberUid — The UID of the member to remove.
+ * @param {string} memberName — The display name for the confirmation message.
  */
-export async function removeMemberFromHH(memberUid) {
-  if (!confirm("Remove this member from the household?")) return;
+export async function removeMemberFromHH(memberUid, memberName) {
+  const displayName = memberName || "this member";
+  if (!confirm(`Remove ${displayName} from the household? They will lose access immediately.`)) return;
 
   try {
     await removeMember(state.hid, memberUid);
-    showNotif("Member removed");
+    showNotif(`${displayName} has been removed`);
     renderHouseholdInfo();
   } catch (err) {
     console.error("removeMemberFromHH error:", err);
     showNotif("Failed to remove member");
+  }
+}
+
+/**
+ * transferOwnershipUI() — Transfers household ownership to another member.
+ * Shows a confirmation dialog. On confirm, updates the household doc so the
+ * selected member becomes the new owner and the current owner becomes a regular member.
+ * @param {string} newOwnerUid — The UID of the member to make owner.
+ * @param {string} memberName — The display name for the confirmation message.
+ */
+export async function transferOwnershipUI(newOwnerUid, memberName) {
+  const displayName = memberName || "this member";
+  if (!confirm(`Transfer ownership to ${displayName}? You will become a regular member.`)) return;
+
+  try {
+    await transferOwnership(state.hid, newOwnerUid);
+    showNotif(`Ownership transferred to ${displayName}`);
+    // Re-render to update crown icon and button visibility
+    renderHouseholdInfo();
+  } catch (err) {
+    console.error("transferOwnershipUI error:", err);
+    showNotif("Failed to transfer ownership");
+  }
+}
+
+/**
+ * leaveHousehold() — Handles the "Leave Household" action for both owners and members.
+ *
+ * For non-owner members:
+ *   Shows a confirmation, then revokes access, clears local state, and redirects
+ *   to onboarding to create or join a new household.
+ *
+ * For owners:
+ *   If other members exist: blocks the action and tells them to transfer ownership first.
+ *   If owner is the only member: offers "Delete Household" or "Cancel".
+ */
+export async function leaveHousehold() {
+  const user = getCurrentUser();
+  if (!user) return;
+
+  try {
+    const hhDoc = await dbGet(`households/${state.hid}`);
+    if (!hhDoc) return;
+
+    const isOwner = hhDoc.ownerUid === user.uid;
+    const memberCount = (hhDoc.members || []).length;
+    const hhName = hhDoc.name || "this household";
+
+    if (isOwner) {
+      // ── Owner leave protection ──
+      if (memberCount > 1) {
+        // Owner has other members — must transfer ownership first
+        alert("You are the household owner. Please transfer ownership to another member before leaving.");
+        return;
+      }
+
+      // Owner is the sole member — offer to delete the entire household
+      if (!confirm(`You are the only member. Delete "${hhName}" and all its data permanently? This cannot be undone.`)) return;
+
+      // Delete the entire household and all subcollections
+      await deleteHousehold(state.hid, user.uid);
+      showNotif("Household deleted");
+
+      // Clear all local state and redirect to onboarding
+      _clearLocalStateAndRedirect();
+    } else {
+      // ── Non-owner member leaving ──
+      if (!confirm(`Leave the ${hhName} household? You will lose access immediately.`)) return;
+
+      // Remove this user from the household (same as being removed by the owner)
+      await removeMember(state.hid, user.uid);
+      showNotif("You have left the household");
+
+      // Clear all local state and redirect to onboarding
+      _clearLocalStateAndRedirect();
+    }
+  } catch (err) {
+    console.error("leaveHousehold error:", err);
+    showNotif("Something went wrong. Please try again.");
+  }
+}
+
+/**
+ * _clearLocalStateAndRedirect() — Clears all local app state (localStorage,
+ * in-memory state) and reloads the page so the user is taken back to the
+ * join/create household screen. Called after a member leaves or is removed,
+ * or after a household is deleted.
+ */
+function _clearLocalStateAndRedirect() {
+  // Remove the active household from localStorage
+  localStorage.removeItem("ks-h");
+
+  // Remove the household from the cached list
+  const arr = (J("ks-hhs") || []).filter(h => h !== state.hid);
+  if (arr.length > 0) {
+    // If user belongs to other households, switch to the first one
+    Js("ks-hhs", arr);
+    localStorage.setItem("ks-h", arr[0]);
+  } else {
+    // No other households — clear the list entirely so onboarding shows
+    localStorage.removeItem("ks-hhs");
+  }
+
+  // Full page reload — resolveHousehold will detect no valid household
+  // and show the join/create screen
+  location.reload();
+}
+
+/**
+ * checkMembershipOnInteraction() — Called periodically or on user interaction
+ * to verify the current user is still a member of the active household.
+ * If they've been removed by the owner, clears local state and redirects
+ * to the onboarding screen. No notification is sent to the removed member.
+ */
+export async function checkMembershipOnInteraction() {
+  const user = getCurrentUser();
+  if (!user || !state.hid) return;
+
+  const isValid = await checkMembershipValid(state.hid, user.uid);
+  if (!isValid) {
+    // User has been removed from this household — clear state and redirect
+    showNotif("You no longer have access to this household");
+    _clearLocalStateAndRedirect();
   }
 }
 
@@ -397,14 +565,14 @@ export function switchHousehold(code) {
 }
 
 /**
- * removeHousehold() — Leaves a household. Removes the user from the household's
- * members list and removes the household from the user's profile.
- * Cannot remove the currently active household (must switch away first).
+ * removeHousehold() — Leaves a non-active household. Removes the user from the
+ * household's members list and removes the household from the user's profile.
+ * For the active household, use leaveHousehold() instead which handles owner protection.
  * @param {string} code - The household ID to leave
  */
 export async function removeHousehold(code) {
-  // Prevent removing the active household — user must switch to another one first
-  if (code === state.hid) { showNotif("Can't remove active household"); return; }
+  // For the active household, redirect to leaveHousehold() which handles owner logic
+  if (code === state.hid) { leaveHousehold(); return; }
 
   const user = getCurrentUser();
   if (user) {
