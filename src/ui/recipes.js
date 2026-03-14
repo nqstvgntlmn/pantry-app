@@ -17,6 +17,7 @@ import { svr, dlr, dbSet, dbList, svShopItem, publishRecipe, unpublishRecipe, li
 import { g, fmtR, showNotif, showOv, hideOv, renderStars, formatQtyWithUnit, toTitleCase } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
 import { uploadRecipeCover, uploadStepPhoto, uploadCommentPhoto, deleteRecipeStorageFile } from '../storage.js';
+import { enableSwipeBack, disableSwipeBack } from './swipeback.js';
 // g = getElementById shorthand, fmtR = format AI response text to HTML,
 // showNotif = toast notification, showOv/hideOv = show/hide overlay panels,
 // renderStars = re-render a star-rating widget, getCurrentUser = Firebase user
@@ -1547,7 +1548,10 @@ export function openRecipeView(id) {
 
   // Update overlay header for read-only mode
   const titleEl = g("erecTitle");
-  if (titleEl) titleEl.textContent = "Recipe";
+  if (titleEl) titleEl.textContent = "Recipes";
+
+  // Enable iOS-style swipe-back to return to the recipe list
+  enableSwipeBack(() => handleRecipeBack());
 
   // ── Cover photo or tasteful placeholder ──
   let coverHtml;
@@ -1707,6 +1711,9 @@ export function openRecipeView(id) {
  * If in edit mode, goes back to read-only view. If in read-only, closes the overlay.
  */
 export function handleRecipeBack() {
+  // Disable swipe-back on the current page before navigating away
+  disableSwipeBack();
+
   // If editing a community recipe, go back to its detail view
   if (_recipeViewMode === "edit" && state._editingComId) {
     const comId = state._editingComId;
@@ -1720,7 +1727,7 @@ export function handleRecipeBack() {
   } else {
     // Reset title when closing the overlay entirely
     const titleEl = g("erecTitle");
-    if (titleEl) titleEl.textContent = "Recipe";
+    if (titleEl) titleEl.textContent = "Recipes";
     hideOv("erec");
   }
 }
@@ -1750,6 +1757,9 @@ export function openER(id) {
   // Update overlay header for edit mode
   const titleEl = g("erecTitle");
   if (titleEl) titleEl.textContent = "Edit Recipe";
+
+  // Enable swipe-back to return to the read-only view from edit mode
+  enableSwipeBack(() => handleRecipeBack());
 
   // Rating is now shown on the read-only view, not the edit form (Feature 8)
 
@@ -3006,6 +3016,13 @@ export async function openComRecipe(id) {
   _recipeViewMode = "view"; // community recipes use the same overlay
   _pendingCommentPhotos = []; // reset any pending comment photo uploads
 
+  // Set overlay title for community recipe detail
+  const titleEl = g("erecTitle");
+  if (titleEl) titleEl.textContent = "Recipes";
+
+  // Enable swipe-back to return to the community recipe list
+  enableSwipeBack(() => handleRecipeBack());
+
   // Fetch like status, comments, user's rating, and review in parallel
   const uid = getCurrentUser()?.uid;
   const [liked, comments, myRating, myReview] = await Promise.all([
@@ -3585,6 +3602,9 @@ export async function editComRecipe(id) {
   const titleEl = g("erecTitle");
   if (titleEl) titleEl.textContent = "Edit Community Recipe";
 
+  // Enable swipe-back to return to the community recipe detail view
+  enableSwipeBack(() => handleRecipeBack());
+
   // Warning banner — clearly communicates that changes are public immediately
   const warningHtml = `<div style="background:rgba(201,168,76,0.15);border:1px solid var(--ac);border-radius:10px;padding:12px;margin-bottom:14px;font-size:.82rem;color:var(--ac);line-height:1.5">
     ⚠️ You are editing the <strong>community version</strong>. Changes will be visible to everyone immediately.
@@ -3697,11 +3717,12 @@ export async function saveComRecipeEdit() {
     // Reset title and editing state so it doesn't persist on next overlay open
     state._editingComId = null;
     const titleEl = g("erecTitle");
-    if (titleEl) titleEl.textContent = "Recipe";
+    if (titleEl) titleEl.textContent = "Recipes";
 
     // Log activity for community recipe edit with attribution
     logActivity("updated", toTitleCase(title) + " (community)");
     showNotif("Community recipe updated!");
+    disableSwipeBack(); // Clean up swipe gesture before closing overlay
     hideOv("erec");
     renderCommunity();
   } catch (e) {
