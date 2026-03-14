@@ -11,7 +11,7 @@ import { state, J, Js } from '../state.js';
 // joinHouseholdByCode: join a household via invite code lookup
 // regenerateInviteCode: generate a new 6-char invite code (owner only)
 // removeMember: remove a member from a household (owner only)
-import { saveCfg, dbGet, dbSet, dbList, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, svShopItem, svi, publishRecipe } from '../db.js';
+import { saveCfg, dbGet, dbSet, dbList, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
 import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
@@ -751,8 +751,16 @@ export async function bulkPublishAll() {
   const btn = g("bulkPubBtn");
   if (btn) btn.disabled = true;
 
+  let skipped = 0;
   for (const r of state.recs) {
     try {
+      // ── DUPLICATE GUARD: skip recipes already in the community ──
+      const existing = await checkRecipeAlreadyPublished(r);
+      if (existing) {
+        skipped++;
+        if (progressEl) progressEl.textContent = `Published ${success}/${total} (${skipped} skipped)…`;
+        continue;
+      }
       // Publish as a fully independent copy — no householdId, new ID
       await publishRecipe(r, authorName);
       success++;

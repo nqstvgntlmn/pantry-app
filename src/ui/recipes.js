@@ -13,7 +13,7 @@
 //   eid       = edit-target ID    cfg = user config/preferences
 
 import { state, J, Js } from '../state.js';
-import { svr, dlr, dbSet, dbList, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
+import { svr, dlr, dbSet, dbList, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, checkRecipeAlreadyPublished, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
 import { g, fmtR, showNotif, showOv, hideOv, renderStars, formatQtyWithUnit } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
 import { uploadRecipeCover, uploadStepPhoto, uploadCommentPhoto, deleteRecipeStorageFile } from '../storage.js';
@@ -2319,6 +2319,21 @@ export async function togglePublic(id) {
   const authorName = user?.displayName || localStorage.getItem("ks-who") || "Anonymous";
 
   if (isPublic) {
+    // ── DUPLICATE PUBLISH GUARD ──────────────────────────────────────────
+    // Before creating a new community entry, check if this recipe was already
+    // published. Prevents duplicate public_recipes documents from being created.
+    const existing = await checkRecipeAlreadyPublished(r);
+    if (existing) {
+      showNotif("This recipe has already been published to the community. To update the community version, edit the recipe and use the \u201cPush to community\u201d option.");
+      // Repair local state: ensure isPublic flag and publicId stay in sync
+      if (!r.isPublic || !r.publicId) {
+        r.isPublic = true;
+        r.publicId = existing.id;
+        await svr({ ...r });
+      }
+      return;
+    }
+
     // Publish as a fully independent copy to the community collection.
     // Store the returned publicId so we can unpublish later.
     const pub = await publishRecipe(r, authorName);

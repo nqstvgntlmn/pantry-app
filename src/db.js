@@ -782,6 +782,42 @@ export async function publishRecipe(recipe, authorName) {
 }
 
 /**
+ * checkRecipeAlreadyPublished — checks if a community version of a recipe
+ * already exists before allowing a publish. Uses two strategies:
+ *   1. If the recipe has a stored publicId, verifies that doc still exists.
+ *   2. Falls back to scanning the local community cache (state.comRecs)
+ *      for a match by authorUid + recipe title.
+ * Returns the existing public recipe object if found, or null if safe to publish.
+ */
+export async function checkRecipeAlreadyPublished(recipe) {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return null;
+
+  // Strategy 1: check stored publicId — the most reliable link between
+  // the private recipe and its community counterpart.
+  if (recipe.publicId) {
+    try {
+      const existing = await getPublicRecipe(recipe.publicId);
+      if (existing) return existing;
+    } catch (_) {
+      // Doc may have been deleted externally — fall through to strategy 2
+    }
+  }
+
+  // Strategy 2: scan the local community cache for a matching author + title.
+  // Handles edge cases where publicId was lost or never stored (legacy recipes).
+  if (state.comRecs && state.comRecs.length > 0) {
+    const title = (recipe.name || "").trim().toLowerCase();
+    const match = state.comRecs.find(
+      cr => cr.authorUid === uid && (cr.title || "").trim().toLowerCase() === title
+    );
+    if (match) return match;
+  }
+
+  return null;
+}
+
+/**
  * unpublishRecipe — remove a recipe from the public_recipes collection.
  * Only the author should call this (enforced by Firestore rules).
  */
