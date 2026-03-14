@@ -1080,13 +1080,19 @@ export async function publishRecipe(recipe, authorName) {
  *   1. If the recipe has a stored publicId, verifies that doc still exists.
  *   2. Scans community recipes for a matching sourceRecipeId (the private
  *      recipe's Firestore ID stored in the public doc at publish time).
- *   3. Falls back to matching by authorUid + recipe title.
- * Ensures community recipes are loaded before checking strategies 2 & 3.
+ *   3. Falls back to matching by householdId + recipe title.
+ * Matches by householdId (not authorUid) so that any member of the same
+ * household is blocked from re-publishing a recipe that another member
+ * already published. This prevents duplicates in multi-member households.
  * Returns the existing public recipe object if found, or null if safe to publish.
  */
 export async function checkRecipeAlreadyPublished(recipe) {
   const uid = getCurrentUser()?.uid;
   if (!uid) return null;
+
+  // The current household ID — used for duplicate matching so that all
+  // members of the same household share one set of community recipes.
+  const hid = state.hid || "";
 
   // Strategy 1: check stored publicId — the most reliable link between
   // the private recipe and its community counterpart.
@@ -1111,19 +1117,21 @@ export async function checkRecipeAlreadyPublished(recipe) {
 
   if (state.comRecs && state.comRecs.length > 0) {
     // Strategy 2: match by sourceRecipeId — the private recipe's Firestore ID
-    // stored in the public doc. Catches duplicates even if publicId was lost.
+    // stored in the public doc. Matches by householdId so any household member's
+    // publish is detected, not just the current user's.
     if (recipe.id) {
       const matchById = state.comRecs.find(
-        cr => cr.authorUid === uid && cr.sourceRecipeId === recipe.id
+        cr => cr.householdId === hid && cr.sourceRecipeId === recipe.id
       );
       if (matchById) return matchById;
     }
 
-    // Strategy 3: match by authorUid + title — handles legacy recipes that
-    // were published before sourceRecipeId was added.
+    // Strategy 3: match by householdId + title — handles legacy recipes that
+    // were published before sourceRecipeId was added. Uses householdId instead
+    // of authorUid so recipes published by any household member are caught.
     const title = (recipe.name || "").trim().toLowerCase();
     const matchByTitle = state.comRecs.find(
-      cr => cr.authorUid === uid && (cr.title || "").trim().toLowerCase() === title
+      cr => cr.householdId === hid && (cr.title || "").trim().toLowerCase() === title
     );
     if (matchByTitle) return matchByTitle;
   }

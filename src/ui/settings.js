@@ -903,22 +903,24 @@ function _needsEnrich(item) {
  */
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ── ONE-TIME BULK PUBLISH ────────────────────────────────────────────────────
+// ── BULK PUBLISH ALL RECIPES ─────────────────────────────────────────────────
 // Utility to publish all existing private recipes to the community as
-// fully independent copies. Runs once, then permanently disables itself.
+// fully independent copies. Skips any recipes already published (detected
+// by checkRecipeAlreadyPublished). Can be run repeatedly — always available
+// in Settings > Utilities for the household owner.
 
 /**
- * bulkPublishAll — one-time utility that publishes all household recipes
- * to the community as fully independent copies with new IDs.
- * Each published recipe has no link back to the private version.
- * Stores ks-bulk-published in localStorage to prevent re-running.
+ * bulkPublishAll — publishes all household recipes to the community as
+ * fully independent copies with new IDs. Skips recipes already published
+ * (using householdId-based duplicate detection). Re-enables the button
+ * after completion so it can be run again when new recipes are added.
  */
 export async function bulkPublishAll() {
-  if (J("ks-bulk-published")) {
-    showNotif("Already published all recipes");
+  if (!state.recs || state.recs.length === 0) {
+    showNotif("No recipes to publish");
     return;
   }
-  if (!confirm(`Publish all ${state.recs.length} recipes to the community? This creates independent copies visible to everyone.`)) return;
+  if (!confirm(`Publish all ${state.recs.length} recipes to the community? This creates independent copies visible to everyone. Already-published recipes will be skipped.`)) return;
 
   const user = getCurrentUser();
   const authorName = user?.displayName || localStorage.getItem("ks-who") || "Anonymous";
@@ -936,6 +938,8 @@ export async function bulkPublishAll() {
   for (const r of state.recs) {
     try {
       // ── DUPLICATE GUARD: skip recipes already in the community ──
+      // Uses householdId-based matching so recipes published by any
+      // household member are correctly detected and skipped.
       const existing = await checkRecipeAlreadyPublished(r);
       if (existing) {
         skipped++;
@@ -951,40 +955,36 @@ export async function bulkPublishAll() {
     }
   }
 
-  // Mark as complete so the button never appears again
-  Js("ks-bulk-published", true);
-  showNotif(`Published ${success} of ${total} recipes to community!`);
+  showNotif(`Published ${success} of ${total} recipes to community!` + (skipped ? ` (${skipped} already published)` : ""));
 
-  // Disable the button permanently
-  if (btn) { btn.disabled = true; btn.textContent = "All recipes published ✓"; }
-  if (progressEl) progressEl.textContent = `Done — ${success} recipes published.`;
+  // Re-enable the button so it can be used again when new recipes are added
+  if (btn) { btn.disabled = false; }
+  if (progressEl) progressEl.textContent = `Done — ${success} published, ${skipped} skipped.`;
 }
 
 /**
- * showBulkPublishBtn — shows the bulk publish button in settings if not yet run.
- * Called from loadCfgUI() to conditionally display the one-time utility.
+ * showBulkPublishBtn — shows the bulk publish button in settings.
+ * Called from loadCfgUI(). Always visible for household owners (the
+ * Utilities section itself is owner-gated). The button can be used
+ * repeatedly — already-published recipes are skipped via duplicate detection.
  */
 export function showBulkPublishBtn() {
   const btn = g("bulkPubBtn");
-  const progress = g("bulkPubProgress");
   if (btn) {
-    if (J("ks-bulk-published")) {
-      btn.style.display = "none";
-      if (progress) progress.style.display = "none";
-    } else {
-      btn.style.display = "block";
-    }
+    btn.style.display = "block";
   }
 }
 
 // ── REMOVE DUPLICATE COMMUNITY RECIPES (MAINTENANCE UTILITY) ────────────────
 // Reusable maintenance utility that scans all public_recipes, identifies
-// duplicates (same title + authorUid), keeps the newest, and deletes the rest.
+// duplicates (same title + householdId), keeps the newest, and deletes the rest.
+// Uses householdId so recipes published by different members of the same
+// household are correctly identified as duplicates.
 // Can be run as many times as needed — always available in Settings > Utilities.
 
 /**
  * removeDuplicateCommunityRecipes — maintenance utility that finds and removes
- * duplicate community recipes. Groups by title + authorUid, keeps the most
+ * duplicate community recipes. Groups by title + householdId, keeps the most
  * recently created version of each duplicate set, and deletes the older copies.
  * Shows a summary notification when complete.
  */
@@ -1003,11 +1003,12 @@ export async function removeDuplicateCommunityRecipes() {
       return;
     }
 
-    // Group recipes by a composite key: lowercase title + authorUid.
-    // Recipes with the same key are considered duplicates.
+    // Group recipes by a composite key: lowercase title + householdId.
+    // Uses householdId instead of authorUid so recipes published by different
+    // members of the same household are correctly grouped as duplicates.
     const groups = {};
     for (const r of allPublic) {
-      const key = ((r.title || "").trim().toLowerCase()) + "||" + (r.authorUid || "");
+      const key = ((r.title || "").trim().toLowerCase()) + "||" + (r.householdId || "");
       if (!groups[key]) groups[key] = [];
       groups[key].push(r);
     }
