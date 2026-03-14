@@ -863,15 +863,40 @@ function _bootWithHousehold(hid) {
 function _showJoinScreen(user) {
   showAuthScreen("join");
 
-  // "Start my own kitchen" — creates a new household (same as original flow)
+  // "Start my own kitchen" — creates a new household for the user.
+  // GUARD: If the user already has householdIds with valid membership,
+  // do NOT create a new household (prevents ghost recreation).
   g("btnCreateKitchen").onclick = async () => {
     disableBtn(g("btnCreateKitchen"), true);
     try {
+      // Check if user already belongs to a household before creating a new one
+      const existingProfile = await dbGet(`users/${user.uid}`);
+      if (existingProfile?.householdIds?.length) {
+        // User has existing household references — check if any are valid
+        for (const hid of existingProfile.householdIds) {
+          const hhDoc = await dbGet(`households/${hid}`);
+          if (hhDoc && (hhDoc.memberUids || []).includes(user.uid)) {
+            // User is already a member of this household — use it instead
+            console.log(`[_showJoinScreen] User already belongs to household ${hid}, using that`);
+            _bootWithHousehold(hid);
+            return;
+          }
+        }
+      }
+
+      // No existing valid membership — safe to create a new household
       const cfgName = state.cfg?.name || "My Kitchen";
       await createHousehold(user.uid, cfgName);
-      const profile = await createUserProfile(user);
-      profile.householdIds = [user.uid];
-      await dbSet(`users/${user.uid}`, profile);
+
+      // Create or update the user profile with the new household
+      if (!existingProfile) {
+        const profile = await createUserProfile(user);
+        profile.householdIds = [user.uid];
+        await dbSet(`users/${user.uid}`, profile);
+      } else {
+        await dbSet(`users/${user.uid}`, { ...existingProfile, householdIds: [user.uid], id: undefined });
+      }
+
       localStorage.removeItem("ks-h");
       const hhs = J("ks-hhs");
       if (hhs) {
@@ -948,20 +973,32 @@ onAuth(async (user) => {
         const isReturningUser = !!userDoc || !!cachedHid || (cachedHhs && cachedHhs.length > 0);
 
         if (isReturningUser) {
-          // Returning user — resolve household and boot normally
-          g("LS").style.display = "none";
-          g("APP").style.display = "flex";
+          // Returning user — resolve household and boot normally.
+          // resolveHousehold returns null if user has householdIds but none
+          // are valid — in that case, show the join screen instead of
+          // falling back to uid (which would recreate a ghost household).
           const hid = await resolveHousehold(user);
-          _bootWithHousehold(hid);
+          if (hid) {
+            g("LS").style.display = "none";
+            g("APP").style.display = "flex";
+            _bootWithHousehold(hid);
+          } else {
+            // No valid household found — show join/create screen so user
+            // can join a household properly instead of auto-creating a ghost
+            console.warn("[onAuth] resolveHousehold returned null — showing join screen");
+            _showJoinScreen(user);
+          }
         } else {
           // First-time user — show join/create household screen
           _showJoinScreen(user);
         }
       } catch (err) {
         console.error("Failed to resolve household:", err);
-        // Fallback: use UID as household ID so the app still loads
-        const hid = user.uid;
-        _bootWithHousehold(hid);
+        // CRITICAL: Do NOT fall back to user.uid as household ID.
+        // That creates ghost households for users who belong to shared ones.
+        // Instead, show the join screen so the user can recover properly.
+        console.warn("[onAuth] Error during household resolution — showing join screen");
+        _showJoinScreen(user);
       }
     }
   } else {

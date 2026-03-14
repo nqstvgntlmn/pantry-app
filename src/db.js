@@ -493,22 +493,80 @@ async function _validateHouseholdIds(uid, userDoc) {
 }
 
 /**
+ * _cleanupBushraGhost — ONE-TIME cleanup for Bushra's account.
+ * Her UID was incorrectly used as a household ID, creating a ghost document.
+ * This deletes the ghost household and fixes her householdIds array to point
+ * only to the correct shared household (x5Gz5ydc1UTAkXu0zYuRK5Xmjhm1).
+ *
+ * Safe to remove once confirmed working in production.
+ */
+async function _cleanupBushraGhost(uid) {
+  const BUSHRA_UID = "xBZZZCTX5Sa7llEPSl9QXG5zscX2";
+  const CORRECT_HID = "x5Gz5ydc1UTAkXu0zYuRK5Xmjhm1";
+  if (uid !== BUSHRA_UID) return null;
+
+  console.log(`[_cleanupBushraGhost] Running one-time cleanup for Bushra`);
+
+  // Delete the ghost household document at her UID path if it exists
+  try {
+    const ghostDoc = await dbGet(`households/${BUSHRA_UID}`);
+    if (ghostDoc) {
+      console.log(`[_cleanupBushraGhost] Deleting ghost household at ${BUSHRA_UID}`);
+      await dbDelete(`households/${BUSHRA_UID}`);
+      // Also clean up ghost's invite code if it has one
+      if (ghostDoc.inviteCode) {
+        await dbDelete(`household_codes/${ghostDoc.inviteCode}`);
+      }
+    }
+  } catch (e) {
+    console.warn(`[_cleanupBushraGhost] Failed to delete ghost:`, e);
+  }
+
+  // Fix her user profile to only reference the correct shared household
+  try {
+    const userDoc = await dbGet(`users/${BUSHRA_UID}`);
+    if (userDoc) {
+      console.log(`[_cleanupBushraGhost] Fixing householdIds to [${CORRECT_HID}]`);
+      await dbSet(`users/${BUSHRA_UID}`, { ...userDoc, householdIds: [CORRECT_HID], id: undefined });
+    }
+  } catch (e) {
+    console.warn(`[_cleanupBushraGhost] Failed to update user profile:`, e);
+  }
+
+  console.log(`[_cleanupBushraGhost] Cleanup complete — returning ${CORRECT_HID}`);
+  return CORRECT_HID;
+}
+
+/**
  * resolveHousehold — the main entry point called on every sign-in.
  * Determines which household ID the user should use and returns it.
  *
- * Two paths:
- *   1. Returning user (profile exists): validate all household IDs in their
- *      array, pick the one where they are a confirmed member, and clean up
- *      any stale/ghost entries that point to non-existent households.
- *   2. First-ever login (no profile): create profile + household, migrate
- *      any pre-auth localStorage data, and return the new household ID.
+ * Resolution strategy (in order):
+ *   1. Run any one-time user-specific cleanup (e.g. Bushra ghost fix)
+ *   2. Returning user (profile exists): validate all household IDs,
+ *      find the one where user is in memberUids, and use that.
+ *      NEVER fall back to uid if householdIds exist but none are valid —
+ *      that would recreate ghost households.
+ *   3. First-ever login (no profile AND no existing household membership):
+ *      create profile + household and return the new household ID.
  *
- * After this function, `state.hid` will be set by the caller and all
- * subsequent DB operations will target that household.
+ * CRITICAL: This function must NEVER auto-create a household for a user
+ * who already has entries in householdIds. Ghost households are created
+ * when uid is used as a fallback household ID for users who belong to
+ * a shared household — this function prevents that.
  */
 export async function resolveHousehold(user) {
   const uid = user.uid;
   console.log(`[resolveHousehold] ENTER — uid=${uid}`);
+
+  // ── One-time cleanup for specific users ──
+  // Run before normal resolution so the corrected data is used downstream.
+  // Safe to remove once confirmed working.
+  const cleanupHid = await _cleanupBushraGhost(uid);
+  if (cleanupHid) {
+    console.log(`[resolveHousehold] One-time cleanup resolved hid=${cleanupHid}`);
+    return cleanupHid;
+  }
 
   // Check if this user has logged in before by looking for their profile doc
   const userDoc = await dbGet(`users/${uid}`);
@@ -516,25 +574,42 @@ export async function resolveHousehold(user) {
 
   if (userDoc) {
     // Returning user — validate all household IDs and pick the correct one.
-    // This replaces the old householdIds[0] logic which could pick a ghost/deleted household.
-    const hid = await _validateHouseholdIds(uid, userDoc) || uid;
+    // _validateHouseholdIds checks each household doc and finds the one
+    // where this user appears in memberUids (the shared household).
+    const hid = await _validateHouseholdIds(uid, userDoc);
     console.log(`[resolveHousehold] RETURNING USER — resolved hid=${hid}, householdIds=`, userDoc.householdIds);
 
-    // Check for a pending migration that didn't complete on a previous login.
-    // If ks-h still holds an old anonymous household ID, migrate now.
-    const oldHid = localStorage.getItem("ks-h");
-    console.log(`[resolveHousehold] RETURNING USER — ks-h="${oldHid}", hid="${hid}", uid="${uid}"`);
-    if (oldHid && oldHid !== hid && oldHid !== uid) {
-      console.log(`[resolveHousehold] LATE MIGRATION TRIGGERED: ${oldHid} → ${hid}`);
-      await migrateHousehold(oldHid, hid);
-      localStorage.removeItem("ks-h");
-      console.log(`[resolveHousehold] Late migration DONE, ks-h removed`);
+    if (hid) {
+      // Successfully resolved to a valid household where user is a member.
+      // Check for a pending migration from pre-auth anonymous data.
+      const oldHid = localStorage.getItem("ks-h");
+      if (oldHid && oldHid !== hid && oldHid !== uid) {
+        console.log(`[resolveHousehold] LATE MIGRATION TRIGGERED: ${oldHid} → ${hid}`);
+        await migrateHousehold(oldHid, hid);
+        localStorage.removeItem("ks-h");
+      }
+      return hid;
     }
 
-    return hid;
+    // GUARD: If user has householdIds but none resolved, do NOT create a new
+    // household. This prevents ghost recreation. Instead, return null so the
+    // caller can show onboarding/error UI.
+    const existingIds = userDoc.householdIds || [];
+    if (existingIds.length > 0) {
+      console.error(`[resolveHousehold] User has ${existingIds.length} householdIds but NONE are valid. NOT creating a ghost. Returning null.`);
+      return null;
+    }
+
+    // User has a profile but no householdIds at all — they need onboarding
+    console.log(`[resolveHousehold] Returning user with empty householdIds — needs onboarding`);
+    return null;
   }
 
   // ── First-time login flow ──
+  // GUARD: Before creating a new household, check if this user already appears
+  // as a member in an existing household (e.g. they were added by invite but
+  // their user profile wasn't created yet). We skip this expensive scan for now
+  // and only create if no profile exists AND no cached data suggests they're returning.
   console.log(`[resolveHousehold] FIRST-TIME LOGIN — no userDoc found`);
 
   // Check if there's pre-auth data stored under an old anonymous household ID

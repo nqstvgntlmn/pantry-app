@@ -17,6 +17,16 @@ service cloud.firestore {
     // No other user can see or modify someone else's profile.
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // ── USER NOTIFICATIONS ──
+      // Notifications subcollection: users/{uid}/notifications/{notifId}
+      // The owning user can read/write their own notifications (mark as read, list).
+      // Any authenticated user can create notifications for others (e.g. comment
+      // notifications sent to recipe authors).
+      match /notifications/{notifId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+        allow create: if request.auth != null;
+      }
     }
 
     // ── HOUSEHOLD DOCUMENTS ──
@@ -46,19 +56,20 @@ service cloud.firestore {
                     && request.auth.uid == resource.data.ownerUid;
 
       // ── HOUSEHOLD SUBCOLLECTIONS ──
-      // All subcollections (inventory, recipes, shopping, mealplan, settings,
-      // cooklog, wastelog) share the same rule: the requesting user's UID must
-      // appear in the parent household's `memberUids` array.
+      // All subcollections share the same membership rule: the requesting user's
+      // UID must appear in the parent household's `memberUids` array.
+      // This covers: inventory, recipes, shopping, mealplan, settings,
+      // cooklog, wastelog, activity, customProducts, productPreferences,
+      // and any future subcollections.
+      //
+      // Both owner AND members get full read/write access to all subcollections.
       //
       // `get()` reads the parent household doc to check membership.
-      // This costs one extra read per request, but Firestore caches it within
-      // the same security evaluation so multiple subcollection checks in one
-      // batch don't multiply the cost.
+      // Firestore caches this within the same security evaluation so multiple
+      // subcollection checks in one batch don't multiply the cost.
       match /{subcollection}/{docId} {
         allow read, write: if request.auth != null
-                           && (request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberUids
-                               || request.auth.uid == householdId);
-
+                           && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberUids;
       }
     }
 
