@@ -176,9 +176,60 @@ export async function lookupHouseholdByCode(code) {
 }
 
 /**
+ * _cleanupGhostHousehold — removes a user's self-created "ghost" household
+ * when they join a real shared household via invite code.
+ *
+ * A ghost household happens when a user clicks "Start my own kitchen" first,
+ * creating a household with hid === uid, and then later joins someone else's
+ * household. The ghost has no other members and no real data, so it's safe
+ * to delete it and remove it from the user's householdIds array.
+ *
+ * This prevents the bug where householdIds[0] points to the ghost instead
+ * of the real shared household.
+ */
+async function _cleanupGhostHousehold(uid, userDoc) {
+  const hids = userDoc?.householdIds || [];
+  // Ghost household has the same ID as the user's UID
+  if (!hids.includes(uid)) return;
+
+  const ghostDoc = await dbGet(`households/${uid}`);
+  if (!ghostDoc) {
+    // Ghost doc already deleted — just remove the stale reference from the user's array
+    console.log(`[_cleanupGhostHousehold] Ghost doc ${uid} already gone, removing from householdIds`);
+    return;
+  }
+
+  // Only delete if the user is the sole member (no other users affected)
+  const memberCount = (ghostDoc.members || []).length;
+  if (memberCount > 1) {
+    console.log(`[_cleanupGhostHousehold] Household ${uid} has ${memberCount} members, skipping cleanup`);
+    return;
+  }
+
+  // Delete the ghost household document from Firestore
+  console.log(`[_cleanupGhostHousehold] Deleting ghost household ${uid}`);
+  try {
+    await dbDelete(`households/${uid}`);
+    // Also delete the invite code index entry if one exists
+    if (ghostDoc.inviteCode) {
+      await dbDelete(`household_codes/${ghostDoc.inviteCode}`);
+    }
+  } catch (e) {
+    console.warn(`[_cleanupGhostHousehold] Failed to delete ghost:`, e);
+  }
+}
+
+/**
  * joinHouseholdByCode — joins a household using a 6-char invite code.
  * Looks up the household via the household_codes index, adds the user as a
  * member to the household doc, and adds the household to the user's profile.
+ *
+ * Also cleans up any ghost/self-created household the user may have:
+ *   - If the user's householdIds contains their own UID as a household (ghost),
+ *     and that ghost has no other members, it gets deleted from Firestore.
+ *   - The user's householdIds array is replaced with just the joined household ID,
+ *     ensuring a member user only ever has one household.
+ *
  * Returns the household ID on success, or null if the code is invalid.
  */
 export async function joinHouseholdByCode(code, user) {
@@ -204,14 +255,17 @@ export async function joinHouseholdByCode(code, user) {
     await dbSet(`households/${hid}`, { ...hhDoc, members, memberUids, id: undefined });
   }
 
-  // Add household to the user's profile
+  // Clean up ghost household: if the user previously created their own household
+  // (hid === uid), delete it so it doesn't pollute the householdIds array
   const userDoc = await dbGet(`users/${user.uid}`);
   if (userDoc) {
-    const hids = userDoc.householdIds || [];
-    if (!hids.includes(hid)) {
-      hids.push(hid);
-      await dbSet(`users/${user.uid}`, { ...userDoc, householdIds: hids, id: undefined });
-    }
+    await _cleanupGhostHousehold(user.uid, userDoc);
+
+    // Replace the entire householdIds array with just the joined household.
+    // A member user should only have one household ID — the shared one they joined.
+    // This prevents ghost entries from accumulating and ensures resolveHousehold
+    // always picks the correct household.
+    await dbSet(`users/${user.uid}`, { ...userDoc, householdIds: [hid], id: undefined });
   }
 
   return hid;
@@ -371,11 +425,81 @@ async function migrateHousehold(oldHid, newHid) {
 }
 
 /**
+ * _validateHouseholdIds — checks each household ID in the user's array,
+ * verifying that the household document actually exists in Firestore and
+ * that the user is listed in its members array.
+ *
+ * Returns the best valid household ID:
+ *   1. If multiple valid households exist, prefer the one where the user
+ *      appears in the members array (shared household over self-created).
+ *   2. If only one valid household exists, use that one.
+ *   3. If none are valid, return null so the caller can fall back to uid.
+ *
+ * Also cleans up the user's householdIds array in Firestore by removing
+ * any entries that point to deleted/non-existent households.
+ */
+async function _validateHouseholdIds(uid, userDoc) {
+  const rawIds = userDoc.householdIds || [];
+  if (!rawIds.length) return null;
+
+  console.log(`[_validateHouseholdIds] Checking ${rawIds.length} household IDs:`, rawIds);
+
+  // Fetch all household docs in parallel to check existence and membership
+  const results = await Promise.all(
+    rawIds.map(async (hid) => {
+      const hhDoc = await dbGet(`households/${hid}`);
+      if (!hhDoc) {
+        console.log(`[_validateHouseholdIds] household ${hid} does NOT exist — will remove`);
+        return { hid, exists: false, isMember: false };
+      }
+      // Check if the user is in the household's members array
+      const isMember = (hhDoc.memberUids || []).includes(uid) ||
+                       (hhDoc.members || []).some(m => m.uid === uid);
+      console.log(`[_validateHouseholdIds] household ${hid} exists, isMember=${isMember}`);
+      return { hid, exists: true, isMember };
+    })
+  );
+
+  // Separate valid (existing) household IDs from stale/ghost ones
+  const validIds = results.filter(r => r.exists).map(r => r.hid);
+  const memberIds = results.filter(r => r.exists && r.isMember).map(r => r.hid);
+  const staleIds = results.filter(r => !r.exists).map(r => r.hid);
+
+  // Clean up: remove stale/non-existent household IDs from the user's profile
+  if (staleIds.length > 0) {
+    console.log(`[_validateHouseholdIds] Removing ${staleIds.length} stale IDs:`, staleIds);
+    const cleanedIds = rawIds.filter(h => !staleIds.includes(h));
+    await dbSet(`users/${uid}`, { ...userDoc, householdIds: cleanedIds, id: undefined });
+  }
+
+  // Pick the best household: prefer one where user is a confirmed member
+  if (memberIds.length > 0) {
+    // If user is a member of multiple households, prefer the one that is NOT
+    // the user's own UID (i.e. prefer the shared/joined household)
+    const sharedHid = memberIds.find(h => h !== uid);
+    const chosen = sharedHid || memberIds[0];
+    console.log(`[_validateHouseholdIds] Resolved to member household: ${chosen}`);
+    return chosen;
+  }
+
+  // Fallback: user exists in a household doc but isn't in members (edge case)
+  if (validIds.length > 0) {
+    console.log(`[_validateHouseholdIds] Fallback to first valid household: ${validIds[0]}`);
+    return validIds[0];
+  }
+
+  console.log(`[_validateHouseholdIds] No valid households found`);
+  return null;
+}
+
+/**
  * resolveHousehold — the main entry point called on every sign-in.
  * Determines which household ID the user should use and returns it.
  *
  * Two paths:
- *   1. Returning user (profile exists): return their first household ID.
+ *   1. Returning user (profile exists): validate all household IDs in their
+ *      array, pick the one where they are a confirmed member, and clean up
+ *      any stale/ghost entries that point to non-existent households.
  *   2. First-ever login (no profile): create profile + household, migrate
  *      any pre-auth localStorage data, and return the new household ID.
  *
@@ -391,22 +515,20 @@ export async function resolveHousehold(user) {
   console.log(`[resolveHousehold] userDoc=`, userDoc);
 
   if (userDoc) {
-    // Returning user — use their first household (or uid as fallback).
-    const hid = userDoc.householdIds?.length ? userDoc.householdIds[0] : uid;
-    console.log(`[resolveHousehold] RETURNING USER — hid=${hid}, householdIds=`, userDoc.householdIds);
+    // Returning user — validate all household IDs and pick the correct one.
+    // This replaces the old householdIds[0] logic which could pick a ghost/deleted household.
+    const hid = await _validateHouseholdIds(uid, userDoc) || uid;
+    console.log(`[resolveHousehold] RETURNING USER — resolved hid=${hid}, householdIds=`, userDoc.householdIds);
 
     // Check for a pending migration that didn't complete on a previous login.
     // If ks-h still holds an old anonymous household ID, migrate now.
     const oldHid = localStorage.getItem("ks-h");
     console.log(`[resolveHousehold] RETURNING USER — ks-h="${oldHid}", hid="${hid}", uid="${uid}"`);
-    console.log(`[resolveHousehold] RETURNING USER — migration condition: oldHid=${!!oldHid}, oldHid!==hid=${oldHid !== hid}, oldHid!==uid=${oldHid !== uid}`);
     if (oldHid && oldHid !== hid && oldHid !== uid) {
       console.log(`[resolveHousehold] LATE MIGRATION TRIGGERED: ${oldHid} → ${hid}`);
       await migrateHousehold(oldHid, hid);
       localStorage.removeItem("ks-h");
       console.log(`[resolveHousehold] Late migration DONE, ks-h removed`);
-    } else {
-      console.log(`[resolveHousehold] RETURNING USER — NO migration needed`);
     }
 
     return hid;
