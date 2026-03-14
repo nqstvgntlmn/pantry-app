@@ -853,11 +853,13 @@
         </div>
       </div>
       <div class="sset" id="utilitiesSection" style="display:none"><div class="ssetttl">Utilities</div>
-        <button class="btn bs bf" id="bulkPubBtn" onclick="bulkPublishAll()" style="width:100%;margin-bottom:8px;display:none">📤 Publish all recipes to community</button>
+        <button class="btn bs bf ownerUtil" id="bulkPubBtn" onclick="bulkPublishAll()" style="width:100%;margin-bottom:8px;display:none">📤 Publish all recipes to community</button>
         <div id="bulkPubProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-bottom:8px"></div>
-        <button class="btn bs bf" id="removeDupBtn" onclick="removeDuplicateCommunityRecipes()" style="width:100%;margin-bottom:8px">🧹 Remove duplicate community recipes</button>
-        <button class="btn bs bf" id="regenSumBtn" onclick="regenAllSummaries()" style="width:100%;margin-top:8px">🔄 Regenerate all summaries</button>
+        <button class="btn bs bf ownerUtil" id="removeDupBtn" onclick="removeDuplicateCommunityRecipes()" style="width:100%;margin-bottom:8px">🧹 Remove duplicate community recipes</button>
+        <button class="btn bs bf ownerUtil" id="regenSumBtn" onclick="regenAllSummaries()" style="width:100%;margin-top:8px">🔄 Regenerate all summaries</button>
         <div id="regenSumProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-top:6px"></div>
+        <button class="btn bs bf" id="removeMyCommBtn" onclick="removeMyCommRecipes()" style="width:100%;margin-top:8px">🗑️ Remove all my community recipes</button>
+        <button class="btn bs bf ownerUtil" id="removeHHCommBtn" onclick="removeHouseholdCommRecipes()" style="width:100%;margin-top:8px">🗑️ Remove all our community recipes</button>
       </div>
       <div class="brow"><button class="btn bp bf" onclick="saveSettings()">Save Settings</button></div>
       <div style="margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:12px">

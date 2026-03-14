@@ -1396,10 +1396,11 @@ export async function loadUsername(uid) {
  * Called before Firebase Auth account deletion on the client side.
  *
  * Steps:
- *   1. Remove user from all households they belong to (or delete if sole owner)
- *   2. Delete their username from the usernames index (frees it for reuse)
- *   3. Delete their notifications subcollection
- *   4. Delete their user profile document
+ *   1. Anonymize community recipes (set authorName/Username to "Deleted User")
+ *   2. Remove user from all households they belong to (or delete if sole owner)
+ *   3. Delete their username from the usernames index (frees it for reuse)
+ *   4. Delete their notifications subcollection
+ *   5. Delete their user profile document
  *
  * @param {string} uid — The UID of the user deleting their account
  */
@@ -1407,7 +1408,26 @@ export async function deleteAccountData(uid) {
   const userDoc = await dbGet(`users/${uid}`);
   if (!userDoc) return;
 
-  // Step 1: Remove user from all households
+  // Step 1: Anonymize community recipes — community content is intentionally
+  // preserved on account deletion, but de-attributed so the deleted user's
+  // name and username no longer appear. The freed username can be reclaimed
+  // by a new user without conflicting with visible community content.
+  try {
+    const allPublic = await listPublicRecipes();
+    const userRecipes = (allPublic || []).filter(r => r.authorUid === uid);
+    for (const r of userRecipes) {
+      await dbSet(`public_recipes/${r.id}`, {
+        ...r,
+        authorName: "Deleted User",
+        authorUsername: "deleted_user",
+        id: undefined  // dbSet strips `id` field — Firestore doc ID is in the path
+      });
+    }
+  } catch (e) {
+    console.warn(`[deleteAccountData] Failed to anonymize community recipes for ${uid}:`, e);
+  }
+
+  // Step 2: Remove user from all households
   const hids = _normalizeHouseholdIds(userDoc);
   for (const hid of hids) {
     try {
@@ -1433,14 +1453,14 @@ export async function deleteAccountData(uid) {
     }
   }
 
-  // Step 2: Delete username from index so it can be reclaimed
+  // Step 3: Delete username from index so it can be reclaimed
   if (userDoc.username) {
     try {
       await dbDelete(`usernames/${userDoc.username.toLowerCase()}`);
     } catch { /* best-effort */ }
   }
 
-  // Step 3: Delete notifications subcollection
+  // Step 4: Delete notifications subcollection
   try {
     const notifs = await dbList(`users/${uid}/notifications`);
     for (const n of notifs) {
@@ -1448,7 +1468,7 @@ export async function deleteAccountData(uid) {
     }
   } catch { /* best-effort */ }
 
-  // Step 4: Delete the user profile document
+  // Step 5: Delete the user profile document
   try {
     await dbDelete(`users/${uid}`);
   } catch { /* best-effort */ }

@@ -72,7 +72,7 @@ import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCook
 // Settings: config UI, push notifications, household management, theme/dark mode
 // Household member management: remove, transfer ownership, leave/delete household
 // checkMembershipOnInteraction: verifies user still belongs to household (kick detection)
-import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, deleteAccount } from './ui/settings.js';
+import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, removeMyCommRecipes, removeHouseholdCommRecipes, deleteAccount } from './ui/settings.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
@@ -391,6 +391,8 @@ window.enrichExistingItems = enrichExistingItems; // Retroactive product enrichm
 window.bulkPublishAll = bulkPublishAll;           // One-time publish all recipes to community
 window.regenAllSummaries = regenAllSummaries;     // Regenerate AI summaries for all recipes
 window.removeDuplicateCommunityRecipes = removeDuplicateCommunityRecipes; // Maintenance utility: remove duplicate community recipes
+window.removeMyCommRecipes = removeMyCommRecipes;                       // Remove all community recipes published by current user
+window.removeHouseholdCommRecipes = removeHouseholdCommRecipes;         // Remove all community recipes published by household (owner only)
 window.deleteAccount = deleteAccount;   // Permanently delete user's account and all associated data
 
 // manualRefresh(target) — Safety valve to force re-fetch all items from Firestore.

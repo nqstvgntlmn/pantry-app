@@ -292,10 +292,18 @@ async function renderHouseholdInfo() {
       }).join("");
     }
 
-    // Show/hide the Utilities section — only household owners should see
-    // publish-all, duplicate cleanup, and other maintenance utilities.
+    // Utilities section is always visible — some utilities are available to
+    // all members (e.g. remove my community recipes), while owner-only utilities
+    // (bulk publish, duplicate cleanup, regen summaries, remove household recipes)
+    // are individually gated with the "ownerUtil" class.
     const utilitiesSection = g("utilitiesSection");
-    if (utilitiesSection) utilitiesSection.style.display = isOwner ? "" : "none";
+    if (utilitiesSection) {
+      utilitiesSection.style.display = "";
+      // Show/hide owner-only utility buttons within the section
+      utilitiesSection.querySelectorAll(".ownerUtil").forEach(el => {
+        el.style.display = isOwner ? "" : "none";
+      });
+    }
 
     // Show/hide the "Leave Household" button based on ownership status
     const leaveBtn = g("leaveHouseholdBtn");
@@ -1155,6 +1163,143 @@ export async function removeDuplicateCommunityRecipes() {
 
   // Always re-enable the button — this is a reusable maintenance utility
   if (btn) { btn.disabled = false; btn.textContent = "🧹 Remove duplicate community recipes"; }
+}
+
+// ── REMOVE MY COMMUNITY RECIPES ──────────────────────────────────────────────
+// Allows any member to permanently remove all community recipes they personally
+// published (matched by authorUid). Recipes from other household members are
+// not affected. Uses a two-step confirmation with count preview.
+
+/**
+ * removeMyCommRecipes — permanently deletes all public_recipes where authorUid
+ * matches the current user's UID. Shows a count-based confirmation dialog
+ * before proceeding. Available to all household members in Settings > Utilities.
+ */
+export async function removeMyCommRecipes() {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return;
+
+  const btn = g("removeMyCommBtn");
+
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = "Counting…"; }
+
+    // Fetch all community recipes and filter to those authored by this user
+    const allPublic = await listPublicRecipes();
+    const myRecipes = (allPublic || []).filter(r => r.authorUid === uid);
+
+    // No recipes found — inform the user and bail out
+    if (myRecipes.length === 0) {
+      showNotif("You have no community recipes to remove.");
+      if (btn) { btn.disabled = false; btn.textContent = "🗑️ Remove all my community recipes"; }
+      return;
+    }
+
+    // Two-step confirmation — show count so user knows the blast radius
+    if (btn) { btn.disabled = false; btn.textContent = "🗑️ Remove all my community recipes"; }
+    if (!confirm(`This will permanently remove ${myRecipes.length} community recipe${myRecipes.length !== 1 ? "s" : ""} published under your username. This cannot be undone. Are you sure?`)) return;
+
+    // Delete each matching recipe from public_recipes
+    if (btn) { btn.disabled = true; btn.textContent = "Removing…"; }
+    let deleted = 0;
+    for (const r of myRecipes) {
+      try {
+        await dbDelete(`public_recipes/${r.id}`);
+        deleted++;
+        if (btn) btn.textContent = `Removing ${deleted}/${myRecipes.length}…`;
+      } catch (e) {
+        console.error("Failed to delete community recipe:", r.id, r.title, e);
+      }
+    }
+
+    // Refresh the local community cache so the UI reflects the removal
+    state.comRecs = await listPublicRecipes();
+
+    showNotif(`${deleted} community recipe${deleted !== 1 ? "s" : ""} removed.`);
+  } catch (e) {
+    console.error("removeMyCommRecipes error:", e);
+    showNotif("Error removing community recipes. Check console.");
+  }
+
+  // Always re-enable the button
+  if (btn) { btn.disabled = false; btn.textContent = "🗑️ Remove all my community recipes"; }
+}
+
+// ── REMOVE ALL HOUSEHOLD COMMUNITY RECIPES ──────────────────────────────────
+// Owner-only utility to permanently remove ALL community recipes belonging to
+// the household. Uses the same two-tier ownership check as duplicate cleanup:
+// householdId match first, authorUid in household member UIDs fallback for
+// legacy recipes published before householdId was added.
+
+/**
+ * removeHouseholdCommRecipes — permanently deletes all public_recipes belonging
+ * to the current household. Ownership is determined by:
+ *   1. householdId field (new-style recipes), OR
+ *   2. authorUid matching any household member (legacy fallback).
+ * Owner-only — the button is only rendered for household owners.
+ */
+export async function removeHouseholdCommRecipes() {
+  const uid = getCurrentUser()?.uid;
+  if (!uid) return;
+
+  const btn = g("removeHHCommBtn");
+
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = "Counting…"; }
+
+    // Fetch all community recipes and household member UIDs for ownership check
+    const allPublic = await listPublicRecipes();
+    const hid = state.hid || "";
+    const memberUids = await getHouseholdMemberUids();
+
+    /**
+     * belongsToHousehold — checks whether a recipe belongs to the current
+     * household using the two-tier check: householdId field first (new-style),
+     * then authorUid in member list (legacy fallback).
+     */
+    const belongsToHousehold = (r) => {
+      if (r.householdId) return r.householdId === hid;
+      return r.authorUid && memberUids.includes(r.authorUid);
+    };
+
+    // Filter to household-owned recipes
+    const hhRecipes = (allPublic || []).filter(belongsToHousehold);
+
+    // No recipes found — inform the user and bail out
+    if (hhRecipes.length === 0) {
+      showNotif("Your household has no community recipes to remove.");
+      if (btn) { btn.disabled = false; btn.textContent = "🗑️ Remove all our community recipes"; }
+      return;
+    }
+
+    // Two-step confirmation — show count so owner knows the blast radius
+    if (btn) { btn.disabled = false; btn.textContent = "🗑️ Remove all our community recipes"; }
+    if (!confirm(`This will permanently remove ${hhRecipes.length} community recipe${hhRecipes.length !== 1 ? "s" : ""} published by your household. This cannot be undone. Are you sure?`)) return;
+
+    // Delete each household recipe from public_recipes
+    if (btn) { btn.disabled = true; btn.textContent = "Removing…"; }
+    let deleted = 0;
+    for (const r of hhRecipes) {
+      try {
+        await dbDelete(`public_recipes/${r.id}`);
+        deleted++;
+        if (btn) btn.textContent = `Removing ${deleted}/${hhRecipes.length}…`;
+      } catch (e) {
+        console.error("Failed to delete household community recipe:", r.id, r.title, e);
+      }
+    }
+
+    // Refresh the local community cache so the UI reflects the removal
+    state.comRecs = await listPublicRecipes();
+
+    showNotif(`${deleted} community recipe${deleted !== 1 ? "s" : ""} removed.`);
+  } catch (e) {
+    console.error("removeHouseholdCommRecipes error:", e);
+    showNotif("Error removing community recipes. Check console.");
+  }
+
+  // Always re-enable the button
+  if (btn) { btn.disabled = false; btn.textContent = "🗑️ Remove all our community recipes"; }
 }
 
 // ── REGENERATE ALL SUMMARIES ─────────────────────────────────────────────────
