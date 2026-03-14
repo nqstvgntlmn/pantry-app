@@ -44,9 +44,9 @@ households/{hid}                              — household document
   shopping/{itemId}                           — shopping list items
   inventory/{itemId}                          — supplies/pantry items
   recipes/{recipeId}                          — household recipes
-  productPreferences/{normalizedName}         — preferred location per product
+  productPreferences/{normalizedName}         — preferred unit + location per product (shared across Shopping & Supplies)
 
-household_codes/{code}                        — invite code index
+household_codes/{code}                        — invite code index (code → householdId)
 
 public_recipes/{recipeId}                     — community recipes
   ratings/{uid}                               — user ratings
@@ -55,6 +55,8 @@ public_recipes/{recipeId}                     — community recipes
 
 users/{uid}                                   — user profiles
   notifications/{notificationId}              — author notifications
+
+usernames/{username}                          — username uniqueness index (freed on account deletion)
 
 reports/{reportId}                            — content reports
 ```
@@ -79,7 +81,10 @@ recipes/{recipeId}/comments/{commentId}/{photoIndex}.jpg — comment photos
 | `api/text-search.js` | Product text search — 4-database parallel pipeline (see Search Pipeline below) |
 | `api/barcode.js` | Barcode/UPC lookup |
 | `api/db.js` | Firestore proxy for client operations |
-| `api/import-recipe.js` | Claude AI-powered recipe importer (uses `claude-sonnet-4-20250514`) |
+| `api/import-recipe.js` | Claude AI-powered recipe importer (uses `claude-sonnet-4-20250514`) — supports bulk import with exponential backoff |
+| `api/deals.js` | Flipp API integration for grocery deal searches by zipcode |
+| `api/proxy.js` | HTTP proxy for external APIs (origin policy handling) |
+| `api/recipe/[id].js` | Dynamic route for public recipe sharing links |
 | `api/sync-reminders.js` | **DO NOT TOUCH** |
 | `api/completed-items.js` | **DO NOT TOUCH** |
 
@@ -94,8 +99,14 @@ recipes/{recipeId}/comments/{commentId}/{photoIndex}.jpg — comment photos
 ### api/import-recipe.js Details
 
 - Uses `claude-sonnet-4-20250514` to parse any recipe website
-- Downloads and stores cover image to Firebase Storage
+- Downloads and stores cover image to Firebase Storage (max 800×600px, ~300KB)
+- Structured JSON extraction with 150+ line system prompt constraining output
+- Extracts: title, summary, ingredients, steps, tags, prepTime, cookTime, servings, difficulty, yield, storage instructions
 - Can publish to `public_recipes` if user opts in
+- **Bulk import mode:** accepts multiple URLs, processes sequentially with exponential backoff
+- **Error classification:** `rate_limit`, `page_blocked`, `page_not_found`, `fetch_error`, `api_error`, `timeout`
+- **Duplicate detection:** checks if recipe URL or title already exists before importing
+- **URL validation:** validates URL format before attempting fetch
 
 ---
 
@@ -145,6 +156,23 @@ The entire image pipeline code is preserved as comments tagged with:
 
 ---
 
+## Text Search in Shopping — DISABLED
+
+Text search enrichment in the Shopping tab has been **commented out (NOT deleted)**.
+
+The frontend integration is disabled in `src/ui/shopping.js` at 3 locations, tagged with:
+```
+// [SEARCH DISABLED]
+```
+
+- The API (`api/text-search.js`) still works — only the frontend calls are commented out
+- **Barcode scan is preserved** and fully functional
+- Voice input enrichment also commented out at same locations
+
+**To re-enable:** Uncomment all `[SEARCH DISABLED]` blocks in `src/ui/shopping.js`.
+
+---
+
 ## Tabs & Navigation
 
 Bottom navigation (left to right):
@@ -154,7 +182,7 @@ Bottom navigation (left to right):
 | 🏠 | HOME | Greeting, Tonight's Dinner, This Week, What to Cook Tonight, Running Low, Recent Activity, Your Supplies |
 | 🧺 | SUPPLIES | Sub-tabs: All / Fridge / Freezer / Pantry / Household |
 | 📖 | RECIPES | My Recipes + Community tab |
-| 🛒 | SHOP | Shopping list with search, voice, barcode |
+| 🛒 | SHOP | Shopping list with barcode scan, voice input |
 | 📊 | STATS | Insights and logs |
 | ✨ | CLAUDE | AI chat assistant |
 
@@ -170,10 +198,10 @@ Bottom navigation (left to right):
   - Finds community recipes matching Supplies inventory
   - 60%+ match threshold
   - Color coded: 🟢 100% = ready to cook, 🟡 80-99% = almost there, 🟠 60-79% = need a few things
-- **Running Low** — collapsible, respects `doNotRestock` flag and thresholds
-- **Recent Activity** — collapsible, shows last 3 actions
+- **Running Low** — collapsible, **defaults to collapsed**, respects `doNotRestock` flag and thresholds
+- **Recent Activity** — collapsible, **defaults to collapsed**, shows last 3 actions, Title Case formatting, uses "Supplies" (not "inventory")
 - **Your Supplies** — summary view
-- All collapsible sections remember state in localStorage
+- All collapsible sections remember state in localStorage (`ks-home-lowstock-collapsed`, `ks-home-activity-collapsed`)
 
 ---
 
@@ -183,8 +211,18 @@ Bottom navigation (left to right):
 - **Swipe left** to delete (10% threshold to reveal, 70-75% to auto-delete)
 - **Swipe right** to add to shopping list
 - **Slim circle** on each item: tap to mark done, tap row to open detail
-- **Detail sheet:** quantity, unit, location, restock threshold, doNotRestock toggle, Add to Shopping List button
-- **Product preferences:** remembers preferred location per product via `productPreferences` collection
+- **Detail sheet (merged with former Adjust screen):**
+  - Item name (Title Case)
+  - Quantity stepper: whole number ±1 buttons + fraction picker dropdown (None, ¼, ⅓, ½, ⅔, ¾)
+  - Unit dropdown (shared with Shopping via productPreferences)
+  - Storage location selector
+  - Expiry date input (truly optional — no default, no auto-fill)
+  - Restock threshold ("Restock when below [X]" with whole + fraction picker)
+  - Category dropdown
+  - Notes textarea
+  - `doNotRestock` toggle ("Don't add to Running Low")
+  - Delete button, Add to Shopping List button
+- **Product preferences:** remembers preferred unit + location per product via `productPreferences` collection
 - **Units:** Piece, Unit, Pack, Box, Bag, Bottle, Jar, Can, Bunch, Head, Loaf, Dozen, Carton, Tube, Roll, Gallon, Half Gallon, Liter, Pound, Oz, Clove
 - **Default restock thresholds by unit:**
   - Threshold 1: Bottle, Jar, Can, Carton, Bunch, Head, Loaf, Dozen, Tube, Roll, Gallon, Half Gallon, Liter
@@ -199,7 +237,8 @@ Bottom navigation (left to right):
 
 - **Swipe left** to delete (same thresholds as Supplies)
 - **Slim circle:** tap to mark bought, tap row for detail sheet
-- **Add item sheet:** text search with 350ms debounce, inline dropdown, location picker, Scan barcode, Voice input
+- **Detail sheet:** quantity stepper (whole ±1 + fraction picker), unit dropdown, location, notes — **inline quantity edit removed**
+- **Add item sheet:** voice input, Scan barcode — **text search disabled** (see Text Search section)
 - **Add button behavior:**
   - 1 result → Add grabs it automatically
   - Multiple results → Add adds plain text, tap result for enriched
@@ -215,25 +254,141 @@ Bottom navigation (left to right):
 
 ---
 
+## Fraction Picker
+
+Shared component used in both Shopping and Supplies quantity fields.
+
+- **Supported fractions:** None (0), ¼ (0.25), ⅓ (0.333), ½ (0.5), ⅔ (0.666), ¾ (0.75)
+- **Storage:** Decimal values in Firestore (e.g., 5.5, 0.25)
+- **Display:** Mixed fractions with Unicode glyphs (e.g., "5 ½", "¼")
+- **Helper functions** in `src/helpers.js`:
+  - `splitQty(decimal)` — splits into {whole, frac}, snaps to nearest supported fraction
+  - `combineQty(whole, frac)` — combines back to decimal, enforces 0.25 minimum
+  - `formatQty(qty)` — formats decimal to display string with Unicode glyphs
+  - `renderFracSelect(idPrefix, selectedFrac)` — returns HTML `<select>` for fraction picking
+  - `FRAC_OPTIONS` — exported array of {value, label} for all fraction options
+
+---
+
+## Unit Preference Memory (productPreferences)
+
+Shared system that remembers preferred unit and location per product across both Shopping and Supplies tabs.
+
+- **Storage:** `households/{hid}/productPreferences/{normalizedName}`
+- **Fields:** `preferredLocation`, `preferredUnit`, `productName`, `updatedAt`
+- **Normalization:** lowercase, trim, spaces → hyphens, max 60 chars
+- **Functions** in `src/ui/shopping.js`:
+  - `_getPreferredLocation(name)` / `_getPreferredUnit(name)` — read
+  - `_savePreferredLocation(name, loc)` / `_savePreferredUnit(name, unit)` — write (merge, don't overwrite other field)
+- **Behavior:** Auto-populates unit/location on next interaction with same product
+
+---
+
 ## Recipe Tab Features
 
 - **Import from any website** via Claude AI (`api/import-recipe.js`)
+- **Bulk import:** paste multiple URLs, processes sequentially with exponential backoff, shows per-URL success/error status, duplicate detection, URL validation
 - **Read-only view** by default, Edit button to enter edit mode
 - **Cover photo:** full width header, tap to upload/change
 - **Step photos:** optional per step, tap to expand full screen
 - **Scale serving size:** ½x, 1x, 2x, 3x
 - **Schedule recipe:** tap day in week view
 - **Shop ingredients:** adds recipe ingredients to shopping list
+- **Recipe fields:**
+  - Title, summary (2 sentences), ingredients, steps, notes
+  - Prep time, cook time, total time (auto-calculated from prep + cook unless manually overridden)
+  - Servings, difficulty (Easy / Medium / Hard), yield (e.g., "24 cookies", "2 loaves")
+  - Storage instructions (refrigeration, freezing tips, max 200 chars)
+  - Cover image URL
 - **Tags:** curated fixed set, grouped by category, no free-form entry
   - If no tags selected, tags section hidden entirely
-  - Tag categories: Meal Type, Diet & Lifestyle, Cook Style, Occasion, Cuisine, Protein
-- **Community tab:** browse/search `public_recipes`
-  - Filters: cuisine, tags, cook time, rating, sort order
-  - Recipe cards: cover photo, name, author username, avg rating, cook time
+  - **Meal Type (10):** Breakfast, Lunch, Dinner, Snack, Dessert, Drinks, Brunch, Bread & Baking, Sauce & Condiment, Preserve & Pickle
+  - **Diet & Lifestyle (20):** Vegetarian, Vegan, Pescatarian, Meat, Gluten-Free, Dairy-Free, Nut-Free, Sugar-Free, Healthy, High Protein, Low Carb, Keto, Heart Healthy, Pregnancy-Safe, Baby & Toddler, Halal, Kosher, Paleo, Egg-Free, Mediterranean
+  - **Cook Style (23):** Quick, Kid-Friendly, Date Night, Batch Cook, Freezer Friendly, One Pot, Special Occasion, Budget Friendly, Spicy, Pasta, Salad, Soup & Stew, Grill & BBQ, Slow Cooker, Air Fryer, Meal Prep, World Cuisine, Fermented & Preserved, Stovetop, Wrap & Sandwich, Street Food, Raw & No-Cook, Camping & Outdoors
+  - **Occasion (13):** Holiday, Party, Summer, Winter Comfort, Halloween, Thanksgiving, Easter, Valentine's Day, Game Day, Graduation, Brunch Party, Ramadan, Hanukkah
+  - **Cuisine (17):** Italian, Mexican, Japanese, Chinese, Indian, Thai, Greek, French, Middle Eastern, Korean, Spanish, Vietnamese, American, African, Latin American, Turkish, Mediterranean Cuisine
+  - **Protein (9):** Chicken, Beef, Pork, Fish, Seafood, Eggs, Beans & Legumes, Nuts & Seeds, Cheese
+- **"Recipes" naming:** plural form used consistently throughout the app (tab label, page titles, activity entries)
+
+---
+
+## Community Recipe Features
+
+- **Grid layout:** responsive CSS grid (1 col mobile, 2 col at 768px+, 3 col at 1200px+)
+- **Card layout:** cover image (160px), title, like/comment badges, cuisine tag, star rating, cook time, up to 3 tag pills, author @username
+- **Sorting (5 options):** Newest first, A→Z, Highest rated, Most popular, Cook time
+- **Filters:** text search (title/tags/cuisine/author), cuisine dropdown, cook time (any / under 30 / 30-60 / over 60), minimum rating (0-4★+), multi-select tag filter (all tags must match)
+- **Pagination:** 20 recipes per page, infinite scroll with IntersectionObserver
+- **Publishing:** standalone publish to `public_recipes` — stores `sourceRecipeId`, `authorUid`, `authorName`, `authorUsername`, `householdId`
+- **Publish check:** `checkRecipeAlreadyPublished()` matches by title (lowercase), sourceRecipeId, or publicId
+- **Unpublishing:** `unpublishRecipe(recipeId)` removes from public_recipes
+- **Forking:** `saveRecipeToKitchen(pubRecipe)` copies public recipe to user's household recipes
+- **Author editing:** `editComRecipe(id)` opens edit overlay for recipe author only
+- **Details view:** full recipe with comments, ratings, like button, share link
 - **Ratings:** 1-5 stars, one per user, authors cannot rate own recipes
 - **Comments:** 500 char limit, optional photos in 3-column grid, tap to expand full screen, swipe to navigate
 - **Report button:** recipe and comment level
 - **Author notifications:** comment alerts with unread badge
+
+---
+
+## Community Recipe Management (Settings)
+
+Three management utilities in Settings, each with confirmation dialog:
+
+1. **"Remove duplicate community recipes"** (owner only) — scans for duplicates by title + householdId (falls back to authorUid), keeps oldest, deletes rest
+2. **"Remove my community recipes"** (any member) — removes all recipes published under current user's username
+3. **"Remove household community recipes"** (owner only) — removes ALL community recipes published by entire household
+
+**Duplicate detection strategy** (3 approaches, tried in order):
+1. Match by `publicId` (UUID field on private recipe)
+2. Match by `sourceRecipeId` (private recipe's Firestore ID)
+3. Fallback: Match by title (lowercase) owned by same household
+
+---
+
+## Account Deletion & Anonymization
+
+- **Guards:** blocks if owner has other members (must transfer ownership first), requires two confirmations, handles `auth/requires-recent-login`
+- **Steps:**
+  1. Anonymize community recipes: set `authorName: "Deleted User"`, `authorUsername: "deleted_user"` — published recipes remain visible
+  2. Remove user from all households (delete entire household if sole owner)
+  3. Delete username from `usernames/{username}` index (frees for reuse by others)
+  4. Delete notifications subcollection
+  5. Delete user profile document
+  6. Delete Firebase Auth account
+  7. Clear localStorage and reload to sign-in screen
+
+---
+
+## Household System & Member Management
+
+- **Multi-household:** users can belong to multiple households (`users/{uid}.householdIds` array)
+- **Household doc fields:** `name`, `ownerUid`, `members` (array of {uid, name, role, joinedAt}), `memberUids` (flat array for Firestore rules), `inviteCode` (6-char uppercase alphanumeric), `createdAt`
+- **Active household:** shown in main "Household" section in Settings; other households in "Other Households" section (filtered to exclude active)
+- **Switching households:** reloads the page to re-fetch all data
+- **Invite code lookup:** `household_codes/{code}` index document maps code → householdId
+- **Member management:**
+  - View all members in household
+  - Remove member (owner only)
+  - Transfer ownership to another member
+  - Leave household (member)
+  - Delete household (owner, sole member only)
+- **Ghost household cleanup:** removes user's self-created household when joining a real shared one
+- **Household sync fix:** non-owner members now sync correctly; ghost household bug resolved
+
+---
+
+## Swipe Back Navigation
+
+Reusable iOS-style edge swipe-back utility (`src/ui/swipeback.js`) applied to all nested pages.
+
+- **API:** `enableSwipeBack(callback)` / `disableSwipeBack()`
+- **Edge zone:** 20px from left edge to start swipe
+- **Threshold:** 40% of screen width triggers navigation
+- **Animations:** 300ms spring snap-back, 250ms accelerating slide-out
+- **Direction lock:** after 8px of movement, locks to horizontal (prevents conflict with vertical scroll)
+- **Applied to:** Recipe detail view, Community recipe detail view
 
 ---
 
@@ -282,7 +437,7 @@ Bottom navigation (left to right):
 
 - `public_recipes` collection (Firestore rules already configured)
 - User profiles: `displayName` (private) + `username` (public)
-- Username chosen on first launch, must be unique
+- Username chosen on first launch, must be unique, freed on account deletion
 - "Recipe by [username]" attribution on all public recipes
 - Report system: stores to `reports/{reportId}` with `status: "pending"`
 - Pagination: 20 recipes per page, infinite scroll
@@ -311,22 +466,53 @@ Bottom navigation (left to right):
 ## Decisions Made — DO NOT Reverse Without Asking Bora
 
 1. **Product images disabled** (commented out, not deleted) — external database images caused too many false positives
-2. **Edamam removed** from search pipeline — consistently slow (3s+)
-3. **Google Custom Search and Bing Image Search removed** — APIs closed/retired
-4. **Nutrition data removed** from product detail sheets — unreliable
-5. **All category/source tags removed** from product detail sheets
-6. **Import/Export buttons removed** — app has surpassed Excel phase
-7. **"+ Plan Dinner" button removed** — accessible via This Week calendar
-8. **"Expiring Soon" and "Shopping List" widgets removed** from home screen
+2. **Text search disabled in Shopping** (commented out, not deleted) — barcode scan preserved
+3. **Edamam removed** from search pipeline — consistently slow (3s+)
+4. **Google Custom Search and Bing Image Search removed** — APIs closed/retired
+5. **Nutrition data removed** from product detail sheets — unreliable
+6. **All category/source tags removed** from product detail sheets
+7. **Import/Export buttons removed** — app has surpassed Excel phase
+8. **"+ Plan Dinner" button removed** — accessible via This Week calendar
+9. **"Expiring Soon" and "Shopping List" widgets removed** from home screen
+10. **Running Low and Recent Activity default to collapsed** on Home tab
+11. **Inline quantity edit removed** from Shopping detail sheet — use stepper only
+12. **Supplies detail sheet merged with Adjust screen** — single unified sheet
 
 ---
 
 ## Known Pending Issues
 
-- Manwich still showing no image — check Vercel logs for `text-search` response when searching "Manwich"
 - Recipe import tested on recipetineats.com/beef-stroganoff — worked successfully with Claude AI parser
-- Community recipe features (Phase 2 + 3) recently added — needs thorough testing
+- Community recipe features recently expanded — needs continued testing with multiple users
 - "What to Cook Tonight" requires community recipes to exist in `public_recipes` to show results
+- Realtime listeners not fully enabled — using 30-second polling (paused during writes)
+
+---
+
+## Source File Reference
+
+| File | Purpose |
+|---|---|
+| `index.html` | App shell, all HTML structure |
+| `src/main.js` | Entry point, imports all modules, registers `window.*` handlers for inline `onclick` |
+| `src/state.js` | Global mutable state object |
+| `src/auth.js` | Firebase Auth (Google, Apple, Email) |
+| `src/db.js` | Firestore proxy client, all CRUD, household management, account deletion |
+| `src/helpers.js` | DOM utilities, date math, fraction picker, Title Case, category/aisle guessing |
+| `src/storage.js` | Firebase Storage for recipe images (product images disabled) |
+| `src/realtime.js` | Firestore listeners, 30s polling |
+| `src/styles.css` | Global stylesheet, CSS custom properties, responsive grid |
+| `src/ui/home.js` | Home screen: greeting, meal plan, Running Low, Recent Activity |
+| `src/ui/inventory.js` | Supplies tab: CRUD, detail sheet, location/unit preferences |
+| `src/ui/recipes.js` | Recipes tab: My Recipes, Community tab, import, publishing, forking, ratings, comments |
+| `src/ui/shopping.js` | Shopping list: CRUD, voice input, deals, productPreferences |
+| `src/ui/scan.js` | Barcode scanner (Quagga.js), product enrichment |
+| `src/ui/mealplan.js` | Meal planning: 7-day grid, schedule, cook log |
+| `src/ui/chat.js` | Claude AI chat assistant |
+| `src/ui/insights.js` | Analytics: waste tracking, cook trends |
+| `src/ui/onboarding.js` | First-time setup: household create/join |
+| `src/ui/settings.js` | Settings: household management, member management, account deletion, community recipe utilities |
+| `src/ui/swipeback.js` | iOS-style edge swipe-back navigation utility |
 
 ---
 
@@ -338,6 +524,7 @@ This app was built over multiple coding sessions. Major milestones:
 - **Session 2:** Search infrastructure (9-database waterfall → 4-database parallel), barcode scanner, voice input
 - **Session 3:** UI polish, swipe-to-delete, product enrichment pipeline, image infrastructure (now disabled)
 - **Session 4:** Supplies tab rename, sub-tabs, recipe import engine, community recipe database, What to Cook Tonight, tag overhaul, home screen cleanup
+- **Session 5:** Recipe tag system expanded (Cuisine, Protein categories + many new tags), recipe metadata fields (prep/cook/total time, servings, difficulty, yield, storage instructions), bulk recipe importer with exponential backoff + duplicate detection + URL validation, Supplies detail sheet merged with Adjust screen, expiry date made truly optional, Shopping detail sheet quantity stepper added + inline edit removed, text search disabled in Shopping tab, unit preference memory shared across tabs via productPreferences, fraction picker for quantity fields, household sync fixed for non-owner members + ghost household bug resolved, full household member management (view/remove/transfer ownership/leave), community recipes overhauled (grid layout, 5 sort options, multi-filter, standalone publishing, forking, author editing), community recipe duplicate detection and cleanup utility, account deletion with anonymization + username reclamation, "Remove my recipes" and "Remove all our recipes" buttons, Running Low and Recent Activity default to collapsed, Recent Activity Title Case + "Supplies" naming, reusable swipe-back navigation utility, "Recipe" → "Recipes" naming fixed throughout
 
 ---
 
