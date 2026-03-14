@@ -461,6 +461,36 @@ window.refreshHomeData = async function() {
   }
 };
 
+// refreshRecipes() — re-fetches recipe data depending on active recipe tab.
+// Community tab: reloads public recipes from Firestore. My Recipes tabs:
+// re-fetches household recipes and re-renders the current filtered view.
+// Triggered by the ↻ button on the Recipes screen header.
+window.refreshRecipes = async function() {
+  // Spin the refresh button for visual feedback (matches Home/Shopping behavior)
+  const btn = event?.target;
+  if (btn) { btn.classList.add("spinning"); setTimeout(() => btn.classList.remove("spinning"), 600); }
+
+  ss("syncing");
+  try {
+    if (state.rt === "community") {
+      // Community tab — reload all public recipes and re-render the feed
+      state.comRecs = await dbList("public_recipes");
+      state.comPage = 0;
+      renderCommunity();
+    } else {
+      // My Recipes tabs — re-fetch household recipes and re-render
+      state.recs = await dbList(`households/${state.hid}/recipes`);
+      renderRecs();
+    }
+    ss("synced");
+    showNotif("Refreshed ✓");
+  } catch (e) {
+    console.error("refreshRecipes error:", e);
+    ss("error");
+    showNotif("Refresh failed");
+  }
+};
+
 // ── Onboarding handlers ──
 window.onboardNext = onboardNext;           // Advance to the next onboarding step
 window.finishOnboarding = finishOnboarding; // Complete onboarding and close overlay

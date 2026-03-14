@@ -2,13 +2,41 @@
 // db.js — Serverless API endpoint (Vercel) that proxies CRUD operations
 // to the Firestore REST API. The frontend never talks to Firestore
 // directly; it POSTs { op, path, data } here and gets plain JSON back.
+//
+// Also supports "admin-delete" operation that uses Firebase Admin SDK
+// to bypass security rules — needed when household owners delete
+// community recipes authored by other household members.
 // ──────────────────────────────────────────────────────────────────────
+
+// Firebase Admin SDK — used for admin-delete operations that need to
+// bypass Firestore security rules (e.g. owner deleting member's recipes)
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 
 // Firebase project ID — determines which Firestore database we hit
 const PROJECT = "family-pantry-c65d6";
 
 // API key is stored as a Vercel environment variable, never shipped to the client
 const API_KEY = process.env.FIREBASE_API_KEY;
+
+/**
+ * _getAdminFirestore — lazily initializes Firebase Admin SDK and returns
+ * the Firestore instance. Uses getApps() to avoid double-initialization
+ * across warm serverless invocations.
+ */
+function _getAdminFirestore() {
+  if (!getApps().length) {
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+      }),
+    });
+  }
+  return getFirestore();
+}
 
 // Firestore REST API base URL — all document paths are appended to this
 const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
@@ -162,11 +190,67 @@ export default async function handler(req, res) {
 
     // --- DELETE: remove a document by its full path ---
     if (op === "delete") {
-      await fetch(`${BASE}/${path}${fsAuth.query}`, {
+      const r = await fetch(`${BASE}/${path}${fsAuth.query}`, {
         method: "DELETE",
         headers: fsAuth.headers
       });
+      // Check if Firestore actually accepted the delete (e.g. 200 or 204)
+      // Permission denied (403) or not found (404) are surfaced as errors
+      if (r.status >= 400) {
+        const errBody = await r.json().catch(() => ({}));
+        const errMsg = errBody?.error?.message || `Delete failed with status ${r.status}`;
+        console.error("Firestore delete error:", path, r.status, errMsg);
+        return res.status(r.status).json({ error: errMsg });
+      }
       return res.status(200).json({ ok: true });
+    }
+
+    // --- ADMIN-DELETE: delete using Firebase Admin SDK (bypasses security rules) ---
+    // Used when a household owner needs to delete community recipes authored by
+    // other household members. The caller must provide a valid Firebase auth token,
+    // and we verify server-side that the user is the owner of the household that
+    // published the recipe before allowing the delete.
+    if (op === "admin-delete") {
+      // Require authentication — anonymous admin-delete is never allowed
+      if (!bearerToken) {
+        return res.status(401).json({ error: "Authentication required for admin-delete" });
+      }
+
+      try {
+        // Verify the caller's identity using Firebase Admin Auth
+        const decodedToken = await getAuth().verifyIdToken(bearerToken);
+        const callerUid = decodedToken.uid;
+
+        // Read the target document to verify ownership before deleting
+        const db = _getAdminFirestore();
+        const docRef = db.doc(path);
+        const docSnap = await docRef.get();
+
+        if (!docSnap.exists) {
+          return res.status(404).json({ error: "Document not found" });
+        }
+
+        const docData = docSnap.data();
+
+        // Authorization check: caller must be the household owner.
+        // Look up the household doc to verify the caller is indeed the owner.
+        const householdId = docData.householdId;
+        if (!householdId) {
+          return res.status(403).json({ error: "Document has no householdId — cannot verify ownership" });
+        }
+
+        const hhDoc = await db.doc(`households/${householdId}`).get();
+        if (!hhDoc.exists || hhDoc.data().ownerUid !== callerUid) {
+          return res.status(403).json({ error: "Only the household owner can admin-delete" });
+        }
+
+        // All checks passed — delete the document using Admin SDK (bypasses rules)
+        await docRef.delete();
+        return res.status(200).json({ ok: true });
+      } catch (e) {
+        console.error("admin-delete error:", path, e.message);
+        return res.status(500).json({ error: e.message });
+      }
     }
 
     // If we reach here, the caller passed an unrecognized operation

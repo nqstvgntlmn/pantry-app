@@ -11,7 +11,7 @@ import { state, J, Js } from '../state.js';
 // joinHouseholdByCode: join a household via invite code lookup
 // regenerateInviteCode: generate a new 6-char invite code (owner only)
 // removeMember: remove a member from a household (owner only)
-import { saveCfg, dbGet, dbSet, dbList, dbDelete, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished, listPublicRecipes, deleteAccountData, getHouseholdMemberUids } from '../db.js';
+import { saveCfg, dbGet, dbSet, dbList, dbDelete, dbAdminDelete, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished, listPublicRecipes, deleteAccountData, getHouseholdMemberUids } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
 import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
@@ -1227,15 +1227,21 @@ export async function removeMyCommRecipes() {
 
 // ── REMOVE ALL HOUSEHOLD COMMUNITY RECIPES ──────────────────────────────────
 // Owner-only utility to permanently remove ALL community recipes belonging to
-// the household. Uses the same two-tier ownership check as duplicate cleanup:
-// householdId match first, authorUid in household member UIDs fallback for
-// legacy recipes published before householdId was added.
+// the household. Uses householdId match as the primary check, with authorUid
+// in household member UIDs as a fallback for legacy recipes.
+//
+// IMPORTANT: Recipes authored by other household members can't be deleted via
+// normal dbDelete because Firestore security rules enforce authorUid == caller.
+// We use dbAdminDelete (Firebase Admin SDK on the server) for those recipes,
+// which verifies household ownership server-side before bypassing rules.
 
 /**
  * removeHouseholdCommRecipes — permanently deletes all public_recipes belonging
  * to the current household. Ownership is determined by:
  *   1. householdId field (new-style recipes), OR
  *   2. authorUid matching any household member (legacy fallback).
+ * Uses dbDelete for the caller's own recipes (fast, no Admin SDK needed)
+ * and dbAdminDelete for other members' recipes (bypasses security rules).
  * Owner-only — the button is only rendered for household owners.
  */
 export async function removeHouseholdCommRecipes() {
@@ -1252,6 +1258,9 @@ export async function removeHouseholdCommRecipes() {
     const hid = state.hid || "";
     const memberUids = await getHouseholdMemberUids();
 
+    console.log("[removeHHComm] Household ID:", hid, "| Member UIDs:", memberUids);
+    console.log("[removeHHComm] Total public recipes fetched:", (allPublic || []).length);
+
     /**
      * belongsToHousehold — checks whether a recipe belongs to the current
      * household using the two-tier check: householdId field first (new-style),
@@ -1265,6 +1274,9 @@ export async function removeHouseholdCommRecipes() {
     // Filter to household-owned recipes
     const hhRecipes = (allPublic || []).filter(belongsToHousehold);
 
+    console.log("[removeHHComm] Matched household recipes:", hhRecipes.length,
+      hhRecipes.map(r => ({ id: r.id, title: r.title, authorUid: r.authorUid, householdId: r.householdId })));
+
     // No recipes found — inform the user and bail out
     if (hhRecipes.length === 0) {
       showNotif("Your household has no community recipes to remove.");
@@ -1277,22 +1289,38 @@ export async function removeHouseholdCommRecipes() {
     if (!confirm(`This will permanently remove ${hhRecipes.length} community recipe${hhRecipes.length !== 1 ? "s" : ""} published by your household. This cannot be undone. Are you sure?`)) return;
 
     // Delete each household recipe from public_recipes
+    // Use dbDelete for own recipes (works with security rules), dbAdminDelete
+    // for other members' recipes (bypasses rules via Admin SDK on server)
     if (btn) { btn.disabled = true; btn.textContent = "Removing…"; }
     let deleted = 0;
+    let failed = 0;
     for (const r of hhRecipes) {
       try {
-        await dbDelete(`public_recipes/${r.id}`);
+        const path = `public_recipes/${r.id}`;
+        // Own recipes can use normal delete; other members' need admin-delete
+        if (r.authorUid === uid) {
+          await dbDelete(path);
+        } else {
+          await dbAdminDelete(path);
+        }
         deleted++;
+        console.log("[removeHHComm] Deleted:", r.id, r.title, "author:", r.authorUid);
         if (btn) btn.textContent = `Removing ${deleted}/${hhRecipes.length}…`;
       } catch (e) {
-        console.error("Failed to delete household community recipe:", r.id, r.title, e);
+        failed++;
+        console.error("[removeHHComm] Failed to delete:", r.id, r.title, "author:", r.authorUid, e);
       }
     }
 
     // Refresh the local community cache so the UI reflects the removal
     state.comRecs = await listPublicRecipes();
 
-    showNotif(`${deleted} community recipe${deleted !== 1 ? "s" : ""} removed.`);
+    // Show result with success/failure breakdown if any failed
+    if (failed > 0) {
+      showNotif(`${deleted} removed, ${failed} failed. Check console.`);
+    } else {
+      showNotif(`${deleted} community recipe${deleted !== 1 ? "s" : ""} removed.`);
+    }
   } catch (e) {
     console.error("removeHouseholdCommRecipes error:", e);
     showNotif("Error removing community recipes. Check console.");

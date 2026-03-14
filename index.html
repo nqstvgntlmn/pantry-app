@@ -172,7 +172,7 @@
   <!-- RECIPES -->
   <div class="screen" id="screen-recipes" style="overflow-y:hidden">
     <div style="flex-shrink:0">
-      <div class="shdr"><div><div class="sttl">Recipes</div><div class="ssub" id="rsub">Your saved recipes</div></div><div style="display:flex;gap:6px"><button class="btn bs bsm" onclick="openNotifications()" style="position:relative;min-width:36px;padding:6px 8px" title="Notifications">🔔<span class="notif-badge notif-badge-inline" id="recipes-notif-badge-hdr" style="display:none">0</span></button><button class="btn bs bsm" onclick="whatCanIMake()">🔍 Make now</button><button class="btn bp bsm" onclick="showOv('arec')">+ Add</button></div></div>
+      <div class="shdr"><div><div class="sttl">Recipes</div><div class="ssub" id="rsub">Your saved recipes</div></div><div style="display:flex;gap:6px"><!-- Refresh button — re-fetches recipe list (My Recipes or Community depending on active tab) --><button class="btn bsm bs refresh-btn" onclick="refreshRecipes()" title="Refresh">↻</button><button class="btn bs bsm" onclick="openNotifications()" style="position:relative;min-width:36px;padding:6px 8px" title="Notifications">🔔<span class="notif-badge notif-badge-inline" id="recipes-notif-badge-hdr" style="display:none">0</span></button><button class="btn bs bsm" onclick="whatCanIMake()">🔍 Make now</button><button class="btn bp bsm" onclick="showOv('arec')">+ Add</button></div></div>
       <div class="rtabs">
         <div class="rtab active" id="rtab-all" onclick="setRT('all')">All</div>
         <div class="rtab" id="rtab-fav" onclick="setRT('fav')">❤️ Favorites</div>

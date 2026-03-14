@@ -81,6 +81,15 @@ export async function dbSet(path, data) { return _db("set", path, data); }
 export async function dbDelete(path) { return _db("delete", path); }
 
 /**
+ * dbAdminDelete — delete a document using Firebase Admin SDK on the server.
+ * Bypasses Firestore security rules — used when the household owner needs to
+ * delete community recipes authored by other household members (whose authorUid
+ * differs from the caller's UID, so normal delete is blocked by rules).
+ * The server verifies the caller is the household owner before proceeding.
+ */
+export async function dbAdminDelete(path) { return _db("admin-delete", path); }
+
+/**
  * dbGet — read a single Firestore document by its full path.
  * Returns the document object, or null if it doesn't exist.
  * Swallows errors and returns null so callers can treat "missing" and "error" the same.
