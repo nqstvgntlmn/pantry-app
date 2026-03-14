@@ -11,7 +11,7 @@ import { state, J, Js } from '../state.js';
 // joinHouseholdByCode: join a household via invite code lookup
 // regenerateInviteCode: generate a new 6-char invite code (owner only)
 // removeMember: remove a member from a household (owner only)
-import { saveCfg, dbGet, dbSet, dbList, dbDelete, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished, listPublicRecipes, deleteAccountData } from '../db.js';
+import { saveCfg, dbGet, dbSet, dbList, dbDelete, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished, listPublicRecipes, deleteAccountData, getHouseholdMemberUids } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
 import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
@@ -1051,18 +1051,21 @@ export function showBulkPublishBtn() {
 }
 
 // ── REMOVE DUPLICATE COMMUNITY RECIPES (MAINTENANCE UTILITY) ────────────────
-// Reusable maintenance utility that scans all public_recipes, identifies
-// duplicates (same title + householdId, ignoring author UID), keeps the
-// oldest (original publish), and deletes all newer copies.
-// Uses householdId so recipes published by different members of the same
-// household are correctly identified as duplicates.
+// Reusable maintenance utility that scans public_recipes belonging to the
+// current household, identifies duplicates by title, keeps the oldest
+// (original publish), and deletes all newer copies.
+// Ownership is determined by householdId field when present, or by checking
+// the authorUid against the household member list for legacy documents
+// published before householdId was added to public_recipes.
 // Can be run as many times as needed — always available in Settings > Utilities.
 
 /**
  * removeDuplicateCommunityRecipes — maintenance utility that finds and removes
- * duplicate community recipes. Groups by title + householdId (author UID plays
- * no role — any recipe from the same household with the same title is a duplicate).
- * Keeps the oldest version (original publish) and deletes all newer copies.
+ * duplicate community recipes belonging to the current household. For each
+ * recipe, household ownership is determined by:
+ *   1. The householdId field (present on newly published recipes), OR
+ *   2. The authorUid matching any current household member (legacy fallback).
+ * Groups owned recipes by lowercase title, keeps the oldest, deletes the rest.
  * Shows a summary notification when complete.
  */
 export async function removeDuplicateCommunityRecipes() {
@@ -1080,12 +1083,31 @@ export async function removeDuplicateCommunityRecipes() {
       return;
     }
 
-    // Group recipes by a composite key: lowercase title + householdId.
-    // Uses householdId instead of authorUid so recipes published by different
-    // members of the same household are correctly grouped as duplicates.
+    // Load current household member UIDs — needed to identify legacy recipes
+    // (published before householdId was added) that belong to this household.
+    const hid = state.hid || "";
+    const memberUids = await getHouseholdMemberUids();
+
+    /**
+     * belongsToHousehold — checks whether a public recipe belongs to the
+     * current household. Tries householdId first (reliable for new docs),
+     * then falls back to checking authorUid against the household member list
+     * (handles legacy docs that were published without a householdId field).
+     */
+    const belongsToHousehold = (r) => {
+      // New-style: recipe has a householdId field — exact match
+      if (r.householdId) return r.householdId === hid;
+      // Legacy fallback: no householdId, check if author is a household member
+      return r.authorUid && memberUids.includes(r.authorUid);
+    };
+
+    // Filter to only recipes belonging to the current household, then group
+    // by lowercase title. Only household-owned recipes are candidates for
+    // duplicate detection — we never touch other households' recipes.
     const groups = {};
     for (const r of allPublic) {
-      const key = ((r.title || "").trim().toLowerCase()) + "||" + (r.householdId || "");
+      if (!belongsToHousehold(r)) continue;
+      const key = (r.title || "").trim().toLowerCase();
       if (!groups[key]) groups[key] = [];
       groups[key].push(r);
     }

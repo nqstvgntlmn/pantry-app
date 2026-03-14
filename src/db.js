@@ -1101,12 +1101,16 @@ export async function publishRecipe(recipe, authorName) {
 
 /**
  * checkRecipeAlreadyPublished — checks if a community version of a recipe
- * already exists before allowing a publish. Author UID plays NO role in
- * duplicate detection — only householdId and title/sourceRecipeId matter.
- * Uses three strategies:
+ * already exists before allowing a publish. Uses three strategies:
  *   1. If the recipe has a stored publicId, verifies that doc still exists.
- *   2. Scans community recipes for a matching sourceRecipeId + householdId.
- *   3. Falls back to matching by householdId + recipe title (lowercase).
+ *   2. Scans community recipes for a matching sourceRecipeId owned by the household.
+ *   3. Falls back to matching by recipe title (lowercase) owned by the household.
+ *
+ * Household ownership for each public recipe is determined by:
+ *   - The householdId field (present on newly published recipes), OR
+ *   - The authorUid matching any current household member (legacy fallback
+ *     for documents published before householdId was added to public_recipes).
+ *
  * Always fetches fresh data from Firestore to catch recent publishes by
  * other household members. Returns the existing public recipe if found,
  * or null if safe to publish.
@@ -1140,22 +1144,37 @@ export async function checkRecipeAlreadyPublished(recipe) {
   }
 
   if (state.comRecs && state.comRecs.length > 0) {
+    // Load household member UIDs for the legacy fallback — needed to identify
+    // public recipes published before householdId was added to the schema.
+    const memberUids = await getHouseholdMemberUids();
+
+    /**
+     * isOwnedByHousehold — checks whether a public recipe belongs to the
+     * current household. Tries householdId first (reliable for new docs),
+     * then falls back to checking authorUid against the household member
+     * list (handles legacy docs published without a householdId field).
+     */
+    const isOwnedByHousehold = (cr) => {
+      if (cr.householdId) return cr.householdId === hid;
+      return cr.authorUid && memberUids.includes(cr.authorUid);
+    };
+
     // Strategy 2: match by sourceRecipeId — the private recipe's Firestore ID
-    // stored in the public doc. Matches by householdId so any household member's
-    // publish is detected, not just the current user's.
+    // stored in the public doc. Uses isOwnedByHousehold so both new-style
+    // (householdId) and legacy (authorUid) documents are detected.
     if (recipe.id) {
       const matchById = state.comRecs.find(
-        cr => cr.householdId === hid && cr.sourceRecipeId === recipe.id
+        cr => isOwnedByHousehold(cr) && cr.sourceRecipeId === recipe.id
       );
       if (matchById) return matchById;
     }
 
-    // Strategy 3: match by householdId + title — handles legacy recipes that
-    // were published before sourceRecipeId was added. Uses householdId instead
-    // of authorUid so recipes published by any household member are caught.
+    // Strategy 3: match by title — handles legacy recipes that were published
+    // before sourceRecipeId was added. Uses isOwnedByHousehold so recipes
+    // published by any household member are caught regardless of doc format.
     const title = (recipe.name || "").trim().toLowerCase();
     const matchByTitle = state.comRecs.find(
-      cr => cr.householdId === hid && (cr.title || "").trim().toLowerCase() === title
+      cr => isOwnedByHousehold(cr) && (cr.title || "").trim().toLowerCase() === title
     );
     if (matchByTitle) return matchByTitle;
   }
