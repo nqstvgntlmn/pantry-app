@@ -72,7 +72,7 @@ import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCook
 // Settings: config UI, push notifications, household management, theme/dark mode
 // Household member management: remove, transfer ownership, leave/delete household
 // checkMembershipOnInteraction: verifies user still belongs to household (kick detection)
-import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes } from './ui/settings.js';
+import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, deleteAccount } from './ui/settings.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
@@ -391,6 +391,7 @@ window.enrichExistingItems = enrichExistingItems; // Retroactive product enrichm
 window.bulkPublishAll = bulkPublishAll;           // One-time publish all recipes to community
 window.regenAllSummaries = regenAllSummaries;     // Regenerate AI summaries for all recipes
 window.removeDuplicateCommunityRecipes = removeDuplicateCommunityRecipes; // Maintenance utility: remove duplicate community recipes
+window.deleteAccount = deleteAccount;   // Permanently delete user's account and all associated data
 
 // manualRefresh(target) — Safety valve to force re-fetch all items from Firestore.
 // Triggered by the subtle ↻ button on Shopping/Inventory screens when real-time
@@ -534,11 +535,50 @@ window._appStart = async function(code) {
   // Store the active household ID in global state so all modules can reference it
   state.hid = code;
 
+  // ── needsHousehold guard ──
+  // Check if the user was removed or left a household since last visit.
+  // If needsHousehold: true, redirect to onboarding regardless of cached state.
+  const currentUser = getCurrentUser();
+  if (currentUser) {
+    try {
+      const userDoc = await dbGet(`users/${currentUser.uid}`);
+      if (userDoc?.needsHousehold === true) {
+        // User needs a new household — clear state and show join screen
+        showNotif("You need to join or create a household");
+        localStorage.removeItem("ks-h");
+        localStorage.removeItem("ks-hhs");
+        location.reload();
+        return;
+      }
+
+      // Also validate householdId still points to a real household
+      if (state.hid) {
+        const hhDoc = await dbGet(`households/${state.hid}`);
+        if (!hhDoc) {
+          // Household document no longer exists — clear and redirect
+          console.warn(`[_appStart] Household ${state.hid} no longer exists`);
+          await dbSet(`users/${currentUser.uid}`, {
+            ...userDoc,
+            householdIds: [],
+            needsHousehold: true,
+            onboardingDone: false,
+            id: undefined
+          });
+          localStorage.removeItem("ks-h");
+          localStorage.removeItem("ks-hhs");
+          location.reload();
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("[_appStart] needsHousehold check failed:", e);
+    }
+  }
+
   // ── Membership check ──
   // Before loading any data, verify the user is still a member of this household.
   // This catches the case where a member was removed by the owner since their last visit.
   // If invalid, clears local state and redirects to onboarding (join/create screen).
-  const currentUser = getCurrentUser();
   if (currentUser) {
     const membershipValid = await checkMembershipValid(state.hid, currentUser.uid);
     if (!membershipValid) {
@@ -898,13 +938,21 @@ function _showJoinScreen(user) {
       const cfgName = state.cfg?.name || "My Kitchen";
       await createHousehold(user.uid, cfgName);
 
-      // Create or update the user profile with the new household
+      // Create or update the user profile with the new household.
+      // Clear needsHousehold flag and set onboardingDone since user explicitly
+      // chose to create a new kitchen (they'll go through onboarding again).
       if (!existingProfile) {
         const profile = await createUserProfile(user);
         profile.householdIds = [user.uid];
+        profile.needsHousehold = false;
         await dbSet(`users/${user.uid}`, profile);
       } else {
-        await dbSet(`users/${user.uid}`, { ...existingProfile, householdIds: [user.uid], id: undefined });
+        await dbSet(`users/${user.uid}`, {
+          ...existingProfile,
+          householdIds: [user.uid],
+          needsHousehold: false,
+          id: undefined
+        });
       }
 
       localStorage.removeItem("ks-h");

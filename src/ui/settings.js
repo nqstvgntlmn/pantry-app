@@ -11,7 +11,7 @@ import { state, J, Js } from '../state.js';
 // joinHouseholdByCode: join a household via invite code lookup
 // regenerateInviteCode: generate a new 6-char invite code (owner only)
 // removeMember: remove a member from a household (owner only)
-import { saveCfg, dbGet, dbSet, dbList, dbDelete, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished, listPublicRecipes } from '../db.js';
+import { saveCfg, dbGet, dbSet, dbList, dbDelete, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished, listPublicRecipes, deleteAccountData } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
 import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
@@ -439,15 +439,30 @@ export async function leaveHousehold() {
       // ── Owner leave protection ──
       if (memberCount > 1) {
         // Owner has other members — must transfer ownership first
-        alert("You are the household owner. Please transfer ownership to another member before leaving.");
+        alert("You're the owner. Please transfer ownership to another member before leaving.");
         return;
       }
 
       // Owner is the sole member — offer to delete the entire household
-      if (!confirm(`You are the only member. Delete "${hhName}" and all its data permanently? This cannot be undone.`)) return;
+      if (!confirm(`You're the only member. Leaving will permanently delete this household and all its data. Are you sure?`)) return;
 
       // Delete the entire household and all subcollections
       await deleteHousehold(state.hid, user.uid);
+
+      // Set needsHousehold flag so user is redirected to onboarding on next boot
+      try {
+        const userDoc = await dbGet(`users/${user.uid}`);
+        if (userDoc) {
+          await dbSet(`users/${user.uid}`, {
+            ...userDoc,
+            householdIds: [],
+            needsHousehold: true,
+            onboardingDone: false,
+            id: undefined
+          });
+        }
+      } catch { /* best-effort */ }
+
       showNotif("Household deleted");
 
       // Clear all local state and redirect to onboarding
@@ -456,7 +471,9 @@ export async function leaveHousehold() {
       // ── Non-owner member leaving ──
       if (!confirm(`Leave the ${hhName} household? You will lose access immediately.`)) return;
 
-      // Remove this user from the household (same as being removed by the owner)
+      // Remove this user from the household — removeMember also sets
+      // needsHousehold: true and onboardingDone: false on their user doc
+      // so they'll be redirected to onboarding on next app interaction
       await removeMember(state.hid, user.uid);
       showNotif("You have left the household");
 
@@ -510,6 +527,64 @@ export async function checkMembershipOnInteraction() {
     // User has been removed from this household — clear state and redirect
     showNotif("You no longer have access to this household");
     _clearLocalStateAndRedirect();
+  }
+}
+
+/**
+ * deleteAccount() — Permanently deletes the current user's account.
+ *
+ * For owners with other members: blocks the action and tells them to
+ * transfer ownership first (same guard as leaveHousehold).
+ *
+ * On confirm:
+ *   1. Deletes all Firestore data (households, username index, user doc)
+ *   2. Deletes the Firebase Auth account
+ *   3. Clears all local state and reloads to the sign-in screen
+ *
+ * The username is freed so it can be reclaimed if the user recreates their account.
+ */
+export async function deleteAccount() {
+  const user = getCurrentUser();
+  if (!user) return;
+
+  try {
+    // Check if user is an owner with other members — must transfer first
+    if (state.hid) {
+      const hhDoc = await dbGet(`households/${state.hid}`);
+      if (hhDoc && hhDoc.ownerUid === user.uid && (hhDoc.members || []).length > 1) {
+        alert("You're the owner of a household with other members. Please transfer ownership before deleting your account.");
+        return;
+      }
+    }
+
+    // Two-step confirmation for account deletion
+    if (!confirm("Delete your account permanently? All your data will be erased and cannot be recovered.")) return;
+    if (!confirm("Are you absolutely sure? This action cannot be undone.")) return;
+
+    // Delete all Firestore data associated with this account
+    // (households, username index, notifications, user profile)
+    await deleteAccountData(user.uid);
+
+    // Delete the Firebase Auth account itself
+    try {
+      await user.delete();
+    } catch (err) {
+      // If re-authentication is required (e.g. session too old),
+      // inform the user and bail — Firebase requires recent sign-in for deletion
+      if (err.code === "auth/requires-recent-login") {
+        alert("For security, please sign out and sign back in, then try deleting your account again.");
+        return;
+      }
+      throw err;
+    }
+
+    // Clear all local state
+    localStorage.clear();
+    showNotif("Account deleted");
+    location.reload();
+  } catch (err) {
+    console.error("deleteAccount error:", err);
+    showNotif("Failed to delete account. Please try again.");
   }
 }
 

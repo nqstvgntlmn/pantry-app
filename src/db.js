@@ -267,7 +267,15 @@ export async function joinHouseholdByCode(code, user) {
     // This prevents ghost entries from accumulating and ensures resolveHousehold
     // always picks the correct household.
     // Also clear singular `householdId` field if present — we normalize to array.
-    const updates = { ...userDoc, householdIds: [hid], id: undefined };
+    // Clear needsHousehold flag since user now belongs to a household.
+    // Set onboardingDone: true since they completed the join flow.
+    const updates = {
+      ...userDoc,
+      householdIds: [hid],
+      needsHousehold: false,
+      onboardingDone: true,
+      id: undefined
+    };
     if (userDoc.householdId) delete updates.householdId;
     await dbSet(`users/${user.uid}`, updates);
   }
@@ -301,7 +309,9 @@ export async function regenerateInviteCode(hid) {
 /**
  * removeMember — removes a member from a household (owner-only action).
  * Removes the user from the household's members and memberUids arrays,
- * and removes the household from the member's user profile.
+ * clears their householdId, sets needsHousehold: true so they're redirected
+ * to onboarding on their next app interaction, and resets onboardingDone
+ * so they go through the proper join flow if they rejoin via invite code.
  */
 export async function removeMember(hid, memberUid) {
   const hhDoc = await dbGet(`households/${hid}`);
@@ -312,14 +322,20 @@ export async function removeMember(hid, memberUid) {
   const memberUids = (hhDoc.memberUids || []).filter(u => u !== memberUid);
   await dbSet(`households/${hid}`, { ...hhDoc, members, memberUids, id: undefined });
 
-  // Remove household from the member's user profile.
-  // Handles both `householdId` (singular) and `householdIds` (array) fields.
+  // Update the removed member's user profile:
+  // - Clear householdIds so they have no active household
+  // - Set needsHousehold: true so app init redirects them to onboarding
+  // - Reset onboardingDone: false so invite code join flow works properly
   try {
     const userDoc = await dbGet(`users/${memberUid}`);
     if (userDoc) {
-      const currentIds = _normalizeHouseholdIds(userDoc);
-      const hids = currentIds.filter(h => h !== hid);
-      const updates = { ...userDoc, householdIds: hids, id: undefined };
+      const updates = {
+        ...userDoc,
+        householdIds: [],
+        needsHousehold: true,
+        onboardingDone: false,
+        id: undefined
+      };
       // Clear singular field if it existed — we always write back as array
       if (userDoc.householdId) delete updates.householdId;
       await dbSet(`users/${memberUid}`, updates);
@@ -564,6 +580,15 @@ export async function resolveHousehold(user) {
   console.log(`[resolveHousehold] userDoc=`, userDoc);
 
   if (userDoc) {
+    // ── needsHousehold guard ──
+    // If the user was removed from a household or left voluntarily,
+    // needsHousehold is set to true. This overrides all other checks
+    // and forces them to the join/create screen regardless of cached state.
+    if (userDoc.needsHousehold === true) {
+      console.log(`[resolveHousehold] User has needsHousehold=true — returning null to show join screen`);
+      return null;
+    }
+
     // Returning user — validate all household IDs and pick the correct one.
     // _validateHouseholdIds handles both `householdId` (singular string) and
     // `householdIds` (array) via _normalizeHouseholdIds. The singular field
@@ -1341,6 +1366,74 @@ export async function loadUsername(uid) {
     const userDoc = await dbGet(`users/${uid}`);
     return userDoc?.username || null;
   } catch { return null; }
+}
+
+// ── ACCOUNT DELETION ─────────────────────────────────────────────────────────
+// Full account deletion: removes the user from all households, cleans up their
+// username from the index, deletes their user profile doc, and deletes their
+// notifications. Firebase Auth account deletion is handled on the client side.
+
+/**
+ * deleteAccountData — removes all Firestore data associated with a user account.
+ * Called before Firebase Auth account deletion on the client side.
+ *
+ * Steps:
+ *   1. Remove user from all households they belong to (or delete if sole owner)
+ *   2. Delete their username from the usernames index (frees it for reuse)
+ *   3. Delete their notifications subcollection
+ *   4. Delete their user profile document
+ *
+ * @param {string} uid — The UID of the user deleting their account
+ */
+export async function deleteAccountData(uid) {
+  const userDoc = await dbGet(`users/${uid}`);
+  if (!userDoc) return;
+
+  // Step 1: Remove user from all households
+  const hids = _normalizeHouseholdIds(userDoc);
+  for (const hid of hids) {
+    try {
+      const hhDoc = await dbGet(`households/${hid}`);
+      if (!hhDoc) continue;
+
+      const isOwner = hhDoc.ownerUid === uid;
+      const memberCount = (hhDoc.members || []).length;
+
+      if (isOwner && memberCount <= 1) {
+        // Sole owner — delete the entire household
+        await deleteHousehold(hid, uid);
+      } else if (!isOwner) {
+        // Regular member — just remove from the household
+        const members = (hhDoc.members || []).filter(m => m.uid !== uid);
+        const memberUids = (hhDoc.memberUids || []).filter(u => u !== uid);
+        await dbSet(`households/${hid}`, { ...hhDoc, members, memberUids, id: undefined });
+      }
+      // Note: if owner with other members, household remains — ownership should
+      // have been transferred before reaching this point (enforced by UI)
+    } catch (e) {
+      console.warn(`[deleteAccountData] Failed to clean up household ${hid}:`, e);
+    }
+  }
+
+  // Step 2: Delete username from index so it can be reclaimed
+  if (userDoc.username) {
+    try {
+      await dbDelete(`usernames/${userDoc.username.toLowerCase()}`);
+    } catch { /* best-effort */ }
+  }
+
+  // Step 3: Delete notifications subcollection
+  try {
+    const notifs = await dbList(`users/${uid}/notifications`);
+    for (const n of notifs) {
+      await dbDelete(`users/${uid}/notifications/${n.id}`);
+    }
+  } catch { /* best-effort */ }
+
+  // Step 4: Delete the user profile document
+  try {
+    await dbDelete(`users/${uid}`);
+  } catch { /* best-effort */ }
 }
 
 // ── REVIEWS (COMMUNITY RECIPE RATINGS) ──────────────────────────────────────
