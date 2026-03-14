@@ -2337,6 +2337,10 @@ export async function togglePublic(id) {
     const existing = await checkRecipeAlreadyPublished(r);
     if (existing) {
       showNotif("This recipe has already been published to the community. To update the community version, edit the recipe and use the \u201cPush to community\u201d option.");
+      // Revert the toggle's CSS class — the inline onclick already toggled it,
+      // but we're blocking the publish so the visual state should stay "on".
+      const toggleEl = g("epub");
+      if (toggleEl && !toggleEl.classList.contains("on")) toggleEl.classList.add("on");
       // Repair local state: ensure isPublic flag and publicId stay in sync
       if (!r.isPublic || !r.publicId) {
         r.isPublic = true;

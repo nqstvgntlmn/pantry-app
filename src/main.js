@@ -72,7 +72,7 @@ import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCook
 // Settings: config UI, push notifications, household management, theme/dark mode
 // Household member management: remove, transfer ownership, leave/delete household
 // checkMembershipOnInteraction: verifies user still belongs to household (kick detection)
-import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries } from './ui/settings.js';
+import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes } from './ui/settings.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
@@ -390,6 +390,7 @@ window.leaveHousehold = leaveHousehold;           // Leave the household (member
 window.enrichExistingItems = enrichExistingItems; // Retroactive product enrichment for all items
 window.bulkPublishAll = bulkPublishAll;           // One-time publish all recipes to community
 window.regenAllSummaries = regenAllSummaries;     // Regenerate AI summaries for all recipes
+window.removeDuplicateCommunityRecipes = removeDuplicateCommunityRecipes; // Maintenance utility: remove duplicate community recipes
 
 // manualRefresh(target) — Safety valve to force re-fetch all items from Firestore.
 // Triggered by the subtle ↻ button on Shopping/Inventory screens when real-time

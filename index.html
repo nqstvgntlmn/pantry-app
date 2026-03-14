@@ -852,9 +852,10 @@
           <select class="fsel" id="setCookTime"><option value="20-30 min">20–30 min</option><option value="30-45 min">30–45 min</option><option value="40-60 min" selected>40–60 min</option><option value="60+ min">60+ min</option></select>
         </div>
       </div>
-      <div class="sset"><div class="ssetttl">Utilities</div>
+      <div class="sset" id="utilitiesSection" style="display:none"><div class="ssetttl">Utilities</div>
         <button class="btn bs bf" id="bulkPubBtn" onclick="bulkPublishAll()" style="width:100%;margin-bottom:8px;display:none">📤 Publish all recipes to community</button>
         <div id="bulkPubProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-bottom:8px"></div>
+        <button class="btn bs bf" id="removeDupBtn" onclick="removeDuplicateCommunityRecipes()" style="width:100%;margin-bottom:8px">🧹 Remove duplicate community recipes</button>
         <button class="btn bs bf" id="regenSumBtn" onclick="regenAllSummaries()" style="width:100%;margin-top:8px">🔄 Regenerate all summaries</button>
         <div id="regenSumProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-top:6px"></div>
       </div>

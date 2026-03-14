@@ -1043,6 +1043,9 @@ export async function publishRecipe(recipe, authorName) {
     steps: recipe.steps || "",
     tags: recipe.tags || [],
     cuisine: recipe.cuisine || "",
+    // sourceRecipeId — links back to the private household recipe's Firestore ID.
+    // Used by duplicate-publish detection to prevent the same recipe being published twice.
+    sourceRecipeId: recipe.id || null,
     // Structured data from AI recipe imports
     imageUrl: recipe.imageUrl || null,
     prepTime: recipe.prepTime || "",
@@ -1073,10 +1076,12 @@ export async function publishRecipe(recipe, authorName) {
 
 /**
  * checkRecipeAlreadyPublished — checks if a community version of a recipe
- * already exists before allowing a publish. Uses two strategies:
+ * already exists before allowing a publish. Uses three strategies:
  *   1. If the recipe has a stored publicId, verifies that doc still exists.
- *   2. Falls back to scanning the local community cache (state.comRecs)
- *      for a match by authorUid + recipe title.
+ *   2. Scans community recipes for a matching sourceRecipeId (the private
+ *      recipe's Firestore ID stored in the public doc at publish time).
+ *   3. Falls back to matching by authorUid + recipe title.
+ * Ensures community recipes are loaded before checking strategies 2 & 3.
  * Returns the existing public recipe object if found, or null if safe to publish.
  */
 export async function checkRecipeAlreadyPublished(recipe) {
@@ -1094,14 +1099,33 @@ export async function checkRecipeAlreadyPublished(recipe) {
     }
   }
 
-  // Strategy 2: scan the local community cache for a matching author + title.
-  // Handles edge cases where publicId was lost or never stored (legacy recipes).
+  // Ensure community recipes are loaded so strategies 2 & 3 can scan them.
+  // Without this, an empty cache would let duplicates slip through.
+  if (!state.comRecs || state.comRecs.length === 0) {
+    try {
+      state.comRecs = await listPublicRecipes();
+    } catch (_) {
+      // If fetch fails, continue with empty cache — strategies 2 & 3 will just skip
+    }
+  }
+
   if (state.comRecs && state.comRecs.length > 0) {
+    // Strategy 2: match by sourceRecipeId — the private recipe's Firestore ID
+    // stored in the public doc. Catches duplicates even if publicId was lost.
+    if (recipe.id) {
+      const matchById = state.comRecs.find(
+        cr => cr.authorUid === uid && cr.sourceRecipeId === recipe.id
+      );
+      if (matchById) return matchById;
+    }
+
+    // Strategy 3: match by authorUid + title — handles legacy recipes that
+    // were published before sourceRecipeId was added.
     const title = (recipe.name || "").trim().toLowerCase();
-    const match = state.comRecs.find(
+    const matchByTitle = state.comRecs.find(
       cr => cr.authorUid === uid && (cr.title || "").trim().toLowerCase() === title
     );
-    if (match) return match;
+    if (matchByTitle) return matchByTitle;
   }
 
   return null;

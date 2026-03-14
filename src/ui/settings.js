@@ -11,7 +11,7 @@ import { state, J, Js } from '../state.js';
 // joinHouseholdByCode: join a household via invite code lookup
 // regenerateInviteCode: generate a new 6-char invite code (owner only)
 // removeMember: remove a member from a household (owner only)
-import { saveCfg, dbGet, dbSet, dbList, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished } from '../db.js';
+import { saveCfg, dbGet, dbSet, dbList, dbDelete, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished, listPublicRecipes } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
 import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
@@ -291,6 +291,11 @@ async function renderHouseholdInfo() {
         </div>`;
       }).join("");
     }
+
+    // Show/hide the Utilities section — only household owners should see
+    // publish-all, duplicate cleanup, and other maintenance utilities.
+    const utilitiesSection = g("utilitiesSection");
+    if (utilitiesSection) utilitiesSection.style.display = isOwner ? "" : "none";
 
     // Show/hide the "Leave Household" button based on ownership status
     const leaveBtn = g("leaveHouseholdBtn");
@@ -970,6 +975,86 @@ export function showBulkPublishBtn() {
       btn.style.display = "block";
     }
   }
+}
+
+// ── REMOVE DUPLICATE COMMUNITY RECIPES (MAINTENANCE UTILITY) ────────────────
+// Reusable maintenance utility that scans all public_recipes, identifies
+// duplicates (same title + authorUid), keeps the newest, and deletes the rest.
+// Can be run as many times as needed — always available in Settings > Utilities.
+
+/**
+ * removeDuplicateCommunityRecipes — maintenance utility that finds and removes
+ * duplicate community recipes. Groups by title + authorUid, keeps the most
+ * recently created version of each duplicate set, and deletes the older copies.
+ * Shows a summary notification when complete.
+ */
+export async function removeDuplicateCommunityRecipes() {
+  if (!confirm("Scan community recipes and remove duplicates? (Keeps the newest version of each duplicate.)")) return;
+
+  const btn = g("removeDupBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Scanning…"; }
+
+  try {
+    // Fetch all community recipes fresh from Firestore
+    const allPublic = await listPublicRecipes();
+    if (!allPublic || allPublic.length === 0) {
+      showNotif("No community recipes found.");
+      if (btn) { btn.disabled = false; btn.textContent = "🧹 Remove duplicate community recipes"; }
+      return;
+    }
+
+    // Group recipes by a composite key: lowercase title + authorUid.
+    // Recipes with the same key are considered duplicates.
+    const groups = {};
+    for (const r of allPublic) {
+      const key = ((r.title || "").trim().toLowerCase()) + "||" + (r.authorUid || "");
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    }
+
+    // For each group with more than one recipe, sort by createdAt descending
+    // and mark all but the newest for deletion
+    const toDelete = [];
+    for (const key of Object.keys(groups)) {
+      const dupes = groups[key];
+      if (dupes.length <= 1) continue;
+
+      // Sort newest first — keep index 0, delete the rest
+      dupes.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+      for (let i = 1; i < dupes.length; i++) {
+        toDelete.push(dupes[i]);
+      }
+    }
+
+    if (toDelete.length === 0) {
+      showNotif("No duplicate community recipes found.");
+      if (btn) { btn.disabled = false; btn.textContent = "🧹 Remove duplicate community recipes"; }
+      return;
+    }
+
+    // Delete each duplicate document from public_recipes
+    let deleted = 0;
+    for (const r of toDelete) {
+      try {
+        await dbDelete(`public_recipes/${r.id}`);
+        deleted++;
+        if (btn) btn.textContent = `Removing ${deleted}/${toDelete.length}…`;
+      } catch (e) {
+        console.error("Failed to delete duplicate:", r.id, r.title, e);
+      }
+    }
+
+    // Refresh the local community cache so the UI reflects the cleanup
+    state.comRecs = await listPublicRecipes();
+
+    showNotif(`${deleted} duplicate recipe${deleted !== 1 ? "s" : ""} removed.`);
+  } catch (e) {
+    console.error("removeDuplicateCommunityRecipes error:", e);
+    showNotif("Error scanning for duplicates. Check console.");
+  }
+
+  // Always re-enable the button — this is a reusable maintenance utility
+  if (btn) { btn.disabled = false; btn.textContent = "🧹 Remove duplicate community recipes"; }
 }
 
 // ── REGENERATE ALL SUMMARIES ─────────────────────────────────────────────────
