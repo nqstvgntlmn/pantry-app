@@ -1101,15 +1101,15 @@ export async function publishRecipe(recipe, authorName) {
 
 /**
  * checkRecipeAlreadyPublished — checks if a community version of a recipe
- * already exists before allowing a publish. Uses three strategies:
+ * already exists before allowing a publish. Author UID plays NO role in
+ * duplicate detection — only householdId and title/sourceRecipeId matter.
+ * Uses three strategies:
  *   1. If the recipe has a stored publicId, verifies that doc still exists.
- *   2. Scans community recipes for a matching sourceRecipeId (the private
- *      recipe's Firestore ID stored in the public doc at publish time).
- *   3. Falls back to matching by householdId + recipe title.
- * Matches by householdId (not authorUid) so that any member of the same
- * household is blocked from re-publishing a recipe that another member
- * already published. This prevents duplicates in multi-member households.
- * Returns the existing public recipe object if found, or null if safe to publish.
+ *   2. Scans community recipes for a matching sourceRecipeId + householdId.
+ *   3. Falls back to matching by householdId + recipe title (lowercase).
+ * Always fetches fresh data from Firestore to catch recent publishes by
+ * other household members. Returns the existing public recipe if found,
+ * or null if safe to publish.
  */
 export async function checkRecipeAlreadyPublished(recipe) {
   const uid = getCurrentUser()?.uid;
@@ -1130,14 +1130,13 @@ export async function checkRecipeAlreadyPublished(recipe) {
     }
   }
 
-  // Ensure community recipes are loaded so strategies 2 & 3 can scan them.
-  // Without this, an empty cache would let duplicates slip through.
-  if (!state.comRecs || state.comRecs.length === 0) {
-    try {
-      state.comRecs = await listPublicRecipes();
-    } catch (_) {
-      // If fetch fails, continue with empty cache — strategies 2 & 3 will just skip
-    }
+  // Always fetch fresh community recipes so strategies 2 & 3 have current data.
+  // A stale cache would miss recipes recently published by other household members,
+  // allowing duplicates to slip through in multi-member households.
+  try {
+    state.comRecs = await listPublicRecipes();
+  } catch (_) {
+    // If fetch fails, fall through with whatever cache exists — better than blocking
   }
 
   if (state.comRecs && state.comRecs.length > 0) {

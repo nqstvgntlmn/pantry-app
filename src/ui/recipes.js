@@ -2336,7 +2336,7 @@ export async function togglePublic(id) {
     // published. Prevents duplicate public_recipes documents from being created.
     const existing = await checkRecipeAlreadyPublished(r);
     if (existing) {
-      showNotif("This recipe has already been published to the community. To update the community version, edit the recipe and use the \u201cPush to community\u201d option.");
+      showNotif("This recipe has already been published to the community.");
       // Revert the toggle's CSS class — the inline onclick already toggled it,
       // but we're blocking the publish so the visual state should stay "on".
       const toggleEl = g("epub");

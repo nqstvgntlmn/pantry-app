@@ -1052,19 +1052,21 @@ export function showBulkPublishBtn() {
 
 // ── REMOVE DUPLICATE COMMUNITY RECIPES (MAINTENANCE UTILITY) ────────────────
 // Reusable maintenance utility that scans all public_recipes, identifies
-// duplicates (same title + householdId), keeps the newest, and deletes the rest.
+// duplicates (same title + householdId, ignoring author UID), keeps the
+// oldest (original publish), and deletes all newer copies.
 // Uses householdId so recipes published by different members of the same
 // household are correctly identified as duplicates.
 // Can be run as many times as needed — always available in Settings > Utilities.
 
 /**
  * removeDuplicateCommunityRecipes — maintenance utility that finds and removes
- * duplicate community recipes. Groups by title + householdId, keeps the most
- * recently created version of each duplicate set, and deletes the older copies.
+ * duplicate community recipes. Groups by title + householdId (author UID plays
+ * no role — any recipe from the same household with the same title is a duplicate).
+ * Keeps the oldest version (original publish) and deletes all newer copies.
  * Shows a summary notification when complete.
  */
 export async function removeDuplicateCommunityRecipes() {
-  if (!confirm("Scan community recipes and remove duplicates? (Keeps the newest version of each duplicate.)")) return;
+  if (!confirm("Scan community recipes and remove duplicates? (Keeps the oldest/original version of each duplicate.)")) return;
 
   const btn = g("removeDupBtn");
   if (btn) { btn.disabled = true; btn.textContent = "Scanning…"; }
@@ -1088,15 +1090,15 @@ export async function removeDuplicateCommunityRecipes() {
       groups[key].push(r);
     }
 
-    // For each group with more than one recipe, sort by createdAt descending
-    // and mark all but the newest for deletion
+    // For each group with more than one recipe, sort by createdAt ascending
+    // and keep the oldest (original publish), deleting all newer duplicates.
     const toDelete = [];
     for (const key of Object.keys(groups)) {
       const dupes = groups[key];
       if (dupes.length <= 1) continue;
 
-      // Sort newest first — keep index 0, delete the rest
-      dupes.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+      // Sort oldest first — keep index 0 (original), delete the rest
+      dupes.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
       for (let i = 1; i < dupes.length; i++) {
         toDelete.push(dupes[i]);
       }
