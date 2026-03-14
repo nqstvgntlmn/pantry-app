@@ -14,29 +14,31 @@ import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 
+// ── Firebase Admin SDK initialization (module-level) ─────────────────────────
+// Must happen at module level, not lazily inside a function, because Vercel
+// serverless functions can cold-start and getAuth()/getFirestore() will throw
+// "The default Firebase app does not exist" if the app isn't initialized first.
+// Uses getApps() guard to avoid double-initialization on warm invocations.
+// Same pattern used in api/import-recipe.js — proven to work on Vercel.
+if (!getApps().length) {
+  initializeApp({
+    credential: cert({
+      projectId: process.env.FIREBASE_PROJECT_ID || "family-pantry-c65d6",
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+    }),
+  });
+}
+
+// Admin Firestore + Auth instances — safe to grab after module-level init above
+const adminDb = getFirestore();
+const adminAuth = getAuth();
+
 // Firebase project ID — determines which Firestore database we hit
 const PROJECT = "family-pantry-c65d6";
 
 // API key is stored as a Vercel environment variable, never shipped to the client
 const API_KEY = process.env.FIREBASE_API_KEY;
-
-/**
- * _getAdminFirestore — lazily initializes Firebase Admin SDK and returns
- * the Firestore instance. Uses getApps() to avoid double-initialization
- * across warm serverless invocations.
- */
-function _getAdminFirestore() {
-  if (!getApps().length) {
-    initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-      }),
-    });
-  }
-  return getFirestore();
-}
 
 // Firestore REST API base URL — all document paths are appended to this
 const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
@@ -218,11 +220,11 @@ export default async function handler(req, res) {
 
       try {
         // Verify the caller's identity using Firebase Admin Auth
-        const decodedToken = await getAuth().verifyIdToken(bearerToken);
+        const decodedToken = await adminAuth.verifyIdToken(bearerToken);
         const callerUid = decodedToken.uid;
 
         // Read the target document to verify ownership before deleting
-        const db = _getAdminFirestore();
+        const db = adminDb;
         const docRef = db.doc(path);
         const docSnap = await docRef.get();
 
