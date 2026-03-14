@@ -14,6 +14,9 @@
 // `J`           — shorthand helper: JSON.parse(localStorage.getItem(key)), returns null on failure
 import { state, CFG_DEFAULT, J } from './state.js';
 
+// toTitleCase — used to ensure item names in activity feed are properly capitalized
+import { toTitleCase } from './helpers.js';
+
 // `getCurrentUser` — returns the currently signed-in Firebase Auth user object (or null)
 // `getIdToken` — returns the user's Firebase JWT for authenticated API calls
 import { getCurrentUser, getIdToken } from './auth.js';
@@ -643,8 +646,8 @@ export async function svi(item) {
     renderCallbacks.renderAll?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/inventory/${item.id}`, item);
-    // Log activity for new items (not quantity adjustments)
-    if (isNew) logActivity("added", item.name + " to inventory");
+    // Log activity for new items (not quantity adjustments) — uses "Supplies" label
+    if (isNew) logActivity("added", toTitleCase(item.name) + " to Supplies");
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
   finally { resumePoll(); }
@@ -664,7 +667,8 @@ export async function dli(id) {
     renderCallbacks.renderAll?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/inventory/${id}`);
-    if (removed) logActivity("removed", removed.name + " from inventory");
+    // Log removal with "Supplies" label and Title Case item name
+    if (removed) logActivity("removed", toTitleCase(removed.name) + " from Supplies");
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
   finally { resumePoll(); }
@@ -678,10 +682,16 @@ export async function dli(id) {
 export async function svr(r) {
   pausePoll();
   try {
+    // Track whether this is a new recipe or an update to an existing one
+    const isNew = !state.recs.find(x => x.id === r.id);
     state.recs = [...state.recs.filter(x => x.id !== r.id), r];
     renderCallbacks.renderRecs?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/recipes/${r.id}`, r);
+    // Log activity for recipe add/update with Title Case name
+    const recipeName = toTitleCase(r.name || r.title || "a recipe");
+    if (isNew) logActivity("added", recipeName + " to Recipes");
+    else logActivity("updated", recipeName);
   } catch (e) { console.error(e); }
   finally { resumePoll(); }
 }
@@ -692,10 +702,14 @@ export async function svr(r) {
 export async function dlr(id) {
   pausePoll();
   try {
+    // Find the recipe before removing so we can log its name
+    const removed = state.recs.find(r => r.id === id);
     state.recs = state.recs.filter(r => r.id !== id);
     renderCallbacks.renderRecs?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/recipes/${id}`);
+    // Log recipe deletion with Title Case name
+    if (removed) logActivity("deleted", toTitleCase(removed.name || removed.title || "a recipe") + " from Recipes");
   } catch (e) { console.error(e); }
   finally { resumePoll(); }
 }
@@ -713,7 +727,8 @@ export async function svShopItem(item) {
     renderCallbacks.renderShop?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/shopping/${item.id}`, item);
-    if (isNew) logActivity("added", item.name + " to shopping list");
+    // Log new shopping list additions with Title Case item name
+    if (isNew) logActivity("added", toTitleCase(item.name) + " to Shopping List");
   } catch (e) { console.error(e); }
   finally { resumePoll(); }
 }
@@ -724,10 +739,14 @@ export async function svShopItem(item) {
 export async function dlShopItem(id) {
   pausePoll();
   try {
+    // Find the item before removing so we can log its name
+    const removed = state.shop.find(s => s.id === id);
     state.shop = state.shop.filter(s => s.id !== id);
     renderCallbacks.renderShop?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/shopping/${id}`);
+    // Log removal from shopping list with Title Case
+    if (removed) logActivity("removed", toTitleCase(removed.name) + " from Shopping List");
   } catch (e) { console.error(e); }
   finally { resumePoll(); }
 }
@@ -768,7 +787,8 @@ export async function publishRecipe(recipe, authorName) {
     authorName: authorName || "Anonymous",
     authorUsername: state.username || "",
     authorUid: getCurrentUser()?.uid || "",
-    // No householdId — community recipes are fully standalone
+    // householdId allows any household member to edit the community version
+    householdId: state.hid || "",
     createdAt: new Date().toISOString(),
     likes: 0,
     commentCount: 0,
@@ -1075,6 +1095,19 @@ export async function checkMyReview(recipeId) {
   const uid = getCurrentUser()?.uid;
   if (!uid) return null;
   return dbGet(`public_recipes/${recipeId}/reviews/${uid}`);
+}
+
+/**
+ * getHouseholdMemberUids — returns the flat array of UIDs for all members
+ * of the current household. Used to check if a user belongs to the same
+ * household as a community recipe's author (for edit permissions).
+ */
+export async function getHouseholdMemberUids() {
+  if (!state.hid) return [];
+  try {
+    const hhDoc = await dbGet(`households/${state.hid}`);
+    return hhDoc?.memberUids || [];
+  } catch { return []; }
 }
 
 // ── ACTIVITY FEED ────────────────────────────────────────────────────────────

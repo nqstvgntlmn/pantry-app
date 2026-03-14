@@ -41,6 +41,7 @@ export const state = {
   cfg: { ...CFG_DEFAULT },// household settings/preferences (merged with CFG_DEFAULT)
   cookLog: [],            // history of cooked meals — used for analytics and "cook again" suggestions
   wasteLog: [],           // history of wasted/expired items — used for waste-reduction insights
+  activity: [],           // recent household activity entries — populated by real-time listener
 
   // ── Ephemeral / UI-only state ────────────────────────────────────────────
   // These are never persisted to Firestore. They control transient UI state

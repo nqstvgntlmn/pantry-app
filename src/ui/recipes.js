@@ -13,8 +13,8 @@
 //   eid       = edit-target ID    cfg = user config/preferences
 
 import { state, J, Js } from '../state.js';
-import { svr, dlr, dbSet, dbList, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, checkRecipeAlreadyPublished, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount } from '../db.js';
-import { g, fmtR, showNotif, showOv, hideOv, renderStars, formatQtyWithUnit } from '../helpers.js';
+import { svr, dlr, dbSet, dbList, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, checkRecipeAlreadyPublished, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount, getHouseholdMemberUids, logActivity } from '../db.js';
+import { g, fmtR, showNotif, showOv, hideOv, renderStars, formatQtyWithUnit, toTitleCase } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
 import { uploadRecipeCover, uploadStepPhoto, uploadCommentPhoto, deleteRecipeStorageFile } from '../storage.js';
 // g = getElementById shorthand, fmtR = format AI response text to HTML,
@@ -1476,6 +1476,8 @@ export async function saveRec() {
     const authorName = user?.displayName || localStorage.getItem("ks-who") || "Anonymous";
     const pub = await publishRecipe(recipe, authorName);
     recipe.publicId = pub.id;
+    // Log activity for publishing a new recipe to community
+    logActivity("published", toTitleCase(recipe.name || "a recipe") + " to community");
   }
 
   await svr(recipe);
@@ -2338,12 +2340,16 @@ export async function togglePublic(id) {
     // Store the returned publicId so we can unpublish later.
     const pub = await publishRecipe(r, authorName);
     r.publicId = pub.id;
+    // Log activity for publishing to community
+    logActivity("published", toTitleCase(r.name || "a recipe") + " to community");
     showNotif("Recipe shared with the community!");
   } else {
     // Remove from the community collection using the stored publicId
     const pubId = r.publicId || r.id; // fallback to r.id for legacy recipes
     await unpublishRecipe(pubId);
     r.publicId = null;
+    // Log activity for unpublishing
+    logActivity("unpublished", toTitleCase(r.name || "a recipe") + " from community");
     showNotif("Recipe removed from community");
   }
 
@@ -3044,6 +3050,17 @@ export async function openComRecipe(id) {
   const isLiked = state.myLikes.has(id);
   const isAuthor = uid && uid === r.authorUid;
 
+  // Check if current user is a household member of the recipe's author.
+  // Household members can edit community recipes published by anyone in their household.
+  // People outside the household can only fork, not edit.
+  let isHouseholdEditor = false;
+  if (!isAuthor && uid && r.householdId && r.householdId === state.hid) {
+    // Same household — allow editing
+    isHouseholdEditor = true;
+  }
+  // canEdit = true for the original author OR any household member
+  const canEdit = isAuthor || isHouseholdEditor;
+
   // Ingredients — prefer structured ingredientsRaw array, fall back to flat text
   let ingredientsContent = "";
   if (r.ingredientsRaw && r.ingredientsRaw.length) {
@@ -3078,16 +3095,19 @@ export async function openComRecipe(id) {
         `<span class="star${i < myRatingVal ? " on" : ""}" onclick="rateComRecipe('${id}',${i + 1})" style="cursor:pointer;font-size:1.3rem">${i < myRatingVal ? "★" : "☆"}</span>`
       ).join("") + clearBtn;
 
-  // Author action buttons: edit community version + unpublish
-  // Non-authors can only fork (save to their own recipes)
-  const authorActionsHtml = isAuthor
-    ? `<button class="btn bs bsm" onclick="editComRecipe('${id}')" style="margin-top:8px;width:100%">✏️ Edit community version</button>
-       <button class="btn bd bsm" onclick="unpublishComRecipe('${id}')" style="margin-top:8px;width:100%">🚫 Unpublish this recipe</button>`
+  // Edit and unpublish buttons — shown to author and household members.
+  // Household members can edit recipes published by anyone in their household.
+  // Only the original author can unpublish. People outside the household can only fork.
+  const editBtn = canEdit
+    ? `<button class="btn bs bsm" onclick="editComRecipe('${id}')" style="margin-top:8px;width:100%">✏️ Edit community version</button>`
     : "";
-  const publishBtn = authorActionsHtml;
+  const unpublishBtn = isAuthor
+    ? `<button class="btn bd bsm" onclick="unpublishComRecipe('${id}')" style="margin-top:8px;width:100%">🚫 Unpublish this recipe</button>`
+    : "";
+  const publishBtn = editBtn + unpublishBtn;
 
-  // Report button for the recipe (subtle, not shown to author)
-  const reportRecipeBtn = !isAuthor && uid
+  // Report button for the recipe (subtle, not shown to author or household editors)
+  const reportRecipeBtn = !canEdit && uid
     ? `<button class="btn-report" onclick="openReportSheet('recipe','${id}','${id}')" title="Report recipe">🚩 Report</button>`
     : "";
 
@@ -3311,6 +3331,8 @@ export async function saveComToKitchen(id) {
 
   try {
     await saveRecipeToKitchen(r);
+    // Log activity for saving a community recipe to household
+    logActivity("saved", toTitleCase(r.title || "a recipe") + " from community");
     showNotif("Recipe saved to your kitchen! 📖");
     hideOv("erec");
   } catch (e) {
@@ -3537,12 +3559,13 @@ export async function deleteComComment(recipeId, commentId) {
   }
 }
 
-// ── COMMUNITY RECIPE EDITING (AUTHOR ONLY) ──────────────────────────────
-// Recipe authors can edit their community version directly.
-// Non-authors must fork (save to their own recipes) instead.
+// ── COMMUNITY RECIPE EDITING (HOUSEHOLD MEMBERS) ────────────────────────
+// Any household member can edit community recipes published by their household.
+// Non-household users must fork (save to their own recipes) instead.
 
 /**
- * editComRecipe — opens an edit form for the author's own community recipe.
+ * editComRecipe — opens an edit form for a community recipe.
+ * Allowed for the original author OR any member of the author's household.
  * Shows a prominent warning banner that edits affect the public version.
  * Saves directly to public_recipes/{id} via dbSet.
  * @param {string} id - public recipe ID
@@ -3551,7 +3574,10 @@ export async function editComRecipe(id) {
   const r = state.comRecs.find(x => x.id === id);
   if (!r) return;
   const uid = getCurrentUser()?.uid;
-  if (uid !== r.authorUid) { showNotif("Only the author can edit"); return; }
+  // Allow edit if user is the author OR a member of the same household
+  const isAuthor = uid === r.authorUid;
+  const isHouseholdMember = r.householdId && r.householdId === state.hid;
+  if (!isAuthor && !isHouseholdMember) { showNotif("Only household members can edit"); return; }
 
   state._editingComId = id;
   _recipeViewMode = "edit";
@@ -3625,7 +3651,7 @@ export async function editComRecipe(id) {
 /**
  * saveComRecipeEdit — saves edits to a community recipe.
  * Reads form values and writes directly to public_recipes/{id} via dbSet.
- * Only callable by the recipe author.
+ * Callable by the recipe author or any member of the author's household.
  */
 export async function saveComRecipeEdit() {
   const id = state._editingComId;
@@ -3673,6 +3699,8 @@ export async function saveComRecipeEdit() {
     const titleEl = g("erecTitle");
     if (titleEl) titleEl.textContent = "Recipe";
 
+    // Log activity for community recipe edit with attribution
+    logActivity("updated", toTitleCase(title) + " (community)");
     showNotif("Community recipe updated!");
     hideOv("erec");
     renderCommunity();

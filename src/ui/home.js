@@ -12,7 +12,7 @@
 
 import { state, J, Js } from '../state.js';
 import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase, formatQtyWithUnit } from '../helpers.js';
-import { saveMp, svShopItem, loadActivity, dbList } from '../db.js';
+import { saveMp, svShopItem, dbList } from '../db.js';
 
 // initHome() — called once on app boot.
 // Sets the time-aware greeting ("Good morning/afternoon/evening"), displays
@@ -365,21 +365,23 @@ export async function addLowToShop(id) {
 // Shows recent household actions (e.g. "Bushra added Milk to shopping list")
 // on the home screen so members can see what's changed.
 
-// renderActivityFeed() — loads and displays the last 3 activity entries.
-// Kept compact for small households (2 people) to avoid clutter on the home screen.
-// Runs asynchronously since it fetches from Firestore.
-async function renderActivityFeed() {
+// renderActivityFeed() — displays the last 3 activity entries from state.activity.
+// state.activity is populated by the real-time Firestore listener in realtime.js,
+// so all household members (including non-owners) see updates instantly.
+function renderActivityFeed() {
   const el = g("activityfeed");
   const lbl = g("activitylbl");
   if (!el) return;
 
-  const entries = await loadActivity();
+  // Use real-time activity data from state (populated by onSnapshot listener)
+  const entries = state.activity || [];
   if (!entries.length) {
     if (lbl) lbl.style.display = "none";
     el.innerHTML = "";
     return;
   }
 
+  // Always show the section label — no owner/role checks, all members see activity
   if (lbl) lbl.style.display = "flex";
 
   // Format relative time (e.g. "2 min ago", "3h ago", "yesterday")
@@ -396,11 +398,11 @@ async function renderActivityFeed() {
   };
 
   // Show only the 3 most recent entries — keeps the feed compact for small households.
-  // Font sizes and weights are unified with the rest of the app (DM Sans .82rem base).
+  // Item names are displayed in Title Case for consistency (handles legacy entries).
   el.innerHTML = entries.slice(0, 3).map(e =>
     `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
       <div style="width:28px;height:28px;border-radius:50%;background:var(--acd);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;color:var(--ac);font-weight:700">${(e.memberName || "?")[0].toUpperCase()}</div>
-      <div style="flex:1;font-size:.82rem;color:var(--tx2);line-height:1.4;font-family:'DM Sans',sans-serif"><strong style="color:var(--tx);font-weight:600">${(e.memberName || "Someone").replace(/</g, "&lt;")}</strong> ${(e.action || "").replace(/</g, "&lt;")} <strong style="color:var(--tx);font-weight:600">${(e.itemName || "").replace(/</g, "&lt;")}</strong></div>
+      <div style="flex:1;font-size:.82rem;color:var(--tx2);line-height:1.4;font-family:'DM Sans',sans-serif"><strong style="color:var(--tx);font-weight:600">${toTitleCase(e.memberName || "Someone").replace(/</g, "&lt;")}</strong> ${(e.action || "").replace(/</g, "&lt;")} <strong style="color:var(--tx);font-weight:600">${(e.itemName || "").replace(/</g, "&lt;")}</strong></div>
       <div style="font-size:.68rem;color:var(--mt);flex-shrink:0">${ago(e.timestamp)}</div>
     </div>`
   ).join("");

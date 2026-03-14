@@ -761,7 +761,7 @@ export async function bulkPublishAll() {
         if (progressEl) progressEl.textContent = `Published ${success}/${total} (${skipped} skipped)…`;
         continue;
       }
-      // Publish as a fully independent copy — no householdId, new ID
+      // Publish as a fully independent copy — householdId set for household editing
       await publishRecipe(r, authorName);
       success++;
       if (progressEl) progressEl.textContent = `Published ${success}/${total}…`;

@@ -122,6 +122,22 @@ export function startRealtimeSync(hid) {
     (err) => { console.warn("realtime wastelog error:", err); }
   ));
 
+  // ── Activity feed listener — updates state.activity in real time ──
+  // Ensures all household members see Recent Activity instantly, including
+  // non-owner members (fixes issue where activity was missing for members).
+  _unsubs.push(onSnapshot(
+    collection(db, `households/${hid}/activity`),
+    (snap) => {
+      // Store latest activity entries in state, sorted newest first
+      state.activity = toDocs(snap)
+        .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+        .slice(0, 10);
+      // Re-render home screen to show updated activity feed
+      renderCallbacks.renderAll?.();
+    },
+    (err) => { console.warn("realtime activity error:", err); }
+  ));
+
   ss("synced");
   console.log("[realtime] Listeners started for household:", hid);
 }

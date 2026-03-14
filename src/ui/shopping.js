@@ -6,7 +6,7 @@
 // and bidirectional Reminders sync (records completed items for iOS Shortcut polling).
 
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
-import { svShopItem, dlShopItem, dbSet, dbGet } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc
+import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
 import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
@@ -1772,6 +1772,8 @@ export function togShop(id) {
   svShopItem({ ...item, checked: nowChecked });
   // Record completion for bidirectional Reminders sync (only when checking off, not unchecking)
   if (nowChecked) recordCompleted(item.name);
+  // Log activity for checking/unchecking items with Title Case
+  logActivity(nowChecked ? "checked off" : "unchecked", toTitleCase(item.name) + " on Shopping List");
 }
 
 /**
