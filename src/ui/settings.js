@@ -577,11 +577,19 @@ export async function removeHousehold(code) {
   const user = getCurrentUser();
   if (user) {
     try {
-      // Remove this household from the user's householdIds list in Firestore
+      // Remove this household from the user's household list in Firestore.
+      // Handles both `householdId` (singular) and `householdIds` (array) fields.
       const userDoc = await dbGet(`users/${user.uid}`);
       if (userDoc) {
-        const hids = (userDoc.householdIds || []).filter(h => h !== code);
-        await dbSet(`users/${user.uid}`, { ...userDoc, householdIds: hids, id: undefined });
+        // Build the updated list from whichever field format exists
+        const currentIds = userDoc.householdId
+          ? [userDoc.householdId]
+          : (userDoc.householdIds || []);
+        const hids = currentIds.filter(h => h !== code);
+        // Write back as array format and clear singular field if it existed
+        const updates = { ...userDoc, householdIds: hids, id: undefined };
+        if (userDoc.householdId) delete updates.householdId;
+        await dbSet(`users/${user.uid}`, updates);
       }
 
       // Remove this user from the household's members and memberUids lists

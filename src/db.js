@@ -188,7 +188,8 @@ export async function lookupHouseholdByCode(code) {
  * of the real shared household.
  */
 async function _cleanupGhostHousehold(uid, userDoc) {
-  const hids = userDoc?.householdIds || [];
+  // Use _normalizeHouseholdIds to handle both singular and plural field formats
+  const hids = _normalizeHouseholdIds(userDoc || {});
   // Ghost household has the same ID as the user's UID
   if (!hids.includes(uid)) return;
 
@@ -265,7 +266,10 @@ export async function joinHouseholdByCode(code, user) {
     // A member user should only have one household ID — the shared one they joined.
     // This prevents ghost entries from accumulating and ensures resolveHousehold
     // always picks the correct household.
-    await dbSet(`users/${user.uid}`, { ...userDoc, householdIds: [hid], id: undefined });
+    // Also clear singular `householdId` field if present — we normalize to array.
+    const updates = { ...userDoc, householdIds: [hid], id: undefined };
+    if (userDoc.householdId) delete updates.householdId;
+    await dbSet(`users/${user.uid}`, updates);
   }
 
   return hid;
@@ -308,12 +312,17 @@ export async function removeMember(hid, memberUid) {
   const memberUids = (hhDoc.memberUids || []).filter(u => u !== memberUid);
   await dbSet(`households/${hid}`, { ...hhDoc, members, memberUids, id: undefined });
 
-  // Remove household from the member's user profile
+  // Remove household from the member's user profile.
+  // Handles both `householdId` (singular) and `householdIds` (array) fields.
   try {
     const userDoc = await dbGet(`users/${memberUid}`);
     if (userDoc) {
-      const hids = (userDoc.householdIds || []).filter(h => h !== hid);
-      await dbSet(`users/${memberUid}`, { ...userDoc, householdIds: hids, id: undefined });
+      const currentIds = _normalizeHouseholdIds(userDoc);
+      const hids = currentIds.filter(h => h !== hid);
+      const updates = { ...userDoc, householdIds: hids, id: undefined };
+      // Clear singular field if it existed — we always write back as array
+      if (userDoc.householdId) delete updates.householdId;
+      await dbSet(`users/${memberUid}`, updates);
     }
   } catch { /* member profile may not be accessible */ }
 }
@@ -372,12 +381,16 @@ export async function deleteHousehold(hid, ownerUid) {
   // Delete the household document itself
   await dbDelete(`households/${hid}`);
 
-  // Remove the household from the owner's user profile
+  // Remove the household from the owner's user profile.
+  // Handles both `householdId` (singular) and `householdIds` (array) fields.
   try {
     const userDoc = await dbGet(`users/${ownerUid}`);
     if (userDoc) {
-      const hids = (userDoc.householdIds || []).filter(h => h !== hid);
-      await dbSet(`users/${ownerUid}`, { ...userDoc, householdIds: hids, id: undefined });
+      const currentIds = _normalizeHouseholdIds(userDoc);
+      const hids = currentIds.filter(h => h !== hid);
+      const updates = { ...userDoc, householdIds: hids, id: undefined };
+      if (userDoc.householdId) delete updates.householdId;
+      await dbSet(`users/${ownerUid}`, updates);
     }
   } catch { /* best-effort */ }
 }
@@ -425,9 +438,29 @@ async function migrateHousehold(oldHid, newHid) {
 }
 
 /**
- * _validateHouseholdIds — checks each household ID in the user's array,
+ * _normalizeHouseholdIds — extracts household IDs from a user doc,
+ * handling both the singular `householdId` (string) and plural
+ * `householdIds` (array) field formats. The singular field takes
+ * priority as the authoritative source when present.
+ *
+ * Returns an array of household ID strings (may be empty).
+ */
+function _normalizeHouseholdIds(userDoc) {
+  // Prefer the singular `householdId` field (authoritative, set manually or by invite)
+  if (userDoc.householdId && typeof userDoc.householdId === "string") {
+    return [userDoc.householdId];
+  }
+  // Fall back to plural `householdIds` array if singular field is absent
+  return userDoc.householdIds || [];
+}
+
+/**
+ * _validateHouseholdIds — checks each household ID in the user's profile,
  * verifying that the household document actually exists in Firestore and
  * that the user is listed in its members array.
+ *
+ * Handles both `householdId` (singular string) and `householdIds` (array)
+ * fields via _normalizeHouseholdIds — the singular field is authoritative.
  *
  * Returns the best valid household ID:
  *   1. If multiple valid households exist, prefer the one where the user
@@ -439,7 +472,7 @@ async function migrateHousehold(oldHid, newHid) {
  * any entries that point to deleted/non-existent households.
  */
 async function _validateHouseholdIds(uid, userDoc) {
-  const rawIds = userDoc.householdIds || [];
+  const rawIds = _normalizeHouseholdIds(userDoc);
   if (!rawIds.length) return null;
 
   console.log(`[_validateHouseholdIds] Checking ${rawIds.length} household IDs:`, rawIds);
@@ -492,50 +525,7 @@ async function _validateHouseholdIds(uid, userDoc) {
   return null;
 }
 
-/**
- * _cleanupBushraGhost — ONE-TIME cleanup for Bushra's account.
- * Her UID was incorrectly used as a household ID, creating a ghost document.
- * This deletes the ghost household and fixes her householdIds array to point
- * only to the correct shared household (x5Gz5ydc1UTAkXu0zYuRK5Xmjhm1).
- *
- * Safe to remove once confirmed working in production.
- */
-async function _cleanupBushraGhost(uid) {
-  const BUSHRA_UID = "xBZZZCTX5Sa7llEPSl9QXG5zscX2";
-  const CORRECT_HID = "x5Gz5ydc1UTAkXu0zYuRK5Xmjhm1";
-  if (uid !== BUSHRA_UID) return null;
 
-  console.log(`[_cleanupBushraGhost] Running one-time cleanup for Bushra`);
-
-  // Delete the ghost household document at her UID path if it exists
-  try {
-    const ghostDoc = await dbGet(`households/${BUSHRA_UID}`);
-    if (ghostDoc) {
-      console.log(`[_cleanupBushraGhost] Deleting ghost household at ${BUSHRA_UID}`);
-      await dbDelete(`households/${BUSHRA_UID}`);
-      // Also clean up ghost's invite code if it has one
-      if (ghostDoc.inviteCode) {
-        await dbDelete(`household_codes/${ghostDoc.inviteCode}`);
-      }
-    }
-  } catch (e) {
-    console.warn(`[_cleanupBushraGhost] Failed to delete ghost:`, e);
-  }
-
-  // Fix her user profile to only reference the correct shared household
-  try {
-    const userDoc = await dbGet(`users/${BUSHRA_UID}`);
-    if (userDoc) {
-      console.log(`[_cleanupBushraGhost] Fixing householdIds to [${CORRECT_HID}]`);
-      await dbSet(`users/${BUSHRA_UID}`, { ...userDoc, householdIds: [CORRECT_HID], id: undefined });
-    }
-  } catch (e) {
-    console.warn(`[_cleanupBushraGhost] Failed to update user profile:`, e);
-  }
-
-  console.log(`[_cleanupBushraGhost] Cleanup complete — returning ${CORRECT_HID}`);
-  return CORRECT_HID;
-}
 
 /**
  * resolveHousehold — the main entry point called on every sign-in.
@@ -559,13 +549,14 @@ export async function resolveHousehold(user) {
   const uid = user.uid;
   console.log(`[resolveHousehold] ENTER — uid=${uid}`);
 
-  // ── One-time cleanup for specific users ──
-  // Run before normal resolution so the corrected data is used downstream.
-  // Safe to remove once confirmed working.
-  const cleanupHid = await _cleanupBushraGhost(uid);
-  if (cleanupHid) {
-    console.log(`[resolveHousehold] One-time cleanup resolved hid=${cleanupHid}`);
-    return cleanupHid;
+  // ── Clear stale localStorage on every login ──
+  // Firestore is the source of truth for household ID. Any cached value in
+  // localStorage may be stale (e.g. from a ghost household or old session).
+  // Clearing it ensures we always use the Firestore-resolved ID.
+  const cachedHid = localStorage.getItem("ks-h");
+  if (cachedHid) {
+    console.log(`[resolveHousehold] Clearing stale cached ks-h="${cachedHid}"`);
+    localStorage.removeItem("ks-h");
   }
 
   // Check if this user has logged in before by looking for their profile doc
@@ -574,34 +565,33 @@ export async function resolveHousehold(user) {
 
   if (userDoc) {
     // Returning user — validate all household IDs and pick the correct one.
-    // _validateHouseholdIds checks each household doc and finds the one
-    // where this user appears in memberUids (the shared household).
+    // _validateHouseholdIds handles both `householdId` (singular string) and
+    // `householdIds` (array) via _normalizeHouseholdIds. The singular field
+    // is treated as authoritative when present.
     const hid = await _validateHouseholdIds(uid, userDoc);
-    console.log(`[resolveHousehold] RETURNING USER — resolved hid=${hid}, householdIds=`, userDoc.householdIds);
+    const normalizedIds = _normalizeHouseholdIds(userDoc);
+    console.log(`[resolveHousehold] RETURNING USER — resolved hid=${hid}, ids=`, normalizedIds);
 
     if (hid) {
       // Successfully resolved to a valid household where user is a member.
       // Check for a pending migration from pre-auth anonymous data.
-      const oldHid = localStorage.getItem("ks-h");
-      if (oldHid && oldHid !== hid && oldHid !== uid) {
-        console.log(`[resolveHousehold] LATE MIGRATION TRIGGERED: ${oldHid} → ${hid}`);
-        await migrateHousehold(oldHid, hid);
-        localStorage.removeItem("ks-h");
+      if (cachedHid && cachedHid !== hid && cachedHid !== uid) {
+        console.log(`[resolveHousehold] LATE MIGRATION TRIGGERED: ${cachedHid} → ${hid}`);
+        await migrateHousehold(cachedHid, hid);
       }
       return hid;
     }
 
-    // GUARD: If user has householdIds but none resolved, do NOT create a new
+    // GUARD: If user has household ID(s) but none resolved, do NOT create a new
     // household. This prevents ghost recreation. Instead, return null so the
     // caller can show onboarding/error UI.
-    const existingIds = userDoc.householdIds || [];
-    if (existingIds.length > 0) {
-      console.error(`[resolveHousehold] User has ${existingIds.length} householdIds but NONE are valid. NOT creating a ghost. Returning null.`);
+    if (normalizedIds.length > 0) {
+      console.error(`[resolveHousehold] User has ${normalizedIds.length} household IDs but NONE are valid. NOT creating a ghost. Returning null.`);
       return null;
     }
 
-    // User has a profile but no householdIds at all — they need onboarding
-    console.log(`[resolveHousehold] Returning user with empty householdIds — needs onboarding`);
+    // User has a profile but no household ID at all — they need onboarding
+    console.log(`[resolveHousehold] Returning user with no household IDs — needs onboarding`);
     return null;
   }
 

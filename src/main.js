@@ -565,11 +565,16 @@ window._appStart = async function(code) {
   const user = getCurrentUser();
   if (user) {
     try {
-      // Try to read the user's Firestore profile to get their household list
+      // Try to read the user's Firestore profile to get their household list.
+      // Handle both `householdId` (singular string) and `householdIds` (array)
+      // field formats — the singular field is authoritative when present.
       const userDoc = await dbGet(`users/${user.uid}`);
-      if (userDoc?.householdIds?.length) {
+      const firestoreIds = userDoc?.householdId
+        ? [userDoc.householdId]
+        : (userDoc?.householdIds || []);
+      if (firestoreIds.length) {
         // User has households in Firestore — cache them locally
-        const arr = [...userDoc.householdIds];
+        const arr = [...firestoreIds];
         // Ensure the current household is in the list (defensive)
         if (!arr.includes(code)) arr.push(code);
         Js("ks-hhs", arr);
@@ -869,11 +874,15 @@ function _showJoinScreen(user) {
   g("btnCreateKitchen").onclick = async () => {
     disableBtn(g("btnCreateKitchen"), true);
     try {
-      // Check if user already belongs to a household before creating a new one
+      // Check if user already belongs to a household before creating a new one.
+      // Handle both `householdId` (singular) and `householdIds` (array) fields.
       const existingProfile = await dbGet(`users/${user.uid}`);
-      if (existingProfile?.householdIds?.length) {
+      const existingIds = existingProfile?.householdId
+        ? [existingProfile.householdId]
+        : (existingProfile?.householdIds || []);
+      if (existingIds.length) {
         // User has existing household references — check if any are valid
-        for (const hid of existingProfile.householdIds) {
+        for (const hid of existingIds) {
           const hhDoc = await dbGet(`households/${hid}`);
           if (hhDoc && (hhDoc.memberUids || []).includes(user.uid)) {
             // User is already a member of this household — use it instead
