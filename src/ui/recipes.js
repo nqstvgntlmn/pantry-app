@@ -1539,7 +1539,7 @@ export async function saveRec() {
 /**
  * openRecipeView — opens a read-only cookbook-style view for a saved recipe.
  * This is the default view when tapping a recipe card. The edit overlay
- * (openER) is accessed via the pencil button in the top-right corner.
+ * (openER) is accessed via the Edit button in the action row below the title.
  */
 export function openRecipeView(id) {
   const r = state.recs.find(r => r.id === id);
@@ -1559,12 +1559,10 @@ export function openRecipeView(id) {
   if (r.imageUrl) {
     coverHtml = `<div class="rv-cover">
       <img src="${r.imageUrl}" alt="${(r.name || "").replace(/"/g, "&quot;")}" onerror="this.parentElement.style.display='none'"/>
-      <div class="rv-edit-btn" onclick="openER('${r.id}')" title="Edit recipe">✏️</div>
     </div>`;
   } else {
     coverHtml = `<div class="rv-cover-placeholder">
       <div class="rv-cover-title">${(r.name || "Untitled").replace(/</g, "&lt;")}</div>
-      <div class="rv-edit-btn" onclick="openER('${r.id}')" title="Edit recipe">✏️</div>
     </div>`;
   }
 

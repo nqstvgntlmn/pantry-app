@@ -67,7 +67,7 @@ import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, 
 import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected } from './ui/swipe.js';
 
 // Meal planning: pick recipes for days, mark as cooked, schedule, chip-based filtering
-import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCooked, saveCooked, scheduleRecipe, schedSet, closeSchedM, initRecChips, toggleChip, filterRecs } from './ui/mealplan.js';
+import { openMealM, openMealDetail, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCooked, saveCooked, scheduleRecipe, schedSet, closeSchedM, initRecChips, toggleChip, filterRecs } from './ui/mealplan.js';
 import { scheduleMealReminders } from './ui/reminders.js';
 
 // Settings: config UI, push notifications, household management, theme/dark mode
@@ -361,6 +361,7 @@ window.deleteSelected = deleteSelected; // Delete all selected items in multi-se
 
 // ── Meal plan handlers ──
 window.openMealM = openMealM;     // Open the meal plan modal for a specific day
+window.openMealDetail = openMealDetail; // Open meal detail sheet for a planned day
 window.pickRec = pickRec;         // Pick a recipe for a meal slot
 window.closeMealM = closeMealM;   // Close the meal plan modal
 window.saveMeal = saveMeal;       // Save the selected meal to the plan

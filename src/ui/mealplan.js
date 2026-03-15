@@ -5,7 +5,7 @@
 // shopping list when a saved recipe is picked.
 
 import { state } from '../state.js';
-import { saveMp, addCookLogEntry, svr, svi, dli, logActivity } from '../db.js';
+import { saveMp, markMpCooked, addCookLogEntry, svr, svi, dli, logActivity } from '../db.js';
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
 // g = getElementById helper, tk = today's date key (YYYY-MM-DD),
 // wDates = array of 7 Date objects for the current week,
@@ -134,6 +134,129 @@ export function pickRec(recId) {
 
 // Closes the meal-planning modal without saving.
 export function closeMealM() { g("mealM").classList.remove("active"); }
+
+// ── MEAL DETAIL SHEET ────────────────────────────────────────────────────────
+// Shown when the user taps a day that already has a planned meal. Displays
+// the meal name and contextual actions based on whether the meal is cooked.
+
+/**
+ * openMealDetail — shows a bottom sheet with details for a planned meal day.
+ * If the meal is NOT yet cooked: shows "Mark as Cooked", "Remove from plan", "View Recipe".
+ * If the meal IS cooked: shows a confirmed "Cooked" label and "View Recipe".
+ * k = date key (YYYY-MM-DD), lbl = human-readable day label for display.
+ */
+export function openMealDetail(k, lbl) {
+  const mealName = state.mp[k];
+  if (!mealName) return; // safety check — no meal, bail
+
+  const isCooked = !!state.mpCooked[k];
+
+  // Check if a matching recipe exists for the "View Recipe" button
+  const matchingRecipe = state.recs.find(r =>
+    r.name && r.name.toLowerCase() === mealName.toLowerCase()
+  );
+
+  // Create or reuse the meal detail modal
+  let modal = g("mealDetailM");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "mealDetailM";
+    modal.className = "modal";
+    modal.onclick = function() { this.classList.remove("active"); };
+    document.body.appendChild(modal);
+  }
+
+  // Build action buttons based on cooked status
+  let actionsHtml;
+  if (isCooked) {
+    // Meal already cooked — show confirmed label and view recipe option
+    actionsHtml = `
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 0;color:var(--ac);font-size:.92rem;font-weight:600">
+        <span style="font-size:1.1rem">✓</span> Cooked
+      </div>
+      ${matchingRecipe
+        ? `<button class="btn bs" style="width:100%;margin-top:8px" onclick="window._mealDetailViewRecipe()">📖 View Recipe</button>`
+        : ""}
+    `;
+  } else {
+    // Meal not cooked — show full action set
+    actionsHtml = `
+      <button class="btn bp" style="width:100%;margin-bottom:8px" onclick="window._mealDetailMarkCooked()">✓ Mark as Cooked</button>
+      <button class="btn bs" style="width:100%;margin-bottom:8px" onclick="window._mealDetailRemove()">🗑️ Remove from plan</button>
+      ${matchingRecipe
+        ? `<button class="btn bs" style="width:100%" onclick="window._mealDetailViewRecipe()">📖 View Recipe</button>`
+        : ""}
+    `;
+  }
+
+  // Render the modal content
+  modal.innerHTML = `
+    <div class="minner" onclick="event.stopPropagation()" style="text-align:center">
+      <div class="mttl" style="font-size:1.05rem;margin-bottom:4px">${_escHtml(mealName)}</div>
+      <div style="font-size:.8rem;color:var(--mt);margin-bottom:16px">${lbl}</div>
+      ${actionsHtml}
+    </div>
+  `;
+
+  // Register action handlers on window (inline onclick pattern)
+  window._mealDetailMarkCooked = async function() {
+    modal.classList.remove("active");
+    await _handleMarkAsCooked(k, mealName);
+  };
+
+  window._mealDetailRemove = async function() {
+    modal.classList.remove("active");
+    // Remove the meal from the plan entirely (no cooking logged)
+    await saveMp(k, null);
+    renderWeek(); renderTonight(); renderSum();
+    showNotif("Meal removed from plan");
+  };
+
+  window._mealDetailViewRecipe = function() {
+    modal.classList.remove("active");
+    if (matchingRecipe) window.openRecipeView(matchingRecipe.id);
+  };
+
+  modal.classList.add("active");
+}
+
+/**
+ * _handleMarkAsCooked — handles the full "Mark as Cooked" flow:
+ * 1. Marks the meal as cooked in Firestore (meal stays on calendar)
+ * 2. Logs the cook event to the cook log
+ * 3. Logs to the activity feed for household visibility
+ * 4. Cancels any pending meal reminder for this day
+ * 5. Prompts user about ingredient deduction from Supplies
+ */
+async function _handleMarkAsCooked(dateKey, mealName) {
+  // Mark as cooked in Firestore — meal stays on the calendar with cooked status
+  await markMpCooked(dateKey);
+
+  // Log the cook event for analytics
+  await addCookLogEntry(mealName, dateKey);
+
+  // Log to activity feed so household members see the action
+  await logActivity("cooked", mealName + " tonight 🍳");
+
+  // Cancel any pending meal reminder for this day since it's been cooked
+  cancelMealReminder(dateKey);
+
+  // Refresh the home screen to reflect the cooked state
+  renderWeek(); renderTonight(); renderSum();
+
+  // Prompt about ingredient deduction (only if matching recipe with ingredients exists)
+  await _promptIngredientDeduction(mealName);
+
+  showNotif("Meal logged! 🍳");
+}
+
+/**
+ * _escHtml — minimal HTML escaping for user-provided text in the detail sheet.
+ */
+function _escHtml(str) {
+  if (!str) return "";
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 // Closes the "Schedule Recipe" modal (cancel or backdrop tap).
 export function closeSchedM() { g("schedM").classList.remove("active"); }

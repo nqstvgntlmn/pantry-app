@@ -128,26 +128,32 @@ function _applyAllHomeSectionStates() {
 }
 
 // renderTonight() — updates the "Tonight's Dinner" card on the home screen.
-// If a meal is planned for today, it shows the meal name plus "Cooked" and "Edit"
-// action buttons. If no meal is planned, it shows a prompt to plan one or ask
-// Claude for a suggestion.
+// If a meal is planned for today, it shows the meal name with action buttons
+// that reflect the cooked state. If no meal is planned, it shows a prompt.
 export function renderTonight() {
   const td = tk();              // today's date key, e.g. "2026-03-09"
   const m = state.mp[td];      // meal plan entry for today (string or undefined)
   const d = g("tnd");          // dinner name display element
   const a = g("tna");          // dinner action buttons container
   const card = g("tonight-main"); // the entire clickable card wrapper
+  const isCooked = !!state.mpCooked[td]; // whether today's meal is already marked cooked
 
-  // Clicking anywhere on the card opens the meal-plan modal for today
-  if (card) card.onclick = function() { window.openMealM(td, "Today"); };
+  // Clicking anywhere on the card opens the meal detail sheet (if meal exists) or planner
+  if (card) card.onclick = function() {
+    if (m) window.openMealDetail(td, "Today");
+    else window.openMealM(td, "Today");
+  };
 
   if (m) {
-    // A meal is planned: show its name and action buttons
+    // A meal is planned: show its name and contextual action buttons
     if (d) d.innerHTML = m;
-    // "I cooked this" opens the cooked-logging modal; "Edit" reopens the planner.
-    // Uses secondary style (.bs) so it looks like an action button, not a status indicator.
-    // stopPropagation prevents the card's onclick from also firing.
-    if (a) a.innerHTML = `<button class="btn bsm bs" onclick="event.stopPropagation();openCooked('${td}')">🍳 I cooked this</button><button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">Edit</button>`;
+    if (isCooked) {
+      // Already cooked — show confirmed label and edit option
+      if (a) a.innerHTML = `<span style="color:var(--ac);font-size:.84rem;font-weight:600;display:inline-flex;align-items:center;gap:4px">✓ Cooked</span><button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">Edit</button>`;
+    } else {
+      // Not yet cooked — "Mark as Cooked" opens the meal detail sheet; "Edit" opens planner
+      if (a) a.innerHTML = `<button class="btn bsm bs" onclick="event.stopPropagation();openMealDetail('${td}','Today')">🍳 Mark as Cooked</button><button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">Edit</button>`;
+    }
   } else {
     // No meal planned: show placeholder text with "Find recipes" and "Ask Claude" buttons
     if (d) d.innerHTML = `<span style="font-size:.9rem;color:var(--mt);font-style:italic">No meal planned yet</span>`;
@@ -219,9 +225,14 @@ export function renderWeek() {
     const iss = d.getTime() === t.getTime(); // true if this cell is today (regardless of week)
     const m = state.mp[k];                   // meal plan text for this date (if any)
 
-    // "today" class highlights the current day in gold; "hm" (has-meal) adds a filled style.
-    // Meal name uses CSS text-overflow for graceful truncation instead of hard char cutoff.
-    return `<div class="wd${iss ? " today" : ""}${m ? " hm" : ""}" onclick="openMealM('${k}','${ns[i]} ${d.getDate()}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${m ? `<div class="wdm">${m}</div>` : ""}</div>`;
+    // "today" class highlights the current day in gold; "hm" (has-meal) adds a filled style;
+    // "hm-cooked" adds a checkmark style for cooked meals.
+    // If a meal is planned, tapping opens the meal detail sheet; otherwise opens the meal planner.
+    const cooked = state.mpCooked[k];
+    const clickHandler = m
+      ? `openMealDetail('${k}','${ns[i]} ${d.getDate()}')`
+      : `openMealM('${k}','${ns[i]} ${d.getDate()}')`;
+    return `<div class="wd${iss ? " today" : ""}${m ? " hm" : ""}${cooked ? " hm-cooked" : ""}" onclick="${clickHandler}"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${m ? `<div class="wdm">${m}</div>` : ""}</div>`;
   }).join("");
 
   // After rendering the grid, evaluate whether the week needs more variety

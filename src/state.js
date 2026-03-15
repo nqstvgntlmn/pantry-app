@@ -38,6 +38,7 @@ export const state = {
   recs: [],               // saved recipes — each has {id, title, ingredients, steps, ...}
   shop: [],               // shopping list entries — each has {id, name, checked, aisle, ...}
   mp: {},                 // meal plan mapping: { "YYYY-MM-DD": "Recipe or meal name" }
+  mpCooked: {},           // tracks which meal plan days are marked as cooked: { "YYYY-MM-DD": true }
   cfg: { ...CFG_DEFAULT },// household settings/preferences (merged with CFG_DEFAULT)
   cookLog: [],            // history of cooked meals — used for analytics and "cook again" suggestions
   wasteLog: [],           // history of wasted/expired items — used for waste-reduction insights

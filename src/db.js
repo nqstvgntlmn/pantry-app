@@ -690,10 +690,27 @@ export async function resolveHousehold(user) {
 export async function saveMp(dateKey, mealName) {
   if (mealName) {
     state.mp[dateKey] = mealName;
-    await dbSet(`households/${state.hid}/mealplan/${dateKey}`, { date: dateKey, meal: mealName });
+    // Preserve existing cooked status when updating the meal name
+    const cooked = state.mpCooked[dateKey] || false;
+    await dbSet(`households/${state.hid}/mealplan/${dateKey}`, { date: dateKey, meal: mealName, cooked });
   } else {
+    // Removing a meal also clears its cooked status
     delete state.mp[dateKey];
+    delete state.mpCooked[dateKey];
     await dbDelete(`households/${state.hid}/mealplan/${dateKey}`);
+  }
+}
+
+/**
+ * markMpCooked — marks a meal plan day as cooked in Firestore.
+ * Updates the mealplan document with cooked: true and sets the in-memory flag.
+ * The meal stays on the calendar but shows a "cooked" state in the UI.
+ */
+export async function markMpCooked(dateKey) {
+  state.mpCooked[dateKey] = true;
+  const meal = state.mp[dateKey];
+  if (meal) {
+    await dbSet(`households/${state.hid}/mealplan/${dateKey}`, { date: dateKey, meal, cooked: true });
   }
 }
 
@@ -794,11 +811,18 @@ export async function loadFirestoreData() {
     }
 
     // ── MEAL PLAN ──
-    // Each meal plan doc has { date: "YYYY-MM-DD", meal: "Recipe Name" }
+    // Each meal plan doc has { date: "YYYY-MM-DD", meal: "Recipe Name", cooked?: boolean }
     // We flatten them into state.mp as a simple { date: mealName } map
+    // and state.mpCooked as { date: true } for days marked as cooked
     const mpDocs = await dbList(`households/${state.hid}/mealplan`);
     state.mp = {};
-    mpDocs.forEach(d => { if (d.date && d.meal) state.mp[d.date] = d.meal; });
+    state.mpCooked = {};
+    mpDocs.forEach(d => {
+      if (d.date && d.meal) {
+        state.mp[d.date] = d.meal;
+        if (d.cooked) state.mpCooked[d.date] = true;
+      }
+    });
     if (!mpDocs.length) {
       // Firestore empty — try migrating from localStorage key "ks-m"
       const lsMp = J("ks-m");

@@ -130,6 +130,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .wdn{font-size:.56rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mt);font-weight:600}
 .wdd{font-family:"Fraunces",serif;font-size:1.1rem;font-weight:300;color:var(--tx2);line-height:1}.wd.today .wdd{color:var(--ac);font-weight:400}
 .wdm{font-size:.46rem;color:var(--gn);line-height:1.15;text-align:center;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;max-height:22px;padding:0 1px;word-break:break-word;overflow-wrap:break-word}
+.wd.hm-cooked{border-color:rgba(201,168,76,.4);background:rgba(201,168,76,.08)}.wd.hm-cooked .wdm{color:var(--ac)}
 .sgrd{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .sc{background:var(--card);border:1.5px solid var(--b1);border-radius:18px;padding:18px 16px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
 .sc::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(212,168,83,.05),transparent);pointer-events:none}
