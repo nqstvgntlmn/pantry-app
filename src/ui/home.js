@@ -144,9 +144,10 @@ export function renderTonight() {
   if (m) {
     // A meal is planned: show its name and action buttons
     if (d) d.innerHTML = m;
-    // "Cooked" marks the meal as cooked (deducts ingredients); "Edit" reopens the planner
-    // stopPropagation prevents the card's onclick from also firing
-    if (a) a.innerHTML = `<button class="btn bsm bp" onclick="event.stopPropagation();openCooked('${td}')">✓ Cooked</button><button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">Edit</button>`;
+    // "I cooked this" opens the cooked-logging modal; "Edit" reopens the planner.
+    // Uses secondary style (.bs) so it looks like an action button, not a status indicator.
+    // stopPropagation prevents the card's onclick from also firing.
+    if (a) a.innerHTML = `<button class="btn bsm bs" onclick="event.stopPropagation();openCooked('${td}')">🍳 I cooked this</button><button class="btn bsm bs" onclick="event.stopPropagation();openMealM('${td}','Today')">Edit</button>`;
   } else {
     // No meal planned: show placeholder text with "Find recipes" and "Ask Claude" buttons
     if (d) d.innerHTML = `<span style="font-size:.9rem;color:var(--mt);font-style:italic">No meal planned yet</span>`;
@@ -219,8 +220,8 @@ export function renderWeek() {
     const m = state.mp[k];                   // meal plan text for this date (if any)
 
     // "today" class highlights the current day in gold; "hm" (has-meal) adds a filled style.
-    // Meal name is truncated to 10 chars with ellipsis to fit the compact grid cell.
-    return `<div class="wd${iss ? " today" : ""}${m ? " hm" : ""}" onclick="openMealM('${k}','${ns[i]} ${d.getDate()}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${m ? `<div class="wdm">${m.substring(0, 10)}${m.length > 10 ? "…" : ""}</div>` : ""}</div>`;
+    // Meal name uses CSS text-overflow for graceful truncation instead of hard char cutoff.
+    return `<div class="wd${iss ? " today" : ""}${m ? " hm" : ""}" onclick="openMealM('${k}','${ns[i]} ${d.getDate()}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${m ? `<div class="wdm">${m}</div>` : ""}</div>`;
   }).join("");
 
   // After rendering the grid, evaluate whether the week needs more variety
@@ -228,17 +229,9 @@ export function renderWeek() {
 }
 
 // checkVarietyNudge() — analyzes the current week's meal plan and shows a
-// gentle suggestion banner if the meals lack cuisine diversity. This is tailored
-// to the household's preferred cuisines (Bangladeshi and Turkish).
-//
-// Logic priority:
-//   1. If any single meal appears 3+ times, warn about repetition.
-//   2. If neither Bangladeshi nor Turkish dishes are present, suggest both.
-//   3. If only one cuisine is missing, suggest that specific one.
-//   4. If everything looks varied, hide the banner.
-//
-// The banner is hidden entirely when fewer than 3 meals are planned (not enough
-// data to judge variety).
+// gentle warning banner if the same meal is repeated 3+ times in one week.
+// The cuisine-specific nudges have been removed per user request.
+// The banner is hidden entirely when fewer than 3 meals are planned.
 function checkVarietyNudge() {
   const el = g("variety-nudge"); // the nudge banner element
   if (!el) return;
@@ -249,21 +242,13 @@ function checkVarietyNudge() {
   // Not enough meals planned to make a meaningful variety judgment
   if (meals.length < 3) { el.style.display = "none"; return; }
 
-  // Check for Bangladeshi dishes by matching common keywords
-  const hasBD = meals.some(m => /dal|curry|biryani|hilsa|mustard|bengali|lentil|khichuri|pulao|bhuna/i.test(m));
-  // Check for Turkish dishes by matching common keywords
-  const hasTR = meals.some(m => /kebab|köfte|pide|börek|meze|pilav|lahmacun|mercimek|döner/i.test(m));
-
   // Count how many times each exact meal name appears (case-insensitive)
   const counts = {}; meals.forEach(m => { const w = m.toLowerCase(); counts[w] = (counts[w] || 0) + 1; });
   // Flag if any meal is repeated 3 or more times in one week
   const repeat = Object.entries(counts).find(([, c]) => c >= 3);
 
-  // Display the appropriate nudge message, or hide the banner
+  // Only show a nudge for excessive repetition — hide otherwise
   if (repeat) { el.style.display = "block"; el.innerHTML = "🔄 <strong>" + repeat[0] + "</strong> is planned " + repeat[1] + "× this week — maybe try something different?"; }
-  else if (!hasBD && !hasTR) { el.style.display = "block"; el.innerHTML = "🌍 No Bangladeshi or Turkish dishes this week yet — ask Claude for ideas!"; }
-  else if (!hasBD) { el.style.display = "block"; el.innerHTML = "🇧🇩 No Bangladeshi dishes this week — how about a dal or fish curry?"; }
-  else if (!hasTR) { el.style.display = "block"; el.innerHTML = "🇹🇷 No Turkish dishes this week — köfte or mercimek çorbası would be great!"; }
   else { el.style.display = "none"; }
 }
 
@@ -540,7 +525,7 @@ function _matchRecipeToInventory(recipe, invNames) {
  * Distinguishes between four failure states:
  *   1. No supplies in inventory — prompt user to add items first
  *   2. No community recipes exist — tell user to publish some
- *   3. No matches above 60% threshold — encourage adding more supplies
+ *   3. No matches above 40% threshold — encourage adding more supplies
  *   4. Actual Firestore/network error — show connection error + log details
  */
 export async function openRecipeMatch() {
@@ -582,10 +567,10 @@ export async function openRecipeMatch() {
         console.log(`[RecipeMatch]  "${recipe.title || recipe.name}": ${match.matchPct}% (${match.matchCount}/${match.totalCount})`);
         return { ...recipe, ...match };
       })
-      .filter(r => r.matchPct >= 60) // Only show recipes with >= 60% ingredient match
+      .filter(r => r.matchPct >= 40) // Show recipes with >= 40% ingredient match (3 tiers)
       .sort((a, b) => b.matchPct - a.matchPct); // Best matches first
 
-    console.log("[RecipeMatch] Recipes above 60% threshold:", _matchedRecipes.length);
+    console.log("[RecipeMatch] Recipes above 40% threshold:", _matchedRecipes.length);
     _matchShown = 0;
     _renderMatchPage(el);
 
@@ -600,9 +585,11 @@ export async function openRecipeMatch() {
 /**
  * _renderMatchPage(el) — Renders the next page of matched recipe cards.
  * Shows 5 recipes at a time with a "Show 5 more" button for pagination.
+ * Three tiers: 🟢 Ready (80-100%), 🟡 Almost there (60-79%), 🟠 Just a few things (40-59%).
+ * Missing ingredients shown for 🟡 and 🟠 tiers with quick "Add to Shopping" buttons.
  */
 function _renderMatchPage(el) {
-  // No recipes met the 60% threshold — distinct from "no community recipes" or errors
+  // No recipes met the 40% threshold — distinct from "no community recipes" or errors
   if (!_matchedRecipes.length) {
     el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--mt)">No matches yet — your pantry doesn\'t have enough ingredients for any community recipes right now. Try adding more items to Supplies!</div>';
     return;
@@ -613,20 +600,26 @@ function _renderMatchPage(el) {
 
   // Build HTML for this batch of recipe cards
   const cards = batch.map(recipe => {
-    // Color-coded match percentage badge
-    let color, label;
-    if (recipe.matchPct === 100) { color = "var(--gn)"; label = "Ready to cook!"; }
-    else if (recipe.matchPct >= 80) { color = "var(--am)"; label = "Almost there"; }
-    else { color = "#e67e22"; label = "Need a few things"; }
+    // Color-coded match percentage badge — three tiers
+    let color, label, tierEmoji;
+    if (recipe.matchPct >= 80) { color = "var(--gn)"; label = "Ready to cook"; tierEmoji = "🟢"; }
+    else if (recipe.matchPct >= 60) { color = "var(--am)"; label = "Almost there"; tierEmoji = "🟡"; }
+    else { color = "#e67e22"; label = "Just a few things needed"; tierEmoji = "🟠"; }
 
     // Cover photo or placeholder
     const coverImg = recipe.imageUrl
       ? `<img src="${recipe.imageUrl}" style="width:100%;height:140px;object-fit:cover;border-radius:12px 12px 0 0" alt="" onerror="this.style.display='none'"/>`
       : `<div style="width:100%;height:80px;background:var(--sf);border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:center;font-size:2rem">🍽</div>`;
 
-    // Missing ingredients list
-    const missingHtml = recipe.missing.length
-      ? `<div style="margin-top:8px"><div style="font-size:.7rem;color:var(--mt);font-weight:600;margin-bottom:4px">Missing (${recipe.missing.length}):</div>${recipe.missing.map(m => `<span style="display:inline-block;font-size:.68rem;padding:2px 8px;border-radius:8px;background:var(--rdd);color:var(--rd);margin:2px 3px 2px 0">${m}</span>`).join("")}</div>`
+    // Missing ingredients list with "Add to Shopping" buttons — shown for 🟡 and 🟠 tiers
+    // 🟢 tier (80-100%) doesn't show missing ingredients since user is ready to cook
+    const showMissing = recipe.matchPct < 80 && recipe.missing.length > 0;
+    const missingHtml = showMissing
+      ? `<div style="margin-top:8px"><div style="font-size:.7rem;color:var(--mt);font-weight:600;margin-bottom:4px">Missing (${recipe.missing.length}):</div>${recipe.missing.map(m => {
+          // Escape ingredient name for use in onclick attribute
+          const escaped = m.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+          return `<div style="display:flex;align-items:center;gap:6px;margin:3px 0"><span style="flex:1;font-size:.72rem;padding:3px 8px;border-radius:8px;background:var(--rdd);color:var(--rd)">${m}</span><button onclick="event.stopPropagation();addMissingToShop('${escaped}')" style="flex-shrink:0;font-size:.62rem;padding:3px 8px;border-radius:8px;border:1px solid var(--ac);background:var(--acd);color:var(--ac);font-weight:600;cursor:pointer;white-space:nowrap">🛒 Add</button></div>`;
+        }).join("")}</div>`
       : "";
 
     // Recipe metadata (cook time, cuisine)
@@ -637,7 +630,7 @@ function _renderMatchPage(el) {
       <div style="padding:12px 14px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
           <div style="font-family:'Fraunces',serif;font-size:1rem;font-weight:400;flex:1;line-height:1.3">${recipe.title || recipe.name || "Untitled"}</div>
-          <div style="flex-shrink:0;font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:20px;background:${color}22;color:${color}">${recipe.matchPct}%</div>
+          <div style="flex-shrink:0;font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:20px;background:${color}22;color:${color}">${tierEmoji} ${recipe.matchPct}%</div>
         </div>
         <div style="font-size:.7rem;color:${color};font-weight:600;margin-top:3px">${label}</div>
         ${meta ? `<div style="font-size:.7rem;color:var(--mt);margin-top:4px">${meta}</div>` : ""}
@@ -671,6 +664,27 @@ function _renderMatchPage(el) {
 export function showMoreMatches() {
   const el = g("recipeMatchResults");
   if (el) _renderMatchPage(el);
+}
+
+/**
+ * addMissingToShop(ingredientName) — Adds a missing recipe ingredient to the
+ * shopping list from the "What to Cook Tonight" results. Uses consolidation
+ * to prevent duplicates if the ingredient is already on the list.
+ */
+export async function addMissingToShop(ingredientName) {
+  if (!ingredientName) return;
+  const result = await consolidateShopItem({
+    id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2),
+    name: ingredientName.trim(),
+    qty: 1,
+    checked: false,
+    src: "recipe-match"
+  });
+  if (result.action === "new") {
+    showNotif(`${ingredientName} added to shopping list 🛒`);
+  } else {
+    showNotif(`${ingredientName} already on shopping list`);
+  }
 }
 
 // updExport() — builds a plain-text summary of the entire inventory, grouped by

@@ -40,7 +40,7 @@ window.getIdToken = getIdToken;
 // so they can be attached to `window` for HTML onclick access.
 
 // Home screen: dashboard rendering, weekly/tonight views, export panel
-import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection, openRecipeMatch, showMoreMatches, changeWeek } from './ui/home.js';
+import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection, openRecipeMatch, showMoreMatches, addMissingToShop, changeWeek } from './ui/home.js';
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
@@ -137,6 +137,7 @@ window.addLowToShop = addLowToShop;   // Add a low-stock item to the shopping li
 window.toggleHomeSection = toggleHomeSection; // Collapse/expand home screen sections
 window.openRecipeMatch = openRecipeMatch;     // Open "What to Cook Tonight?" recipe matching overlay
 window.showMoreMatches = showMoreMatches;     // Load next batch of matched recipes
+window.addMissingToShop = addMissingToShop;   // Add a missing ingredient to shopping from recipe match
 window.changeWeek = changeWeek;               // Navigate week calendar forward/backward
 // toggleExp — toggle the export panel's visibility (show/hide)
 window.toggleExp = function() { const p = g("exppanel"); p.style.display = p.style.display === "none" ? "block" : "none"; };

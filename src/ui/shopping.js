@@ -1448,7 +1448,8 @@ export async function changeShopUnit(id, unit) {
   // Propagate unit change to matching inventory item (universal unit sync)
   const invItem = state.inv.find(i => i.name.toLowerCase().trim() === item.name.toLowerCase().trim());
   if (invItem) await svi({ ...invItem, unit });
-  showNotif("Unit updated everywhere");
+  // Subtle 2-second banner confirming unit preference was saved across both tabs
+  showNotif("Unit updated everywhere", 2000);
   openItemDetail(id); // refresh sheet
 }
 

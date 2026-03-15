@@ -75,9 +75,8 @@ export function renderInsights() {
   }
 
   // ── CUISINE VARIETY NUDGE ─────────────────────────────────────────────────
-  // Checks the user's recent cooking history and weekly meal plan, then shows
-  // a gentle suggestion if they're repeating the same dish too often or
-  // missing dishes from their cultural cuisines (Bangladeshi / Turkish).
+  // Checks the user's recent cooking history and shows a warning only if
+  // the same dish is repeated 3+ times. Cuisine-specific nudges removed.
 
   // Grab the names of the last 7 meals cooked
   const recent = log.slice(0, 7).map(e => e.name);
@@ -90,18 +89,8 @@ export function renderInsights() {
     // Flag any meal that was cooked 3+ times in the last 7 — that's repetitive
     const repeat = Object.entries(counts).filter(([, c]) => c >= 3);
 
-    // Collect all non-empty planned meals for the current week
-    const weekMeals = Object.values(state.mp).filter(Boolean);
-
-    // Check if at least one Bangladeshi or Turkish dish is planned this week
-    // (regex matches common dishes / keywords from each cuisine)
-    const hasBD = weekMeals.some(m => /curry|dal|rice|bengali|biryani|hilsa|mustard|lentil/i.test(m));
-    const hasTR = weekMeals.some(m => /kebab|köfte|pide|börek|meze|turkish|pilav|lahmacun/i.test(m));
-
-    // Priority: repetition warning > missing Bangladeshi > missing Turkish > hide nudge
+    // Only show nudge for excessive repetition — hide otherwise
     if (repeat.length) { nudgeEl.style.display = "block"; nudgeMsg.textContent = `You've cooked "${repeat[0][0]}" ${repeat[0][1]} times this week. Time to mix it up?`; }
-    else if (!hasBD && weekMeals.length >= 3) { nudgeEl.style.display = "block"; nudgeMsg.textContent = "No Bangladeshi dishes this week — how about a dal, biryani, or fish curry?"; }
-    else if (!hasTR && weekMeals.length >= 3) { nudgeEl.style.display = "block"; nudgeMsg.textContent = "No Turkish dishes planned — köfte, mercimek çorbası, or a pilav would be great this week!"; }
     else nudgeEl.style.display = "none";
   } else if (nudgeEl) nudgeEl.style.display = "none"; // Not enough data — hide the nudge card
 

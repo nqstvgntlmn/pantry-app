@@ -246,12 +246,13 @@ let _notifTimer = null;
 
 /**
  * Shows a brief toast notification at the top of the screen.
- * The notification auto-hides after 2.5 seconds using a CSS animation
- * named "fn" (fade-notification).
+ * The notification auto-hides after the specified duration using a CSS animation
+ * named "fn" (fade-notification). Default duration is 2.5 seconds.
  *
  * @param {string} msg - The message to display.
+ * @param {number} [duration=2500] - Duration in ms before the notification fades out.
  */
-export function showNotif(msg) {
+export function showNotif(msg, duration = 2500) {
   const el = g("notif");
   if (!el) return;
   el.textContent = msg;
@@ -261,11 +262,11 @@ export function showNotif(msg) {
   // was already animating from a previous notification.
   el.style.animation = "none";
   void el.offsetWidth; // Force reflow — without this the browser won't restart the animation
-  el.style.animation = "fn 2.5s ease forwards";
+  el.style.animation = `fn ${duration / 1000}s ease forwards`;
   // Cancel any existing hide-timer so rapid-fire notifications don't
   // disappear too early
   if (_notifTimer) clearTimeout(_notifTimer);
-  _notifTimer = setTimeout(() => el.style.display = "none", 2500);
+  _notifTimer = setTimeout(() => el.style.display = "none", duration);
 }
 
 /**

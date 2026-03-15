@@ -269,7 +269,8 @@ export function scheduleRecipe(name) {
     const k = d.toISOString().split("T")[0];        // Date key (YYYY-MM-DD)
     const iss = d.getTime() === t.getTime();         // Is this cell today?
     const has = state.mp[k];                          // Existing meal for this day (if any)
-    return `<div class="wd${iss ? " today" : ""}${has ? " hm" : ""}" onclick="schedSet('${k}','${name}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${has ? `<div class="wdm">${has.substring(0, 8)}…</div>` : ""}</div>`;
+    // Meal name uses CSS text-overflow for graceful truncation instead of hard char cutoff
+    return `<div class="wd${iss ? " today" : ""}${has ? " hm" : ""}" onclick="schedSet('${k}','${name}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${has ? `<div class="wdm">${has}</div>` : ""}</div>`;
   }).join("");
 
   g("schedM").classList.add("active");

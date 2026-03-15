@@ -679,7 +679,8 @@ export async function adjUnit() {
   // Propagate unit change to matching shopping item (universal unit sync)
   const shopItem = state.shop.find(i => i.name.toLowerCase().trim() === item.name.toLowerCase().trim());
   if (shopItem) await svShopItem({ ...shopItem, unit });
-  showNotif("Unit updated everywhere");
+  // Subtle 2-second banner confirming unit preference was saved across both tabs
+  showNotif("Unit updated everywhere", 2000);
 }
 
 // Adjusts the restock threshold by a delta (+1 / -1).
@@ -732,7 +733,8 @@ export async function changeInvUnit(id, unit) {
   // Propagate unit change to matching shopping item (universal unit sync)
   const shopItem = state.shop.find(i => i.name.toLowerCase().trim() === item.name.toLowerCase().trim());
   if (shopItem) await svShopItem({ ...shopItem, unit });
-  showNotif("Unit updated everywhere");
+  // Subtle 2-second banner confirming unit preference was saved across both tabs
+  showNotif("Unit updated everywhere", 2000);
   openInvItemDetail(id); // refresh the sheet to show updated data
 }
 
