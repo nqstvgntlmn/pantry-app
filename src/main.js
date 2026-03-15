@@ -68,6 +68,7 @@ import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togI
 
 // Meal planning: pick recipes for days, mark as cooked, schedule, chip-based filtering
 import { openMealM, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCooked, saveCooked, scheduleRecipe, schedSet, closeSchedM, initRecChips, toggleChip, filterRecs } from './ui/mealplan.js';
+import { scheduleMealReminders } from './ui/reminders.js';
 
 // Settings: config UI, push notifications, household management, theme/dark mode
 // Household member management: remove, transfer ownership, leave/delete household
@@ -710,6 +711,10 @@ window._appStart = async function(code) {
     console.error("initial load error", e);
     ss("error");
   }
+
+  // Schedule meal reminders for planned meals (9 AM browser notifications).
+  // Runs after data load so state.mp is populated with the meal plan.
+  scheduleMealReminders();
 
   // Load the user's public username from Firestore.
   // If they don't have one yet, prompt them to choose one via the username modal.

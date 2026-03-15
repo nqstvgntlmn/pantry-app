@@ -5,7 +5,7 @@
 // shopping list when a saved recipe is picked.
 
 import { state } from '../state.js';
-import { saveMp, addCookLogEntry, svr } from '../db.js';
+import { saveMp, addCookLogEntry, svr, svi, dli, logActivity } from '../db.js';
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
 // g = getElementById helper, tk = today's date key (YYYY-MM-DD),
 // wDates = array of 7 Date objects for the current week,
@@ -13,6 +13,7 @@ import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add 
 // nextDay = tomorrow's date key
 import { g, tk, wDates, showNotif, renderStars, nextDay } from '../helpers.js';
 import { renderWeek, renderTonight, renderSum } from './home.js';
+import { cancelMealReminder, scheduleMealReminders } from './reminders.js';
 
 // ── RECIPE FILTER CHIPS ────────────────────────────────────────────────────────
 // These category labels appear as togglable filter buttons inside the meal modal,
@@ -187,6 +188,9 @@ export async function saveMeal() {
   // Clean up and refresh the home screen views
   window._pickedRec = null;
   closeMealM(); renderWeek(); renderSum(); renderTonight();
+
+  // Re-schedule meal reminders since the plan changed
+  scheduleMealReminders();
 }
 
 // Clears the meal assignment for the currently-open day (sets it to null)
@@ -212,45 +216,315 @@ export function openCooked(k) {
 }
 
 // Logs the meal as cooked (adds to cook log) but does NOT save it as a recipe.
+// After logging, logs activity feed entry and prompts user about ingredient deduction.
 // Clears today's meal slot afterward since it has been consumed.
 export async function skipCooked() {
-  await addCookLogEntry(state.cn, tk());  // Log the cook event with today's date
-  await saveMp(tk(), null);               // Clear today's meal slot
+  const mealName = state.cn;
+  await addCookLogEntry(mealName, tk());  // Log the cook event with today's date
+
+  // Step 1: Log to activity feed so household members see the action
+  const memberName = localStorage.getItem("ks-who") || "Someone";
+  await logActivity("cooked", mealName + " tonight 🍳");
+
+  // Cancel any pending meal reminder for this day since it's been cooked
+  cancelMealReminder(tk());
+
+  // Clear today's meal slot since it has been consumed
+  await saveMp(tk(), null);
   g("cookedM").classList.remove("active");
-  renderWeek(); renderTonight(); showNotif("Meal logged!");
+  renderWeek(); renderTonight();
+
+  // Step 2: Prompt about ingredient deduction (only if we can find a matching recipe)
+  await _promptIngredientDeduction(mealName);
+
+  showNotif("Meal logged!");
 }
 
 // Logs the meal as cooked AND saves or updates it in the recipe collection.
 // If the recipe already exists, increments its cook count. If not, creates a new
 // recipe record. Also handles the "leftovers" toggle -- if enabled, schedules
 // the same meal (with " (leftovers)" suffix) for the next day.
+// After saving, logs activity and prompts about ingredient deduction.
 export async function saveCooked() {
+  const mealName = state.cn;
   const notes = g("cnotes").value.trim();
   // Check the leftovers toggle (a custom toggle button with class "on" when active)
   const hasLeftover = g("tog-leftover")?.classList.contains("on");
 
   // Log the cook event
-  await addCookLogEntry(state.cn, tk());
+  await addCookLogEntry(mealName, tk());
+
+  // Step 1: Log to activity feed so household members see the action
+  await logActivity("cooked", mealName + " tonight 🍳");
+
+  // Cancel any pending meal reminder for this day since it's been cooked
+  cancelMealReminder(tk());
 
   // Update or create the recipe record
-  const existing = state.recs.find(r => r.name.toLowerCase() === state.cn.toLowerCase());
+  const existing = state.recs.find(r => r.name.toLowerCase() === mealName.toLowerCase());
   if (existing) {
     // Recipe exists -- bump its cook count and update the last-cooked date
     await svr({ ...existing, cookCount: (existing.cookCount || 0) + 1, lastCooked: tk() });
   } else {
     // New recipe -- create a full record with the user's rating and notes
-    await svr({ id: "rec-" + Date.now(), name: state.cn, rating: state.nr, favorited: false, notes, description: "", source: "Meal Plan", tags: [], cookCount: 1, savedAt: new Date().toLocaleDateString(), lastCooked: tk() });
+    await svr({ id: "rec-" + Date.now(), name: mealName, rating: state.nr, favorited: false, notes, description: "", source: "Meal Plan", tags: [], cookCount: 1, savedAt: new Date().toLocaleDateString(), lastCooked: tk() });
   }
 
   // If the leftovers toggle is on, schedule the meal for tomorrow with a suffix
-  if (hasLeftover) await saveMp(nextDay(), state.cn + " (leftovers)");
+  if (hasLeftover) await saveMp(nextDay(), mealName + " (leftovers)");
 
   // Clear today's meal slot since it has been cooked
   await saveMp(tk(), null);
 
   g("cookedM").classList.remove("active");
   renderWeek(); renderTonight();
+
+  // Step 2: Prompt about ingredient deduction (only if we can find a matching recipe)
+  await _promptIngredientDeduction(mealName);
+
   showNotif(hasLeftover ? "Saved! Leftovers planned for tomorrow 🥡" : "Saved to recipes! ⭐");
+}
+
+// ── INGREDIENT DEDUCTION ─────────────────────────────────────────────────────
+// After marking a meal as cooked, this prompts the user about whether to deduct
+// the recipe's ingredients from their Supplies inventory.
+
+/**
+ * _promptIngredientDeduction(mealName) — Finds the matching recipe for the
+ * cooked meal and asks the user if they want to deduct ingredients from Supplies.
+ * Only shows the prompt if a matching recipe with ingredients exists.
+ */
+async function _promptIngredientDeduction(mealName) {
+  // Find the recipe matching the cooked meal name (case-insensitive)
+  const recipe = state.recs.find(r =>
+    r.name && r.name.toLowerCase() === mealName.toLowerCase()
+  );
+
+  // No matching recipe or no ingredients — skip silently
+  if (!recipe) return;
+  const ingredients = _getRecipeIngredients(recipe);
+  if (!ingredients.length) return;
+
+  // Show the ingredient deduction prompt modal
+  _showDeductionPrompt(mealName, ingredients);
+}
+
+/**
+ * _getRecipeIngredients(recipe) — Extracts ingredient strings from a recipe.
+ * Supports ingredientsRaw (structured array) and description (legacy text format).
+ * Returns an array of raw ingredient strings like ["2 cups flour", "1 tsp salt"].
+ */
+function _getRecipeIngredients(recipe) {
+  // Prefer structured ingredientsRaw array (set by recipe importer)
+  if (recipe.ingredientsRaw && Array.isArray(recipe.ingredientsRaw) && recipe.ingredientsRaw.length) {
+    return recipe.ingredientsRaw.filter(ing => typeof ing === "string" && ing.trim());
+  }
+  // Fallback: parse ingredients from description text (legacy format)
+  if (recipe.description) {
+    const lines = recipe.description.split(/\n/);
+    const ingStart = lines.findIndex(l => /^ingredients/i.test(l.trim()));
+    if (ingStart >= 0) {
+      const ingLines = [];
+      for (let i = ingStart + 1; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        // Stop at next section header (Steps, Instructions, Directions, etc.)
+        if (/^(steps|instructions|directions|notes)/i.test(trimmed)) break;
+        if (trimmed) ingLines.push(trimmed.replace(/^[-•*]\s*/, ""));
+      }
+      return ingLines;
+    }
+  }
+  return [];
+}
+
+/**
+ * _showDeductionPrompt(mealName, ingredients) — Shows a modal asking the user
+ * if they want to deduct recipe ingredients from Supplies.
+ * Two options: "Yes, deduct from Supplies" and "No, skip"
+ */
+function _showDeductionPrompt(mealName, ingredients) {
+  // Create or reuse the deduction prompt modal
+  let modal = g("deductM");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "deductM";
+    modal.className = "modal";
+    modal.onclick = function() { this.classList.remove("active"); };
+    document.body.appendChild(modal);
+  }
+
+  // Build the modal content with the two action buttons
+  modal.innerHTML = `
+    <div class="minner" onclick="event.stopPropagation()" style="text-align:center">
+      <div class="mttl">🧺 Deduct Ingredients?</div>
+      <div style="font-size:.85rem;color:var(--tx2);margin-bottom:16px;line-height:1.5">
+        Did you use all the ingredients for <strong>${mealName}</strong>?
+      </div>
+      <div class="brow" style="gap:10px">
+        <button class="btn bp" style="flex:1;font-size:.82rem" onclick="window._confirmDeduction()">Yes, deduct from Supplies</button>
+        <button class="btn bs" style="flex:1;font-size:.82rem" onclick="window._skipDeduction()">No, skip</button>
+      </div>
+    </div>
+  `;
+
+  // Store ingredients temporarily for the confirmation handler
+  window._pendingDeductIngredients = ingredients;
+
+  // Register the handlers on window (inline onclick pattern)
+  window._confirmDeduction = async function() {
+    modal.classList.remove("active");
+    await _deductIngredientsFromSupplies(ingredients);
+  };
+  window._skipDeduction = function() {
+    modal.classList.remove("active");
+    window._pendingDeductIngredients = null;
+  };
+
+  modal.classList.add("active");
+}
+
+/**
+ * _parseIngredientQty(ingredientStr) — Parses a raw ingredient string to extract
+ * the name and quantity. Handles formats like "2 cups flour", "1/2 tsp salt",
+ * "3 cloves garlic", "salt and pepper to taste".
+ * Returns { name: string, qty: number|null, unit: string|null }
+ */
+function _parseIngredientQty(ingredientStr) {
+  let str = ingredientStr.trim().replace(/^[-•*]\s*/, "");
+
+  // Match leading quantity: integers, decimals, fractions, Unicode fractions
+  const qtyMatch = str.match(/^([\d]+(?:\.\d+)?(?:\s*\/\s*\d+)?|[\d]*\s*[½¼¾⅓⅔])\s*/);
+  let qty = null;
+  if (qtyMatch) {
+    const raw = qtyMatch[1].trim();
+    // Handle Unicode fractions
+    if (raw.includes("½")) qty = (parseInt(raw) || 0) + 0.5;
+    else if (raw.includes("¼")) qty = (parseInt(raw) || 0) + 0.25;
+    else if (raw.includes("¾")) qty = (parseInt(raw) || 0) + 0.75;
+    else if (raw.includes("⅓")) qty = (parseInt(raw) || 0) + 1/3;
+    else if (raw.includes("⅔")) qty = (parseInt(raw) || 0) + 2/3;
+    else if (raw.includes("/")) {
+      // Handle "1/2", "3/4" style fractions
+      const parts = raw.split("/");
+      qty = parseFloat(parts[0]) / parseFloat(parts[1]);
+    } else {
+      qty = parseFloat(raw);
+    }
+    str = str.slice(qtyMatch[0].length);
+  }
+
+  // Match common unit words after the quantity
+  const unitMatch = str.match(/^(cups?|tbsps?|tsps?|tablespoons?|teaspoons?|ounces?|oz|lbs?|pounds?|grams?|g|kg|ml|liters?|cloves?|cans?|packages?|pkgs?|bunche?s?|heads?|slices?|pieces?|bottles?|jars?|bags?|boxes?|gallons?|pints?|quarts?|rolls?|dozen|loaf|loaves)\s*/i);
+  let unit = null;
+  if (unitMatch) {
+    unit = unitMatch[1].trim();
+    str = str.slice(unitMatch[0].length);
+  }
+
+  // Clean up remaining name: strip "of", leading/trailing junk
+  const name = str.replace(/^of\s+/i, "").replace(/,.*$/, "").replace(/\(.*\)/, "").trim();
+
+  return { name, qty, unit };
+}
+
+/**
+ * _normalizeForMatch(name) — Normalizes an ingredient name for fuzzy matching
+ * against inventory items. Lowercases, strips common modifiers and plurals.
+ */
+function _normalizeForMatch(name) {
+  if (!name) return "";
+  return name.toLowerCase()
+    .replace(/\b(fresh|dried|chopped|minced|sliced|diced|ground|large|small|medium|whole|organic|optional|to taste|for garnish|as needed)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/s$/, ""); // basic plural removal
+}
+
+/**
+ * _unitsCompatible(recipeUnit, invUnit) — Checks if a recipe unit can be
+ * directly subtracted from an inventory unit. Only allows exact or known-compatible
+ * unit matches. Returns false for incompatible units (deduction skipped silently).
+ */
+function _unitsCompatible(recipeUnit, invUnit) {
+  if (!recipeUnit || !invUnit) return true; // no unit specified = assume compatible
+  const r = recipeUnit.toLowerCase().replace(/s$/, "");
+  const inv = invUnit.toLowerCase().replace(/s$/, "");
+
+  // Exact match after normalization
+  if (r === inv) return true;
+
+  // Known aliases (recipe unit → inventory unit)
+  const aliases = {
+    "lb": "pound", "lbs": "pound", "oz": "ounce", "ounce": "oz",
+    "g": "gram", "gram": "g", "kg": "kilogram",
+    "ml": "milliliter", "l": "liter", "liter": "l",
+    "tbsp": "tablespoon", "tablespoon": "tbsp",
+    "tsp": "teaspoon", "teaspoon": "tsp",
+    "clove": "clove", "can": "can", "piece": "piece", "unit": "unit",
+    "bottle": "bottle", "jar": "jar", "bag": "bag", "box": "box",
+    "bunch": "bunch", "head": "head", "loaf": "loaf",
+    "gallon": "gallon", "dozen": "dozen", "roll": "roll",
+    "package": "pack", "pkg": "pack", "pack": "pack"
+  };
+  const rNorm = aliases[r] || r;
+  const iNorm = aliases[inv] || inv;
+  return rNorm === iNorm;
+}
+
+/**
+ * _deductIngredientsFromSupplies(ingredients) — For each recipe ingredient,
+ * finds a matching item in Supplies inventory and deducts the quantity.
+ * - If units match: subtract directly
+ * - If units don't match: skip silently
+ * - If quantity drops to zero or below: remove the item entirely
+ * - If ingredient not found in Supplies: skip silently
+ * Shows a summary toast when done.
+ */
+async function _deductIngredientsFromSupplies(ingredients) {
+  let deductedCount = 0;
+
+  for (const ingStr of ingredients) {
+    const parsed = _parseIngredientQty(ingStr);
+    if (!parsed.name) continue;
+
+    const normName = _normalizeForMatch(parsed.name);
+    if (!normName) continue;
+
+    // Find matching inventory item by fuzzy name match (substring both ways)
+    const invItem = state.inv.find(item => {
+      const invNorm = _normalizeForMatch(item.name);
+      return invNorm.includes(normName) || normName.includes(invNorm);
+    });
+
+    // If ingredient not found in Supplies, skip silently
+    if (!invItem) continue;
+
+    // If recipe specifies a quantity, attempt deduction
+    if (parsed.qty != null && parsed.qty > 0) {
+      // Check unit compatibility before deducting
+      if (!_unitsCompatible(parsed.unit, invItem.unit)) continue;
+
+      const newQty = (invItem.qty || 0) - parsed.qty;
+      if (newQty <= 0) {
+        // Quantity depleted — remove item from Supplies entirely
+        await dli(invItem.id);
+      } else {
+        // Reduce quantity and save updated item
+        await svi({ ...invItem, qty: newQty });
+      }
+      deductedCount++;
+    }
+  }
+
+  // Show summary toast
+  if (deductedCount > 0) {
+    showNotif(`${deductedCount} ingredient${deductedCount !== 1 ? "s" : ""} deducted from Supplies`);
+  } else {
+    showNotif("No matching ingredients found to deduct");
+  }
+
+  // Clean up
+  window._pendingDeductIngredients = null;
 }
 
 // ── SCHEDULE RECIPE MODAL ──────────────────────────────────────────────────────
@@ -278,9 +552,12 @@ export function scheduleRecipe(name) {
 
 // Assigns a recipe to a specific day from the schedule modal.
 // k = date key (YYYY-MM-DD), name = recipe name. Saves to DB, closes modal,
-// and refreshes the home screen.
+// refreshes the home screen, and re-schedules meal reminders.
 export async function schedSet(k, name) {
   await saveMp(k, name);
   g("schedM").classList.remove("active");
   renderWeek(); renderTonight(); showNotif("Scheduled! 📅");
+
+  // Re-schedule meal reminders since a new meal was planned
+  scheduleMealReminders();
 }
