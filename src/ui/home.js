@@ -12,7 +12,8 @@
 
 import { state, J, Js } from '../state.js';
 import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase, formatQtyWithUnit } from '../helpers.js';
-import { saveMp, svShopItem, dbList } from '../db.js';
+import { saveMp, dbList } from '../db.js';
+import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
 
 // initHome() — called once on app boot.
 // Sets the time-aware greeting ("Good morning/afternoon/evening"), displays
@@ -387,23 +388,20 @@ export async function addLowToShop(id) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
 
-  // Check if this item is already on the shopping list
-  const existing = state.shop.find(s =>
-    s.name.toLowerCase() === item.name.toLowerCase() && !s.checked
-  );
-  if (existing) {
-    showNotif(`${item.name} is already on your list`);
-    return;
-  }
-
-  await svShopItem({
+  // Consolidate with existing items — increments qty if already on the list
+  const result = await consolidateShopItem({
     id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2),
     name: item.name,
     qty: 1,
     checked: false,
     src: "low-stock"
   });
-  showNotif(`${item.name} added to shopping list 🛒`);
+
+  if (result.action === "new") {
+    showNotif(`${item.name} added to shopping list 🛒`);
+  } else {
+    showNotif(`${item.name} quantity updated on shopping list 🛒`);
+  }
 }
 
 // Badge on Supplies tab removed — per design requirement, no notification dot.

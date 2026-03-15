@@ -16,7 +16,8 @@
 //   - Shopping list mode: scanned product is added as a shopping list item
 
 import { state } from '../state.js';            // Global app state (holds current product, inventory, scan destination, etc.)
-import { svi, svShopItem } from '../db.js';      // svi = save inventory item, svShopItem = save shopping list item (both persist to Firebase)
+import { svi } from '../db.js';                   // svi = save inventory item (persists to Firebase)
+import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list (deduplicates by name)
 import { g, showNotif, showOv, hideOv } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels
 
 // Track whether the live scanner is currently active to avoid double-init
@@ -322,8 +323,8 @@ export function addScannedToList() {
   if (state.cp.image) item.image = state.cp.image;   // Persist the product image for list thumbnail
   if (note) item.note = note;                         // Include note only if the user typed something
 
-  // Persist the new shopping list item to the database
-  svShopItem(item);
+  // Consolidate with existing items instead of creating duplicates
+  consolidateShopItem(item);
 
   showNotif("Added to list: " + name);    // Toast confirmation
   hideOv("result"); hideOv("scan");       // Close both overlays (result and scan)

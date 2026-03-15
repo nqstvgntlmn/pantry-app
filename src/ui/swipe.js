@@ -16,7 +16,8 @@
 //   </div>
 
 import { state } from '../state.js';
-import { dli, dlShopItem, svShopItem } from '../db.js';
+import { dli, dlShopItem } from '../db.js';
+import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
 import { g, showNotif } from '../helpers.js';
 
 // ── Swipe gesture state ──
@@ -565,24 +566,23 @@ export async function swipeAddItem(id, list) {
 }
 
 // Shared logic for adding an inventory item to the shopping list.
-// Checks for duplicates, creates the shopping item, and shows a notification.
+// Uses consolidation to increment qty if already on the list instead of duplicating.
 async function _addInvItemToShopping(id) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
 
-  // Don't add duplicates — check if an unchecked shopping item with this name exists
-  const existing = state.shop.find(s => s.name.toLowerCase() === item.name.toLowerCase() && !s.checked);
-  if (existing) {
-    showNotif(`${item.name} is already on your list`);
-    return;
-  }
-
-  await svShopItem({
+  // Consolidate with existing items — increments qty if already on the list
+  const result = await consolidateShopItem({
     id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2),
     name: item.name, qty: 1, checked: false,
     brand: item.brand || "", image: item.image || null, src: "supplies"
   });
-  showNotif(`${item.name} added to shopping list 🛒`);
+
+  if (result.action === "new") {
+    showNotif(`${item.name} added to shopping list 🛒`);
+  } else {
+    showNotif(`${item.name} quantity updated on shopping list 🛒`);
+  }
 }
 
 // Handles the delete action when the user taps the revealed red delete button.

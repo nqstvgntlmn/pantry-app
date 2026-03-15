@@ -13,7 +13,8 @@
 //   eid       = edit-target ID    cfg = user config/preferences
 
 import { state, J, Js } from '../state.js';
-import { svr, dlr, dbSet, dbList, svShopItem, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, checkRecipeAlreadyPublished, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount, getHouseholdMemberUids, logActivity } from '../db.js';
+import { svr, dlr, dbSet, dbList, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, checkRecipeAlreadyPublished, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount, getHouseholdMemberUids, logActivity } from '../db.js';
+import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
 import { g, fmtR, showNotif, showOv, hideOv, renderStars, formatQtyWithUnit, toTitleCase } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
 import { uploadRecipeCover, uploadStepPhoto, uploadCommentPhoto, deleteRecipeStorageFile } from '../storage.js';
@@ -2235,9 +2236,9 @@ export async function addRecIngToShop(id) {
 
     if (!toAdd.length) { showNotif("All ingredients already in pantry ✓"); return; }
 
-    // Save each missing ingredient as a new shopping list item
+    // Save each missing ingredient — consolidate with existing items instead of duplicating
     for (const ing of toAdd) {
-      await svShopItem({ id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2), name: ing, qty: 1, checked: false, src: "recipe" });
+      await consolidateShopItem({ id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2), name: ing, qty: 1, checked: false, src: "recipe" });
     }
 
     showNotif(`Added ${toAdd.length} ingredient${toAdd.length !== 1 ? "s" : ""} to shopping list 🛒`);

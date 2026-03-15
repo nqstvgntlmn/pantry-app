@@ -7,6 +7,7 @@
 
 import { state } from '../state.js';
 import { svi, dli, addWasteEntry, dbSet, dbGet, svShopItem } from '../db.js';
+import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
 // g        – getElementById shorthand
 // xSt      – returns expiry status object { c: class, l: label } for a date
 // ll       – location label (e.g. "fridge" → "🌡 Fridge")
@@ -1571,21 +1572,11 @@ export function toggleInvVoice() {
  * checking if the item is already on the shopping list.
  */
 export async function addInvToShopping(id) {
-  const { svShopItem } = await import('../db.js');
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
 
-  // Check if this item is already on the shopping list (case-insensitive)
-  const existing = state.shop.find(s =>
-    s.name.toLowerCase() === item.name.toLowerCase() && !s.checked
-  );
-  if (existing) {
-    showNotif(`${item.name} is already on your list`);
-    return;
-  }
-
-  // Create a new shopping item with the same name and brand
-  await svShopItem({
+  // Consolidate with existing items — increments qty if already on the list
+  const result = await consolidateShopItem({
     id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2),
     name: item.name,
     qty: 1,
@@ -1595,6 +1586,10 @@ export async function addInvToShopping(id) {
     src: "supplies"
   });
 
-  showNotif(`${item.name} added to shopping list 🛒`);
+  if (result.action === "new") {
+    showNotif(`${item.name} added to shopping list 🛒`);
+  } else {
+    showNotif(`${item.name} quantity updated on shopping list 🛒`);
+  }
   closeInvItemDetail();
 }

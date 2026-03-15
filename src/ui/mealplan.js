@@ -5,7 +5,8 @@
 // shopping list when a saved recipe is picked.
 
 import { state } from '../state.js';
-import { saveMp, addCookLogEntry, svr, svShopItem } from '../db.js';
+import { saveMp, addCookLogEntry, svr } from '../db.js';
+import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
 // g = getElementById helper, tk = today's date key (YYYY-MM-DD),
 // wDates = array of 7 Date objects for the current week,
 // showNotif = toast notification, renderStars = star-rating UI,
@@ -175,8 +176,8 @@ export async function saveMeal() {
       // Skip if the exact ingredient is already on the shopping list
       if (shopNames.some(n => n === cl)) continue;
 
-      // Add the ingredient as a new shopping list item, tagged with src:"recipe"
-      await svShopItem({ id: Date.now().toString() + Math.random().toString(36).slice(2), name: clean, qty: 1, checked: false, src: "recipe" });
+      // Consolidate with existing items instead of creating duplicates, tagged with src:"recipe"
+      await consolidateShopItem({ id: Date.now().toString() + Math.random().toString(36).slice(2), name: clean, qty: 1, checked: false, src: "recipe" });
       added++;
     }
 

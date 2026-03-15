@@ -112,6 +112,79 @@ export function _savePreferredUnit(name, unit) {
   _saveProductPreference(name, { preferredUnit: unit });
 }
 
+// ── QUANTITY CONSOLIDATION ────────────────────────────────────────────────────
+// When adding items to the shopping list, we consolidate duplicates instead of
+// creating separate entries. This applies to ALL add paths: manual add, voice,
+// barcode scan, recipe ingredients, meal plan build, Running Low, and Supplies.
+
+/**
+ * _normalizeForMatch(name) — Normalizes an item name for duplicate matching.
+ * Lowercases, trims whitespace, strips punctuation, and collapses spaces.
+ * Used to compare item names across all shopping list add paths.
+ * NOTE: "Coriander" and "Cilantro" are treated as different items — no synonyms.
+ */
+export function _normalizeForMatch(name) {
+  if (!name) return "";
+  return name.trim().toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * consolidateShopItem(newItem) — Adds an item to the shopping list with quantity consolidation.
+ *
+ * Before creating a new entry, checks if an unchecked item with the same
+ * normalized name already exists in the list:
+ *   - Same unit (or both unitless): increment the existing item's quantity
+ *   - Different units: keep existing entry, append new quantity as a consolidation note
+ *     e.g. "2 tbsp + 1 tsp" — never creates a duplicate entry
+ *   - No match: add as a new item normally
+ *
+ * Already-checked (bought) items are ignored — only active items are consolidated.
+ *
+ * @param {object} newItem - The shopping item to add (must have at least id, name, qty)
+ * @returns {Promise<{action: string, item: object}>} Result with action type and final item
+ */
+export async function consolidateShopItem(newItem) {
+  const normName = _normalizeForMatch(newItem.name);
+
+  // Find an existing unchecked item with the same normalized name
+  const existing = state.shop.find(s =>
+    !s.checked && _normalizeForMatch(s.name) === normName
+  );
+
+  if (!existing) {
+    // No match — add as a new item
+    await svShopItem(newItem);
+    return { action: "new", item: newItem };
+  }
+
+  // Determine units for comparison (treat empty/undefined as the same)
+  const existingUnit = (existing.unit || "").trim().toLowerCase();
+  const newUnit = (newItem.unit || "").trim().toLowerCase();
+
+  if (existingUnit === newUnit) {
+    // Units match (or both unitless) — increment the existing item's quantity
+    const updatedQty = (existing.qty || 1) + (newItem.qty || 1);
+    // Merge any note from the new item if the existing item has no note
+    const mergedNote = existing.note || newItem.note || "";
+    const updated = { ...existing, qty: updatedQty };
+    if (mergedNote) updated.note = mergedNote;
+    await svShopItem(updated);
+    return { action: "consolidated", item: updated, addedQty: newItem.qty || 1 };
+  } else {
+    // Units don't match — consolidate into one entry with a descriptive note.
+    // Build a human-readable string like "2 tbsp + 1 tsp" so the user sees
+    // all the quantities in one place without duplicate list entries.
+    const existingDesc = `${formatQty(existing.qty || 1)} ${existing.unit || "unit"}`;
+    const newDesc = `${formatQty(newItem.qty || 1)} ${newItem.unit || "unit"}`;
+    // If already consolidated before, append to the existing consolidation string
+    const consolidatedAmounts = existing.consolidatedAmounts
+      ? `${existing.consolidatedAmounts} + ${newDesc}`
+      : `${existingDesc} + ${newDesc}`;
+    await svShopItem({ ...existing, consolidatedAmounts });
+    return { action: "consolidated-mixed", item: existing };
+  }
+}
+
 // ── VOICE INPUT (Web Speech API) ─────────────────────────────────────────────
 // Uses the SpeechRecognition API to let users speak items into the shopping list.
 // The mic button is hidden if the browser doesn't support the API (graceful fallback).
@@ -246,7 +319,8 @@ export function toggleVoice() {
       else if (leadMatch) { name = leadMatch[2].trim(); qty = parseInt(leadMatch[1], 10) || 1; }
 
       const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
-      svShopItem(item);
+      // Consolidate with existing items instead of creating duplicates
+      consolidateShopItem(item);
       showNotif(`Added "${transcript}" 🎤`);
 
       // Clear the input field since the item has been committed
@@ -313,10 +387,19 @@ export function sH(item) {
   // Default to qty 1 if the field is missing (backwards compat with old items)
   const qty = item.qty || 1;
   const unit = item.unit || "Unit";
-  // Show qty badge with unit using fraction display; qty=1 gets a muted style.
-  // Quantity is edited only via the detail sheet stepper, not inline.
-  const qtyDisplay = formatQty(qty);
-  const qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}"> × ${qtyDisplay} ${unit}</span>`;
+
+  // Quantity badge: two display modes depending on whether units were consolidated
+  //   1. Normal: "× 3 Unit" — when all quantities share the same unit
+  //   2. Consolidated mixed: "— 2 tbsp + 1 tsp" — when different units were merged
+  let qtyBadge;
+  if (item.consolidatedAmounts) {
+    // Mixed-unit consolidation: show the descriptive amounts string
+    qtyBadge = `<span class="sh-qty sh-qty-mixed"> — ${item.consolidatedAmounts}</span>`;
+  } else {
+    // Standard display: show qty × unit with fraction formatting; qty=1 gets muted style
+    const qtyDisplay = formatQty(qty);
+    qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}"> × ${qtyDisplay} ${unit}</span>`;
+  }
 
   // [IMAGES DISABLED] — Product images commented out pending decision.
   // See session notes: images caused false positives from external databases,
@@ -467,8 +550,8 @@ export function qadd() {
   const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
   if (note) item.note = note; // Only include note field if the user typed something
 
-  // Save the item as plain text — no enriched data since user didn't pick a specific result
-  svShopItem(item);
+  // Consolidate with existing items instead of creating duplicates
+  consolidateShopItem(item);
   i.value = ""; // Clear the input after adding
 
   // Reset and collapse the note field so it's clean for the next item
@@ -1024,7 +1107,8 @@ export function pickInlineResult(index) {
   };
   if (note) item.note = note;
 
-  svShopItem(item);
+  // Consolidate with existing items instead of creating duplicates
+  consolidateShopItem(item);
   showNotif(`Added "${product.name}" ✓`);
 
   // Clean up: clear input, collapse note, close sheet, reset dropdown
@@ -2139,7 +2223,8 @@ function bpUpdBtn() {
 export async function bpConfirm() {
   const toAdd = window._bpItems.filter(i => i.sel);
   if (!toAdd.length) { g("buildPreviewM").classList.remove("active"); return; } // Nothing selected — just close
-  for (const it of toAdd) await svShopItem({ id: Date.now().toString() + Math.random().toString(36).slice(2), name: it.name, qty: 1, checked: false, src: "meal-plan" });
+  // Consolidate each item with existing shopping list entries instead of creating duplicates
+  for (const it of toAdd) await consolidateShopItem({ id: Date.now().toString() + Math.random().toString(36).slice(2), name: it.name, qty: 1, checked: false, src: "meal-plan" });
   g("buildPreviewM").classList.remove("active"); // Close the preview modal
   showNotif(`Added ${toAdd.length} item${toAdd.length !== 1 ? "s" : ""}! 🛒`);
 }
@@ -2235,12 +2320,15 @@ function renderNearbyStores(stores) {
  * addDealToList(name) — Adds a deal item to the shopping list.
  * Deduplicates by checking if an item with the same name (case-insensitive) already exists.
  */
-export function addDealToList(name) {
+export async function addDealToList(name) {
   const decoded = (name || "").replace(/&#39;/g, "'"); // Fix any HTML-encoded apostrophes
-  if (!state.shop.find(i => i.name.toLowerCase() === decoded.toLowerCase())) {
-    svShopItem({ id: Date.now().toString(), name: decoded, qty: 1, checked: false, src: "deal" });
+  // Consolidate with existing items — increments qty if already on the list
+  const result = await consolidateShopItem({ id: Date.now().toString(), name: decoded, qty: 1, checked: false, src: "deal" });
+  if (result.action === "new") {
     showNotif(decoded + " added!");
-  } else { showNotif("Already on your list!"); }
+  } else {
+    showNotif(decoded + " quantity updated!");
+  }
 }
 
 /**
