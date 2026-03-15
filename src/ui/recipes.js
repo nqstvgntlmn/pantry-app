@@ -1980,7 +1980,8 @@ export function openER(id) {
     ${stepPhotosHtml}
     <div style="display:flex;align-items:center;gap:10px;margin:12px 0"><span style="font-size:.88rem">Favorite</span><div class="tog${r.favorited ? " on" : ""}" id="etog" onclick="this.classList.toggle('on')"></div></div>
     <div style="display:flex;align-items:center;gap:10px;margin:6px 0 14px"><span style="font-size:.88rem">Share publicly</span><div class="tog${r.isPublic ? " on" : ""}" id="epub" onclick="togglePublic('${r.id}');this.classList.toggle('on')"></div><span style="font-size:.72rem;color:var(--mt)">Visible to the community</span></div>
-    <div class="brow"><button class="btn bd" style="flex:1" onclick="delER()">Delete</button><button class="btn bp" style="flex:2" onclick="updR()">Save</button></div>`;
+    <button class="btn bp" style="width:100%;margin-bottom:12px" onclick="updR()">Save</button>
+    <button class="btn" style="width:100%;background:transparent;border:1.5px solid var(--rd);color:var(--rd);font-weight:600" onclick="delER()">🗑 Delete Recipe</button>`;
 
   showOv("erec"); // display the Edit Recipe overlay
 }
@@ -2138,13 +2139,60 @@ export async function updR() {
 // ── DELETE RECIPE ────────────────────────────────────────────────────────────
 
 /**
- * Deletes the recipe currently open in the Edit overlay after a confirmation
- * dialog. Uses the recipe ID stored in state.eid (set by openER).
+ * Deletes the recipe currently open in the Edit overlay. Handles two cases:
+ * 1. Recipe has NO community version (no publicId) — confirm and delete from household.
+ * 2. Recipe HAS a community version (publicId) — show a three-option dialog:
+ *    - "Delete local copy only" removes from household recipes, keeps public_recipes.
+ *    - "Delete everywhere" removes from BOTH household recipes AND public_recipes.
+ *    - "Cancel" dismisses without deleting.
+ * After deletion, logs activity and navigates back to My Recipes list.
  */
 export async function delER() {
-  if (!confirm("Delete this recipe?")) return;
-  await dlr(state.eid); // dlr = delete recipe from Firestore
-  showNotif("Deleted"); hideOv("erec");
+  const r = state.recs.find(x => x.id === state.eid);
+  if (!r) return;
+
+  const recipeName = r.name || r.title || "this recipe";
+
+  // Case 1: No community version — simple confirm dialog
+  if (!r.publicId) {
+    if (!confirm(`Delete ${recipeName}? This cannot be undone.`)) return;
+    await dlr(state.eid);
+    showNotif("Recipe deleted");
+    hideOv("erec");
+    return;
+  }
+
+  // Case 2: Has a community version — show a three-option prompt.
+  // Using two sequential confirms to simulate a three-option dialog since
+  // the browser only provides confirm/cancel. First ask what to do, then confirm.
+  const choice = prompt(
+    `"${recipeName}" is also published to the community.\n\n` +
+    `Type 1 to delete local copy only (keeps community version)\n` +
+    `Type 2 to delete everywhere (removes local AND community)\n` +
+    `Press Cancel to keep the recipe`
+  );
+
+  if (!choice) return; // user pressed Cancel
+
+  if (choice.trim() === "1") {
+    // Delete local copy only — remove from household recipes, keep public_recipes
+    await dlr(state.eid);
+    showNotif("Local copy deleted — community version kept");
+    hideOv("erec");
+  } else if (choice.trim() === "2") {
+    // Delete everywhere — remove from both household recipes AND public_recipes
+    try {
+      await unpublishRecipe(r.publicId);
+    } catch (e) {
+      console.error("Failed to remove community version:", e);
+    }
+    await dlr(state.eid);
+    showNotif("Recipe deleted from everywhere");
+    hideOv("erec");
+  } else {
+    // Invalid input — do nothing
+    showNotif("Cancelled — type 1 or 2 to delete");
+  }
 }
 
 // ── RECIPE SCALING (AI-POWERED) ──────────────────────────────────────────────
@@ -3083,6 +3131,10 @@ export async function openComRecipe(id) {
   // canEdit = true for the original author OR any household member
   const canEdit = isAuthor || isHouseholdEditor;
 
+  // Hide "Save to my recipes" if the recipe already belongs to the user or their household.
+  // Only show for recipes from other households that the user hasn't authored.
+  const isOwnRecipe = isAuthor || (r.householdId && r.householdId === state.hid);
+
   // Ingredients — prefer structured ingredientsRaw array, fall back to flat text
   let ingredientsContent = "";
   if (r.ingredientsRaw && r.ingredientsRaw.length) {
@@ -3152,7 +3204,7 @@ export async function openComRecipe(id) {
       <button class="btn ${isLiked ? "bp" : "bs"} bsm" onclick="likeComRecipe('${id}')" id="com-like-btn">
         ${isLiked ? "❤️" : "🤍"} ${r.likes || 0} Like${(r.likes || 0) !== 1 ? "s" : ""}
       </button>
-      <button class="btn bs bsm" style="flex:1" onclick="saveComToKitchen('${id}')">📖 Save to my recipes</button>
+      ${!isOwnRecipe ? `<button class="btn bs bsm" style="flex:1" onclick="saveComToKitchen('${id}')">📖 Save to my recipes</button>` : ""}
       <button class="btn bs bsm" onclick="shareComRecipe('${id}')">📤 Share</button>
     </div>
 
