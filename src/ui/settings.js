@@ -292,17 +292,14 @@ async function renderHouseholdInfo() {
       }).join("");
     }
 
-    // Utilities section is always visible — some utilities are available to
-    // all members (e.g. remove my community recipes), while owner-only utilities
-    // (bulk publish, duplicate cleanup, regen summaries, remove household recipes)
-    // are individually gated with the "ownerUtil" class.
-    const utilitiesSection = g("utilitiesSection");
-    if (utilitiesSection) {
-      utilitiesSection.style.display = "";
-      // Show/hide owner-only utility buttons within the section
-      utilitiesSection.querySelectorAll(".ownerUtil").forEach(el => {
-        el.style.display = isOwner ? "" : "none";
-      });
+    // Utilities row — only visible to household owner. Tapping it opens
+    // the dedicated Utilities page (ov-utilities overlay).
+    const utilitiesRow = g("utilitiesRow");
+    if (utilitiesRow) {
+      utilitiesRow.style.display = isOwner ? "" : "none";
+      // Update the subtitle with the count of available tools
+      const subtitle = g("utilitiesSubtitle");
+      if (subtitle) subtitle.textContent = _getUtilityCount(isOwner) + " tools";
     }
 
     // Show/hide the "Leave Household" button based on ownership status
@@ -986,6 +983,70 @@ function _needsEnrich(item) {
  */
 function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// ── UTILITIES PAGE ──────────────────────────────────────────────────────────
+// Dedicated full-screen page for all household management utilities,
+// opened from the Utilities row in Settings. Organized into sub-groups:
+// Recipes, Community, and Data. Uses swipe-back navigation for iOS feel.
+
+import { enableSwipeBack, disableSwipeBack } from './swipeback.js';
+
+/**
+ * _getUtilityCount — returns the number of visible utility tools for the
+ * current user. Owner sees all tools; non-owners see only their own tools.
+ * Used to show the subtitle count on the Utilities row in Settings.
+ *
+ * @param {boolean} isOwner - Whether the current user is the household owner
+ * @returns {number} Count of available utility tools
+ */
+function _getUtilityCount(isOwner) {
+  // Owner tools: scan recipes, publish all, remove duplicates, regen summaries,
+  //              remove my community, remove household community = 6 owner-only + 1 any-member
+  // Non-owner: remove my community recipes = 1
+  // But this function is only called for owners (row is hidden for non-owners)
+  return isOwner ? 6 : 1;
+}
+
+/**
+ * openUtilities — opens the dedicated Utilities page overlay from Settings.
+ * Fetches the household doc to determine owner status, shows/hides owner-only
+ * buttons accordingly, and enables swipe-back navigation.
+ */
+export async function openUtilities() {
+  showOv("utilities");
+
+  // Fetch household doc to determine if current user is the owner
+  const user = getCurrentUser();
+  let isOwner = false;
+  if (user && state.hid) {
+    try {
+      const hhDoc = await dbGet(`households/${state.hid}`);
+      isOwner = hhDoc && hhDoc.ownerUid === user.uid;
+    } catch (e) {
+      console.error("openUtilities: failed to fetch household doc:", e);
+    }
+  }
+
+  // Show/hide owner-only utility buttons within the Utilities page
+  const ovUtil = g("ov-utilities");
+  if (ovUtil) {
+    ovUtil.querySelectorAll(".ownerUtil").forEach(el => {
+      el.style.display = isOwner ? "" : "none";
+    });
+  }
+
+  // Enable swipe-back gesture to return to Settings
+  enableSwipeBack(() => closeUtilities());
+}
+
+/**
+ * closeUtilities — closes the Utilities page and returns to Settings.
+ * Cleans up swipe-back listeners to prevent ghost gestures.
+ */
+export function closeUtilities() {
+  disableSwipeBack();
+  hideOv("utilities");
+}
+
 // ── BULK PUBLISH ALL RECIPES ─────────────────────────────────────────────────
 // Utility to publish all existing private recipes to the community as
 // fully independent copies. Skips any recipes already published (detected
@@ -1046,16 +1107,13 @@ export async function bulkPublishAll() {
 }
 
 /**
- * showBulkPublishBtn — shows the bulk publish button in settings.
- * Called from loadCfgUI(). Always visible for household owners (the
- * Utilities section itself is owner-gated). The button can be used
- * repeatedly — already-published recipes are skipped via duplicate detection.
+ * showBulkPublishBtn — no-op. Previously toggled visibility of the bulk
+ * publish button in Settings. Now the button lives in the Utilities page
+ * and is always visible (owner-gating handled by openUtilities()).
+ * Kept as a stub so existing calls from loadCfgUI() don't break.
  */
 export function showBulkPublishBtn() {
-  const btn = g("bulkPubBtn");
-  if (btn) {
-    btn.style.display = "block";
-  }
+  // Button is always visible in the Utilities page — nothing to toggle
 }
 
 // ── REMOVE DUPLICATE COMMUNITY RECIPES (MAINTENANCE UTILITY) ────────────────

@@ -858,22 +858,49 @@
           <select class="fsel" id="setCookTime"><option value="20-30 min">20–30 min</option><option value="30-45 min">30–45 min</option><option value="40-60 min" selected>40–60 min</option><option value="60+ min">60+ min</option></select>
         </div>
       </div>
-      <div class="sset" id="utilitiesSection" style="display:none"><div class="ssetttl">Utilities</div>
-        <button class="btn bs bf ownerUtil" id="bulkPubBtn" onclick="bulkPublishAll()" style="width:100%;margin-bottom:8px;display:none">📤 Publish all recipes to community</button>
-        <div id="bulkPubProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-bottom:8px"></div>
-        <button class="btn bs bf ownerUtil" id="removeDupBtn" onclick="removeDuplicateCommunityRecipes()" style="width:100%;margin-bottom:8px">🧹 Remove duplicate community recipes</button>
-        <button class="btn bs bf ownerUtil" id="regenSumBtn" onclick="regenAllSummaries()" style="width:100%;margin-top:8px">🔄 Regenerate all summaries</button>
-        <div id="regenSumProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-top:6px"></div>
-        <button class="btn bs bf" id="removeMyCommBtn" onclick="removeMyCommRecipes()" style="width:100%;margin-top:8px">🗑️ Remove all my community recipes</button>
-        <button class="btn bs bf ownerUtil" id="removeHHCommBtn" onclick="removeHouseholdCommRecipes()" style="width:100%;margin-top:8px">🗑️ Remove all our community recipes</button>
-        <button class="btn bs bf ownerUtil" id="scanRecipesBtn" onclick="scanRecipesForIssues()" style="width:100%;margin-top:8px">🔍 Scan all recipes for issues</button>
-        <div id="scanRecipesProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-top:6px"></div>
+      <!-- Utilities row — tappable row that opens the dedicated Utilities page (owner only) -->
+      <div id="utilitiesRow" style="display:none;cursor:pointer" onclick="openUtilities()">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--card);border:1px solid var(--b2);border-radius:14px;margin-bottom:12px">
+          <div>
+            <div style="font-size:.88rem;font-weight:500;color:var(--tx)">🛠️ Utilities</div>
+            <div id="utilitiesSubtitle" style="font-size:.72rem;color:var(--mt);margin-top:2px">6 tools</div>
+          </div>
+          <div style="font-size:1rem;color:var(--mt)">›</div>
+        </div>
       </div>
       <div class="brow"><button class="btn bp bf" onclick="saveSettings()">Save Settings</button></div>
       <div style="margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:12px">
         <button class="btn bsm bd" onclick="doSignOut()">Sign Out</button>
         <button class="btn bsm" onclick="deleteAccount()" style="background:none;border:none;color:var(--rd);font-size:.76rem;padding:4px 8px;cursor:pointer;opacity:.7">Delete Account</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- UTILITIES PAGE — full-screen overlay opened from Settings > Utilities row -->
+<div class="ov" id="ov-utilities">
+  <div class="ovhdr"><div class="bkbtn" onclick="closeUtilities()">←</div><div class="ovttl">Utilities</div></div>
+  <div class="ovbody">
+    <!-- Recipes group — tools for managing household recipes -->
+    <div class="sset"><div class="ssetttl">Recipes</div>
+      <button class="btn bs bf ownerUtil" id="scanRecipesBtn" onclick="scanRecipesForIssues()" style="width:100%;margin-bottom:8px">🔍 Scan all recipes for issues</button>
+      <div id="scanRecipesProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-bottom:8px"></div>
+      <button class="btn bs bf ownerUtil" id="bulkPubBtn" onclick="bulkPublishAll()" style="width:100%;margin-bottom:8px">📤 Publish all recipes to community</button>
+      <div id="bulkPubProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-bottom:8px"></div>
+      <button class="btn bs bf ownerUtil" id="removeDupBtn" onclick="removeDuplicateCommunityRecipes()" style="width:100%;margin-bottom:8px">🧹 Remove duplicate community recipes</button>
+      <button class="btn bs bf ownerUtil" id="regenSumBtn" onclick="regenAllSummaries()" style="width:100%">🔄 Regenerate all summaries</button>
+      <div id="regenSumProgress" style="display:none;font-size:.78rem;color:var(--mt);margin-top:6px"></div>
+    </div>
+
+    <!-- Community group — tools for managing community recipe presence -->
+    <div class="sset"><div class="ssetttl">Community</div>
+      <button class="btn bs bf" id="removeMyCommBtn" onclick="removeMyCommRecipes()" style="width:100%;margin-bottom:8px">🗑️ Remove all my community recipes</button>
+      <button class="btn bs bf ownerUtil" id="removeHHCommBtn" onclick="removeHouseholdCommRecipes()" style="width:100%">🗑️ Remove all our community recipes</button>
+    </div>
+
+    <!-- Data group — reserved for future utilities -->
+    <div class="sset"><div class="ssetttl">Data</div>
+      <div style="font-size:.78rem;color:var(--mt);padding:8px 0">No data utilities yet — more tools coming soon.</div>
     </div>
   </div>
 </div>
