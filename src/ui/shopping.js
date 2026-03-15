@@ -371,7 +371,7 @@ export function sH(item) {
  * Also handles multi-select mode styling when the user is bulk-selecting items.
  */
 export function renderShop() {
-  const az = (a, b) => a.name.localeCompare(b.name); // Alphabetical comparator
+  const az = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }); // Case-insensitive A-Z sort
   const c = g("shlist");                               // The main list container element
   const un = state.shop.filter(i => !i.checked).sort(az);  // Unchecked items, sorted A-Z
   const ch = state.shop.filter(i => i.checked).sort(az);   // Checked items, sorted A-Z

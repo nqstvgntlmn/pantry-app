@@ -132,8 +132,8 @@ export function iH(item) {
 //   "all" – all items from all locations, sorted alphabetically
 //   "fridge"/"freezer"/"pantry"/"household" – flat list filtered to one location
 export function renderInv() {
-  // Alphabetical sort comparator
-  const az = (a, b) => a.name.localeCompare(b.name);
+  // Alphabetical sort comparator (case-insensitive A-Z)
+  const az = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 
   // Filter items by the selected location sub-tab; "all" shows everything
   const f = state.it === "all"

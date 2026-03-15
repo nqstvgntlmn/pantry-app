@@ -153,9 +153,38 @@ export function renderTonight() {
   }
 }
 
+// ── WEEK NAVIGATION STATE ─────────────────────────────────────────────────────
+// _weekOffset tracks how many weeks forward (+) or backward (-) from the
+// current week. Resets to 0 on app load — does not persist across sessions.
+let _weekOffset = 0;
+
+/**
+ * _getWeekDates(offset) — Returns an array of 7 Date objects (Sun–Sat) for
+ * the week that is `offset` weeks away from the current week.
+ * offset=0 is this week, offset=-1 is last week, offset=1 is next week.
+ */
+function _getWeekDates(offset) {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  // Rewind to Sunday of the current week
+  const s = new Date(t); s.setDate(t.getDate() - t.getDay());
+  // Shift by offset weeks (7 days per week)
+  s.setDate(s.getDate() + (offset * 7));
+  return Array.from({ length: 7 }, (_, i) => { const d = new Date(s); d.setDate(s.getDate() + i); return d; });
+}
+
+/**
+ * changeWeek(dir) — Navigates the "This Week" calendar forward or backward.
+ * dir = -1 for previous week, +1 for next week.
+ */
+export function changeWeek(dir) {
+  _weekOffset += dir;
+  renderWeek();
+}
+
 // renderWeek() — builds the 7-day (Sun–Sat) meal-plan grid.
 // Each day cell shows the day letter, date number, and (if a meal is planned)
 // a truncated meal name. Clicking a cell opens the meal-plan modal for that date.
+// Supports week navigation via _weekOffset — today is always highlighted in gold.
 // After rendering, it checks whether the week's meals lack cuisine variety.
 export function renderWeek() {
   const ns = ["S", "M", "T", "W", "T", "F", "S"]; // day-of-week abbreviations
@@ -164,13 +193,31 @@ export function renderWeek() {
   const wgrd = g("wgrd"); // the week-grid container element
   if (!wgrd) return;
 
-  // Build one cell per day of the current week
-  wgrd.innerHTML = wDates().map((d, i) => {
+  // Get dates for the displayed week (may differ from current week)
+  const weekDates = _getWeekDates(_weekOffset);
+
+  // Update the week header label to show the date range and nav arrows
+  const weekLbl = g("weekLbl");
+  if (weekLbl) {
+    const startDate = weekDates[0];
+    const endDate = weekDates[6];
+    // Format as "Mar 9 – 15" or "Mar 30 – Apr 5" if months differ
+    const startMonth = startDate.toLocaleDateString("en-US", { month: "short" });
+    const endMonth = endDate.toLocaleDateString("en-US", { month: "short" });
+    const rangeStr = startMonth === endMonth
+      ? `${startMonth} ${startDate.getDate()} – ${endDate.getDate()}`
+      : `${startMonth} ${startDate.getDate()} – ${endMonth} ${endDate.getDate()}`;
+    // Show "This Week" when on current week, otherwise the date range
+    weekLbl.textContent = _weekOffset === 0 ? "This Week" : rangeStr;
+  }
+
+  // Build one cell per day of the displayed week
+  wgrd.innerHTML = weekDates.map((d, i) => {
     const k = d.toISOString().split("T")[0]; // date key, e.g. "2026-03-09"
-    const iss = d.getTime() === t.getTime(); // true if this cell is today
+    const iss = d.getTime() === t.getTime(); // true if this cell is today (regardless of week)
     const m = state.mp[k];                   // meal plan text for this date (if any)
 
-    // "today" class highlights the current day; "hm" (has-meal) adds a filled style.
+    // "today" class highlights the current day in gold; "hm" (has-meal) adds a filled style.
     // Meal name is truncated to 10 chars with ellipsis to fit the compact grid cell.
     return `<div class="wd${iss ? " today" : ""}${m ? " hm" : ""}" onclick="openMealM('${k}','${ns[i]} ${d.getDate()}')"><div class="wdn">${ns[i]}</div><div class="wdd">${d.getDate()}</div>${m ? `<div class="wdm">${m.substring(0, 10)}${m.length > 10 ? "…" : ""}</div>` : ""}</div>`;
   }).join("");
@@ -195,8 +242,8 @@ function checkVarietyNudge() {
   const el = g("variety-nudge"); // the nudge banner element
   if (!el) return;
 
-  // Gather all planned meal names for this week, ignoring empty days
-  const meals = wDates().map(d => state.mp[d.toISOString().split("T")[0]]).filter(Boolean);
+  // Gather all planned meal names for the displayed week, ignoring empty days
+  const meals = _getWeekDates(_weekOffset).map(d => state.mp[d.toISOString().split("T")[0]]).filter(Boolean);
 
   // Not enough meals planned to make a meaningful variety judgment
   if (meals.length < 3) { el.style.display = "none"; return; }
@@ -304,7 +351,7 @@ export function _defaultThreshold(unit) {
 
 // renderLowStock() — renders the "Running Low" section on the home screen.
 // Items are considered low when qty <= their restock threshold (smart defaults by unit).
-// Items with doNotRestock:true are excluded. Sorted by quantity ascending.
+// Items with doNotRestock:true are excluded. Sorted alphabetically (A-Z, case-insensitive).
 function renderLowStock() {
   const low = state.inv
     .filter(i => {
@@ -314,7 +361,7 @@ function renderLowStock() {
       const thresh = i.restockThreshold != null ? i.restockThreshold : _defaultThreshold(i.unit);
       return i.qty <= thresh;
     })
-    .sort((a, b) => a.qty - b.qty);
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
   const lbl = g("lowstocklbl");
   const lst = g("lowstocklist");
@@ -477,6 +524,12 @@ function _matchRecipeToInventory(recipe, invNames) {
  * openRecipeMatch() — Fetches community recipes and matches them against
  * the user's current Supplies inventory. Opens a full-screen overlay
  * showing the best matches sorted by match percentage.
+ *
+ * Distinguishes between four failure states:
+ *   1. No supplies in inventory — prompt user to add items first
+ *   2. No community recipes exist — tell user to publish some
+ *   3. No matches above 60% threshold — encourage adding more supplies
+ *   4. Actual Firestore/network error — show connection error + log details
  */
 export async function openRecipeMatch() {
   const el = g("recipeMatchResults");
@@ -488,29 +541,47 @@ export async function openRecipeMatch() {
   try {
     // Build a normalized set of inventory item names for matching
     const invNames = state.inv.map(i => _normalizeIngredient(i.name)).filter(Boolean);
+    console.log("[RecipeMatch] Inventory items:", state.inv.length, "| Normalized names:", invNames.length);
+
+    // If the user has no supplies, show a helpful prompt instead of running the match
+    if (!invNames.length) {
+      console.log("[RecipeMatch] No supplies in inventory — aborting match");
+      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--mt)">Add some items to your Supplies so we can find recipes you can cook tonight!</div>';
+      return;
+    }
 
     // Fetch community recipes from public_recipes collection
+    console.log("[RecipeMatch] Fetching public_recipes from Firestore…");
     const publicRecs = await dbList("public_recipes");
+    console.log("[RecipeMatch] Fetched", publicRecs.length, "community recipes");
+
+    // No community recipes published yet
     if (!publicRecs.length) {
-      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--mt)">No community recipes available yet.<br/>Publish some recipes first!</div>';
+      console.log("[RecipeMatch] No community recipes found");
+      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--mt)">No community recipes available yet.</div>';
       return;
     }
 
     // Score each recipe by how well it matches current inventory
+    console.log("[RecipeMatch] Scoring recipes against inventory…");
     _matchedRecipes = publicRecs
       .map(recipe => {
         const match = _matchRecipeToInventory(recipe, invNames);
+        console.log(`[RecipeMatch]  "${recipe.title || recipe.name}": ${match.matchPct}% (${match.matchCount}/${match.totalCount})`);
         return { ...recipe, ...match };
       })
       .filter(r => r.matchPct >= 60) // Only show recipes with >= 60% ingredient match
       .sort((a, b) => b.matchPct - a.matchPct); // Best matches first
 
+    console.log("[RecipeMatch] Recipes above 60% threshold:", _matchedRecipes.length);
     _matchShown = 0;
     _renderMatchPage(el);
 
   } catch (e) {
-    console.error("Recipe match error:", e);
-    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--rd)">Something went wrong. Try again.</div>';
+    // Actual error (Firestore failure, timeout, permissions, network)
+    console.error("[RecipeMatch] Error during recipe matching:", e);
+    console.error("[RecipeMatch] Error name:", e.name, "| message:", e.message);
+    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--rd)">Couldn\'t load recipes — please check your connection and try again.</div>';
   }
 }
 
@@ -519,8 +590,9 @@ export async function openRecipeMatch() {
  * Shows 5 recipes at a time with a "Show 5 more" button for pagination.
  */
 function _renderMatchPage(el) {
+  // No recipes met the 60% threshold — distinct from "no community recipes" or errors
   if (!_matchedRecipes.length) {
-    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--mt)">No recipes match 60% or more of your supplies.<br/>Try adding more items to your pantry!</div>';
+    el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--mt)">No matches yet — your pantry doesn\'t have enough ingredients for any community recipes right now. Try adding more items to Supplies!</div>';
     return;
   }
 

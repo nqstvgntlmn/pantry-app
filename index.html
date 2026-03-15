@@ -127,7 +127,13 @@
         </div>
       </div>
       <div id="variety-nudge" style="display:none;background:var(--amd);border:1px solid var(--am);border-radius:14px;padding:12px 16px;font-size:.82rem;color:var(--tx2);line-height:1.6;margin-bottom:16px"></div>
-      <div class="hsec-lbl">🗓 This Week</div>
+      <div class="hsec-lbl" style="display:flex;align-items:center;justify-content:space-between">
+        <span>🗓 <span id="weekLbl">This Week</span></span>
+        <div style="display:flex;gap:4px">
+          <button class="week-nav-btn" onclick="changeWeek(-1)" aria-label="Previous week">‹</button>
+          <button class="week-nav-btn" onclick="changeWeek(1)" aria-label="Next week">›</button>
+        </div>
+      </div>
       <div class="week-wrap"><div class="wgrd" id="wgrd"></div></div>
       <div class="hsec-lbl">🧺 Your Supplies</div>
       <div class="sgrd" id="sgrd"></div>
