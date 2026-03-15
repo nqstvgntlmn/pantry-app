@@ -468,9 +468,13 @@ let _matchShown = 0;
  * _normalizeIngredient(name) — Normalizes an ingredient name for fuzzy matching.
  * Lowercases, trims, removes common quantity words and plurals so
  * "2 large eggs" matches inventory item "Egg".
+ * Returns empty string for null, undefined, non-string, or empty values —
+ * callers should filter these out before using the result.
  */
 function _normalizeIngredient(name) {
-  return (name || "")
+  // Guard: only process non-empty strings — skip numbers, objects, null, etc.
+  if (typeof name !== "string" || !name.trim()) return "";
+  return name
     .toLowerCase()
     .trim()
     // Strip leading numbers, fractions, and common measurement words
@@ -485,26 +489,36 @@ function _normalizeIngredient(name) {
 /**
  * _matchRecipeToInventory(recipe, invNames) — Calculates what percentage
  * of a recipe's ingredients are available in the current inventory.
- * Returns { matchPct, matchCount, totalCount, missing[] }
+ * Returns { matchPct, matchCount, totalCount, missing[] }.
+ * Safely skips any ingredient that isn't a valid string (null, number, object, etc.)
+ * and returns 0% match if a recipe has zero valid ingredients after filtering.
  */
 function _matchRecipeToInventory(recipe, invNames) {
   // Get recipe ingredients — supports both array and raw string formats
   let ingredients = [];
   if (recipe.ingredientsRaw && Array.isArray(recipe.ingredientsRaw)) {
     ingredients = recipe.ingredientsRaw;
-  } else if (recipe.ingredients) {
+  } else if (recipe.ingredients && typeof recipe.ingredients === "string") {
     // Handle string format: split by newlines or semicolons
     ingredients = recipe.ingredients.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
+  } else if (Array.isArray(recipe.ingredients)) {
+    // Handle case where ingredients is already an array
+    ingredients = recipe.ingredients;
   }
-  if (!ingredients.length) return { matchPct: 0, matchCount: 0, totalCount: 0, missing: [] };
+
+  // Filter to only valid, non-empty strings — skip nulls, numbers, objects, etc.
+  const validIngredients = ingredients.filter(ing => typeof ing === "string" && ing.trim());
+
+  // If no valid ingredients remain, skip this recipe entirely (avoids division by zero)
+  if (!validIngredients.length) return { matchPct: 0, matchCount: 0, totalCount: 0, missing: [] };
 
   const missing = [];
   let matchCount = 0;
-  const totalCount = ingredients.length;
+  const totalCount = validIngredients.length;
 
-  for (const ing of ingredients) {
+  for (const ing of validIngredients) {
     const norm = _normalizeIngredient(ing);
-    if (!norm) { matchCount++; continue; } // skip empty/measurement-only ingredients
+    if (!norm) { matchCount++; continue; } // skip measurement-only ingredients (e.g. "2 cups")
 
     // Check if any inventory item name matches (substring or vice versa)
     const found = invNames.some(invName => {
@@ -514,7 +528,7 @@ function _matchRecipeToInventory(recipe, invNames) {
     else missing.push(ing);
   }
 
-  const matchPct = totalCount > 0 ? Math.round((matchCount / totalCount) * 100) : 0;
+  const matchPct = Math.round((matchCount / totalCount) * 100);
   return { matchPct, matchCount, totalCount, missing };
 }
 
