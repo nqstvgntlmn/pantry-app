@@ -297,6 +297,78 @@ export function renderStars(id, n) {
   });
 }
 
+// ── INGREDIENT VALIDATION ────────────────────────────────────────────────────
+// Reusable filter to detect invalid ingredient entries — preparation methods,
+// cooking instructions, or other non-food text that leaked into ingredient lists.
+
+/** Words/phrases that are preparation methods, not food items */
+const PREP_METHOD_WORDS = [
+  "chopped", "finely chopped", "diced", "sliced", "minced", "grated",
+  "shredded", "crushed", "mashed", "julienned", "cubed", "halved",
+  "quartered", "torn", "peeled", "deveined", "deboned", "trimmed",
+  "drained", "rinsed", "sifted", "seared", "blanched", "toasted",
+  "roasted", "grilled", "fried", "baked", "steamed", "boiled",
+  "melted", "softened", "dissolved", "beaten", "whipped", "whisked",
+  "divided", "separated", "combined", "mixed", "tossed", "coated",
+  "marinated", "soaked", "chilled", "frozen", "thawed", "warmed",
+  "room temperature", "at room temperature",
+  "for serving", "for garnish", "for garnishing", "for topping",
+  "for drizzling", "for decoration", "for dusting", "for dipping",
+  "to taste", "to serve", "as needed", "as required", "as desired",
+  "optional", "if desired", "if needed", "if using",
+  "fresh", "dried", "ground", "whole", "packed", "loosely packed",
+  "tightly packed", "lightly", "roughly", "coarsely", "finely",
+  "thinly", "thickly", "into pieces", "into strips", "into cubes",
+  "plus more", "plus extra", "or more", "or less", "about",
+  "approximately", "heaping", "scant", "level", "generous",
+  "garnish", "topping", "finishing", "reserved"
+];
+
+/**
+ * isValidIngredient(name) — checks whether an ingredient entry contains a real
+ * food item vs. being just a preparation method, modifier, or junk entry.
+ * Returns true if the ingredient is valid, false if it should be filtered out.
+ *
+ * Filters out:
+ *   - Entries shorter than 3 characters (e.g. "", "a", "or")
+ *   - Number-only entries (e.g. "2", "1.5")
+ *   - Entries that consist ONLY of known preparation/serving method words
+ *   - Entries longer than 100 characters (likely instruction text, not an ingredient)
+ *
+ * @param {string} name - The ingredient name/text to validate
+ * @returns {boolean} true if valid food ingredient, false if should be filtered
+ */
+export function isValidIngredient(name) {
+  if (!name || typeof name !== "string") return false;
+
+  const trimmed = name.trim();
+
+  // Too short to be a real ingredient
+  if (trimmed.length < 3) return false;
+
+  // Number-only entries (e.g. "2", "1.5", "½")
+  if (/^[\d\s.\/½¼¾⅓⅔]+$/.test(trimmed)) return false;
+
+  // Too long — likely instruction text that leaked into ingredients
+  if (trimmed.length > 100) return false;
+
+  // Check if the entire entry is ONLY prep method words (no food item)
+  const lower = trimmed.toLowerCase();
+  // Direct match against known prep-only phrases
+  if (PREP_METHOD_WORDS.includes(lower)) return false;
+
+  // Split into words and check if ALL words are prep-method words or trivial connectors
+  const trivialWords = new Set(["and", "or", "the", "a", "an", "of", "with", "in", "on", "for", "to", "into", "per"]);
+  const words = lower.split(/\s+/);
+  const allPrepOrTrivial = words.every(w =>
+    trivialWords.has(w) || PREP_METHOD_WORDS.includes(w) ||
+    PREP_METHOD_WORDS.some(p => p === w)
+  );
+  if (allPrepOrTrivial && words.length > 0) return false;
+
+  return true;
+}
+
 /**
  * Guesses the most appropriate storage location (fridge, freezer, or pantry)
  * for a grocery item based on keyword matching against its name.

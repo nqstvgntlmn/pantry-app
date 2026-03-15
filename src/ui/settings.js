@@ -14,7 +14,7 @@ import { state, J, Js } from '../state.js';
 import { saveCfg, dbGet, dbSet, dbList, dbDelete, dbAdminDelete, createHousehold, joinHouseholdByCode, regenerateInviteCode, removeMember, transferOwnership, deleteHousehold, checkMembershipValid, svShopItem, svi, publishRecipe, checkRecipeAlreadyPublished, listPublicRecipes, deleteAccountData, getHouseholdMemberUids } from '../db.js';
 // g: getElementById shorthand; xSt: compute expiry status from a date string;
 // showNotif: toast notification; showOv/hideOv: show/hide overlay panels
-import { g, xSt, showNotif, showOv, hideOv } from '../helpers.js';
+import { g, xSt, showNotif, showOv, hideOv, isValidIngredient } from '../helpers.js';
 // initHome: re-renders the home screen (called after settings change to reflect updates)
 import { initHome } from './home.js';
 // getCurrentUser: returns the currently signed-in Firebase Auth user (or null)
@@ -1418,4 +1418,301 @@ export async function regenAllSummaries() {
   if (progressEl) progressEl.textContent = `Done — ${updated} summaries updated.`;
   if (btn) btn.disabled = false;
   showNotif(`${updated} summaries regenerated!`);
+}
+
+// ── RECIPE ISSUE SCANNER ──────────────────────────────────────────────────────
+// Scans all household recipes for ingredient quality issues using client-side
+// validation with isValidIngredient(). Shows results in a bottom sheet with
+// options to fix all flagged recipes via AI or review individually.
+
+/**
+ * scanRecipesForIssues — scans all household recipes for common ingredient problems:
+ *   1. Ingredients that are preparation methods only (e.g. "Finely Chopped")
+ *   2. Ingredients that are suspiciously short (under 3 characters)
+ *   3. Instruction text leaked into ingredients (over 100 characters)
+ *   4. Recipes with 0 ingredients or 0 instructions
+ *
+ * Shows a results sheet with flagged recipes and their specific issues.
+ * Owner-only utility available in Settings > Utilities.
+ */
+export async function scanRecipesForIssues() {
+  const user = getCurrentUser();
+  if (!user) { showNotif("Sign in first"); return; }
+
+  const btn = g("scanRecipesBtn");
+  const progressEl = g("scanRecipesProgress");
+  if (btn) { btn.disabled = true; btn.textContent = "🔍 Scanning your recipes..."; }
+  if (progressEl) { progressEl.style.display = "block"; progressEl.textContent = "Scanning..."; }
+
+  // Small delay for UI to render loading state
+  await _sleep(50);
+
+  const flagged = []; // Array of { recipe, issues: string[] }
+
+  for (const r of state.recs) {
+    const issues = [];
+
+    // Extract ingredient names from the description field
+    const ingNames = _extractIngredientNames(r);
+
+    // Check 1: recipes with 0 ingredients or 0 instructions
+    if (ingNames.length === 0) {
+      issues.push("no ingredients found");
+    }
+    if ((!r.stepsRaw || r.stepsRaw.length === 0) && !(r.description || "").includes("Steps:")) {
+      issues.push("no instructions found");
+    }
+
+    // Check 2: run isValidIngredient on each ingredient name
+    let prepMethodCount = 0;
+    let shortCount = 0;
+    let longCount = 0;
+
+    for (const name of ingNames) {
+      if (!name || typeof name !== "string") continue;
+      const trimmed = name.trim();
+
+      // Check for instruction text leaked into ingredients (over 100 chars)
+      if (trimmed.length > 100) {
+        longCount++;
+        continue;
+      }
+
+      // Check for too-short entries
+      if (trimmed.length > 0 && trimmed.length < 3) {
+        shortCount++;
+        continue;
+      }
+
+      // Check if it's a prep method only (not a valid ingredient)
+      if (trimmed.length >= 3 && !isValidIngredient(trimmed)) {
+        prepMethodCount++;
+      }
+    }
+
+    if (prepMethodCount > 0) issues.push(`${prepMethodCount} preparation method${prepMethodCount > 1 ? "s" : ""} found as ingredient${prepMethodCount > 1 ? "s" : ""}`);
+    if (shortCount > 0) issues.push(`${shortCount} suspiciously short ingredient${shortCount > 1 ? "s" : ""}`);
+    if (longCount > 0) issues.push(`instructions mixed with ingredients`);
+
+    if (issues.length > 0) {
+      flagged.push({ recipe: r, issues });
+    }
+  }
+
+  // Reset button state
+  if (btn) { btn.disabled = false; btn.textContent = "🔍 Scan all recipes for issues"; }
+  if (progressEl) progressEl.style.display = "none";
+
+  // Show results
+  if (flagged.length === 0) {
+    showNotif("All recipes look good ✓");
+    return;
+  }
+
+  // Show the results modal
+  _showScanResults(flagged);
+}
+
+/**
+ * _extractIngredientNames — extracts ingredient name strings from a recipe.
+ * Checks ingredientsRaw first (structured data from imports), falls back to
+ * parsing the description field for lines that look like ingredient entries.
+ *
+ * @param {object} r - Recipe object from state.recs
+ * @returns {string[]} Array of ingredient name strings
+ */
+function _extractIngredientNames(r) {
+  // Prefer structured ingredient data if available
+  if (r.ingredientsRaw && r.ingredientsRaw.length > 0) {
+    return r.ingredientsRaw.map(ing => {
+      if (typeof ing === "string") return ing;
+      return ing.name || "";
+    }).filter(Boolean);
+  }
+
+  // Fall back to parsing description text for ingredient lines
+  const desc = r.description || "";
+  const lines = desc.split("\n");
+  const names = [];
+  let inIngredients = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Detect section headers
+    if (/^ingredients?:?\s*$/i.test(trimmed)) { inIngredients = true; continue; }
+    if (/^(steps?|directions?|instructions?|method):?\s*$/i.test(trimmed)) { inIngredients = false; continue; }
+    // Capture lines that look like ingredient entries (starting with -)
+    if (inIngredients && trimmed.startsWith("-")) {
+      // Strip the dash and any leading quantity like "2 cups"
+      const text = trimmed.replace(/^-\s*/, "").replace(/^\d+[\d./\s]*(?:cups?|tbsp|tsp|oz|lb|g|kg|ml|l|cloves?|pieces?|slices?|cans?|bunch(?:es)?|heads?|stalks?|sprigs?|pinch(?:es)?|dash(?:es)?|packages?|packets?)\s*/i, "").trim();
+      if (text) names.push(text);
+    }
+  }
+
+  return names;
+}
+
+/**
+ * _showScanResults — renders a bottom sheet modal showing all flagged recipes
+ * with their specific issues. Provides "Fix all flagged" and "Review individually"
+ * action buttons at the bottom.
+ *
+ * @param {Array} flagged - Array of { recipe, issues: string[] } objects
+ */
+function _showScanResults(flagged) {
+  // Build the flagged recipe list HTML
+  const listHtml = flagged.map(({ recipe, issues }) => {
+    const name = recipe.name || recipe.title || "Untitled";
+    const issueText = issues.join(", ");
+    return `<div style="padding:10px 14px;border-bottom:1px solid var(--b1);display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.86rem;font-weight:500;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+        <div style="font-size:.74rem;color:var(--mt);margin-top:2px">${issueText}</div>
+      </div>
+    </div>`;
+  }).join("");
+
+  // Create the modal overlay
+  const modal = document.createElement("div");
+  modal.id = "scanResultsModal";
+  modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center";
+
+  modal.innerHTML = `<div style="background:var(--bg);border-radius:18px 18px 0 0;max-height:85vh;width:100%;max-width:500px;overflow-y:auto;padding:20px;padding-bottom:max(20px,env(safe-area-inset-bottom))">
+    <div style="font-size:1rem;font-weight:600;color:var(--tx);margin-bottom:4px">🔍 Recipe Scan Results</div>
+    <div style="font-size:.78rem;color:var(--mt);margin-bottom:16px">${flagged.length} recipe${flagged.length !== 1 ? "s" : ""} with potential issues</div>
+
+    <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;overflow:hidden;margin-bottom:20px;max-height:50vh;overflow-y:auto">
+      ${listHtml}
+    </div>
+
+    <div style="display:flex;gap:10px;flex-direction:column">
+      <button class="btn bp" style="width:100%" onclick="fixAllFlaggedRecipes()">✨ Fix all flagged (${flagged.length} recipe${flagged.length !== 1 ? "s" : ""})</button>
+      <button class="btn bs" style="width:100%" onclick="closeScanResults()">Review individually</button>
+    </div>
+  </div>`;
+
+  // Store flagged data for the fix-all handler
+  modal._flaggedData = flagged;
+
+  // Tap backdrop to close
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeScanResults();
+  });
+
+  document.body.appendChild(modal);
+}
+
+/**
+ * closeScanResults — removes the scan results modal from the DOM.
+ */
+export function closeScanResults() {
+  const modal = document.getElementById("scanResultsModal");
+  if (modal) modal.remove();
+}
+
+/**
+ * fixAllFlaggedRecipes — runs "Parse with AI" on every flagged recipe
+ * automatically, applies results without preview. Shows progress as it works
+ * through the list. Unflagged recipes are never touched.
+ */
+export async function fixAllFlaggedRecipes() {
+  const modal = document.getElementById("scanResultsModal");
+  if (!modal || !modal._flaggedData) return;
+
+  const flagged = modal._flaggedData;
+  const total = flagged.length;
+  let fixed = 0;
+  let skipped = 0;
+
+  // Replace modal content with progress display
+  const content = modal.querySelector("div");
+  if (content) {
+    content.innerHTML = `<div style="background:var(--bg);border-radius:18px 18px 0 0;max-height:85vh;width:100%;max-width:500px;padding:20px;padding-bottom:max(20px,env(safe-area-inset-bottom));text-align:center">
+      <div style="font-size:1rem;font-weight:600;color:var(--tx);margin-bottom:8px">✨ Fixing Recipes...</div>
+      <div id="fixProgress" style="font-size:.84rem;color:var(--mt);margin-bottom:16px">Fixing 1 of ${total}...</div>
+      <div style="width:100%;height:6px;background:var(--b2);border-radius:3px;overflow:hidden;margin-bottom:12px">
+        <div id="fixProgressBar" style="height:100%;background:var(--ac);border-radius:3px;width:0%;transition:width .3s ease"></div>
+      </div>
+    </div>`;
+  }
+
+  for (let i = 0; i < flagged.length; i++) {
+    const { recipe: r } = flagged[i];
+    const progressEl = document.getElementById("fixProgress");
+    const barEl = document.getElementById("fixProgressBar");
+    if (progressEl) progressEl.textContent = `Fixing ${i + 1} of ${total}... (${r.name || "Untitled"})`;
+    if (barEl) barEl.style.width = `${((i + 1) / total) * 100}%`;
+
+    try {
+      // Extract raw text from the recipe
+      const rawIngredients = r.description || "";
+      const rawInstructions = (r.stepsRaw || []).map((s, idx) => {
+        const text = typeof s === "string" ? s : (s.text || "");
+        return `${idx + 1}. ${text}`;
+      }).join("\n") || "";
+
+      // Call the parse-recipe API
+      const resp = await fetch("/api/parse-recipe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ingredients: rawIngredients,
+          instructions: rawInstructions,
+          title: r.name || "",
+        }),
+      });
+
+      const data = await resp.json();
+      if (!data.success) { skipped++; continue; }
+
+      const { ingredients, steps } = data.result;
+
+      // Build new description from restructured content
+      let descParts = [];
+      if (ingredients.length) {
+        descParts.push("Ingredients:");
+        ingredients.forEach(ing => {
+          const amt = [ing.amount, ing.unit].filter(Boolean).join(" ");
+          descParts.push(`- ${amt ? amt + " " : ""}${ing.name}`);
+        });
+        descParts.push("");
+      }
+      if (steps.length) {
+        descParts.push("Steps:");
+        steps.forEach((step, idx) => descParts.push(`${idx + 1}. ${step}`));
+      }
+
+      // Update and save the recipe
+      const updatedRecipe = {
+        ...r,
+        description: descParts.join("\n"),
+        ingredientsRaw: ingredients,
+        stepsRaw: steps,
+      };
+
+      // Save to Firestore via db proxy
+      const path = `households/${state.hid}/recipes/${r.id}`;
+      await dbSet(path, { ...updatedRecipe, id: undefined });
+
+      // Update local state
+      const local = state.recs.find(x => x.id === r.id);
+      if (local) {
+        local.description = updatedRecipe.description;
+        local.ingredientsRaw = updatedRecipe.ingredientsRaw;
+        local.stepsRaw = updatedRecipe.stepsRaw;
+      }
+
+      fixed++;
+    } catch (e) {
+      console.error(`Failed to fix recipe "${r.name}":`, e);
+      skipped++;
+    }
+
+    // Small delay between API calls to avoid rate limiting
+    await _sleep(500);
+  }
+
+  // Show completion summary
+  closeScanResults();
+  showNotif(`${fixed} recipe${fixed !== 1 ? "s" : ""} fixed${skipped > 0 ? `, ${skipped} skipped` : ""}`);
 }

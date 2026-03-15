@@ -15,7 +15,7 @@
 import { state, J, Js } from '../state.js';
 import { svr, dlr, dbSet, dbList, publishRecipe, unpublishRecipe, listPublicRecipes, getPublicRecipe, checkRecipeAlreadyPublished, toggleLike, addComment, listComments, checkMyLike, saveRecipeToKitchen, addReview, listReviews, checkMyReview, submitRating, getMyRating, deleteRating, deleteComment, submitReport, listNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotifCount, getHouseholdMemberUids, logActivity } from '../db.js';
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
-import { g, fmtR, showNotif, showOv, hideOv, renderStars, formatQtyWithUnit, toTitleCase } from '../helpers.js';
+import { g, fmtR, showNotif, showOv, hideOv, renderStars, formatQtyWithUnit, toTitleCase, isValidIngredient } from '../helpers.js';
 import { getCurrentUser } from '../auth.js';
 import { uploadRecipeCover, uploadStepPhoto, uploadCommentPhoto, deleteRecipeStorageFile } from '../storage.js';
 import { enableSwipeBack, disableSwipeBack } from './swipeback.js';
@@ -1974,6 +1974,7 @@ export function openER(id) {
     <div class="frow"><label class="flbl">Summary <span class="otag">optional</span></label><input class="fi" id="esummary" value="${_esc(r.summary || "")}" placeholder="e.g. A classic Italian pasta dish. Made with just 4 ingredients and ready in under 20 minutes." maxlength="200"/></div>
     ${tagsHtml}
     <div class="frow"><label class="flbl">Description / Ingredients</label><textarea class="fta" id="erd" style="min-height:140px">${r.description || ""}</textarea></div>
+    <button class="btn bs bsm" id="parseAIBtn" onclick="parseRecipeWithAI('${r.id}')" style="width:100%;margin-bottom:14px">✨ Parse with AI</button>
     <div class="frow"><label class="flbl">Notes</label><input class="fi" id="erno" value="${r.notes || ""}"/></div>
     ${srcLink}
     <div class="frow"><label class="flbl">Cuisine <span class="otag">optional</span></label><input class="fi" id="ecuis" value="${r.cuisine || ""}" placeholder="e.g. Mediterranean, Turkish, Asian…"/></div>
@@ -2278,9 +2279,12 @@ export async function addRecIngToShop(id) {
     const text = (data.content && data.content[0] && data.content[0].text || "").replace(/```json|```/g, "").trim();
     const ingredients = JSON.parse(text);
 
+    // Safety net: filter out any entries that are just prep methods, too short, or number-only
+    const validIngredients = ingredients.filter(ing => isValidIngredient(ing));
+
     // Filter out ingredients the user already has in their pantry.
     // Uses substring matching in both directions so "chicken breast" matches "chicken"
-    const toAdd = ingredients.filter(ing => !invNames.some(n => n.includes(ing.toLowerCase()) || ing.toLowerCase().includes(n)));
+    const toAdd = validIngredients.filter(ing => !invNames.some(n => n.includes(ing.toLowerCase()) || ing.toLowerCase().includes(n)));
 
     if (!toAdd.length) { showNotif("All ingredients already in pantry ✓"); return; }
 
@@ -2293,6 +2297,181 @@ export async function addRecIngToShop(id) {
     hideOv("erec");                  // close the Edit Recipe overlay
     window.showScreen("shopping");   // navigate to the shopping list screen
   } catch { showNotif("Couldn't parse ingredients"); }
+}
+
+// ── PARSE WITH AI ────────────────────────────────────────────────────────────
+// Sends current recipe content to Claude for intelligent restructuring.
+// Available on ALL recipes (manually entered and AI-imported) in edit mode.
+// Shows a preview modal so the user can review before applying changes.
+
+/**
+ * parseRecipeWithAI(id) — sends the recipe's current ingredients and instructions
+ * text to the /api/parse-recipe endpoint. Shows a preview modal with the
+ * restructured content and Apply/Cancel buttons.
+ *
+ * @param {string} id - Recipe ID to parse (defaults to state.eid if not provided)
+ */
+export async function parseRecipeWithAI(id) {
+  const recipeId = id || state.eid;
+  const r = state.recs.find(x => x.id === recipeId);
+  if (!r) { showNotif("Recipe not found"); return; }
+
+  // Show loading state on the button
+  const btn = g("parseAIBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "✨ Parsing with AI..."; }
+
+  try {
+    // Extract raw text from the recipe — use description (which contains ingredients
+    // and steps as formatted text) and stepsRaw if available
+    const rawIngredients = r.description || "";
+    const rawInstructions = (r.stepsRaw || []).map((s, i) => {
+      const text = typeof s === "string" ? s : (s.text || "");
+      return `${i + 1}. ${text}`;
+    }).join("\n") || "";
+
+    // Call the parse-recipe API endpoint
+    const resp = await fetch("/api/parse-recipe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ingredients: rawIngredients,
+        instructions: rawInstructions,
+        title: r.name || "",
+      }),
+    });
+
+    const data = await resp.json();
+    if (!data.success) {
+      showNotif(data.error || "AI parsing failed");
+      return;
+    }
+
+    const { ingredients, steps } = data.result;
+
+    // Show the preview modal with restructured content
+    _showParsePreview(recipeId, ingredients, steps);
+  } catch (e) {
+    console.error("Parse with AI failed:", e);
+    showNotif("Couldn't parse recipe — try again");
+  } finally {
+    // Reset button state
+    if (btn) { btn.disabled = false; btn.textContent = "✨ Parse with AI"; }
+  }
+}
+
+/**
+ * _showParsePreview — renders a preview modal/sheet showing the restructured
+ * recipe content from Claude AI. User can Apply (saves to Firestore) or Cancel.
+ *
+ * @param {string} recipeId - ID of the recipe being parsed
+ * @param {Array} ingredients - Array of {name, amount, unit} objects from Claude
+ * @param {Array} steps - Array of step strings from Claude
+ */
+function _showParsePreview(recipeId, ingredients, steps) {
+  // Build readable ingredients list for preview
+  const ingHtml = ingredients.map(ing => {
+    const amt = [ing.amount, ing.unit].filter(Boolean).join(" ");
+    return `<div style="padding:6px 0;border-bottom:1px solid var(--b1);font-size:.84rem;color:var(--tx)">
+      ${amt ? `<span style="color:var(--ac);font-weight:500">${amt}</span> ` : ""}${ing.name}
+    </div>`;
+  }).join("");
+
+  // Build numbered steps list for preview
+  const stepsHtml = steps.map((s, i) => {
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--b1);font-size:.84rem;color:var(--tx)">
+      <span style="color:var(--ac);font-weight:600;margin-right:6px">${i + 1}.</span>${s}
+    </div>`;
+  }).join("");
+
+  // Create the preview modal overlay
+  const modal = document.createElement("div");
+  modal.id = "parsePreviewModal";
+  modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center";
+
+  modal.innerHTML = `<div style="background:var(--bg);border-radius:18px 18px 0 0;max-height:85vh;width:100%;max-width:500px;overflow-y:auto;padding:20px;padding-bottom:max(20px,env(safe-area-inset-bottom))">
+    <div style="font-size:1rem;font-weight:600;color:var(--tx);margin-bottom:4px">✨ Restructured Recipe</div>
+    <div style="font-size:.78rem;color:var(--mt);margin-bottom:16px">Here's the restructured recipe — does this look right?</div>
+
+    <div style="font-size:.82rem;font-weight:600;color:var(--ac);margin-bottom:8px">Ingredients (${ingredients.length})</div>
+    <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:10px 14px;margin-bottom:16px">${ingHtml || '<div style="color:var(--mt);font-size:.82rem">No ingredients found</div>'}</div>
+
+    <div style="font-size:.82rem;font-weight:600;color:var(--ac);margin-bottom:8px">Steps (${steps.length})</div>
+    <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:10px 14px;margin-bottom:20px">${stepsHtml || '<div style="color:var(--mt);font-size:.82rem">No steps found</div>'}</div>
+
+    <div style="display:flex;gap:10px">
+      <button class="btn bs" style="flex:1" onclick="closeParsePreview()">Cancel</button>
+      <button class="btn bp" style="flex:1" onclick="applyParsedRecipe()">Apply</button>
+    </div>
+  </div>`;
+
+  // Store parsed data for the Apply handler
+  modal._parsedData = { recipeId, ingredients, steps };
+
+  // Tap backdrop to close
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeParsePreview();
+  });
+
+  document.body.appendChild(modal);
+}
+
+/**
+ * closeParsePreview — removes the parse preview modal from the DOM.
+ * Called when user taps Cancel or the backdrop.
+ */
+export function closeParsePreview() {
+  const modal = g("parsePreviewModal");
+  if (modal) modal.remove();
+}
+
+/**
+ * applyParsedRecipe — applies the AI-restructured content to the recipe
+ * and saves to Firestore. Updates both the description field (formatted text)
+ * and the structured ingredientsRaw/stepsRaw fields.
+ */
+export async function applyParsedRecipe() {
+  const modal = g("parsePreviewModal");
+  if (!modal || !modal._parsedData) return;
+
+  const { recipeId, ingredients, steps } = modal._parsedData;
+  const r = state.recs.find(x => x.id === recipeId);
+  if (!r) { showNotif("Recipe not found"); closeParsePreview(); return; }
+
+  // Build a new description string from the restructured content
+  let descParts = [];
+  if (ingredients.length) {
+    descParts.push("Ingredients:");
+    ingredients.forEach(ing => {
+      const amt = [ing.amount, ing.unit].filter(Boolean).join(" ");
+      descParts.push(`- ${amt ? amt + " " : ""}${ing.name}`);
+    });
+    descParts.push("");
+  }
+  if (steps.length) {
+    descParts.push("Steps:");
+    steps.forEach((step, i) => descParts.push(`${i + 1}. ${step}`));
+  }
+
+  // Update the recipe object with restructured content
+  const updatedRecipe = {
+    ...r,
+    description: descParts.join("\n"),
+    ingredientsRaw: ingredients,
+    stepsRaw: steps,
+  };
+
+  try {
+    // Save to Firestore
+    await svr(updatedRecipe);
+    showNotif("Recipe restructured and saved ✓");
+
+    // Close modal and refresh the edit view
+    closeParsePreview();
+    openER(recipeId);
+  } catch (e) {
+    console.error("Failed to save parsed recipe:", e);
+    showNotif("Couldn't save — try again");
+  }
 }
 
 // ── STAR RATING ──────────────────────────────────────────────────────────────

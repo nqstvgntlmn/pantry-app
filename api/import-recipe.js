@@ -148,6 +148,13 @@ Return this exact JSON shape:
 
 Rules:
 - For ingredients: split each into name, amount, and unit. If no amount/unit, leave them as empty strings.
+- CRITICAL — ingredient quality rules:
+  * Every ingredient entry MUST contain a real food item (e.g. "flour", "garlic", "olive oil", "chicken breast").
+  * NEVER create an ingredient entry that is ONLY a preparation method, modifier, or serving instruction. Examples of entries that must NEVER appear as standalone ingredients: "Finely Chopped", "Drained", "For Serving", "Sliced", "To Taste", "Optional", "As Needed", "For Garnish", "Divided", "Room Temperature", "Softened", "Melted", "Fresh", "Dried".
+  * If a source line contains a food item WITH a preparation note (e.g. "2 cloves garlic, minced"), keep the prep note as part of the ingredient name (e.g. name: "garlic, minced", amount: "2", unit: "cloves"). Do NOT split "minced" into a separate ingredient.
+  * If a source line contains ONLY a preparation method with no identifiable food item, discard it entirely — do not include it in the ingredients array.
+  * If instruction text appears in an ingredients section (e.g. "Mix all ingredients together"), move it to the steps array instead.
+  * If ingredient text appears in a directions/details section, extract it into the ingredients array.
 - For steps: return as an array of strings, one per step, numbered order.
 - For tags: infer from content. Choose from these curated tags ONLY:
   Meal Type: Breakfast, Lunch, Dinner, Snack, Dessert, Drinks, Brunch, Bread & Baking, Sauce & Condiment, Preserve & Pickle
