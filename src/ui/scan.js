@@ -393,21 +393,51 @@ export async function manLookup() {
   g("scspin").style.display = "none";
 }
 
-// Master product lookup — calls the /api/barcode serverless endpoint which
-// first checks the household's customProducts for a corrected name, then
-// tries five product databases in waterfall order:
+// Master product lookup — first checks the household's customProducts for a
+// corrected barcode name (instant, no server round-trip), then falls back to
+// the /api/barcode serverless endpoint which tries five product databases in
+// waterfall order:
 //   1. Open Food Facts (community food DB)
 //   2. UPC Item DB (general US products)
 //   3. Open Beauty Facts (cosmetics, personal care)
 //   4. Open Pet Food Facts (pet food and treats)
 //   5. Edamam (food + nutrition data)
-// Passes the household ID so the server can check for custom product overrides.
+// Custom product check is done client-side to avoid loading Firebase Admin SDK
+// in the barcode serverless function (which caused ~12s cold starts).
 // Returns the product object on success, or a "not found" placeholder if all fail.
 async function lkup(bc) {
+  // ── CLIENT-SIDE CUSTOM PRODUCT OVERRIDE ──────────────────────────────────
+  // Check if this household has a corrected name saved for this barcode.
+  // If found, return immediately — skips the server call entirely (instant + free).
+  if (state.hid) {
+    try {
+      const normalizedBarcode = bc.replace(/[^a-zA-Z0-9]/g, "");
+      const docPath = `households/${state.hid}/customProducts/barcode_${normalizedBarcode}`;
+      const customData = await dbGet(docPath);
+      if (customData && customData.correctedName) {
+        console.log(`[Scan] Custom product override: "${customData.correctedName}"`);
+        return {
+          barcode: bc,
+          name: customData.correctedName,
+          brand: customData.brand || "",
+          quantity: customData.quantity || "",
+          category: customData.category || "General",
+          image: customData.image || null,
+          source: "Custom",
+          description: customData.description || "",
+          nutrition: null,
+          customOverride: true,
+          notFound: false,
+        };
+      }
+    } catch {
+      // Non-fatal — if custom product check fails, fall through to server lookup
+    }
+  }
+
+  // ── SERVER-SIDE WATERFALL LOOKUP ─────────────────────────────────────────
   try {
-    // Include household ID so the server checks customProducts before external DBs
-    const hidParam = state.hid ? `&hid=${encodeURIComponent(state.hid)}` : "";
-    const r = await fetch("/api/barcode?code=" + encodeURIComponent(bc) + hidParam);
+    const r = await fetch("/api/barcode?code=" + encodeURIComponent(bc));
     if (r.ok) {
       const d = await r.json();
       if (d.found && d.product) {

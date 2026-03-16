@@ -6,11 +6,10 @@
 // This keeps all API keys server-side and centralizes lookup logic so the
 // frontend makes a single request.
 //
-// Custom product override:
-//   Before querying any external database, checks the household's
-//   customProducts/{normalizedBarcode} collection in Firestore. If a
-//   correctedName exists, returns it immediately — skipping all external
-//   lookups (instant + free).
+// NOTE: Custom product override (checking household's customProducts for a
+// corrected barcode name) is handled CLIENT-SIDE in src/ui/scan.js before
+// calling this endpoint. This keeps this file free of Firebase Admin SDK
+// dependencies for fast cold starts on Vercel.
 //
 // Sequential waterfall order (tried one at a time, stops on first good match):
 //   1. Open Food Facts     — FIRST — community-driven food database (no key needed), best coverage
@@ -19,29 +18,9 @@
 //   4. Open Pet Food Facts — pet food and treats (no key needed)
 //   5. Edamam              — last resort, best for nutritional data but often lacks product variants
 //
-// Request:  GET /api/barcode?code=013000006408&hid=householdId
+// Request:  GET /api/barcode?code=013000006408
 // Response: { found: true, product: { barcode, name, brand, category, image, source, description, nutrition } }
 //      or:  { found: false }
-
-// Firebase Admin SDK — used to check customProducts before external lookups
-import { initializeApp, getApps, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
-
-// ── Firebase Admin SDK initialization (module-level) ─────────────────────────
-// Same pattern as api/db.js — module-level init with getApps() guard to
-// avoid double-initialization on warm Vercel serverless invocations.
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID || "family-pantry-c65d6",
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-    }),
-  });
-}
-
-// Admin Firestore instance for customProducts lookup
-const adminDb = getFirestore();
 
 // --- Edamam credentials (free tier) ---
 const EID = "2b6ecac2";
@@ -373,49 +352,7 @@ export default async function handler(req, res) {
   const code = (req.query.code || "").trim();
   if (!code) return res.status(400).json({ error: "Missing 'code' query parameter" });
 
-  // Household ID passed from frontend — used to check customProducts override
-  const hid = (req.query.hid || "").trim();
-
-  console.log(`[Barcode] ── Lookup started for barcode: ${code} | household: ${hid || "(none)"}`);
-
-  // ── CUSTOM PRODUCT OVERRIDE ────────────────────────────────────────────────
-  // Before hitting any external database, check if this household has a
-  // corrected name saved for this barcode. If found, return immediately —
-  // this makes repeat scans of corrected products instant and free.
-  if (hid) {
-    try {
-      const normalizedBarcode = code.replace(/[^a-zA-Z0-9]/g, "");
-      const customDoc = await adminDb
-        .collection("households").doc(hid)
-        .collection("customProducts").doc(`barcode_${normalizedBarcode}`)
-        .get();
-
-      if (customDoc.exists) {
-        const data = customDoc.data();
-        if (data.correctedName) {
-          console.log(`[Barcode] ── Custom product override found: "${data.correctedName}" — skipping all external lookups`);
-          return res.status(200).json({
-            found: true,
-            product: {
-              barcode: code,
-              name: data.correctedName,
-              brand: data.brand || "",
-              quantity: data.quantity || "",
-              category: data.category || "General",
-              image: data.image || null,
-              source: "Custom",
-              description: data.description || "",
-              nutrition: null,
-              customOverride: true,
-            }
-          });
-        }
-      }
-    } catch (err) {
-      // Non-fatal — if custom product check fails, fall through to normal lookups
-      console.log(`[Barcode] Custom product check failed (non-fatal): ${err.message}`);
-    }
-  }
+  console.log(`[Barcode] ── Lookup started for barcode: ${code}`);
 
   // ── SEQUENTIAL WATERFALL ──────────────────────────────────────────────────
   // Try each database one at a time in strict priority order.
