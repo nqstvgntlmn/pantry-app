@@ -44,11 +44,11 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, initInvQtyToolbar, invQtyStep, invFracChange } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, initShopQtyToolbar, shopQtyStep, shopFracChange } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -185,6 +185,8 @@ window.openInvAddSheet = openInvAddSheet;     // Open the add-to-pantry bottom s
 window.closeInvAddSheet = closeInvAddSheet;   // Close the add-to-pantry bottom sheet
 window.invAddScan = invAddScan;               // Scan barcode from inventory bottom sheet
 window.invAddVoice = invAddVoice;             // Start voice input from inventory bottom sheet
+window.invQtyStep = invQtyStep;               // Increment/decrement inventory toolbar qty
+window.invFracChange = invFracChange;         // Update inventory toolbar fraction from dropdown
 window.setInvAddLoc = setInvAddLoc;           // Set location in inventory add sheet
 window.toggleInvAddNote = toggleInvAddNote;   // Toggle note field in inventory add sheet
 window.qaddInv = qaddInv;                     // Quick-add item to inventory from text input
@@ -221,6 +223,8 @@ window.closeShopAddSheet = closeShopAddSheet; // Close the add-item bottom sheet
 // shopAddType removed — text input is shown directly when sheet opens
 window.shopAddScan = shopAddScan;             // Scan barcode from bottom sheet
 window.shopAddVoice = shopAddVoice;           // Start voice input from bottom sheet
+window.shopQtyStep = shopQtyStep;             // Increment/decrement shopping toolbar qty
+window.shopFracChange = shopFracChange;       // Update shopping toolbar fraction from dropdown
 window.closeEnrichSheet = closeEnrichSheet;   // Close the product enrichment bottom sheet
 window.pickEnrichResult = pickEnrichResult;   // Pick a product match from enrichment results
 window.onShopInput = onShopInput;             // Debounced live search as user types in add-item input
@@ -715,6 +719,10 @@ window._appStart = async function(code) {
   // Detect Web Speech API support and show mic buttons if available
   initVoice();
   initInvVoice();
+
+  // Populate the qty/fraction/unit toolbar dropdowns in both add-item sheets
+  initShopQtyToolbar();
+  initInvQtyToolbar();
 
   // ── Real-time sync ──
   // Instead of polling every 30 seconds, we use Firestore onSnapshot listeners

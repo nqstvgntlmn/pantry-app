@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-faGqE_oK.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BaRQHpiz.css">
+  <script type="module" crossorigin src="/assets/index-BsLliNrs.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DRGz0tnb.css">
 </head>
 <body>
 
@@ -358,6 +358,16 @@
       <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
       <!-- Live search results dropdown: populated as user types (debounced) -->
       <div id="shopSearchDropdown"></div>
+      <!-- Qty/fraction/unit toolbar — sits above keyboard for quick entry -->
+      <div class="qty-toolbar" id="shopQtyToolbar">
+        <div class="qt-stepper">
+          <button type="button" onclick="shopQtyStep(-1)">−</button>
+          <span class="qt-val" id="shopQtyVal">1</span>
+          <button type="button" onclick="shopQtyStep(1)">+</button>
+        </div>
+        <select class="qt-frac" id="shopQtyFrac" onchange="shopFracChange()"></select>
+        <select class="qt-unit" id="shopQtyUnit"></select>
+      </div>
       <div class="sh-add-note-wrap" id="addNoteWrap" style="display:none;margin-top:8px">
         <textarea class="sh-note-inp" id="addNoteInp" rows="2" placeholder="Add a note… (e.g. brand, size, store)"></textarea>
       </div>
@@ -390,6 +400,16 @@
       <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>
       <!-- Live search results dropdown: populated as user types (debounced) -->
       <div id="invSearchDropdown"></div>
+      <!-- Qty/fraction/unit toolbar — sits above keyboard for quick entry -->
+      <div class="qty-toolbar" id="invQtyToolbar">
+        <div class="qt-stepper">
+          <button type="button" onclick="invQtyStep(-1)">−</button>
+          <span class="qt-val" id="invQtyVal">1</span>
+          <button type="button" onclick="invQtyStep(1)">+</button>
+        </div>
+        <select class="qt-frac" id="invQtyFrac" onchange="invFracChange()"></select>
+        <select class="qt-unit" id="invQtyUnit"></select>
+      </div>
       <!-- Storage location picker -->
       <div class="frow" style="margin-top:10px;margin-bottom:0">
         <label class="flbl">Location</label>

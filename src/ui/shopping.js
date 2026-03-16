@@ -8,7 +8,7 @@
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
 import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
 import { defaultThreshold } from '../helpers.js';  // Smart restock threshold by unit — used for "already have" inventory check
-import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems } from '../helpers.js';
+import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, FRAC_OPTIONS } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
 // gcat = guess category for inventory, showNotif = toast notification,
@@ -551,7 +551,8 @@ export function sH(item) {
  * Also handles multi-select mode styling when the user is bulk-selecting items.
  */
 export function renderShop() {
-  const az = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }); // Case-insensitive A-Z sort
+  // Sort by the display name (scanTitle if available, otherwise raw name) — matches what the user sees on each row
+  const az = (a, b) => (a.scanTitle || a.name).localeCompare(b.scanTitle || b.name, undefined, { sensitivity: 'base' });
   const c = g("shlist");                               // The main list container element
   const un = state.shop.filter(i => !i.checked).sort(az);  // Unchecked items, sorted A-Z
   const ch = state.shop.filter(i => i.checked).sort(az);   // Checked items, sorted A-Z
@@ -639,26 +640,23 @@ export function qadd() {
   // Multiple results or no results: add as plain text.
   // User must tap a specific dropdown row to get enriched data when there are choices.
 
-  // Try to parse a quantity from common patterns
-  let name = v, qty = 1;
-  // Pattern 1: leading number, e.g. "5 apples" or "12 eggs"
+  // Try to parse a quantity from common text patterns (e.g. "5 apples", "eggs x3")
+  let name = v, textQty = null;
   const leadMatch = v.match(/^(\d+)\s+(.+)/);
-  // Pattern 2: trailing multiplier, e.g. "apples x3" or "eggs ×12"
   const trailMatch = v.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
+  if (trailMatch) { name = trailMatch[1].trim(); textQty = parseInt(trailMatch[2], 10) || null; }
+  else if (leadMatch) { name = leadMatch[2].trim(); textQty = parseInt(leadMatch[1], 10) || null; }
 
-  if (trailMatch) {
-    name = trailMatch[1].trim();
-    qty = parseInt(trailMatch[2], 10) || 1;
-  } else if (leadMatch) {
-    name = leadMatch[2].trim();
-    qty = parseInt(leadMatch[1], 10) || 1;
-  }
+  // Use toolbar qty/unit — toolbar is the primary source; text-parsed qty overrides only the whole number
+  const tb = _getShopToolbarValues();
+  const qty = textQty || tb.qty;
+  const unit = tb.unit;
 
   // Capture the optional note from the collapsible "Note" field (if expanded and filled)
   const noteInp = g("addNoteInp");
   const note = noteInp ? noteInp.value.trim() : "";
 
-  const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
+  const item = { id: Date.now().toString(), name, qty, unit, checked: false, src: "manual" };
   if (note) item.note = note; // Only include note field if the user typed something
 
   // Consolidate with existing items instead of creating duplicates
@@ -707,6 +705,8 @@ export function openShopAddSheet() {
   const sheet = g("shopAddSheet");
   if (backdrop) backdrop.classList.add("active");
   if (sheet) sheet.classList.add("active");
+  // Reset the qty/unit toolbar to defaults each time the sheet opens
+  resetShopQtyToolbar();
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("shi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
 }
@@ -722,6 +722,84 @@ export function closeShopAddSheet() {
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
   _clearInlineSearch();
+}
+
+// ── QTY TOOLBAR STATE (SHOPPING) ─────────────────────────────────────────────
+// Tracks the quantity, fraction, and unit selected in the add-item toolbar.
+// These values are applied to items when the user taps Add or picks a search result.
+
+/** Current whole-number quantity in the shopping add toolbar (default 1) */
+let _shopToolbarQty = 1;
+/** Current fraction value in the shopping add toolbar (default 0 = none) */
+let _shopToolbarFrac = 0;
+
+/**
+ * initShopQtyToolbar() — Populates the fraction and unit dropdowns in the
+ * shopping add-item toolbar. Called once on app init.
+ */
+export function initShopQtyToolbar() {
+  // Build fraction dropdown options from FRAC_OPTIONS
+  const fracSel = g("shopQtyFrac");
+  if (fracSel) {
+    fracSel.innerHTML = FRAC_OPTIONS.map(o =>
+      `<option value="${o.value}">${o.value === 0 ? "—" : o.label}</option>`
+    ).join("");
+  }
+  // Build unit dropdown options — "Unit" placeholder first, then all units alphabetically
+  const unitSel = g("shopQtyUnit");
+  if (unitSel) {
+    unitSel.innerHTML = UNITS.map(u =>
+      `<option value="${u}"${u === "Unit" ? " selected" : ""}>${u}</option>`
+    ).join("");
+  }
+}
+
+/**
+ * resetShopQtyToolbar() — Resets the toolbar to defaults (qty 1, no fraction, Unit).
+ * Called each time the add-item sheet opens so prior values don't carry over.
+ */
+export function resetShopQtyToolbar() {
+  _shopToolbarQty = 1;
+  _shopToolbarFrac = 0;
+  const valEl = g("shopQtyVal");
+  if (valEl) valEl.textContent = "1";
+  const fracSel = g("shopQtyFrac");
+  if (fracSel) fracSel.value = "0";
+  const unitSel = g("shopQtyUnit");
+  if (unitSel) unitSel.value = "Unit";
+}
+
+/**
+ * shopQtyStep(delta) — Increments or decrements the shopping toolbar whole qty.
+ * Clamps to 1–99 range so the user can't go below 1 or above 99.
+ */
+export function shopQtyStep(delta) {
+  _shopToolbarQty = Math.max(1, Math.min(99, _shopToolbarQty + delta));
+  const valEl = g("shopQtyVal");
+  if (valEl) valEl.textContent = _shopToolbarQty;
+}
+
+/**
+ * shopFracChange() — Updates the stored fraction value when the user picks
+ * a fraction from the toolbar dropdown.
+ */
+export function shopFracChange() {
+  const fracSel = g("shopQtyFrac");
+  _shopToolbarFrac = fracSel ? parseFloat(fracSel.value) || 0 : 0;
+}
+
+/**
+ * _getShopToolbarValues() — Returns the current toolbar qty, fraction, and unit
+ * as a combined quantity decimal + unit string. Used by qadd() and pickInlineResult().
+ */
+function _getShopToolbarValues() {
+  const fracSel = g("shopQtyFrac");
+  const unitSel = g("shopQtyUnit");
+  const frac = fracSel ? parseFloat(fracSel.value) || 0 : 0;
+  const unit = unitSel ? unitSel.value : "Unit";
+  // Combine whole + fraction into a single decimal (e.g. 2 + 0.5 = 2.5)
+  const qty = combineQty(_shopToolbarQty, frac);
+  return { qty, unit };
 }
 
 /**
@@ -1202,11 +1280,15 @@ export function pickInlineResult(index) {
   // irrelevant brands like "Great Value" when the user just searched "milk").
   const searchQuery = g("shi") ? g("shi").value.trim() : "";
 
+  // Use toolbar qty/unit values so the user's stepper/dropdown choices carry through
+  const tb = _getShopToolbarValues();
+
   // Build an enriched shopping item with full product data from the search result
   const item = {
     id: Date.now().toString(),
     name: product.name,
-    qty: 1,
+    qty: tb.qty,
+    unit: tb.unit,
     checked: false,
     src: "search",
     brand: product.brand || "",

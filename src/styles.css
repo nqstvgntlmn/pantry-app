@@ -227,6 +227,20 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .sh-add-note-toggle:active{color:var(--ac)}
 .sh-add-note-wrap{margin-bottom:6px;animation:noteSlide .15s ease}
 @keyframes noteSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── QTY TOOLBAR: compact stepper + fraction + unit shown above keyboard in add sheets ── */
+.qty-toolbar{display:flex;align-items:center;gap:6px;padding:8px 0;margin-top:8px}
+/* Quantity stepper: [ − ] [ value ] [ + ] */
+.qt-stepper{display:flex;align-items:center;gap:0;background:var(--card);border:1.5px solid var(--b2);border-radius:10px;overflow:hidden;flex-shrink:0}
+.qt-stepper button{width:36px;height:36px;background:none;border:none;color:var(--ac);font-size:1.1rem;font-weight:700;cursor:pointer;font-family:"DM Sans",sans-serif;display:flex;align-items:center;justify-content:center;transition:background .12s}
+.qt-stepper button:active{background:var(--acd)}
+.qt-stepper .qt-val{min-width:28px;text-align:center;font-size:.88rem;font-weight:600;color:var(--tx);padding:0 2px;user-select:none}
+/* Fraction and unit dropdowns — compact style for toolbar */
+.qt-frac,.qt-unit{background:var(--card);border:1.5px solid var(--b2);border-radius:10px;padding:7px 6px;color:var(--tx);font-size:.82rem;font-family:"DM Sans",sans-serif;font-weight:500;cursor:pointer;-webkit-appearance:none;appearance:none;min-height:36px}
+.qt-frac{min-width:54px;text-align:center}
+.qt-unit{flex:1;min-width:0;max-width:120px;text-overflow:ellipsis}
+.qt-frac:focus,.qt-unit:focus{outline:none;border-color:var(--ac)}
+
 /* [IMAGES DISABLED] — Product images commented out pending decision.
    See session notes: images caused false positives from external databases,
    inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.

@@ -14,7 +14,7 @@ import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add 
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems, FRAC_OPTIONS } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 // _defaultThreshold returns the smart restock threshold based on unit type
 import { updExport, _defaultThreshold } from './home.js';
@@ -134,8 +134,8 @@ export function iH(item) {
 //   "all" – all items from all locations, sorted alphabetically
 //   "fridge"/"freezer"/"pantry"/"household" – flat list filtered to one location
 export function renderInv() {
-  // Alphabetical sort comparator (case-insensitive A-Z)
-  const az = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  // Sort by the display name (scanTitle if available, otherwise raw name) — matches what the user sees on each row
+  const az = (a, b) => (a.scanTitle || a.name).localeCompare(b.scanTitle || b.name, undefined, { sensitivity: 'base' });
 
   // Filter items by the selected location sub-tab; "all" shows everything
   const f = state.it === "all"
@@ -1187,6 +1187,9 @@ export function openInvAddSheet() {
   const fBtn = g("invAddLoc-fridge");
   if (fBtn) fBtn.classList.add("sel");
 
+  // Reset the qty/unit toolbar to defaults each time the sheet opens
+  resetInvQtyToolbar();
+
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("invi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
 }
@@ -1201,6 +1204,84 @@ export function closeInvAddSheet() {
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
   _clearInvSearch();
+}
+
+// ── QTY TOOLBAR STATE (INVENTORY) ────────────────────────────────────────────
+// Tracks the quantity, fraction, and unit selected in the inventory add-item toolbar.
+// These values are applied to items when the user taps Add or picks a search result.
+
+/** Current whole-number quantity in the inventory add toolbar (default 1) */
+let _invToolbarQty = 1;
+/** Current fraction value in the inventory add toolbar (default 0 = none) */
+let _invToolbarFrac = 0;
+
+/**
+ * initInvQtyToolbar() — Populates the fraction and unit dropdowns in the
+ * inventory add-item toolbar. Called once on app init.
+ */
+export function initInvQtyToolbar() {
+  // Build fraction dropdown options from FRAC_OPTIONS
+  const fracSel = g("invQtyFrac");
+  if (fracSel) {
+    fracSel.innerHTML = FRAC_OPTIONS.map(o =>
+      `<option value="${o.value}">${o.value === 0 ? "—" : o.label}</option>`
+    ).join("");
+  }
+  // Build unit dropdown — "Unit" placeholder first, then all units alphabetically
+  const unitSel = g("invQtyUnit");
+  if (unitSel) {
+    unitSel.innerHTML = UNITS.map(u =>
+      `<option value="${u}"${u === "Unit" ? " selected" : ""}>${u}</option>`
+    ).join("");
+  }
+}
+
+/**
+ * resetInvQtyToolbar() — Resets the toolbar to defaults (qty 1, no fraction, Unit).
+ * Called each time the add-item sheet opens so prior values don't carry over.
+ */
+export function resetInvQtyToolbar() {
+  _invToolbarQty = 1;
+  _invToolbarFrac = 0;
+  const valEl = g("invQtyVal");
+  if (valEl) valEl.textContent = "1";
+  const fracSel = g("invQtyFrac");
+  if (fracSel) fracSel.value = "0";
+  const unitSel = g("invQtyUnit");
+  if (unitSel) unitSel.value = "Unit";
+}
+
+/**
+ * invQtyStep(delta) — Increments or decrements the inventory toolbar whole qty.
+ * Clamps to 1–99 range so the user can't go below 1 or above 99.
+ */
+export function invQtyStep(delta) {
+  _invToolbarQty = Math.max(1, Math.min(99, _invToolbarQty + delta));
+  const valEl = g("invQtyVal");
+  if (valEl) valEl.textContent = _invToolbarQty;
+}
+
+/**
+ * invFracChange() — Updates the stored fraction value when the user picks
+ * a fraction from the inventory toolbar dropdown.
+ */
+export function invFracChange() {
+  const fracSel = g("invQtyFrac");
+  _invToolbarFrac = fracSel ? parseFloat(fracSel.value) || 0 : 0;
+}
+
+/**
+ * _getInvToolbarValues() — Returns the current toolbar qty, fraction, and unit
+ * as a combined quantity decimal + unit string. Used by qaddInv() and pickInvInlineResult().
+ */
+function _getInvToolbarValues() {
+  const fracSel = g("invQtyFrac");
+  const unitSel = g("invQtyUnit");
+  const frac = fracSel ? parseFloat(fracSel.value) || 0 : 0;
+  const unit = unitSel ? unitSel.value : "Unit";
+  // Combine whole + fraction into a single decimal (e.g. 2 + 0.5 = 2.5)
+  const qty = combineQty(_invToolbarQty, frac);
+  return { qty, unit };
 }
 
 /**
@@ -1256,12 +1337,16 @@ export async function qaddInv() {
   const inp = g("invi"), v = inp ? inp.value.trim() : "";
   if (!v) return;
 
-  // Parse optional quantity from the input text
-  let name = v, qty = 1;
+  // Try to parse a quantity from common text patterns (e.g. "5 apples", "eggs x3")
+  let name = v, textQty = null;
   const leadMatch = v.match(/^(\d+)\s+(.+)/);
   const trailMatch = v.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
-  if (trailMatch) { name = trailMatch[1].trim(); qty = parseInt(trailMatch[2], 10) || 1; }
-  else if (leadMatch) { name = leadMatch[2].trim(); qty = parseInt(leadMatch[1], 10) || 1; }
+  if (trailMatch) { name = trailMatch[1].trim(); textQty = parseInt(trailMatch[2], 10) || null; }
+  else if (leadMatch) { name = leadMatch[2].trim(); textQty = parseInt(leadMatch[1], 10) || null; }
+
+  // Use toolbar qty/unit — toolbar is the primary source; text-parsed qty overrides only the whole number
+  const tb = _getInvToolbarValues();
+  const qty = textQty || tb.qty;
 
   // Capture the optional note from the collapsible note field
   const noteInp = g("invAddNoteInp");
@@ -1270,14 +1355,15 @@ export async function qaddInv() {
   // Check for saved product preferences (location + unit) in a single Firestore read
   const pref = await _getProductPreference(name);
   const loc = pref?.preferredLocation || _invAddLocation;
-  const prefUnit = pref?.preferredUnit || null;
+  // Toolbar unit takes priority, then saved preference, then default "unit"
+  const unit = tb.unit !== "Unit" ? tb.unit : (pref?.preferredUnit || "unit");
 
   // Generate a unique ID for the new inventory item
   const id = "itm-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
 
-  // Save the item to inventory with preferred location and unit (if saved)
+  // Save the item to inventory with toolbar qty/unit and preferred location
   const item = {
-    id, barcode: id, name, brand: "", unit: prefUnit || "unit", qty,
+    id, barcode: id, name, brand: "", unit, qty,
     location: loc, category: gcat({ name }),
     image: null, source: "Manual",
     expiry: null, addedAt: new Date().toLocaleDateString()
@@ -1529,18 +1615,24 @@ export async function pickInvInlineResult(index) {
   const noteInp = g("invAddNoteInp");
   const note = noteInp ? noteInp.value.trim() : "";
 
+  // Use toolbar qty/unit values so the user's stepper/dropdown choices carry through
+  const tb = _getInvToolbarValues();
+
   // Check for saved product preferences (location + unit) in a single read
   const pref = await _getProductPreference(product.name);
 
   // Generate a unique ID
   const id = "itm-" + (product.name || "item").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
 
-  // Save the enriched item to inventory, applying saved unit preference if available
+  // Toolbar unit takes priority, then saved preference, then default "unit"
+  const unit = tb.unit !== "Unit" ? tb.unit : (pref?.preferredUnit || "unit");
+
+  // Save the enriched item to inventory, applying toolbar and saved preferences
   const item = {
     id, barcode: id,
     name: product.name,
     brand: product.brand || "",
-    unit: pref?.preferredUnit || "unit", qty: 1,
+    unit, qty: tb.qty,
     location: pref?.preferredLocation || _invAddLocation,
     category: product.category || gcat({ name: product.name }),
     // [IMAGES DISABLED] — product image field commented out
