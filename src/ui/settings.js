@@ -294,12 +294,12 @@ async function renderHouseholdInfo() {
       }).join("");
     }
 
-    // Utilities row — only visible to household owner. Tapping it opens
-    // the dedicated Utilities page (ov-utilities overlay).
+    // Utilities row — visible to all members (non-owners see scan cache + community tools).
+    // Tapping it opens the dedicated Utilities page (ov-utilities overlay).
     const utilitiesRow = g("utilitiesRow");
     if (utilitiesRow) {
-      utilitiesRow.style.display = isOwner ? "" : "none";
-      // Update the subtitle with the count of available tools
+      utilitiesRow.style.display = "";
+      // Update the subtitle with the count of available tools for this user's role
       const subtitle = g("utilitiesSubtitle");
       if (subtitle) subtitle.textContent = _getUtilityCount(isOwner) + " tools";
     }
@@ -1002,10 +1002,10 @@ import { enableSwipeBack, disableSwipeBack } from './swipeback.js';
  */
 function _getUtilityCount(isOwner) {
   // Owner tools: scan recipes, publish all, remove duplicates, regen summaries,
-  //              remove my community, remove household community = 6 owner-only + 1 any-member
-  // Non-owner: remove my community recipes = 1
+  //              remove my community, remove household community = 6 owner-only + 2 any-member
+  // Non-owner: remove my community recipes + clear scan cache = 2
   // But this function is only called for owners (row is hidden for non-owners)
-  return isOwner ? 6 : 1;
+  return isOwner ? 7 : 2;
 }
 
 /**
@@ -1036,6 +1036,9 @@ export async function openUtilities() {
     });
   }
 
+  // Update the scan cache button label with the current entry count
+  _updateScanCacheBtn();
+
   // Enable swipe-back gesture to return to Settings
   enableSwipeBack(() => closeUtilities());
 }
@@ -1047,6 +1050,38 @@ export async function openUtilities() {
 export function closeUtilities() {
   disableSwipeBack();
   hideOv("utilities");
+}
+
+// ── CLEAR SCAN CACHE ────────────────────────────────────────────────────────
+// Utility to clear all cached barcode scan results from localStorage.
+// Available to all household members in Settings > Utilities > Data.
+// Useful when product data seems stale or incorrect.
+
+import { getScanCacheCount, clearScanCache } from './scan.js';
+
+/**
+ * clearScanCacheUI — clears all cached barcode scan entries and shows a toast.
+ * Updates the button label with the current count before and after clearing.
+ */
+export function clearScanCacheUI() {
+  const count = clearScanCache();
+  showNotif(count > 0 ? `✓ Cleared ${count} cached scan${count === 1 ? "" : "s"}` : "Cache is already empty");
+
+  // Update the button label to reflect the new (zero) count
+  _updateScanCacheBtn();
+}
+
+/**
+ * _updateScanCacheBtn — updates the scan cache clear button label with the
+ * current cache entry count. Called when the Utilities page opens and after clearing.
+ */
+export function _updateScanCacheBtn() {
+  const btn = g("clearScanCacheBtn");
+  if (!btn) return;
+  const count = getScanCacheCount();
+  btn.textContent = count > 0
+    ? `🗑️ Clear scan cache (${count} item${count === 1 ? "" : "s"})`
+    : "🗑️ Clear scan cache";
 }
 
 // ── BULK PUBLISH ALL RECIPES ─────────────────────────────────────────────────

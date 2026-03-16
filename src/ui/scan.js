@@ -21,6 +21,141 @@ import { getCurrentUser } from '../auth.js';       // getCurrentUser = get the s
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list (deduplicates by name)
 import { g, showNotif, showOv, hideOv, formatScanResult } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels, formatScanResult = smart product type extraction
 
+// ── SCAN CACHE ──────────────────────────────────────────────────────────────
+// Client-side cache for barcode lookup results stored in localStorage.
+// Avoids redundant server calls when the same barcode is scanned again.
+// Cache entries expire after 30 days and the cache holds at most 200 entries.
+
+const SCAN_CACHE_PREFIX = "scan_cache_";  // localStorage key prefix for cached barcode results
+const SCAN_CACHE_TTL = 30 * 24 * 60 * 60 * 1000;  // 30 days in milliseconds
+const SCAN_CACHE_MAX = 200;  // Maximum number of cached barcode entries
+
+/**
+ * _getCachedScan — retrieves a cached barcode result from localStorage.
+ * Returns the cached product object if found and not expired, or null otherwise.
+ * Expired entries are removed immediately to keep the cache clean.
+ *
+ * @param {string} barcode - The barcode string to look up in the cache
+ * @returns {object|null} Cached product data or null if not found/expired
+ */
+function _getCachedScan(barcode) {
+  try {
+    const raw = localStorage.getItem(SCAN_CACHE_PREFIX + barcode);
+    if (!raw) return null;
+
+    const entry = JSON.parse(raw);
+
+    // Check if the cached entry has expired (older than 30 days)
+    if (Date.now() - entry.cachedAt > SCAN_CACHE_TTL) {
+      localStorage.removeItem(SCAN_CACHE_PREFIX + barcode);
+      return null;
+    }
+
+    return entry;
+  } catch {
+    return null;  // Corrupted entry — treat as cache miss
+  }
+}
+
+/**
+ * _setCachedScan — stores a barcode lookup result in the localStorage cache.
+ * Enforces a 200-entry size limit by evicting the oldest entry when full.
+ * Only caches successful lookups (products that were actually found).
+ *
+ * @param {string} barcode - The barcode string as the cache key
+ * @param {object} product - The product data returned from the API
+ */
+function _setCachedScan(barcode, product) {
+  try {
+    // Build the cache entry with only the fields needed for scan results
+    const entry = {
+      name: product.name || "",
+      brand: product.brand || "",
+      category: product.category || "General",
+      scanTitle: product._scanTitle || "",
+      image: product.image || null,
+      source: product.source || null,
+      cachedAt: Date.now()
+    };
+
+    // Enforce size limit — evict the oldest entry if cache is full
+    const allKeys = _getScanCacheKeys();
+    if (allKeys.length >= SCAN_CACHE_MAX) {
+      _evictOldestCacheEntry(allKeys);
+    }
+
+    localStorage.setItem(SCAN_CACHE_PREFIX + barcode, JSON.stringify(entry));
+  } catch {
+    // localStorage full or unavailable — silently skip caching
+  }
+}
+
+/**
+ * _getScanCacheKeys — returns all localStorage keys that belong to the scan cache.
+ * Used for cache size enforcement and the "clear cache" utility.
+ *
+ * @returns {string[]} Array of full localStorage keys with the scan_cache_ prefix
+ */
+function _getScanCacheKeys() {
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(SCAN_CACHE_PREFIX)) {
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
+/**
+ * _evictOldestCacheEntry — removes the oldest cached scan entry to make room
+ * for a new one. Finds the entry with the smallest cachedAt timestamp.
+ *
+ * @param {string[]} keys - Array of scan cache localStorage keys
+ */
+function _evictOldestCacheEntry(keys) {
+  let oldestKey = null;
+  let oldestTime = Infinity;
+
+  for (const key of keys) {
+    try {
+      const entry = JSON.parse(localStorage.getItem(key));
+      if (entry && entry.cachedAt < oldestTime) {
+        oldestTime = entry.cachedAt;
+        oldestKey = key;
+      }
+    } catch {
+      // Corrupted entry — remove it as the eviction target
+      oldestKey = key;
+      break;
+    }
+  }
+
+  if (oldestKey) localStorage.removeItem(oldestKey);
+}
+
+/**
+ * getScanCacheCount — returns the number of cached barcode entries.
+ * Exported so the Settings > Utilities page can show the count on the clear button.
+ *
+ * @returns {number} Number of cached scan entries in localStorage
+ */
+export function getScanCacheCount() {
+  return _getScanCacheKeys().length;
+}
+
+/**
+ * clearScanCache — removes all cached barcode scan entries from localStorage.
+ * Called from Settings > Utilities when the user wants to force fresh lookups.
+ *
+ * @returns {number} Number of entries that were cleared
+ */
+export function clearScanCache() {
+  const keys = _getScanCacheKeys();
+  keys.forEach(key => localStorage.removeItem(key));
+  return keys.length;
+}
+
 // Track whether the live scanner is currently active to avoid double-init
 let scannerRunning = false;
 
@@ -435,14 +570,40 @@ async function lkup(bc) {
     }
   }
 
+  // ── CLIENT-SIDE SCAN CACHE CHECK ───────────────────────────────────────────
+  // Check if we have a recent cached result for this barcode in localStorage.
+  // This avoids a server round-trip for barcodes that have been scanned before.
+  const cached = _getCachedScan(bc);
+  if (cached) {
+    console.log(`[Scan] Cache hit for barcode ${bc}`);
+    return {
+      barcode: bc,
+      name: cached.name,
+      brand: cached.brand,
+      quantity: "",
+      category: cached.category || "General",
+      image: cached.image || null,
+      source: cached.source || null,
+      description: "",
+      nutrition: null,
+      notFound: false,
+      _scanTitle: cached.scanTitle || "",
+      fromCache: true
+    };
+  }
+
   // ── SERVER-SIDE WATERFALL LOOKUP ─────────────────────────────────────────
   try {
     const r = await fetch("/api/barcode?code=" + encodeURIComponent(bc));
     if (r.ok) {
       const d = await r.json();
       if (d.found && d.product) {
-        // Server returned a match — add the notFound flag for the UI
-        return { ...d.product, notFound: false };
+        const product = { ...d.product, notFound: false };
+
+        // Cache the successful result for future scans of the same barcode
+        _setCachedScan(bc, product);
+
+        return product;
       }
     }
   } catch {
