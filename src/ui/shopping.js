@@ -1468,10 +1468,32 @@ export async function openItemDetail(id) {
   // const changePhotoLink = displayImage
   //   ? `<div class="item-detail-change-photo" onclick="triggerProductPhotoUpload('${item.id}')">Change photo</div>`
   //   : "";
+
+  // Use scanTitle (corrected/formatted name) if available, fallback to raw name
+  const displayName = item.scanTitle || item.name;
+  // Subtitle: show the raw DB name only when it differs from the display name
+  const detailSubtitle = item.scanTitle && item.scanTitle !== item.name ? item.name : "";
+
   let html = `<div class="item-detail-header">
     <div style="flex:1;min-width:0">
-      <div class="item-detail-name">${toTitleCase(item.name)}</div>
-      ${showBrand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
+      <div class="detail-editable" onclick="editShopDetailName('${item.id}')">
+        <span class="item-detail-name" id="shop-detail-name-${item.id}">${toTitleCase(displayName)}</span>
+        <span class="detail-edit-hint">✏️</span>
+      </div>
+      <div id="shop-detail-name-edit-${item.id}" style="display:none">
+        <input class="detail-edit-input" id="shop-detail-name-input-${item.id}" value="${toTitleCase(displayName).replace(/"/g, '&quot;')}"
+          data-item-id="${item.id}" onblur="saveShopDetailName('${item.id}')" onkeydown="if(event.key==='Enter')this.blur()" style="font-size:1.1rem;font-weight:700"/>
+      </div>
+      ${detailSubtitle ? `
+      <div class="detail-editable" onclick="editShopDetailSubtitle('${item.id}')" style="margin-top:2px">
+        <span class="item-detail-brand" id="shop-detail-sub-${item.id}">${toTitleCase(detailSubtitle)}</span>
+        <span class="detail-edit-hint">✏️</span>
+      </div>
+      <div id="shop-detail-sub-edit-${item.id}" style="display:none">
+        <input class="detail-edit-input" id="shop-detail-sub-input-${item.id}" value="${toTitleCase(detailSubtitle).replace(/"/g, '&quot;')}"
+          data-item-id="${item.id}" onblur="saveShopDetailSubtitle('${item.id}')" onkeydown="if(event.key==='Enter')this.blur()" style="font-size:.82rem"/>
+      </div>` : ""}
+      ${showBrand && !detailSubtitle ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
       ${item.checked ? `<div style="margin-top:4px"><span class="item-detail-badge" style="background:var(--gnd);color:var(--gn)">✓ Purchased</span></div>` : ""}
     </div>
   </div>`;
@@ -1482,7 +1504,7 @@ export async function openItemDetail(id) {
   // Category/source tags removed — hyphenated category names (e.g. "plant-based-foods-and-beverages")
   // and source labels ("via reminders") added no user value and looked ugly/technical.
 
-  // Quantity stepper — whole number +/- stepper on left, fraction picker on right.
+  // Quantity stepper — layout: [−] [qty] [+] [frac ▼] [unit ▼] all inline.
   // Stored as a single decimal in Firestore (e.g. 5.5), split here for UI display.
   const qty = item.qty || 1;
   const curUnit = item.unit || "Unit";
@@ -1498,16 +1520,10 @@ export async function openItemDetail(id) {
       <div class="frac-group">
         ${renderFracSelect(`shop-frac-${item.id}`, shopFrac).replace('<select', '<select onchange="changeShopFrac(\'' + item.id + '\')"')}
       </div>
-      <span style="font-size:.8rem;color:var(--mt)">${curUnit}</span>
+      <select class="frac-select frac-active" onchange="changeShopUnit('${item.id}',this.value)">
+        ${UNITS.map(u => `<option value="${u}"${u === curUnit ? " selected" : ""}>${u}</option>`).join("")}
+      </select>
     </div>
-  </div>`;
-
-  // Unit of measure selector — dropdown to change the unit
-  html += `<div class="item-detail-section">
-    <div class="item-detail-label">Unit of Measure</div>
-    <select class="detail-select" onchange="changeShopUnit('${item.id}',this.value)">
-      ${UNITS.map(u => `<option value="${u}"${u === curUnit ? " selected" : ""}>${u}</option>`).join("")}
-    </select>
   </div>`;
 
   // Note section (if present)
@@ -1618,6 +1634,96 @@ export async function changeShopFrac(id) {
   // If user sets fraction to None while whole is 0, bump whole to 1
   if (f === 0 && w === 0 && el) el.value = 1;
   await svShopItem({ ...item, qty: combined });
+}
+
+// ── EDITABLE NAME / SUBTITLE IN DETAIL SHEET ─────────────────────────────────
+// Allows users to tap the product name or subtitle in the shopping detail sheet
+// to inline-edit it. Changes save to Firestore and, for barcoded items, also
+// persist to customProducts/{barcode} so future scans use the corrected name.
+
+/**
+ * editShopDetailName(id) — Switches the name display to an inline input field.
+ */
+export function editShopDetailName(id) {
+  const display = g(`shop-detail-name-${id}`)?.parentElement;
+  const editRow = g(`shop-detail-name-edit-${id}`);
+  const input = g(`shop-detail-name-input-${id}`);
+  if (!display || !editRow || !input) return;
+  display.style.display = "none";
+  editRow.style.display = "block";
+  input.focus();
+  input.select();
+}
+
+/**
+ * saveShopDetailName(id) — Saves the edited name on blur or Enter.
+ * Updates the item name (and scanTitle if set) in Firestore.
+ * For barcoded items, also saves to customProducts for future scans.
+ */
+export async function saveShopDetailName(id) {
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+  const input = g(`shop-detail-name-input-${id}`);
+  const newName = (input?.value || "").trim();
+  if (!newName) return; // Don't allow empty names
+
+  // Update the display name — if item has a scanTitle, update that; otherwise update name directly
+  const updates = { ...item };
+  if (item.scanTitle) {
+    updates.scanTitle = newName;
+  } else {
+    updates.name = newName;
+  }
+  await svShopItem(updates);
+
+  // For barcoded items, save the corrected name to customProducts so future scans use it
+  if (item.barcode && state.hid) {
+    await _saveShopCustomProductName(item.barcode, newName);
+  }
+
+  showNotif("✓ Name updated");
+  openItemDetail(id); // Refresh the sheet to reflect changes
+}
+
+/**
+ * editShopDetailSubtitle(id) — Switches the subtitle display to an inline input field.
+ */
+export function editShopDetailSubtitle(id) {
+  const display = g(`shop-detail-sub-${id}`)?.parentElement;
+  const editRow = g(`shop-detail-sub-edit-${id}`);
+  const input = g(`shop-detail-sub-input-${id}`);
+  if (!display || !editRow || !input) return;
+  display.style.display = "none";
+  editRow.style.display = "block";
+  input.focus();
+  input.select();
+}
+
+/**
+ * saveShopDetailSubtitle(id) — Saves the edited subtitle (raw product name) on blur or Enter.
+ * Updates item.name in Firestore since the subtitle shows the original DB name.
+ */
+export async function saveShopDetailSubtitle(id) {
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+  const input = g(`shop-detail-sub-input-${id}`);
+  const newSub = (input?.value || "").trim();
+  if (!newSub) return;
+  await svShopItem({ ...item, name: newSub });
+  showNotif("✓ Subtitle updated");
+  openItemDetail(id);
+}
+
+/**
+ * _saveShopCustomProductName(barcode, correctedName) — Saves a corrected name
+ * to customProducts/{barcode} so future barcode scans return this name.
+ */
+async function _saveShopCustomProductName(barcode, correctedName) {
+  if (!state.hid || !barcode) return;
+  const normalizedBarcode = barcode.replace(/[^a-zA-Z0-9]/g, "");
+  const docPath = `households/${state.hid}/customProducts/barcode_${normalizedBarcode}`;
+  // dbSet uses PATCH (merge) so this only updates correctedName + updatedAt without overwriting other fields
+  await dbSet(docPath, { correctedName, updatedAt: new Date().toISOString() });
 }
 
 // ── DRAG-AND-DROP IMAGE UPLOAD ────────────────────────────────────────────────

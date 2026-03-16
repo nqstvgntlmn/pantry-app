@@ -44,11 +44,11 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -175,6 +175,11 @@ window.changeInvExpiry = changeInvExpiry;              // Save expiry date from 
 window.clearInvExpiry = clearInvExpiry;                // Clear expiry date (set to "no expiry")
 window.setInvExpiry = setInvExpiry;                    // Switch from "No expiry" badge to date picker (sets today as default)
 window.changeInvNote = changeInvNote;                  // Save notes from detail sheet textarea
+// Editable name/subtitle in inventory detail sheet
+window.editInvDetailName = editInvDetailName;           // Switch name to inline edit mode
+window.saveInvDetailName = saveInvDetailName;           // Save edited name on blur/Enter
+window.editInvDetailSubtitle = editInvDetailSubtitle;   // Switch subtitle to inline edit mode
+window.saveInvDetailSubtitle = saveInvDetailSubtitle;   // Save edited subtitle on blur/Enter
 // Inventory add-to-pantry bottom sheet (mirrors shopping add-item sheet)
 window.openInvAddSheet = openInvAddSheet;     // Open the add-to-pantry bottom sheet
 window.closeInvAddSheet = closeInvAddSheet;   // Close the add-to-pantry bottom sheet
@@ -226,6 +231,11 @@ window.changeShopUnit = changeShopUnit;       // Change unit of measure for a sh
 window.changeShopQty = changeShopQty;         // Adjust shopping item quantity whole part from detail sheet stepper
 window.changeShopQtyDirect = changeShopQtyDirect; // Direct input of quantity whole part from detail sheet stepper
 window.changeShopFrac = changeShopFrac;       // Fraction dropdown change for shopping quantity
+// Editable name/subtitle in shopping detail sheet
+window.editShopDetailName = editShopDetailName;           // Switch name to inline edit mode
+window.saveShopDetailName = saveShopDetailName;           // Save edited name on blur/Enter
+window.editShopDetailSubtitle = editShopDetailSubtitle;   // Switch subtitle to inline edit mode
+window.saveShopDetailSubtitle = saveShopDetailSubtitle;   // Save edited subtitle on blur/Enter
 window.deleteItemImage = deleteItemImage;     // Remove product image from a shopping item (keeps other fields)
 window.triggerProductPhotoUpload = triggerProductPhotoUpload; // Open file picker to upload a custom product photo
 window.handleProductPhotoSelected = handleProductPhotoSelected; // Process the selected product photo file

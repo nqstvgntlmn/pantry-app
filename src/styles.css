@@ -384,14 +384,23 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .qbtn:active{background:var(--b1);transform:scale(.93)}
 .qinp{width:68px;background:var(--sf);border:1.5px solid var(--b2);border-radius:10px;padding:7px 8px;color:var(--tx);font-size:1.15rem;font-family:"Fraunces",serif;text-align:center;font-weight:300}
 .qinp:focus{outline:none;border-color:var(--ac)}
-/* Fraction picker dropdown — sits beside the whole-number stepper */
-.frac-select{background:var(--sf);border:1.5px solid var(--b2);border-radius:10px;padding:7px 8px;color:var(--tx);font-size:.92rem;font-family:"DM Sans",sans-serif;font-weight:500;cursor:pointer;min-width:68px;text-align:center;-webkit-appearance:none;appearance:none;transition:border-color .15s}
+/* Fraction picker dropdown — sits inline between the stepper and unit dropdown.
+   When no fraction selected, shows subtle "+½" placeholder in muted style.
+   When a fraction IS selected, shows it clearly with normal text color. */
+.frac-select{background:var(--sf);border:1.5px solid var(--b2);border-radius:10px;padding:7px 8px;color:var(--mt);font-size:.92rem;font-family:"DM Sans",sans-serif;font-weight:500;cursor:pointer;min-width:56px;text-align:center;-webkit-appearance:none;appearance:none;transition:border-color .15s;opacity:.55}
+.frac-select.frac-active{color:var(--tx);opacity:1}
 .frac-select:focus{outline:none;border-color:var(--ac)}
-/* Container for whole stepper + fraction picker side by side */
+/* Layout: [− ] [qty] [+ ] [frac ▼] [unit ▼] — all inline on one row */
 .qty-combo{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
 .qty-combo .qty-group{display:flex;align-items:center;gap:6px}
 .qty-combo .frac-group{display:flex;align-items:center;gap:6px}
 .qty-combo .frac-group .frac-label{font-size:.72rem;color:var(--mt);white-space:nowrap}
+/* Editable name/subtitle in detail sheets — subtle edit hint styling */
+.detail-editable{cursor:pointer;position:relative;display:inline-flex;align-items:center;gap:4px}
+.detail-edit-hint{font-size:.7rem;opacity:.4;flex-shrink:0;transition:opacity .15s}
+.detail-editable:hover .detail-edit-hint{opacity:.7}
+.detail-edit-input{background:var(--sf);border:1.5px solid var(--ac);border-radius:8px;padding:6px 10px;color:var(--tx);font-family:"DM Sans",sans-serif;font-size:inherit;font-weight:inherit;width:100%}
+.detail-edit-input:focus{outline:none}
 .lpick{display:flex;gap:8px}
 .lbtn{flex:1;padding:11px 6px;border-radius:11px;border:1.5px solid var(--b2);background:var(--sf);color:var(--mt);font-family:"DM Sans",sans-serif;font-size:.82rem;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
 .lbtn.sel{background:var(--ac);color:#0c0c0a;border-color:var(--ac)}

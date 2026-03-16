@@ -11,11 +11,12 @@ import { state } from './state.js';
 // between the two representations and render the fraction picker controls.
 
 /** Map of supported fraction decimals → display labels */
-const FRAC_MAP = { 0: "None", 0.25: "1/4", [1/3]: "1/3", 0.5: "1/2", [2/3]: "2/3", 0.75: "3/4" };
+const FRAC_MAP = { 0: "+½", 0.25: "1/4", [1/3]: "1/3", 0.5: "1/2", [2/3]: "2/3", 0.75: "3/4" };
 
-/** Fraction options for <select> dropdowns — value is the decimal stored in Firestore */
+/** Fraction options for <select> dropdowns — value is the decimal stored in Firestore.
+ *  The "none" option shows a subtle "+½" placeholder instead of "None" to avoid confusing users. */
 export const FRAC_OPTIONS = [
-  { value: 0,    label: "None" },
+  { value: 0,    label: "＋½" },
   { value: 0.25, label: "¼" },
   { value: 1/3,  label: "⅓" },
   { value: 0.5,  label: "½" },
@@ -93,11 +94,16 @@ export function formatQtyWithUnit(qty, unit) {
  * @returns {string} HTML string for the fraction <select>
  */
 export function renderFracSelect(idPrefix, selectedFrac) {
+  // Build the <select> options — the "none" option gets muted styling via a CSS class.
+  // When a fraction IS selected, show the value clearly (e.g. "½", "¼").
+  const hasFrac = selectedFrac > 0.01;
   const opts = FRAC_OPTIONS.map(o => {
     const sel = Math.abs(o.value - selectedFrac) < 0.01 ? " selected" : "";
     return `<option value="${o.value}"${sel}>${o.label}</option>`;
   }).join("");
-  return `<select class="frac-select" id="${idPrefix}">${opts}</select>`;
+  // Add "frac-active" class when a fraction is selected for clear visual feedback
+  const activeClass = hasFrac ? " frac-active" : "";
+  return `<select class="frac-select${activeClass}" id="${idPrefix}">${opts}</select>`;
 }
 
 /**
@@ -566,8 +572,59 @@ export function formatScanResult(product) {
   // Determine the short title (product type) from available fields
   const title = _extractProductTitle(name, brand, description, category);
 
-  // Subtitle: full product name (truncation handled by CSS, tap to expand)
-  return { title: title || name, subtitle: name, brand };
+  // Subtitle: full product name, cleaned of redundant brand/abbreviation duplicates.
+  // E.g. "Mountain Dew Mtn Dew Zero Sugar Baja Blast" → "Zero Sugar Baja Blast"
+  const cleanedSubtitle = _deduplicateSubtitle(name, brand);
+
+  return { title: title || name, subtitle: cleanedSubtitle, brand };
+}
+
+/**
+ * _deduplicateSubtitle(name, brand) — Removes redundant repeated words/phrases
+ * from a product name to produce a cleaner subtitle.
+ * Handles:
+ *   - Full brand name appearing in the product name (e.g. "Mountain Dew" in title)
+ *   - Common abbreviations of the brand (e.g. "Mtn Dew" when brand is "Mountain Dew")
+ *   - Duplicate words within the name itself
+ * @param {string} name - Full product name from the database
+ * @param {string} brand - Brand name to strip from the subtitle
+ * @returns {string} Cleaned subtitle with redundant parts removed
+ */
+function _deduplicateSubtitle(name, brand) {
+  if (!name) return "";
+  let result = name;
+
+  if (brand) {
+    // Strip the full brand name from the beginning of the product name (case-insensitive)
+    const escapedBrand = brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(new RegExp("^" + escapedBrand + "\\s*", "i"), "").trim();
+
+    // Build common abbreviation patterns from the brand name.
+    // E.g. "Mountain Dew" → check for "Mtn Dew", "Mt Dew", etc.
+    const ABBREVS = {
+      "mountain": "mtn", "mount": "mt", "doctor": "dr", "mister": "mr",
+      "saint": "st", "international": "intl", "company": "co"
+    };
+    const brandWords = brand.toLowerCase().split(/\s+/);
+    const abbrWords = brandWords.map(w => ABBREVS[w] || w);
+    const abbrBrand = abbrWords.join(" ");
+
+    // If the abbreviated form differs from the original brand, strip it too
+    if (abbrBrand !== brand.toLowerCase()) {
+      const escapedAbbr = abbrBrand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      result = result.replace(new RegExp(escapedAbbr + "\\s*", "i"), "").trim();
+    }
+  }
+
+  // Remove consecutive duplicate words (case-insensitive).
+  // E.g. "Sugar Sugar Free" → "Sugar Free"
+  result = result.replace(/\b(\w+)\s+\1\b/gi, "$1");
+
+  // Clean up any leftover leading/trailing whitespace or double spaces
+  result = result.replace(/\s{2,}/g, " ").trim();
+
+  // If we stripped everything, fall back to the original name
+  return result || name;
 }
 
 /**
