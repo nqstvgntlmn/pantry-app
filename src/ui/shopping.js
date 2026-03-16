@@ -8,7 +8,7 @@
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
 import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
 import { defaultThreshold } from '../helpers.js';  // Smart restock threshold by unit — used for "already have" inventory check
-import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, FRAC_OPTIONS } from '../helpers.js';
+import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, deduplicateSubtitle, FRAC_OPTIONS } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
 // gcat = guess category for inventory, showNotif = toast notification,
@@ -511,7 +511,13 @@ export function sH(item) {
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
         <div class="shck" onclick="event.stopPropagation();togShop('${item.id}')">${item.checked ? "✓" : ""}</div>  <!-- Slim ring: tap to mark as bought; hidden in select mode (replaced by sel-cb) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
-          ${item.scanTitle ? `<div class="shnm">${toTitleCase(item.scanTitle)}${qtyBadge}</div><div class="sh-brand" style="font-size:.78rem;color:var(--mt)">${toTitleCase(item.name)}</div>` : `<div class="shnm">${toTitleCase(item.name)}${qtyBadge}</div>`}
+          ${item.scanTitle ? (() => {
+            // Clean the subtitle by removing redundant brand/abbreviation duplicates
+            const cleanSub = deduplicateSubtitle(item.name, item.brand || "");
+            // Hide subtitle if it matches the title (case-insensitive) — avoids redundant text
+            const showSub = cleanSub.toLowerCase().trim() !== item.scanTitle.toLowerCase().trim();
+            return `<div class="shnm">${toTitleCase(item.scanTitle)}${qtyBadge}</div>${showSub ? `<div class="sh-brand" style="font-size:.78rem;color:var(--mt)">${toTitleCase(cleanSub)}</div>` : ""}`;
+          })() : `<div class="shnm">${toTitleCase(item.name)}${qtyBadge}</div>`}
           ${_shouldShowBrand(item) ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand shown for barcode scans always; for text search only if the user's query matches the brand name -->
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
         </div>

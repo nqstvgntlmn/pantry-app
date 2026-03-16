@@ -574,13 +574,13 @@ export function formatScanResult(product) {
 
   // Subtitle: full product name, cleaned of redundant brand/abbreviation duplicates.
   // E.g. "Mountain Dew Mtn Dew Zero Sugar Baja Blast" → "Zero Sugar Baja Blast"
-  const cleanedSubtitle = _deduplicateSubtitle(name, brand);
+  const cleanedSubtitle = deduplicateSubtitle(name, brand);
 
   return { title: title || name, subtitle: cleanedSubtitle, brand };
 }
 
 /**
- * _deduplicateSubtitle(name, brand) — Removes redundant repeated words/phrases
+ * deduplicateSubtitle(name, brand) — Removes redundant repeated words/phrases
  * from a product name to produce a cleaner subtitle.
  * Handles:
  *   - Full brand name appearing in the product name (e.g. "Mountain Dew" in title)
@@ -590,7 +590,7 @@ export function formatScanResult(product) {
  * @param {string} brand - Brand name to strip from the subtitle
  * @returns {string} Cleaned subtitle with redundant parts removed
  */
-function _deduplicateSubtitle(name, brand) {
+export function deduplicateSubtitle(name, brand) {
   if (!name) return "";
   let result = name;
 

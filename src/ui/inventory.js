@@ -14,7 +14,7 @@ import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add 
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems, FRAC_OPTIONS } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems, deduplicateSubtitle, FRAC_OPTIONS } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 // _defaultThreshold returns the smart restock threshold based on unit type
 import { updExport, _defaultThreshold } from './home.js';
@@ -99,7 +99,13 @@ export function iH(item) {
         <!-- Slim outlined circle: tapping opens detail sheet -->
         <div class="shck" onclick="event.stopPropagation();openInvItemDetail('${item.id}')"></div>
         <div style="flex:1;min-width:0;cursor:pointer" onclick="event.stopPropagation();openInvItemDetail('${item.id}')">
-          ${item.scanTitle ? `<div class="inm">${toTitleCase(item.scanTitle)}</div><div class="sh-brand" style="font-size:.78rem;color:var(--mt)">${toTitleCase(item.name)}</div>` : `<div class="inm">${toTitleCase(item.name)}</div>`}
+          ${item.scanTitle ? (() => {
+            // Clean the subtitle by removing redundant brand/abbreviation duplicates
+            const cleanSub = deduplicateSubtitle(item.name, item.brand || "");
+            // Hide subtitle if it matches the title (case-insensitive) — avoids redundant text
+            const showSub = cleanSub.toLowerCase().trim() !== item.scanTitle.toLowerCase().trim();
+            return `<div class="inm">${toTitleCase(item.scanTitle)}</div>${showSub ? `<div class="sh-brand" style="font-size:.78rem;color:var(--mt)">${toTitleCase(cleanSub)}</div>` : ""}`;
+          })() : `<div class="inm">${toTitleCase(item.name)}</div>`}
           ${brandHtml}
           ${item.note ? `<div class="shnote" style="margin-top:2px">📝 ${item.note}</div>` : ""}
           ${et}

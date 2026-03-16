@@ -19,7 +19,7 @@ import { state } from '../state.js';            // Global app state (holds curre
 import { svi, dbSet, dbGet } from '../db.js';     // svi = save inventory item, dbSet/dbGet = Firestore CRUD
 import { getCurrentUser } from '../auth.js';       // getCurrentUser = get the signed-in Firebase Auth user
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list (deduplicates by name)
-import { g, showNotif, showOv, hideOv, formatScanResult } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels, formatScanResult = smart product type extraction
+import { g, showNotif, showOv, hideOv, formatScanResult, combineQty } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels, formatScanResult = smart product type extraction, combineQty = combine whole + fraction
 
 // ── SCAN CACHE ──────────────────────────────────────────────────────────────
 // Client-side cache for barcode lookup results stored in localStorage.
@@ -349,8 +349,10 @@ async function onBarcodeDetected(result) {
     const prod = await lkup(code);
     state.cp = prod;                       // Store the current product in global state for later use
 
-    // Reset the quantity and expiry fields in the result overlay to defaults
+    // Reset the quantity, fraction, unit, and expiry fields in the result overlay to defaults
     g("aqty").value = 1; g("aexp").value = "";
+    const scanFracEl = g("scan-frac"); if (scanFracEl) scanFracEl.value = "0";
+    const aunitEl = g("aunit"); if (aunitEl) aunitEl.value = "Unit";
     selRL("fridge", g("rl-fridge"));       // Pre-select "fridge" as the default storage location
 
     showRes(prod);                         // Render the product result overlay
@@ -461,12 +463,15 @@ export function addScannedToList() {
   const noteInp = g("scanNoteInp");
   const note = noteInp ? noteInp.value.trim() : "";
 
-  // Read quantity from the result overlay (default 1)
-  const qty = parseInt(g("aqty").value) || 1;
+  // Read quantity (whole + fraction) and unit from the result overlay
+  const whole = parseInt(g("aqty").value) || 1;
+  const frac = parseFloat(g("scan-frac").value) || 0;
+  const qty = combineQty(whole, frac);
+  const unit = g("aunit").value || "Unit";
 
   // Build the shopping list item with brand stored as a separate field
   // so it renders as a subtitle in the list, not concatenated into the name
-  const item = { id: Date.now().toString(), name, qty, checked: false, src: "scan" };
+  const item = { id: Date.now().toString(), name, qty, unit, checked: false, src: "scan" };
   if (state.cp.brand) item.brand = state.cp.brand;   // Preserve brand separately for subtitle display
   if (state.cp.image) item.image = state.cp.image;   // Persist the product image for list thumbnail
   if (state.cp._scanTitle) item.scanTitle = state.cp._scanTitle; // Persist smart product type title for list row display
@@ -516,8 +521,10 @@ export async function manLookup() {
   const prod = await lkup(v);              // Query product databases with the entered barcode
   state.cp = prod;                         // Store result in global state
 
-  // Reset result form fields to defaults
+  // Reset result form fields to defaults (qty, fraction, unit, expiry)
   g("aqty").value = 1; g("aexp").value = "";
+  const scanFracEl2 = g("scan-frac"); if (scanFracEl2) scanFracEl2.value = "0";
+  const aunitEl2 = g("aunit"); if (aunitEl2) aunitEl2.value = "Unit";
   selRL("fridge", g("rl-fridge"));         // Pre-select "fridge" as default location
   g("meinp").value = "";                   // Clear the manual entry input
 
@@ -626,7 +633,14 @@ async function lkup(bc) {
 function showRes(prod) {
   hideOv("scan");                          // Close the scan overlay before showing the result
   g("resttl").textContent = prod.notFound ? "Not Found" : "Product Found ✓";
-  g("aunit").value = prod.quantity || "unit";  // Pre-fill the unit field with the product's quantity info
+  // Pre-fill the unit dropdown — try to match the product's quantity info to a valid option
+  const unitEl = g("aunit");
+  if (unitEl) {
+    const prodUnit = (prod.quantity || "Unit").trim();
+    // Check if the product's unit matches an option in the dropdown; default to "Unit" if not
+    const matchOption = Array.from(unitEl.options).find(o => o.value.toLowerCase() === prodUnit.toLowerCase());
+    unitEl.value = matchOption ? matchOption.value : "Unit";
+  }
 
   let html = "";
   if (prod.notFound) {
@@ -659,6 +673,9 @@ function showRes(prod) {
 
     // [SOURCE LINKS REMOVED] — database source badge no longer displayed to users
 
+    // Hide subtitle entirely if it matches the title (case-insensitive) — avoids redundant text
+    const subtitleHidden = scanFmt.subtitle.toLowerCase().trim() === scanFmt.title.toLowerCase().trim();
+
     // Subtitle: full product name, truncated at 60 characters with tap-to-expand.
     // Uses data attribute + generic handler to avoid inline script injection from product names.
     const subtitleText = scanFmt.subtitle.length > 60 ? scanFmt.subtitle.slice(0, 60) + "…" : scanFmt.subtitle;
@@ -678,7 +695,7 @@ function showRes(prod) {
         <input id="scan-title-input" class="fi" style="flex:1;font-size:1rem;padding:6px 10px;margin:0" data-original="${scanFmt.title.replace(/"/g, "&quot;")}" />
         <button onclick="confirmScanTitle()" style="background:var(--gn);color:#fff;border:none;border-radius:8px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0" title="Save">✓</button>
       </div>
-      <div class="pbr" style="font-size:.82rem;color:var(--mt);margin-top:2px"${subtitleExpand}>${subtitleText}</div>
+      ${subtitleHidden ? "" : `<div class="pbr" style="font-size:.82rem;color:var(--mt);margin-top:2px"${subtitleExpand}>${subtitleText}</div>`}
       ${scanFmt.brand ? `<div style="font-size:.72rem;color:var(--mt);opacity:.7;margin-top:2px">${scanFmt.brand}</div>` : ""}
     </div></div></div>`;
 
@@ -686,17 +703,15 @@ function showRes(prod) {
 
   g("resbody").innerHTML = html;           // Inject the built HTML into the result overlay body
 
-  // Hide inventory-specific fields (location, expiry, unit) when scanning from the Shopping tab —
+  // Hide inventory-specific fields (location, expiry) when scanning from the Shopping tab —
   // shopping list items don't have a storage location or expiry date.
-  // These fields are direct children of .ovbody in the ov-result overlay.
+  // Quantity, fraction, and unit remain visible for both contexts.
   const ovBody = g("ov-result")?.querySelector(".ovbody");
   if (ovBody) {
     const locationRow = ovBody.querySelector(".frow");          // First .frow = location picker
     const expiryRow = ovBody.querySelectorAll(".frow")[1];      // Second .frow = expiry date
-    const unitRow = ovBody.querySelectorAll(".qrow")[1];        // Second .qrow = unit input
     if (locationRow) locationRow.style.display = state.scanDestList ? "none" : "";
     if (expiryRow) expiryRow.style.display = state.scanDestList ? "none" : "";
-    if (unitRow) unitRow.style.display = state.scanDestList ? "none" : "";
   }
 
   // Dynamically render the action buttons based on which tab triggered the scan.
@@ -765,8 +780,10 @@ export async function addToInv() {
   const nm = state.cp.notFound ? (ne ? ne.value.trim() || "" : "") : state.cp.name;
   if (!nm) return;                         // Guard: can't add an item without a name
 
-  // Read user inputs from the result overlay
-  const unit = g("aunit").value.trim() || "unit", qty = Math.max(1, parseInt(g("aqty").value) || 1), exp = g("aexp").value || null;
+  // Read user inputs from the result overlay (whole qty + fraction combined, unit, expiry)
+  const whole = parseInt(g("aqty").value) || 1;
+  const frac = parseFloat(g("scan-frac").value) || 0;
+  const unit = g("aunit").value || "Unit", qty = combineQty(whole, frac), exp = g("aexp").value || null;
 
   // Generate a deterministic ID from the barcode (non-word chars replaced with dashes).
   // This lets us detect duplicates: if you scan the same barcode twice, it updates the existing item.
@@ -792,12 +809,12 @@ export async function addToInv() {
   showNotif(ex ? `✓ +${qty} added to ${nm}` : `✓ ${nm} added`);
 }
 
-// Increments or decrements the quantity field in the scan result overlay.
+// Increments or decrements the whole-number quantity field in the scan result overlay.
 // Called by the +/- buttons. The delta (d) is +1 or -1.
-// Clamps the value to a minimum of 1 (can't add zero or negative items).
+// Minimum 0 (the fraction picker can provide the fractional part when whole is 0).
 export function chgAQ(d) {
   const i = g("aqty");
-  i.value = Math.max(1, (parseInt(i.value) || 1) + d);
+  i.value = Math.max(0, (parseInt(i.value) || 0) + d);
 }
 
 // ── EDITABLE SCAN TITLE ───────────────────────────────────────────────────────
