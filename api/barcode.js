@@ -1,9 +1,10 @@
 // ── BARCODE LOOKUP API ──────────────────────────────────────────────────────
-// Serverless function that looks up a barcode (UPC/EAN) against a waterfall
-// of five free product databases. Tries each in priority order and returns
-// the first successful match. This keeps all API keys server-side and
-// centralizes lookup logic so the frontend makes a single request.
-// Five databases are tried in priority order; the first match wins.
+// Serverless function that looks up a barcode (UPC/EAN) against five free
+// product databases. All five are queried in PARALLEL — the first database
+// to return a good-quality result wins (short-circuit). This keeps all API
+// keys server-side and centralizes lookup logic so the frontend makes a
+// single request. Parallel execution prevents a slow/timing-out DB from
+// blocking the entire lookup.
 //
 // Waterfall order:
 //   1. Open Food Facts   — community-driven food database (no key needed)
@@ -348,28 +349,51 @@ export default async function handler(req, res) {
 
   console.log(`[Barcode] ── Lookup started for barcode: ${code}`);
 
-  // Run the waterfall: try each database in order.
-  // If a result has a truncated or low-quality name (e.g. ends with "imp", cut off mid-word),
-  // keep it as a fallback but continue trying other databases for a better match.
-  // This ensures we return the most complete product info available.
+  // Fire ALL database lookups in parallel, then short-circuit on the first
+  // good-quality result. This prevents a slow/timing-out database from
+  // blocking the entire waterfall — every DB starts its HTTP request immediately.
   const fns = [tryOpenFoodFacts, tryUpcItemDb, tryOpenBeautyFacts, tryOpenPetFoodFacts, tryEdamam];
   const fnNames = ["Open Food Facts", "UPC Item DB", "Open Beauty Facts", "Open Pet Food Facts", "Edamam"];
-  let bestFallback = null;
 
-  for (let i = 0; i < fns.length; i++) {
-    const result = await fns[i](code);
+  // Wrap each lookup so it always resolves (never rejects) with {result, idx}
+  const wrappers = fns.map((fn, i) =>
+    fn(code)
+      .then(result => ({ result, idx: i }))
+      .catch(() => ({ result: null, idx: i }))
+  );
+
+  // As each promise settles, check if we have a good result and short-circuit.
+  // Uses a racing pattern: repeatedly Promise.race the remaining promises,
+  // process the winner, remove it, and repeat until we find a match or exhaust all.
+  let bestFallback = null;
+  const pending = new Set(wrappers.map((p, i) => {
+    // Tag each promise so we can identify and remove it after it settles
+    const tagged = p.then(v => { tagged._settled = v; return v; });
+    tagged._idx = i;
+    return tagged;
+  }));
+
+  while (pending.size > 0) {
+    // Race remaining promises — first to settle wins this iteration
+    const { result, idx } = await Promise.race(pending);
+
+    // Remove the settled promise from the pending set
+    for (const p of pending) {
+      if (p._settled && p._settled.idx === idx) { pending.delete(p); break; }
+    }
+
     if (!result) {
-      console.log(`[Barcode] ${fnNames[i]}: no result`);
+      console.log(`[Barcode] ${fnNames[idx]}: no result`);
       continue;
     }
 
-    console.log(`[Barcode] ${fnNames[i]}: found "${result.name}" | image: ${result.image ? "YES" : "NONE"} | source: ${result.source}`);
+    console.log(`[Barcode] ${fnNames[idx]}: found "${result.name}" | image: ${result.image ? "YES" : "NONE"} | source: ${result.source}`);
 
-    // If the name looks complete and good, use it immediately
+    // If the name looks complete and good, return immediately (short-circuit)
     if (!isLowQualityName(result.name)) {
-      console.log(`[Barcode] Name quality OK — using ${fnNames[i]} as primary result`);
+      console.log(`[Barcode] Name quality OK — using ${fnNames[idx]} as primary result (${pending.size} lookup(s) still in-flight, abandoned)`);
 
-      // Merge in any missing fields from the fallback (e.g. image, description)
+      // Merge in any missing fields from a previously-seen fallback
       if (bestFallback) {
         if (!result.image && bestFallback.image) {
           console.log(`[Barcode] Merging image from fallback (${bestFallback.source})`);
@@ -393,8 +417,8 @@ export default async function handler(req, res) {
       return res.status(200).json({ found: true, product: result });
     }
 
-    // Low-quality name — save as fallback and keep trying other databases
-    console.log(`[Barcode] ${fnNames[i]}: low-quality name "${result.name}" — saving as fallback, continuing waterfall`);
+    // Low-quality name — save as fallback and keep waiting for other databases
+    console.log(`[Barcode] ${fnNames[idx]}: low-quality name "${result.name}" — saving as fallback, waiting for remaining`);
     if (!bestFallback) bestFallback = result;
   }
 
