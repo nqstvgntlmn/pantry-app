@@ -1069,9 +1069,8 @@ const _INV_CACHE_MAX = 30;
 
 /**
  * openInvAddSheet() — Opens the add-to-pantry bottom sheet.
- * Shows the text input with keyboard focused, location picker, and a
- * "📷 Scan barcode" button. Camera does NOT auto-start — user taps the
- * scan button to activate (tap-to-scan).
+ * Shows the text input with keyboard focused, location picker, and the persistent
+ * barcode scanner that auto-starts in the viewfinder area (self-checkout UX).
  * Resets the location to "fridge" and clears previous input on each open.
  */
 export function openInvAddSheet() {
@@ -1086,22 +1085,25 @@ export function openInvAddSheet() {
   const fBtn = g("invAddLoc-fridge");
   if (fBtn) fBtn.classList.add("sel");
 
-  // Expose the current add-sheet location for the tap-to-scan auto-add
+  // Expose the current add-sheet location for the persistent scanner's auto-add
   window._invAddLocation = _invAddLocation;
 
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("invi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
 
-  // Ensure the scan button is visible and scanner is hidden (clean state)
-  const scanBtn = g("invScanBtn");
-  if (scanBtn) scanBtn.classList.remove("hidden");
-  const scanner = g("invAddScanner");
-  if (scanner) scanner.classList.add("hidden");
+  // Ensure the "Scan barcode" start button is hidden (in case it was shown from a previous stop)
+  const startBtn = g("invScanStartBtn");
+  if (startBtn) startBtn.classList.add("hidden");
+
+  // Start the persistent barcode scanner in the sheet viewfinder after sheet animation completes
+  setTimeout(() => {
+    if (window.startSheetScanner) window.startSheetScanner("invAddScannerVF", "inv");
+  }, 400);
 }
 
 /**
  * closeInvAddSheet() — Dismisses the add-to-pantry bottom sheet.
- * Stops any active tap-to-scan camera and clears inline search to avoid stale results.
+ * Stops the persistent scanner and clears inline search to avoid stale results.
  */
 export function closeInvAddSheet() {
   const backdrop = g("invAddBackdrop");
@@ -1110,8 +1112,35 @@ export function closeInvAddSheet() {
   if (sheet) sheet.classList.remove("active");
   _clearInvSearch();
 
-  // Stop the tap-to-scan camera if it's running when sheet closes
-  if (window.stopTapScan) window.stopTapScan();
+  // Stop the persistent barcode scanner when closing the sheet
+  if (window.stopSheetScanner) window.stopSheetScanner();
+}
+
+/**
+ * stopInvScanner() — Pauses the persistent scanner in the inventory add sheet.
+ * Called when user taps "Stop scanning" — stops the camera and shows a
+ * "📷 Scan barcode" button so the user can re-activate scanning later.
+ */
+export function stopInvScanner() {
+  // Pause (stop camera without hiding container) instead of full stop
+  if (window.pauseSheetScanner) window.pauseSheetScanner();
+
+  // Hide the scanner viewfinder, show the "Scan barcode" start button
+  const scanner = g("invAddScanner");
+  const startBtn = g("invScanStartBtn");
+  if (scanner) scanner.classList.add("hidden");
+  if (startBtn) startBtn.classList.remove("hidden");
+}
+
+/**
+ * restartInvScanner() — Re-activates the persistent scanner after user stopped it.
+ * Hides the "Scan barcode" button and restarts the camera in the viewfinder.
+ */
+export function restartInvScanner() {
+  // Hide the start button, restart the scanner (startSheetScanner shows the container)
+  const startBtn = g("invScanStartBtn");
+  if (startBtn) startBtn.classList.add("hidden");
+  if (window.startSheetScanner) window.startSheetScanner("invAddScannerVF", "inv");
 }
 
 /**

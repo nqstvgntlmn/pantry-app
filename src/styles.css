@@ -358,41 +358,28 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .swipe-wrap.selecting .price-tag,
 .swipe-wrap.selecting .iit>div[style*="text-align:right"]{pointer-events:none}
 
-/* ── SHEET SCANNER (TAP-TO-SCAN) ── */
-/* Inline barcode scanner embedded in the add-item bottom sheets.
-   Camera activates only on tap, detects one barcode, then stops immediately. */
+/* ── SHEET SCANNER ── */
+/* Inline barcode scanner embedded in the add-item bottom sheets */
 .sheet-scanner{margin-bottom:14px;border-radius:14px;overflow:hidden;position:relative;background:#000}
 .sheet-scanner-vf{width:100%;height:180px;position:relative;overflow:hidden}
 .sheet-scanner-vf video,.sheet-scanner-vf canvas{width:100%!important;height:100%!important;object-fit:cover;position:absolute;top:0;left:0}
-/* Animated laser line that sweeps up/down while camera is active */
+/* Animated laser line that sweeps up/down inside the sheet scanner viewfinder */
 .sheet-scanner-vf::after{content:"";position:absolute;left:10%;right:10%;height:3px;background:linear-gradient(90deg,transparent,var(--ac),var(--ac),transparent);opacity:.85;z-index:5;border-radius:2px;box-shadow:0 0 8px 2px rgba(212,168,83,.5),0 0 20px 4px rgba(212,168,83,.2);animation:sheetScanLine 2.2s ease-in-out infinite}
 @keyframes sheetScanLine{0%,100%{top:15%;opacity:.5}50%{top:82%;opacity:1}}
+.sheet-scanner-controls{display:flex;justify-content:center;padding:8px}
+.sheet-scanner-stop{font-size:.78rem;color:var(--mt);background:none;border:none;cursor:pointer;font-family:"DM Sans",sans-serif;padding:6px 14px;min-height:36px}
+.sheet-scanner-stop:active{color:var(--tx)}
 /* Green flash on successful scan in sheet scanner */
 .sheet-scanner-vf.scan-flash{animation:sheetFlash .4s ease-out}
 @keyframes sheetFlash{0%{box-shadow:inset 0 0 0 3px var(--gn)}100%{box-shadow:inset 0 0 0 0 transparent}}
+/* Status text inside the scanner viewfinder */
+.sheet-scanner-status{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:.7rem;color:rgba(255,255,255,.75);z-index:6;text-shadow:0 1px 3px rgba(0,0,0,.8)}
 /* Hidden state for scanner */
 .sheet-scanner.hidden{display:none}
-/* "📷 Scan barcode" button — tap to activate camera for a single scan */
+/* "Scan barcode" toggle button — shown when scanner is stopped, tap to re-activate */
 .sheet-scan-toggle-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:14px;margin-bottom:14px;border-radius:14px;border:1.5px solid var(--bd);background:var(--sf);color:var(--tx);font-family:"DM Sans",sans-serif;font-size:.9rem;font-weight:500;cursor:pointer;min-height:48px;transition:all .15s}
 .sheet-scan-toggle-btn:active{background:var(--bd);transform:scale(.98)}
 .sheet-scan-toggle-btn.hidden{display:none}
-
-/* ── SCAN RESULT BANNER ── */
-/* Success/error/loading banner shown at the top of add-item sheets after a barcode scan */
-.scan-result-banner{padding:10px 14px;border-radius:12px;margin-bottom:12px;font-family:"DM Sans",sans-serif;font-size:.85rem;line-height:1.4;transition:opacity .2s}
-.scan-result-banner.hidden{display:none}
-/* Success state — subtle green with checkmark */
-.scan-banner-success{background:rgba(90,173,111,.12);border:1px solid rgba(90,173,111,.3);color:var(--gn)}
-/* Error state — subtle amber for "not found" or failures */
-.scan-banner-error{background:rgba(212,168,83,.1);border:1px solid rgba(212,168,83,.25);color:var(--ac)}
-/* Loading state — subtle neutral while looking up */
-.scan-banner-loading{background:var(--sf);border:1px solid var(--bd);color:var(--mt)}
-/* Banner text */
-.scan-banner-text{display:block}
-.scan-banner-text code{font-size:.8rem;background:rgba(255,255,255,.08);padding:1px 5px;border-radius:4px}
-/* Action buttons inside the banner (try again, search) */
-.scan-banner-action{font-family:"DM Sans",sans-serif;font-size:.8rem;padding:6px 14px;border-radius:10px;border:1px solid var(--bd);background:var(--sf);color:var(--tx);cursor:pointer;min-height:36px;transition:all .15s}
-.scan-banner-action:active{background:var(--bd);transform:scale(.98)}
 
 /* ── SCAN RESULT DISPLAY (truncation + expand) ── */
 /* Prominently displayed product type title in scan result */

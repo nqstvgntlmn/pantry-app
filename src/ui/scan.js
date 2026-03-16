@@ -1,23 +1,17 @@
-// ── BARCODE SCANNER (TAP-TO-SCAN) ───────────────────────────────────────────
-// This module handles barcode scanning using the device's rear camera.
-// Uses a tap-to-scan approach: camera only activates when the user taps
-// "📷 Scan barcode", detects a barcode, then immediately stops the camera.
-// This is faster and more battery-friendly than persistent always-on scanning.
+// ── BARCODE SCANNER (LIVE) ──────────────────────────────────────────────────
+// This module handles real-time barcode scanning using the device's rear camera.
+// Instead of taking a photo and decoding it, the camera streams continuously
+// inside a viewfinder and Quagga.js detects barcodes automatically in real time
+// (similar to MyFitnessPal's scanner UX).
 //
-// Flow (in-sheet scanning — primary flow):
-//   1. User opens the add-item sheet → "📷 Scan barcode" button is visible
-//   2. User taps button → camera activates with laser sweep animation
-//   3. Barcode detected → camera stops IMMEDIATELY, laser stops
-//   4. Success banner shows "✓ Scanned: [Product Title] — [Brand]"
-//   5. Item is auto-added to the list
-//   6. "📷 Scan barcode" button reappears for next scan
+// Flow:
+//   1. User opens the scan overlay → camera starts streaming inside the viewfinder
+//   2. Quagga continuously analyzes video frames for barcodes
+//   3. When a barcode is detected with high confidence, we auto-look it up
+//   4. Product result is shown — user can add to inventory or shopping list
+//   5. Manual barcode entry remains available as a fallback
 //
-// Flow (full-screen overlay — used from Home tab scan button):
-//   1. User opens the scan overlay → camera starts streaming
-//   2. Barcode detected → camera stops, product result overlay shown
-//   3. User chooses destination (pantry or shopping list)
-//
-// Supports two destinations:
+// The scan flow supports two destinations:
 //   - Inventory mode (default): scanned product goes into the pantry
 //   - Shopping list mode: scanned product is added as a shopping list item
 
@@ -41,15 +35,15 @@ const _DETECT_COOLDOWN = 500; // milliseconds between detection attempts
 // when Quagga's built-in getUserMedia produces a black feed)
 let _manualStream = null;
 
-// ── TAP-TO-SCAN STATE ──
-// When scanning from inside a bottom sheet, the camera activates on tap,
-// detects one barcode, auto-adds it, then stops. No persistent scanning.
-let _tapScanMode = null;       // "shop" or "inv" — which sheet triggered the scan
-let _tapScanTargetId = null;   // ID of the viewfinder DOM element currently in use
+// ── PERSISTENT SHEET SCANNER STATE ──
+// When the add-item bottom sheet is open, the scanner runs persistently inside
+// the sheet viewfinder. Items are auto-added on detection (self-checkout UX).
+let _sheetScanMode = null;   // "shop" or "inv" — which sheet the scanner is embedded in
+let _lastSheetCode = null;   // Last scanned barcode (to prevent immediate re-detection of same item)
+let _lastSheetScanTime = 0;  // Timestamp of last sheet scan (cooldown period)
+const SHEET_SCAN_COOLDOWN = 3000; // 3 seconds before re-scanning the same barcode
 
-// ── FULL-SCREEN OVERLAY SCANNER ─────────────────────────────────────────────
-
-// Starts the live camera scanner inside the full-screen scan overlay viewfinder.
+// Starts the live camera scanner inside the viewfinder element.
 // Uses a double-requestAnimationFrame to ensure the scan overlay is fully
 // laid out before Quagga measures container dimensions, then initializes
 // Quagga with the rear camera and applies iOS Safari video fixes.
@@ -203,8 +197,7 @@ export function stopLiveScanner() {
 // Handles a barcode detection event from Quagga's live stream.
 // Validates the result confidence to filter out false positives,
 // shows a success animation, then triggers the product lookup.
-// In tap-to-scan mode (sheet), stops camera immediately, auto-adds item,
-// and shows a result banner in the sheet.
+// In sheet scanner mode (persistent), auto-adds the item and keeps scanning.
 async function onBarcodeDetected(result) {
   if (processingBarcode) return;           // Already processing a detection, ignore this one
 
@@ -226,38 +219,30 @@ async function onBarcodeDetected(result) {
   // Record successful detection time for debounce
   _lastDetectTime = now;
 
-  // ── TAP-TO-SCAN MODE (in-sheet) ──
-  // Camera stops immediately on detection. Item is looked up and auto-added.
-  // The scan button reappears so the user can scan again.
-  if (_tapScanMode) {
+  // ── PERSISTENT SHEET SCANNER MODE ──
+  // In sheet scanner mode, auto-add the scanned item and keep scanning.
+  // Implements a cooldown to prevent re-scanning the same barcode immediately.
+  if (_sheetScanMode) {
+    // Cooldown: skip if same barcode was just scanned
+    if (code === _lastSheetCode && (now - _lastSheetScanTime) < SHEET_SCAN_COOLDOWN) return;
+
     processingBarcode = true;
-    const mode = _tapScanMode;  // Capture before stopping (stopTapScan clears it)
+    _lastSheetCode = code;
+    _lastSheetScanTime = now;
 
-    // Stop the camera IMMEDIATELY — core performance requirement
-    _stopTapScanCamera();
-
-    // Flash the viewfinder green to indicate successful detection
-    _flashSheetScanner(mode);
-
-    // Show a "looking up..." banner while we query the product database
-    _showScanBanner(mode, `Looking up ${code}…`, "loading");
+    // Flash the viewfinder border green to indicate successful scan
+    _flashSheetScanner();
 
     try {
       const prod = await lkup(code);
       if (prod.notFound) {
-        // Barcode not in any database — show failure banner with manual entry option
-        _showScanBanner(mode, `Barcode not found: ${code}`, "error");
-        _showManualBarcodeInSheet(mode, code);
+        showNotif("Barcode not found — try entering manually");
       } else {
-        // Product found — auto-add and show success banner
-        await _autoAddFromSheet(prod, mode);
-        const formatted = formatScanResult(prod);
-        const displayName = formatted.title || prod.name;
-        const brandText = formatted.brand ? ` — ${formatted.brand}` : "";
-        _showScanBanner(mode, `✓ Scanned: ${displayName}${brandText}`, "success");
+        // Auto-add the scanned product to the appropriate list
+        _autoAddFromSheet(prod);
       }
     } catch {
-      _showScanBanner(mode, "Lookup failed — try again", "error");
+      showNotif("Lookup failed — try again");
     }
 
     processingBarcode = false;
@@ -731,53 +716,46 @@ export function toggleScanExpand(el) {
   }
 }
 
-// ── TAP-TO-SCAN (IN-SHEET SCANNER) ─────────────────────────────────────────
-// Replaces the old persistent always-on scanner with a fast tap-to-scan flow.
-// Camera activates only when user taps the scan button, detects one barcode,
-// stops immediately, auto-adds the item, and shows a result banner.
-// No persistent background scanning — fast and battery-friendly.
+// ── PERSISTENT SHEET SCANNER ────────────────────────────────────────────────
+// Embeds a live barcode scanner inside the add-item bottom sheets. The camera
+// runs continuously (self-checkout style) so the user can scan multiple items
+// without tapping "Scan" each time. Items are auto-added on detection.
 
 /**
- * startTapScan(targetId, mode) — Activates the camera for a single barcode scan.
- * Called when the user taps "📷 Scan barcode" in an add-item bottom sheet.
- * The camera starts, laser animation plays, and on first detection the camera
- * stops immediately and the scanned item is processed.
+ * startSheetScanner(targetId, list) — Starts the persistent scanner in a bottom sheet.
+ * Initializes Quagga inside the given viewfinder element and enters persistent mode
+ * where detected barcodes are auto-looked-up and added to the list.
  *
- * @param {string} targetId - ID of the viewfinder container element (e.g. "shopAddScannerVF")
- * @param {string} mode - "shop" or "inv" — determines where scanned items go
+ * @param {string} targetId - ID of the viewfinder container element
+ * @param {string} list - "shop" or "inv" — determines where scanned items go
  */
-export function startTapScan(targetId, mode) {
+export function startSheetScanner(targetId, list) {
   // Stop any existing scanner instance first (Quagga is singleton)
   if (scannerRunning) stopLiveScanner();
 
-  _tapScanMode = mode;
-  _tapScanTargetId = targetId;
+  _sheetScanMode = list;
+  _lastSheetCode = null;
+  _lastSheetScanTime = 0;
 
-  const containerId = targetId.replace("VF", ""); // The .sheet-scanner wrapper (e.g. "shopAddScanner")
-  const container = g(containerId);
+  const container = g(targetId.replace("VF", "")); // The .sheet-scanner wrapper
   const target = g(targetId);
   if (!container || !target) return;
 
-  // Hide the scan button while camera is active
-  const btnId = mode === "shop" ? "shopScanBtn" : "invScanBtn";
-  const scanBtn = g(btnId);
-  if (scanBtn) scanBtn.classList.add("hidden");
-
-  // Show the scanner container with laser animation
+  // Show the scanner container (remove hidden class)
   container.classList.remove("hidden");
 
   // Double rAF ensures the bottom sheet is fully rendered before Quagga measures
   requestAnimationFrame(() => { requestAnimationFrame(() => {
-    _initTapScanQuagga(target, mode);
+    _initSheetQuagga(target);
   }); });
 }
 
 /**
- * _initTapScanQuagga(target, mode) — Initializes Quagga for the tap-to-scan viewfinder.
- * Same optimized config as the main scanner but targets the sheet viewfinder element.
- * On camera error, hides the scanner and shows an error message.
+ * _initSheetQuagga(target) — Initializes Quagga for the sheet scanner viewfinder.
+ * Same config as the main scanner but targets the sheet viewfinder element.
+ * On error, hides the scanner gracefully.
  */
-function _initTapScanQuagga(target, mode) {
+function _initSheetQuagga(target) {
   Quagga.init({
     inputStream: {
       name: "Live",
@@ -799,10 +777,9 @@ function _initTapScanQuagga(target, mode) {
     frequency: 15
   }, function(err) {
     if (err) {
-      console.warn("Tap-scan init error:", err);
-      // Camera not available — hide scanner, show scan button again, notify user
-      _stopTapScanCamera();
-      showNotif("Could not access camera");
+      console.warn("Sheet scanner init error:", err);
+      // Camera not available — hide the scanner area and let user type manually
+      _hideSheetScanner();
       return;
     }
 
@@ -820,48 +797,44 @@ function _initTapScanQuagga(target, mode) {
 }
 
 /**
- * _stopTapScanCamera() — Stops the camera and hides the scanner viewfinder.
- * Re-shows the "📷 Scan barcode" button so the user can scan again.
- * Called immediately when a barcode is detected (core performance requirement).
+ * stopSheetScanner() — Stops the persistent sheet scanner and hides the viewfinder.
+ * Called when user closes the add-item sheet (full stop + hide).
  */
-function _stopTapScanCamera() {
-  const mode = _tapScanMode;
-  _tapScanMode = null;
-  _tapScanTargetId = null;
+export function stopSheetScanner() {
+  _sheetScanMode = null;
+  _lastSheetCode = null;
   stopLiveScanner();
+  _hideSheetScanner();
+}
 
-  // Hide the scanner viewfinder
+/**
+ * pauseSheetScanner() — Stops the camera without hiding the scanner container.
+ * Called when user taps "Stop scanning" to toggle off the camera while keeping
+ * the sheet open. The scanner can be restarted via startSheetScanner().
+ */
+export function pauseSheetScanner() {
+  _sheetScanMode = null;
+  _lastSheetCode = null;
+  stopLiveScanner();
+}
+
+/**
+ * _hideSheetScanner() — Hides both sheet scanner containers (shopping + inventory).
+ * Adds the "hidden" class so the scanner area collapses out of the sheet layout.
+ */
+function _hideSheetScanner() {
   const shopScanner = g("shopAddScanner");
   const invScanner = g("invAddScanner");
   if (shopScanner) shopScanner.classList.add("hidden");
   if (invScanner) invScanner.classList.add("hidden");
-
-  // Re-show the scan button for the active sheet
-  const btnId = mode === "shop" ? "shopScanBtn" : "invScanBtn";
-  const scanBtn = g(btnId);
-  if (scanBtn) scanBtn.classList.remove("hidden");
 }
 
 /**
- * stopTapScan() — Public stop function for tap-to-scan.
- * Called when the add-item sheet is closed to ensure the camera is released.
- * Safe to call even if no scan is in progress.
- */
-export function stopTapScan() {
-  if (_tapScanMode || scannerRunning) {
-    _stopTapScanCamera();
-  }
-  // Also clear any scan banners when sheet closes
-  _hideScanBanner("shop");
-  _hideScanBanner("inv");
-}
-
-/**
- * _flashSheetScanner(mode) — Flashes the sheet scanner viewfinder border green
+ * _flashSheetScanner() — Flashes the sheet scanner viewfinder border green
  * to give visual feedback that a barcode was successfully detected.
  */
-function _flashSheetScanner(mode) {
-  const vfId = mode === "shop" ? "shopAddScannerVF" : "invAddScannerVF";
+function _flashSheetScanner() {
+  const vfId = _sheetScanMode === "shop" ? "shopAddScannerVF" : "invAddScannerVF";
   const vf = g(vfId);
   if (!vf) return;
   vf.classList.remove("scan-flash");
@@ -870,109 +843,20 @@ function _flashSheetScanner(mode) {
   setTimeout(() => vf.classList.remove("scan-flash"), 450);
 }
 
-// ── SCAN RESULT BANNER ─────────────────────────────────────────────────────
-// Shows a success/error/loading banner at the top of the add-item sheet
-// after a tap-to-scan completes. Provides immediate visual feedback
-// without navigating away from the sheet.
-
 /**
- * _showScanBanner(mode, text, type) — Displays a status banner in the add-item sheet.
- * Types: "success" (green), "error" (amber), "loading" (subtle)
- */
-function _showScanBanner(mode, text, type) {
-  const bannerId = mode === "shop" ? "shopScanBanner" : "invScanBanner";
-  const banner = g(bannerId);
-  if (!banner) return;
-
-  // Set the banner text and type class for styling
-  banner.innerHTML = `<span class="scan-banner-text">${text}</span>`;
-  banner.className = `scan-result-banner scan-banner-${type}`;
-  banner.classList.remove("hidden");
-
-  // Auto-hide success banners after 4 seconds so they don't clutter the sheet
-  if (type === "success") {
-    setTimeout(() => { banner.classList.add("hidden"); }, 4000);
-  }
-}
-
-/**
- * _hideScanBanner(mode) — Hides the scan result banner for the given sheet.
- */
-function _hideScanBanner(mode) {
-  const bannerId = mode === "shop" ? "shopScanBanner" : "invScanBanner";
-  const banner = g(bannerId);
-  if (banner) banner.classList.add("hidden");
-}
-
-/**
- * _showManualBarcodeInSheet(mode, code) — Shows a manual barcode entry fallback
- * inside the scan banner area when a barcode is not found in any database.
- * Allows the user to re-enter a barcode or try scanning again.
- */
-function _showManualBarcodeInSheet(mode, code) {
-  const bannerId = mode === "shop" ? "shopScanBanner" : "invScanBanner";
-  const banner = g(bannerId);
-  if (!banner) return;
-
-  // Build the not-found UI with manual entry and try-again options
-  banner.innerHTML = `
-    <div class="scan-banner-text">Barcode not found: <code>${code}</code></div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="scan-banner-action" onclick="startTapScan('${mode === "shop" ? "shopAddScannerVF" : "invAddScannerVF"}','${mode}')">📷 Try again</button>
-    </div>
-    <div style="margin-top:8px">
-      <input class="fi" id="sheetManualBarcode" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="Enter barcode number" style="font-size:.9rem;text-align:center;letter-spacing:1px;margin-bottom:6px"/>
-      <button class="scan-banner-action" onclick="sheetManualBarcodeSearch('${mode}')">🔍 Search</button>
-    </div>`;
-  banner.className = "scan-result-banner scan-banner-error";
-  banner.classList.remove("hidden");
-}
-
-/**
- * sheetManualBarcodeSearch(mode) — Looks up a barcode typed manually from the
- * in-sheet "not found" banner. Runs the same lkup() pipeline as a camera scan.
- * On success, auto-adds the item. On failure, keeps the error banner visible.
- */
-export async function sheetManualBarcodeSearch(mode) {
-  const inp = g("sheetManualBarcode");
-  const code = inp ? inp.value.trim() : "";
-  if (!code) return;
-
-  // Show loading state
-  _showScanBanner(mode, `Looking up ${code}…`, "loading");
-
-  try {
-    const prod = await lkup(code);
-    if (prod.notFound) {
-      _showScanBanner(mode, `Barcode not found: ${code}`, "error");
-      _showManualBarcodeInSheet(mode, code);
-    } else {
-      // Product found — auto-add and show success banner
-      await _autoAddFromSheet(prod, mode);
-      const formatted = formatScanResult(prod);
-      const displayName = formatted.title || prod.name;
-      const brandText = formatted.brand ? ` — ${formatted.brand}` : "";
-      _showScanBanner(mode, `✓ Scanned: ${displayName}${brandText}`, "success");
-    }
-  } catch {
-    _showScanBanner(mode, "Lookup failed — try again", "error");
-  }
-}
-
-/**
- * _autoAddFromSheet(prod, mode) — Auto-adds a scanned product from the sheet scanner.
+ * _autoAddFromSheet(prod) — Auto-adds a scanned product from the sheet scanner.
  * In shopping mode, adds to the shopping list. In inventory mode, adds to supplies
  * using the location selected in the add sheet's location picker.
  * Shows a brief toast confirming the addition.
  */
-async function _autoAddFromSheet(prod, mode) {
+async function _autoAddFromSheet(prod) {
   const name = prod.name || "Unknown product";
 
   // Compute smart display title so list rows show a clean product type
   const formatted = formatScanResult(prod);
   const scanTitle = (formatted.title && formatted.title.toLowerCase() !== name.toLowerCase()) ? formatted.title : null;
 
-  if (mode === "shop") {
+  if (_sheetScanMode === "shop") {
     // Add to shopping list with consolidation (increments qty if already on list)
     const item = {
       id: Date.now().toString(),
@@ -986,7 +870,7 @@ async function _autoAddFromSheet(prod, mode) {
     if (scanTitle) item.scanTitle = scanTitle;          // Short product type for prominent list display
     await consolidateShopItem(item);
     showNotif(`Added: ${formatted.title || name} 🛒`);
-  } else if (mode === "inv") {
+  } else if (_sheetScanMode === "inv") {
     // Add to inventory — use the location from the add sheet's location picker
     const loc = window._invAddLocation || "fridge";
     const id = "item-" + (prod.barcode || Date.now()).toString().replace(/\W/g, "-");
