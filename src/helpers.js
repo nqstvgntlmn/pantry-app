@@ -116,6 +116,35 @@ export function toTitleCase(str) {
 }
 
 /**
+ * applyTitleCaseWhileTyping(inputEl) — Applies Title Case transformation to an
+ * input element's value on every keystroke. Preserves the user's cursor position
+ * so typing feels natural (no cursor jump to end). Only capitalizes the first
+ * letter of each word; leaves the rest of the word as-is while the user is still
+ * typing it (so mid-word characters stay lowercase naturally).
+ * @param {HTMLInputElement} inputEl - The text input element to transform
+ */
+export function applyTitleCaseWhileTyping(inputEl) {
+  if (!inputEl) return;
+  const val = inputEl.value;
+  if (!val) return;
+
+  // Save cursor position before modifying — prevents the cursor from jumping to the end
+  const cursorPos = inputEl.selectionStart;
+
+  // Capitalize the first letter of every word (after a space or at the start).
+  // This only uppercases the first char of each word — leaves the rest as-is so
+  // the user can naturally type lowercase mid-word without fighting the transform.
+  const titleCased = val.replace(/(^|\s)(\w)/g, (match, space, char) => space + char.toUpperCase());
+
+  // Only update if the value actually changed (avoids unnecessary DOM writes)
+  if (titleCased !== val) {
+    inputEl.value = titleCased;
+    // Restore cursor position so typing isn't interrupted
+    inputEl.setSelectionRange(cursorPos, cursorPos);
+  }
+}
+
+/**
  * Shorthand for document.getElementById.
  * Used everywhere to keep DOM lookups concise (e.g., g("notif") instead of
  * document.getElementById("notif")).

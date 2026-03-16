@@ -14,7 +14,7 @@ import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add 
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems, deduplicateSubtitle, FRAC_OPTIONS } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 // _defaultThreshold returns the smart restock threshold based on unit type
 import { updExport, _defaultThreshold } from './home.js';
@@ -1229,8 +1229,9 @@ export function initInvQtyToolbar() {
   // Build fraction dropdown options from FRAC_OPTIONS
   const fracSel = g("invQtyFrac");
   if (fracSel) {
+    // "·/·" placeholder when no fraction selected; fraction glyph + "▼" arrow when selected
     fracSel.innerHTML = FRAC_OPTIONS.map(o =>
-      `<option value="${o.value}">${o.value === 0 ? "—" : o.label}</option>`
+      `<option value="${o.value}">${o.value === 0 ? "·/· ▼" : o.label + " ▼"}</option>`
     ).join("");
   }
   // Build unit dropdown — "Unit" placeholder first, then all units alphabetically
@@ -1399,24 +1400,35 @@ export async function qaddInv() {
 
 /**
  * onInvInput() — Called on every keystroke in the inventory add input (#invi).
- * Debounces the product search by 350ms to avoid excessive API calls.
+ * Applies Title Case as the user types and (when search is enabled) debounces
+ * the product search by 350ms to avoid excessive API calls.
  */
 export function onInvInput() {
-  if (_invSearchTimer) clearTimeout(_invSearchTimer);
-
+  // Auto Title Case: capitalize the first letter of every word as the user types
   const inp = g("invi");
-  const query = inp ? inp.value.trim() : "";
-  const dropdown = g("invSearchDropdown");
+  if (inp) applyTitleCaseWhileTyping(inp);
 
-  // If input is too short, hide the dropdown
-  if (!query || query.length < 2) {
-    if (dropdown) { dropdown.classList.remove("active"); dropdown.innerHTML = ""; }
-    _invInlineResults = null;
-    return;
-  }
+  // [SEARCH DISABLED] — uncomment to re-enable product search
+  // Text search on keystroke is disabled. The input field still works for
+  // plain-text adds via qaddInv(). Debounce and _runInvSearch calls are
+  // commented out so no API calls fire while typing.
+  return;
 
-  // Wait 350ms after the user stops typing before searching
-  _invSearchTimer = setTimeout(() => _runInvSearch(query), 350);
+  // // Clear any pending search timer so only the last keystroke triggers a search
+  // if (_invSearchTimer) clearTimeout(_invSearchTimer);
+  //
+  // const query = inp ? inp.value.trim() : "";
+  // const dropdown = g("invSearchDropdown");
+  //
+  // // If input is too short, hide the dropdown and bail
+  // if (!query || query.length < 2) {
+  //   if (dropdown) { dropdown.classList.remove("active"); dropdown.innerHTML = ""; }
+  //   _invInlineResults = null;
+  //   return;
+  // }
+  //
+  // // Wait 350ms after the user stops typing before searching (debounce)
+  // _invSearchTimer = setTimeout(() => _runInvSearch(query), 350);
 }
 
 /**

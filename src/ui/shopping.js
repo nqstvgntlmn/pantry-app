@@ -8,7 +8,7 @@
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
 import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
 import { defaultThreshold } from '../helpers.js';  // Smart restock threshold by unit — used for "already have" inventory check
-import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, deduplicateSubtitle, FRAC_OPTIONS } from '../helpers.js';
+import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
 // gcat = guess category for inventory, showNotif = toast notification,
@@ -747,8 +747,9 @@ export function initShopQtyToolbar() {
   // Build fraction dropdown options from FRAC_OPTIONS
   const fracSel = g("shopQtyFrac");
   if (fracSel) {
+    // "·/·" placeholder when no fraction selected; fraction glyph + "▼" arrow when selected
     fracSel.innerHTML = FRAC_OPTIONS.map(o =>
-      `<option value="${o.value}">${o.value === 0 ? "—" : o.label}</option>`
+      `<option value="${o.value}">${o.value === 0 ? "·/· ▼" : o.label + " ▼"}</option>`
     ).join("");
   }
   // Build unit dropdown options — "Unit" placeholder first, then all units alphabetically
@@ -853,7 +854,11 @@ const _CACHE_MAX = 30;             // Max cached queries
  * character. Clears the dropdown if the input is too short (< 2 chars).
  */
 export function onShopInput() {
-  // [SEARCH DISABLED] — uncomment to re-enable
+  // Auto Title Case: capitalize the first letter of every word as the user types
+  const inp = g("shi");
+  if (inp) applyTitleCaseWhileTyping(inp);
+
+  // [SEARCH DISABLED] — uncomment to re-enable product search
   // Text search on keystroke is disabled. The input field still works for
   // plain-text adds via qadd(). Debounce and _runInlineSearch calls are
   // commented out so no API calls fire while typing.

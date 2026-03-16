@@ -237,6 +237,9 @@ function _initQuagga(target, statusEl) {
     scannerRunning = true;
     if (statusEl) statusEl.textContent = "Scanning…";
 
+    // Enable tap-to-focus: tapping the viewfinder triggers autofocus on the camera
+    _enableTapToFocus(target);
+
     // Fallback: if after 2 seconds the video has no visible frame (videoWidth === 0),
     // manually acquire a new camera stream and attach it. This catches edge cases
     // where Quagga's internal getUserMedia produced a valid stream that doesn't render.
@@ -295,6 +298,61 @@ async function _ensureCameraVisible(target) {
   }
 }
 
+// ── TAP-TO-FOCUS ───────────────────────────────────────────────────────────
+// Tapping the camera viewfinder triggers autofocus on the active video track.
+// Uses the browser's track.applyConstraints() API to request a single-shot
+// focus mode. Falls back silently if the device or browser doesn't support it.
+
+/** Stores the bound tap handler so we can remove it when the scanner stops */
+let _tapFocusHandler = null;
+
+/**
+ * _enableTapToFocus(target) — Attaches a tap listener to the scanner viewfinder.
+ * On tap, finds the active video track and requests autofocus via applyConstraints.
+ * Fails silently if the API isn't supported (e.g. desktop browsers, older iOS).
+ * @param {HTMLElement} target — The scanner-video container element
+ */
+function _enableTapToFocus(target) {
+  // Remove any prior handler to avoid duplicates on scanner restart
+  if (_tapFocusHandler) {
+    target.removeEventListener("click", _tapFocusHandler);
+    _tapFocusHandler = null;
+  }
+
+  _tapFocusHandler = async () => {
+    try {
+      // Find the active video element and its media stream track
+      const video = target.querySelector("video");
+      if (!video || !video.srcObject) return;
+      const track = video.srcObject.getVideoTracks()[0];
+      if (!track) return;
+
+      // Check if the device camera supports focus mode control
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (!caps.focusMode || !caps.focusMode.includes("single-shot")) return;
+
+      // Request a single-shot autofocus — the camera will refocus once then return to continuous
+      await track.applyConstraints({ advanced: [{ focusMode: "single-shot" }] });
+    } catch {
+      // Fail silently — tap-to-focus is a best-effort enhancement
+    }
+  };
+
+  target.addEventListener("click", _tapFocusHandler);
+}
+
+/**
+ * _disableTapToFocus() — Removes the tap-to-focus listener from the viewfinder.
+ * Called when the scanner stops to clean up event listeners.
+ */
+function _disableTapToFocus() {
+  if (_tapFocusHandler) {
+    const target = g("scanner-video");
+    if (target) target.removeEventListener("click", _tapFocusHandler);
+    _tapFocusHandler = null;
+  }
+}
+
 // Stops the live scanner and releases the camera.
 // Called when the user navigates away from the scan overlay (back button)
 // or after a successful barcode detection to free the camera resource.
@@ -302,6 +360,7 @@ export function stopLiveScanner() {
   if (!scannerRunning) return;
   try { Quagga.stop(); } catch { /* ignore if already stopped */ }
   Quagga.offDetected(onBarcodeDetected);  // Remove the detection listener to prevent stale callbacks
+  _disableTapToFocus();                   // Clean up tap-to-focus listener
 
   // Stop the manually acquired fallback stream if it was activated,
   // releasing the camera hardware back to the OS
