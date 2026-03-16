@@ -14,7 +14,7 @@ import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add 
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, formatScanResult, parseVoiceMultiItems } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 // _defaultThreshold returns the smart restock threshold based on unit type
 import { updExport, _defaultThreshold } from './home.js';
@@ -98,11 +98,7 @@ export function iH(item) {
         <!-- Slim outlined circle: tapping opens detail sheet -->
         <div class="shck" onclick="event.stopPropagation();openInvItemDetail('${item.id}')"></div>
         <div style="flex:1;min-width:0;cursor:pointer" onclick="event.stopPropagation();openInvItemDetail('${item.id}')">
-          ${item.scanTitle
-            ? `<div class="inm">${toTitleCase(item.scanTitle)}</div>
-               <div class="sh-scan-subtitle scan-text-truncated" onclick="event.stopPropagation();toggleScanExpand(this)">${toTitleCase(item.name)}</div>`
-            : `<div class="inm">${toTitleCase(item.name)}</div>`
-          }
+          <div class="inm">${toTitleCase(item.name)}</div>
           ${brandHtml}
           ${item.note ? `<div class="shnote" style="margin-top:2px">📝 ${item.note}</div>` : ""}
           ${et}
@@ -1069,8 +1065,7 @@ const _INV_CACHE_MAX = 30;
 
 /**
  * openInvAddSheet() — Opens the add-to-pantry bottom sheet.
- * Shows the text input with keyboard focused, location picker, and the persistent
- * barcode scanner that auto-starts in the viewfinder area (self-checkout UX).
+ * Shows the text input with keyboard focused, location picker, and scan/voice options.
  * Resets the location to "fridge" and clears previous input on each open.
  */
 export function openInvAddSheet() {
@@ -1085,25 +1080,13 @@ export function openInvAddSheet() {
   const fBtn = g("invAddLoc-fridge");
   if (fBtn) fBtn.classList.add("sel");
 
-  // Expose the current add-sheet location for the persistent scanner's auto-add
-  window._invAddLocation = _invAddLocation;
-
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("invi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
-
-  // Ensure the "Scan barcode" start button is hidden (in case it was shown from a previous stop)
-  const startBtn = g("invScanStartBtn");
-  if (startBtn) startBtn.classList.add("hidden");
-
-  // Start the persistent barcode scanner in the sheet viewfinder after sheet animation completes
-  setTimeout(() => {
-    if (window.startSheetScanner) window.startSheetScanner("invAddScannerVF", "inv");
-  }, 400);
 }
 
 /**
  * closeInvAddSheet() — Dismisses the add-to-pantry bottom sheet.
- * Stops the persistent scanner and clears inline search to avoid stale results.
+ * Clears the search dropdown to avoid stale results on next open.
  */
 export function closeInvAddSheet() {
   const backdrop = g("invAddBackdrop");
@@ -1111,36 +1094,6 @@ export function closeInvAddSheet() {
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
   _clearInvSearch();
-
-  // Stop the persistent barcode scanner when closing the sheet
-  if (window.stopSheetScanner) window.stopSheetScanner();
-}
-
-/**
- * stopInvScanner() — Pauses the persistent scanner in the inventory add sheet.
- * Called when user taps "Stop scanning" — stops the camera and shows a
- * "📷 Scan barcode" button so the user can re-activate scanning later.
- */
-export function stopInvScanner() {
-  // Pause (stop camera without hiding container) instead of full stop
-  if (window.pauseSheetScanner) window.pauseSheetScanner();
-
-  // Hide the scanner viewfinder, show the "Scan barcode" start button
-  const scanner = g("invAddScanner");
-  const startBtn = g("invScanStartBtn");
-  if (scanner) scanner.classList.add("hidden");
-  if (startBtn) startBtn.classList.remove("hidden");
-}
-
-/**
- * restartInvScanner() — Re-activates the persistent scanner after user stopped it.
- * Hides the "Scan barcode" button and restarts the camera in the viewfinder.
- */
-export function restartInvScanner() {
-  // Hide the start button, restart the scanner (startSheetScanner shows the container)
-  const startBtn = g("invScanStartBtn");
-  if (startBtn) startBtn.classList.add("hidden");
-  if (window.startSheetScanner) window.startSheetScanner("invAddScannerVF", "inv");
 }
 
 /**
@@ -1167,8 +1120,6 @@ export function invAddVoice() {
  */
 export function setInvAddLoc(loc, btn) {
   _invAddLocation = loc;
-  // Expose location for the persistent sheet scanner's auto-add
-  window._invAddLocation = loc;
   document.querySelectorAll("#invAddSheet .lbtn").forEach(b => b.classList.remove("sel"));
   if (btn) btn.classList.add("sel");
 }

@@ -8,7 +8,7 @@
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
 import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
 import { defaultThreshold } from '../helpers.js';  // Smart restock threshold by unit — used for "already have" inventory check
-import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, formatScanResult, getStoreAisleOrder, parseVoiceMultiItems } from '../helpers.js';
+import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
 // gcat = guess category for inventory, showNotif = toast notification,
@@ -511,11 +511,7 @@ export function sH(item) {
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
         <div class="shck" onclick="event.stopPropagation();togShop('${item.id}')">${item.checked ? "✓" : ""}</div>  <!-- Slim ring: tap to mark as bought; hidden in select mode (replaced by sel-cb) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
-          ${item.scanTitle
-            ? `<div class="shnm">${toTitleCase(item.scanTitle)}${qtyBadge}</div>
-               <div class="sh-scan-subtitle scan-text-truncated" onclick="event.stopPropagation();toggleScanExpand(this)">${toTitleCase(item.name)}</div>`
-            : `<div class="shnm">${toTitleCase(item.name)}${qtyBadge}</div>`
-          }
+          <div class="shnm">${toTitleCase(item.name)}${qtyBadge}</div>
           ${_shouldShowBrand(item) ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand shown for barcode scans always; for text search only if the user's query matches the brand name -->
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
         </div>
@@ -704,8 +700,7 @@ export function toggleAddNote() {
 
 /**
  * openShopAddSheet() — Opens the add-item bottom sheet.
- * Immediately shows the text input with keyboard focused, plus the persistent
- * barcode scanner that auto-starts in the viewfinder area (self-checkout UX).
+ * Immediately shows the text input with keyboard focused, plus scan/voice options below.
  */
 export function openShopAddSheet() {
   const backdrop = g("shopAddBackdrop");
@@ -714,22 +709,12 @@ export function openShopAddSheet() {
   if (sheet) sheet.classList.add("active");
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("shi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
-
-  // Ensure the "Scan barcode" start button is hidden (in case it was shown from a previous stop)
-  const startBtn = g("shopScanStartBtn");
-  if (startBtn) startBtn.classList.add("hidden");
-
-  // Start the persistent barcode scanner in the sheet viewfinder after sheet animation completes
-  // The 400ms delay ensures the bottom sheet is fully visible before Quagga measures dimensions
-  setTimeout(() => {
-    if (window.startSheetScanner) window.startSheetScanner("shopAddScannerVF", "shop");
-  }, 400);
 }
 
 /**
  * closeShopAddSheet() — Dismisses the add-item bottom sheet.
  * Called when tapping the backdrop or after an item is added.
- * Stops the persistent scanner and clears inline search to avoid stale results.
+ * Also clears the inline search dropdown to avoid stale results on next open.
  */
 export function closeShopAddSheet() {
   const backdrop = g("shopAddBackdrop");
@@ -737,36 +722,6 @@ export function closeShopAddSheet() {
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
   _clearInlineSearch();
-
-  // Stop the persistent barcode scanner when closing the sheet
-  if (window.stopSheetScanner) window.stopSheetScanner();
-}
-
-/**
- * stopShopScanner() — Pauses the persistent scanner in the shopping add sheet.
- * Called when user taps "Stop scanning" — stops the camera and shows a
- * "📷 Scan barcode" button so the user can re-activate scanning later.
- */
-export function stopShopScanner() {
-  // Pause (stop camera without hiding container) instead of full stop
-  if (window.pauseSheetScanner) window.pauseSheetScanner();
-
-  // Hide the scanner viewfinder, show the "Scan barcode" start button
-  const scanner = g("shopAddScanner");
-  const startBtn = g("shopScanStartBtn");
-  if (scanner) scanner.classList.add("hidden");
-  if (startBtn) startBtn.classList.remove("hidden");
-}
-
-/**
- * restartShopScanner() — Re-activates the persistent scanner after user stopped it.
- * Hides the "Scan barcode" button and restarts the camera in the viewfinder.
- */
-export function restartShopScanner() {
-  // Hide the start button, restart the scanner (startSheetScanner shows the container)
-  const startBtn = g("shopScanStartBtn");
-  if (startBtn) startBtn.classList.add("hidden");
-  if (window.startSheetScanner) window.startSheetScanner("shopAddScannerVF", "shop");
 }
 
 /**

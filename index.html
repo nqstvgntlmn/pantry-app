@@ -351,15 +351,6 @@
   <div class="bsheet" id="shopAddSheet">
     <div class="bsheet-handle"></div>
     <div class="bsheet-title">Add to list</div>
-    <!-- Persistent barcode scanner — auto-starts when sheet opens, self-checkout style -->
-    <div class="sheet-scanner hidden" id="shopAddScanner">
-      <div class="sheet-scanner-vf" id="shopAddScannerVF"></div>
-      <div class="sheet-scanner-controls">
-        <button class="sheet-scanner-stop" onclick="stopShopScanner()">Stop scanning</button>
-      </div>
-    </div>
-    <!-- Scan barcode button — shown when scanner is stopped, tap to re-activate camera -->
-    <button class="sheet-scan-toggle-btn hidden" id="shopScanStartBtn" onclick="restartShopScanner()">📷 Scan barcode</button>
     <!-- Text input shown immediately when sheet opens -->
     <div id="shopAddTypeForm">
       <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
@@ -373,6 +364,13 @@
     </div>
     <!-- Scan and voice options below the input -->
     <div class="bsheet-options" id="shopAddOptions" style="margin-top:12px">
+      <button class="bsheet-opt bsheet-opt-scan" onclick="shopAddScan()">
+        <span class="bsheet-opt-icon" style="font-size:1.8rem">📷</span>
+        <div style="flex:1">
+          <span class="bsheet-opt-text">Scan barcode</span>
+          <span class="bsheet-opt-sub">Point your camera at any product barcode</span>
+        </div>
+      </button>
       <button class="bsheet-opt" id="shopAddMicOpt" onclick="shopAddVoice()" style="display:none">
         <span class="bsheet-opt-icon">🎤</span>
         <span class="bsheet-opt-text">Voice input</span>
@@ -385,15 +383,6 @@
   <div class="bsheet" id="invAddSheet">
     <div class="bsheet-handle"></div>
     <div class="bsheet-title">Add to supplies</div>
-    <!-- Persistent barcode scanner — auto-starts when sheet opens, self-checkout style -->
-    <div class="sheet-scanner hidden" id="invAddScanner">
-      <div class="sheet-scanner-vf" id="invAddScannerVF"></div>
-      <div class="sheet-scanner-controls">
-        <button class="sheet-scanner-stop" onclick="stopInvScanner()">Stop scanning</button>
-      </div>
-    </div>
-    <!-- Scan barcode button — shown when scanner is stopped, tap to re-activate camera -->
-    <button class="sheet-scan-toggle-btn hidden" id="invScanStartBtn" onclick="restartInvScanner()">📷 Scan barcode</button>
     <!-- Text input with live search dropdown (same UX as shopping) -->
     <div id="invAddTypeForm">
       <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>
@@ -415,8 +404,15 @@
       </div>
       <button class="btn bp bf" onclick="qaddInv()">Add</button>
     </div>
-    <!-- Voice option below the input (scan is now persistent in the scanner viewfinder above) -->
+    <!-- Scan and voice options below the input (same as shopping) -->
     <div class="bsheet-options" style="margin-top:12px">
+      <button class="bsheet-opt bsheet-opt-scan" onclick="invAddScan()">
+        <span class="bsheet-opt-icon" style="font-size:1.8rem">📷</span>
+        <div style="flex:1">
+          <span class="bsheet-opt-text">Scan barcode</span>
+          <span class="bsheet-opt-sub">Point your camera at any product barcode</span>
+        </div>
+      </button>
       <button class="bsheet-opt" id="invAddMicOpt" onclick="invAddVoice()" style="display:none">
         <span class="bsheet-opt-icon">🎤</span>
         <span class="bsheet-opt-text">Voice input</span>

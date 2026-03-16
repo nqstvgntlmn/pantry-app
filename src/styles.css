@@ -358,46 +358,6 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .swipe-wrap.selecting .price-tag,
 .swipe-wrap.selecting .iit>div[style*="text-align:right"]{pointer-events:none}
 
-/* ── SHEET SCANNER ── */
-/* Inline barcode scanner embedded in the add-item bottom sheets */
-.sheet-scanner{margin-bottom:14px;border-radius:14px;overflow:hidden;position:relative;background:#000}
-.sheet-scanner-vf{width:100%;height:180px;position:relative;overflow:hidden}
-.sheet-scanner-vf video,.sheet-scanner-vf canvas{width:100%!important;height:100%!important;object-fit:cover;position:absolute;top:0;left:0}
-/* Animated laser line that sweeps up/down inside the sheet scanner viewfinder */
-.sheet-scanner-vf::after{content:"";position:absolute;left:10%;right:10%;height:3px;background:linear-gradient(90deg,transparent,var(--ac),var(--ac),transparent);opacity:.85;z-index:5;border-radius:2px;box-shadow:0 0 8px 2px rgba(212,168,83,.5),0 0 20px 4px rgba(212,168,83,.2);animation:sheetScanLine 2.2s ease-in-out infinite}
-@keyframes sheetScanLine{0%,100%{top:15%;opacity:.5}50%{top:82%;opacity:1}}
-.sheet-scanner-controls{display:flex;justify-content:center;padding:8px}
-.sheet-scanner-stop{font-size:.78rem;color:var(--mt);background:none;border:none;cursor:pointer;font-family:"DM Sans",sans-serif;padding:6px 14px;min-height:36px}
-.sheet-scanner-stop:active{color:var(--tx)}
-/* Green flash on successful scan in sheet scanner */
-.sheet-scanner-vf.scan-flash{animation:sheetFlash .4s ease-out}
-@keyframes sheetFlash{0%{box-shadow:inset 0 0 0 3px var(--gn)}100%{box-shadow:inset 0 0 0 0 transparent}}
-/* Status text inside the scanner viewfinder */
-.sheet-scanner-status{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:.7rem;color:rgba(255,255,255,.75);z-index:6;text-shadow:0 1px 3px rgba(0,0,0,.8)}
-/* Hidden state for scanner */
-.sheet-scanner.hidden{display:none}
-/* "Scan barcode" toggle button — shown when scanner is stopped, tap to re-activate */
-.sheet-scan-toggle-btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:14px;margin-bottom:14px;border-radius:14px;border:1.5px solid var(--bd);background:var(--sf);color:var(--tx);font-family:"DM Sans",sans-serif;font-size:.9rem;font-weight:500;cursor:pointer;min-height:48px;transition:all .15s}
-.sheet-scan-toggle-btn:active{background:var(--bd);transform:scale(.98)}
-.sheet-scan-toggle-btn.hidden{display:none}
-
-/* ── SCAN RESULT DISPLAY (truncation + expand) ── */
-/* Prominently displayed product type title in scan result */
-.scan-result-name{font-size:1.2rem;font-weight:600;color:var(--tx);line-height:1.3}
-/* Subtitle: full product name shown smaller below the title */
-.scan-result-subtitle{font-size:.85rem;color:var(--mt);margin-top:3px;line-height:1.3}
-.scan-result-brand{font-size:.78rem;color:var(--mt);margin-top:2px;opacity:.8}
-/* Subtitle in shopping/supplies list rows for barcode-scanned items */
-.sh-scan-subtitle{font-size:.75rem;color:var(--mt);margin-top:1px;line-height:1.2;max-width:100%}
-/* Truncated text with tap-to-expand */
-.scan-text-truncated{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
-.scan-text-truncated::after{content:" ▸";font-size:.7em;color:var(--ac);opacity:.7}
-.scan-text-expanded{white-space:normal;word-break:break-word}
-.scan-text-expanded::after{content:none}
-/* Not-found retry button */
-.scan-retry-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;margin-top:12px;border-radius:14px;border:1.5px solid var(--ac);background:var(--acd);color:var(--ac);font-family:"DM Sans",sans-serif;font-size:.95rem;font-weight:600;cursor:pointer;min-height:48px;transition:all .15s}
-.scan-retry-btn:active{background:var(--ac);color:var(--bg);transform:scale(.98)}
-
 /* ── OVERLAYS ── */
 .ov{position:fixed;inset:0;bottom:var(--nh);background:var(--bg);display:none;flex-direction:column;overflow-y:auto;z-index:100}
 .ov.active{display:flex}
@@ -475,12 +435,9 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .rc-tr{top:0;right:0;border-width:3px 3px 0 0;border-radius:0 8px 0 0}
 .rc-bl{bottom:0;left:0;border-width:0 0 3px 3px;border-radius:0 0 0 8px}
 .rc-br{bottom:0;right:0;border-width:0 3px 3px 0;border-radius:0 0 8px 0}
-/* Animated laser scan line that sweeps vertically inside the reticle */
-/* Enhanced with glow effect for a scanner-laser feel */
-.reticle-line{position:absolute;left:12px;right:12px;height:3px;background:linear-gradient(90deg,transparent,var(--ac),var(--ac),transparent);opacity:.85;top:50%;animation:scanLine 2.2s ease-in-out infinite;border-radius:2px;box-shadow:0 0 8px 2px rgba(212,168,83,.5),0 0 20px 4px rgba(212,168,83,.2)}
-@keyframes scanLine{0%,100%{top:15%;opacity:.5}50%{top:82%;opacity:1}}
-/* Success flash: briefly change laser to green when barcode is detected */
-.reticle-line.scan-success-flash{background:linear-gradient(90deg,transparent,var(--gn),var(--gn),transparent);box-shadow:0 0 12px 3px rgba(90,173,111,.6),0 0 24px 6px rgba(90,173,111,.25);animation:none}
+/* Animated scan line that sweeps vertically inside the reticle */
+.reticle-line{position:absolute;left:16px;right:16px;height:2px;background:var(--ac);opacity:.7;top:50%;animation:scanLine 2s ease-in-out infinite}
+@keyframes scanLine{0%,100%{top:15%;opacity:.4}50%{top:80%;opacity:.9}}
 
 /* Success checkmark — flashes briefly over the viewfinder when barcode is detected */
 .scan-success{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3;font-size:3rem;color:var(--gn);background:rgba(0,0,0,.55);width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;animation:scanPop .45s ease-out forwards;pointer-events:none}
