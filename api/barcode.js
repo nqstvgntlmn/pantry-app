@@ -6,11 +6,11 @@
 // Five databases are tried in priority order; the first match wins.
 //
 // Waterfall order:
-//   1. Edamam         — best for food + nutritional data
-//   2. Open Food Facts — community-driven food database (no key needed)
+//   1. Open Food Facts   — community-driven food database (no key needed)
+//   2. UPC Item DB       — general products, often has complete variant names (e.g. "Zero Sugar", "Diet")
 //   3. Open Beauty Facts — cosmetics, shampoos, personal care (no key needed)
 //   4. Open Pet Food Facts — pet food and treats (no key needed)
-//   5. UPC Item DB    — general products, 100 lookups/day free tier (no key needed for trial)
+//   5. Edamam            — last resort, best for nutritional data but often lacks product variants
 //
 // Request:  GET /api/barcode?code=013000006408
 // Response: { found: true, product: { barcode, name, brand, category, image, source, description, nutrition } }
@@ -352,8 +352,8 @@ export default async function handler(req, res) {
   // If a result has a truncated or low-quality name (e.g. ends with "imp", cut off mid-word),
   // keep it as a fallback but continue trying other databases for a better match.
   // This ensures we return the most complete product info available.
-  const fns = [tryEdamam, tryOpenFoodFacts, tryOpenBeautyFacts, tryOpenPetFoodFacts, tryUpcItemDb];
-  const fnNames = ["Edamam", "Open Food Facts", "Open Beauty Facts", "Open Pet Food Facts", "UPC Item DB"];
+  const fns = [tryOpenFoodFacts, tryUpcItemDb, tryOpenBeautyFacts, tryOpenPetFoodFacts, tryEdamam];
+  const fnNames = ["Open Food Facts", "UPC Item DB", "Open Beauty Facts", "Open Pet Food Facts", "Edamam"];
   let bestFallback = null;
 
   for (let i = 0; i < fns.length; i++) {
