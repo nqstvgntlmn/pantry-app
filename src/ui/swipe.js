@@ -16,9 +16,9 @@
 //   </div>
 
 import { state } from '../state.js';
-import { dli, dlShopItem } from '../db.js';
+import { dli, dlShopItem, renderCallbacks } from '../db.js';
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
-import { g, showNotif } from '../helpers.js';
+import { g, showNotif, toTitleCase } from '../helpers.js';
 
 // ── Swipe gesture state ──
 // Tracks the currently-swiped element, start position, and which row is "locked open"
@@ -456,7 +456,7 @@ function _snapClose(wrap) {
 }
 
 // Performs the auto-delete animation when the user swipes past 80% of the row.
-// Slides the row fully off-screen, collapses height, then removes from database.
+// Slides the row fully off-screen, collapses height, then defers delete with undo.
 async function _performAutoDelete(wrap, inner) {
   const id = wrap?.dataset.id;
   const list = wrap?.dataset.list;
@@ -486,14 +486,10 @@ async function _performAutoDelete(wrap, inner) {
   // Clean up the open row reference
   if (_openWrap === wrap) _openWrap = null;
 
-  // Wait for collapse animation, then delete from database
+  // Wait for collapse animation, then defer delete with undo window
   await new Promise(r => setTimeout(r, 250));
-  if (list === "shop") {
-    await dlShopItem(id);
-  } else {
-    await dli(id);
-    showNotif("Item removed");
-  }
+  const listKey = list === "shop" ? "shop" : "inv";
+  deleteWithUndo(id, listKey);
 }
 
 // Performs the auto-add-to-shopping animation when the user right-swipes past 70%
@@ -586,7 +582,7 @@ async function _addInvItemToShopping(id) {
 }
 
 // Handles the delete action when the user taps the revealed red delete button.
-// Plays the same slide-out + collapse animation as auto-delete for consistency.
+// Plays the same slide-out + collapse animation as auto-delete, then defers with undo.
 export async function swipeDelItem(id, list) {
   const wrap = g("sw-" + id);
   if (!wrap) return;
@@ -615,14 +611,10 @@ export async function swipeDelItem(id, list) {
 
   if (_openWrap === wrap) _openWrap = null;
 
-  // Wait for collapse, then delete from database
+  // Wait for collapse, then defer delete with undo window
   await new Promise(r => setTimeout(r, 250));
-  if (list === "shop") {
-    await dlShopItem(id);
-  } else {
-    await dli(id);
-    showNotif("Item removed");
-  }
+  const listKey = list === "shop" ? "shop" : "inv";
+  deleteWithUndo(id, listKey);
 }
 
 // Handles a tap on a list row. Behavior depends on the current context:
@@ -724,4 +716,184 @@ function updateMultiBar() {
   if (count) count.textContent = n;
   if (state.selectMode) bar.classList.add("visible");
   else bar.classList.remove("visible");
+}
+
+// ── UNDO DELETION SYSTEM ───────────────────────────────────────────────────
+// When an item is deleted (swipe or Remove button), the Firestore delete is
+// deferred for 5 seconds. A bottom toast with a shrinking progress bar gives
+// the user an "Undo" button. After 5 seconds the delete commits permanently.
+// If another item is deleted while the undo is active, the previous delete
+// commits immediately and the new one starts its own 5-second window.
+
+/** Holds the pending undo state: { id, list, item, index, timer, onCommit } */
+let _undoState = null;
+
+/**
+ * deleteWithUndo(id, list, opts) — Defers a delete with a 5-second undo window.
+ * Removes the item from in-memory state immediately for instant UI feedback,
+ * then shows the undo toast. After 5 seconds, commits the Firestore delete.
+ *
+ * @param {string} id - Item ID to delete
+ * @param {string} list - "shop" or "inv"
+ * @param {Object} opts - Optional: { onCommit: fn(item) } — extra logic when delete commits
+ */
+export function deleteWithUndo(id, list, opts = {}) {
+  // If there's already a pending undo, commit it immediately (forfeit)
+  if (_undoState) {
+    _commitPendingDelete();
+  }
+
+  // Capture the item data before removing from state
+  const items = list === "shop" ? state.shop : state.inv;
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+
+  // Record the item's position in the list for accurate restoration on undo
+  const index = items.indexOf(item);
+
+  // Remove from in-memory state immediately (optimistic UI update)
+  if (list === "shop") {
+    state.shop = state.shop.filter(s => s.id !== id);
+    renderCallbacks.renderShop?.();
+    renderCallbacks.renderSum?.();
+  } else {
+    state.inv = state.inv.filter(i => i.id !== id);
+    renderCallbacks.renderAll?.();
+    renderCallbacks.renderSum?.();
+  }
+
+  // Show the undo toast with the item name
+  _showUndoToast(toTitleCase(item.name));
+
+  // Start 5-second timer — after which the delete becomes permanent
+  const timer = setTimeout(() => _commitPendingDelete(), 5000);
+
+  _undoState = { id, list, item: { ...item }, index, timer, onCommit: opts.onCommit || null };
+}
+
+/**
+ * _commitPendingDelete() — Executes the actual Firestore delete for the pending undo.
+ * Called when the 5-second timer expires or when another delete supersedes this one.
+ * Temporarily re-inserts the item into state so the delete function can find it
+ * for activity logging, then calls the standard delete function.
+ */
+function _commitPendingDelete() {
+  if (!_undoState) return;
+  const { id, list, item, timer, onCommit } = _undoState;
+  clearTimeout(timer);
+  _undoState = null;
+  _hideUndoToast();
+
+  // Run any extra commit logic (e.g. waste tracking for expired inventory items)
+  if (onCommit) onCommit(item);
+
+  // Re-add item to state so the delete function finds it for activity logging
+  if (list === "shop") {
+    state.shop.push(item);
+    dlShopItem(id);
+  } else {
+    state.inv.push(item);
+    dli(id);
+  }
+}
+
+/**
+ * undoDelete() — Restores the last deleted item to its original position.
+ * Called when the user taps "Undo" within the 5-second window.
+ * Re-inserts the item into state, re-renders the list, and cancels the timer.
+ */
+export function undoDelete() {
+  if (!_undoState) return;
+  const { id, list, item, index, timer } = _undoState;
+  clearTimeout(timer);
+  _undoState = null;
+  _hideUndoToast();
+
+  // Restore item to its original position in the state array
+  if (list === "shop") {
+    state.shop.splice(Math.min(index, state.shop.length), 0, item);
+    renderCallbacks.renderShop?.();
+    renderCallbacks.renderSum?.();
+  } else {
+    state.inv.splice(Math.min(index, state.inv.length), 0, item);
+    renderCallbacks.renderAll?.();
+    renderCallbacks.renderSum?.();
+  }
+
+  showNotif("Restored ✓");
+}
+
+/**
+ * _showUndoToast(itemName) — Displays the undo toast with a shrinking progress bar.
+ * The progress bar animates from 100% to 0% width over exactly 5 seconds via CSS.
+ */
+function _showUndoToast(itemName) {
+  const toast = g("undo-toast");
+  const text = g("undo-toast-text");
+  const bar = g("undo-bar");
+  if (!toast || !bar) return;
+
+  // Update the toast text with the deleted item's name
+  if (text) text.textContent = `${itemName} deleted`;
+
+  // Reset the progress bar to full width before starting the animation
+  bar.classList.remove("shrinking");
+  bar.style.width = "100%";
+  // Force reflow so the browser registers the reset before we start shrinking
+  void bar.offsetWidth;
+
+  // Show the toast and start the progress bar countdown
+  toast.classList.add("visible");
+  // Start the shrinking animation in the next frame
+  requestAnimationFrame(() => {
+    bar.classList.add("shrinking");
+  });
+}
+
+/**
+ * _hideUndoToast() — Hides the undo toast and resets the progress bar.
+ */
+function _hideUndoToast() {
+  const toast = g("undo-toast");
+  const bar = g("undo-bar");
+  if (toast) toast.classList.remove("visible");
+  if (bar) { bar.classList.remove("shrinking"); bar.style.width = "100%"; }
+}
+
+// ── DELETE ALL ──────────────────────────────────────────────────────────────
+// Deletes ALL items in the current tab during select mode, regardless of
+// individual selection. Requires confirmation to prevent accidental data loss.
+
+/**
+ * deleteAll() — Deletes every item in the current list after user confirms.
+ * Shows a confirmation dialog with the item count. On confirm, deletes all
+ * items from the active tab (shopping or supplies) and exits select mode.
+ */
+export async function deleteAll() {
+  const list = state.selectMode;
+  if (!list) return;
+
+  // Determine items and label based on which tab is in select mode
+  const items = list === "shop" ? state.shop : state.inv;
+  const count = items.length;
+  if (!count) return;
+
+  const label = list === "shop" ? "shopping list" : "supplies";
+
+  // Show native confirmation dialog — this action cannot be undone
+  if (!confirm(`Delete all ${count} items from your ${label}? This cannot be undone.`)) return;
+
+  // Exit select mode first to reset the UI
+  cancelSelect();
+
+  // Delete all items in parallel
+  if (list === "shop") {
+    const ids = items.map(i => i.id);
+    await Promise.all(ids.map(id => dlShopItem(id)));
+  } else {
+    const ids = items.map(i => i.id);
+    await Promise.all(ids.map(id => dli(id)));
+  }
+
+  showNotif(`All ${count} items deleted 🗑`);
 }

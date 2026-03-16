@@ -44,11 +44,11 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, stopInvScanner } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, stopShopScanner } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -60,11 +60,12 @@ import { renderInsights } from './ui/insights.js';
 // Chat screen: AI chat, pill suggestions, clear history, auto-reply, kitchen context builder
 import { sendChat, sendPill, clrChat, ar, kitCtx, importChatRecipe } from './ui/chat.js';
 
-// Scanner: barcode/photo scanning, manual lookup, add scanned items to inventory or list
-import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, togManual, manLookup, selRL, valAdd, addToInv, chgAQ } from './ui/scan.js';
+// Scanner: barcode/photo scanning, manual lookup, add scanned items to inventory or list,
+// persistent sheet scanner, scan result expand toggle
+import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, togManual, manLookup, selRL, valAdd, addToInv, chgAQ, toggleScanExpand, startSheetScanner, stopSheetScanner } from './ui/scan.js';
 
-// Swipe gestures: swipe-to-delete, row tap, multi-select mode for shopping/inventory
-import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected } from './ui/swipe.js';
+// Swipe gestures: swipe-to-delete, row tap, multi-select mode, undo deletion, delete all
+import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected, undoDelete, deleteAll, deleteWithUndo } from './ui/swipe.js';
 
 // Meal planning: pick recipes for days, mark as cooked, schedule, chip-based filtering
 import { openMealM, openMealDetail, pickRec, closeMealM, saveMeal, clrMeal, openCooked, skipCooked, saveCooked, scheduleRecipe, schedSet, closeSchedM, initRecChips, toggleChip, filterRecs } from './ui/mealplan.js';
@@ -349,8 +350,11 @@ window.selRL = selRL;                           // Select a result from the barc
 window.valAdd = valAdd;                         // Validate the scanned-item add form
 window.addToInv = addToInv;                     // Add a scanned/looked-up item to inventory
 window.chgAQ = chgAQ;                           // Change quantity in the add-to-inventory form
+window.toggleScanExpand = toggleScanExpand;     // Toggle scan result text truncation
+window.startSheetScanner = startSheetScanner;   // Start persistent scanner in add sheet
+window.stopSheetScanner = stopSheetScanner;     // Stop persistent scanner in add sheet
 
-// ── Swipe / Multi-select handlers ──
+// ── Swipe / Multi-select / Undo handlers ──
 window.swipeDelItem = swipeDelItem;   // Delete an item revealed by swipe gesture
 window.swipeAddItem = swipeAddItem;   // Add an inventory item to shopping via swipe gesture
 window.swipeRowTap = swipeRowTap;     // Handle tap on a swipeable row
@@ -358,6 +362,11 @@ window.togShopSelect = togShopSelect; // Toggle multi-select mode on shopping li
 window.togInvSelect = togInvSelect;   // Toggle multi-select mode on inventory list
 window.cancelSelect = cancelSelect;   // Cancel multi-select mode
 window.deleteSelected = deleteSelected; // Delete all selected items in multi-select mode
+window.undoDelete = undoDelete;       // Restore last deleted item (5-second undo window)
+window.deleteAll = deleteAll;         // Delete ALL items in current list (with confirmation)
+window.deleteWithUndo = deleteWithUndo; // Deferred delete with undo — used by inventory remItem
+window.stopShopScanner = stopShopScanner;   // Stop persistent scanner in shopping add sheet
+window.stopInvScanner = stopInvScanner;     // Stop persistent scanner in inventory add sheet
 
 // ── Meal plan handlers ──
 window.openMealM = openMealM;     // Open the meal plan modal for a specific day

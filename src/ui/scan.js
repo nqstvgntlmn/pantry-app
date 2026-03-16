@@ -30,6 +30,14 @@ let processingBarcode = false;
 // when Quagga's built-in getUserMedia produces a black feed)
 let _manualStream = null;
 
+// ── PERSISTENT SHEET SCANNER STATE ──
+// When the add-item bottom sheet is open, the scanner runs persistently inside
+// the sheet viewfinder. Items are auto-added on detection (self-checkout UX).
+let _sheetScanMode = null;   // "shop" or "inv" — which sheet the scanner is embedded in
+let _lastSheetCode = null;   // Last scanned barcode (to prevent immediate re-detection of same item)
+let _lastSheetScanTime = 0;  // Timestamp of last sheet scan (cooldown period)
+const SHEET_SCAN_COOLDOWN = 3000; // 3 seconds before re-scanning the same barcode
+
 // Starts the live camera scanner inside the viewfinder element.
 // Uses a double-requestAnimationFrame to ensure the scan overlay is fully
 // laid out before Quagga measures container dimensions, then initializes
@@ -181,6 +189,7 @@ export function stopLiveScanner() {
 // Handles a barcode detection event from Quagga's live stream.
 // Validates the result confidence to filter out false positives,
 // shows a success animation, then triggers the product lookup.
+// In sheet scanner mode (persistent), auto-adds the item and keeps scanning.
 async function onBarcodeDetected(result) {
   if (processingBarcode) return;           // Already processing a detection, ignore this one
 
@@ -195,6 +204,38 @@ async function onBarcodeDetected(result) {
   const avgError = errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 1;
   if (avgError > 0.25) return;             // Skip low-confidence reads (threshold tuned for live scanning)
 
+  // ── PERSISTENT SHEET SCANNER MODE ──
+  // In sheet scanner mode, auto-add the scanned item and keep scanning.
+  // Implements a cooldown to prevent re-scanning the same barcode immediately.
+  if (_sheetScanMode) {
+    // Cooldown: skip if same barcode was just scanned
+    const now = Date.now();
+    if (code === _lastSheetCode && (now - _lastSheetScanTime) < SHEET_SCAN_COOLDOWN) return;
+
+    processingBarcode = true;
+    _lastSheetCode = code;
+    _lastSheetScanTime = now;
+
+    // Flash the viewfinder border green to indicate successful scan
+    _flashSheetScanner();
+
+    try {
+      const prod = await lkup(code);
+      if (prod.notFound) {
+        showNotif("Barcode not found — try entering manually");
+      } else {
+        // Auto-add the scanned product to the appropriate list
+        _autoAddFromSheet(prod);
+      }
+    } catch {
+      showNotif("Lookup failed — try again");
+    }
+
+    processingBarcode = false;
+    return;
+  }
+
+  // ── STANDARD SCANNER MODE (full-screen overlay) ──
   processingBarcode = true;                // Lock to prevent concurrent lookups
 
   // Flash the success checkmark animation over the viewfinder
@@ -418,9 +459,10 @@ function srcUrl(source, barcode) {
 
 // Renders the scan result overlay with product details (or a "not found" form).
 // Two distinct UI states:
-//   - Product found: shows a product card with image, name, brand, barcode, category,
-//     and description
-//   - Product not found: shows the barcode and a text input so the user can manually name the item
+//   - Product found: shows product name prominently at top, brand smaller below,
+//     with truncation at 40 chars and tap-to-expand behavior.
+//   - Product not found: shows the barcode, a text input for manual entry,
+//     and a prominent "Try Again" button to re-trigger the scanner.
 function showRes(prod) {
   hideOv("scan");                          // Close the scan overlay before showing the result
   g("resttl").textContent = prod.notFound ? "Not Found" : "Product Found ✓";
@@ -428,21 +470,44 @@ function showRes(prod) {
 
   let html = "";
   if (prod.notFound) {
-    // Product not in any database — show a manual name input so the user can still add it
-    html = `<div class="nfb">⚠️ Barcode <code>${prod.barcode}</code> not found in any database. Enter name:<input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:10px"/></div>`;
+    // Product not in any database — show a "Not found" message with retry + manual entry
+    html = `<div class="nfb">
+      <div style="text-align:center;margin-bottom:12px">
+        <div style="font-size:2rem;margin-bottom:6px">🔍</div>
+        <div style="font-size:1rem;font-weight:600;color:var(--tx)">Barcode not found</div>
+        <div style="font-size:.82rem;color:var(--mt);margin-top:4px">
+          <code>${prod.barcode}</code> wasn't found in any database.
+        </div>
+      </div>
+      <button class="scan-retry-btn" onclick="resumeScanner()">📷 Try again</button>
+      <div style="margin-top:14px;font-size:.85rem;color:var(--mt);text-align:center">or enter name manually:</div>
+      <input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:8px"/>
+    </div>`;
     // Disabled state is applied after buttons are rendered below
   } else {
-    // Product found — build a product card with image (or placeholder icon), name, brand, etc.
+    // Product found — prominent name/brand display with truncation.
+    // Names exceeding 40 chars are truncated with "..." and a tap-to-expand indicator.
     const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
-
-    // Build the description line if the API returned one
-    const desc = prod.description ? `<div class="pdsc">${prod.description}</div>` : "";
 
     // Build the source badge — if we can link to the product's page on the source database, make it tappable
     const srcHtml = prod.source ? `<a href="${srcUrl(prod.source, prod.barcode)}" target="_blank" rel="noopener" class="srcb" style="text-decoration:none">${prod.source} ↗</a>` : "";
 
-    // Assemble the full product card HTML with image, name, brand, category, source link, and description
-    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand ? `<div class="pbr">${prod.brand}</div>` : ""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}</div></div>${desc}</div>`;
+    // Truncated name display — prominent at top, truncated if > 40 chars with tap-to-expand
+    const nameClass = (prod.name && prod.name.length > 40) ? "scan-result-name scan-text-truncated" : "scan-result-name";
+    const nameHtml = `<div class="${nameClass}" onclick="toggleScanExpand(this)">${prod.name}</div>`;
+
+    // Brand name — shown smaller below the product name
+    const brandHtml = prod.brand ? `<div class="scan-result-brand">${prod.brand}</div>` : "";
+
+    // Description — also truncated at 40 chars with tap-to-expand
+    let descHtml = "";
+    if (prod.description) {
+      const descClass = prod.description.length > 40 ? "pdsc scan-text-truncated" : "pdsc";
+      descHtml = `<div class="${descClass}" onclick="toggleScanExpand(this)">${prod.description}</div>`;
+    }
+
+    // Assemble the product card with prominent name, brand, image, and metadata
+    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1">${nameHtml}${brandHtml}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}</div></div>${descHtml}</div>`;
 
   }
 
@@ -544,4 +609,180 @@ export async function addToInv() {
 export function chgAQ(d) {
   const i = g("aqty");
   i.value = Math.max(1, (parseInt(i.value) || 1) + d);
+}
+
+// ── SCAN RESULT DISPLAY: TAP TO EXPAND ──────────────────────────────────────
+// Toggles truncated text between collapsed (ellipsis) and expanded (full text).
+// Applied to product names and descriptions exceeding 40 characters.
+export function toggleScanExpand(el) {
+  if (!el) return;
+  if (el.classList.contains("scan-text-truncated")) {
+    // Expand: remove truncation, show full text
+    el.classList.remove("scan-text-truncated");
+    el.classList.add("scan-text-expanded");
+  } else if (el.classList.contains("scan-text-expanded")) {
+    // Collapse: re-apply truncation
+    el.classList.remove("scan-text-expanded");
+    el.classList.add("scan-text-truncated");
+  }
+}
+
+// ── PERSISTENT SHEET SCANNER ────────────────────────────────────────────────
+// Embeds a live barcode scanner inside the add-item bottom sheets. The camera
+// runs continuously (self-checkout style) so the user can scan multiple items
+// without tapping "Scan" each time. Items are auto-added on detection.
+
+/**
+ * startSheetScanner(targetId, list) — Starts the persistent scanner in a bottom sheet.
+ * Initializes Quagga inside the given viewfinder element and enters persistent mode
+ * where detected barcodes are auto-looked-up and added to the list.
+ *
+ * @param {string} targetId - ID of the viewfinder container element
+ * @param {string} list - "shop" or "inv" — determines where scanned items go
+ */
+export function startSheetScanner(targetId, list) {
+  // Stop any existing scanner instance first (Quagga is singleton)
+  if (scannerRunning) stopLiveScanner();
+
+  _sheetScanMode = list;
+  _lastSheetCode = null;
+  _lastSheetScanTime = 0;
+
+  const container = g(targetId.replace("VF", "")); // The .sheet-scanner wrapper
+  const target = g(targetId);
+  if (!container || !target) return;
+
+  // Show the scanner container (remove hidden class)
+  container.classList.remove("hidden");
+
+  // Double rAF ensures the bottom sheet is fully rendered before Quagga measures
+  requestAnimationFrame(() => { requestAnimationFrame(() => {
+    _initSheetQuagga(target);
+  }); });
+}
+
+/**
+ * _initSheetQuagga(target) — Initializes Quagga for the sheet scanner viewfinder.
+ * Same config as the main scanner but targets the sheet viewfinder element.
+ * On error, hides the scanner gracefully.
+ */
+function _initSheetQuagga(target) {
+  Quagga.init({
+    inputStream: {
+      name: "Live",
+      type: "LiveStream",
+      target: target,
+      constraints: {
+        facingMode: "environment",
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    },
+    locator: { patchSize: "medium", halfSample: true },
+    decoder: {
+      readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader", "code_39_reader"]
+    },
+    locate: true,
+    frequency: 10
+  }, function(err) {
+    if (err) {
+      console.warn("Sheet scanner init error:", err);
+      // Camera not available — hide the scanner area and let user type manually
+      _hideSheetScanner();
+      return;
+    }
+
+    // Apply iOS Safari video fixes (playsinline, muted, forced play)
+    _fixVideoForIOS(target);
+    Quagga.start();
+    scannerRunning = true;
+
+    // Fallback: re-acquire camera if feed appears black after 2 seconds
+    setTimeout(() => _ensureCameraVisible(target), 2000);
+  });
+
+  // Register detection callback — shared with the standard scanner
+  Quagga.onDetected(onBarcodeDetected);
+}
+
+/**
+ * stopSheetScanner() — Stops the persistent sheet scanner and hides the viewfinder.
+ * Called when user taps "Stop scanning" or closes the add-item sheet.
+ */
+export function stopSheetScanner() {
+  _sheetScanMode = null;
+  _lastSheetCode = null;
+  stopLiveScanner();
+  _hideSheetScanner();
+}
+
+/**
+ * _hideSheetScanner() — Hides both sheet scanner containers (shopping + inventory).
+ * Adds the "hidden" class so the scanner area collapses out of the sheet layout.
+ */
+function _hideSheetScanner() {
+  const shopScanner = g("shopAddScanner");
+  const invScanner = g("invAddScanner");
+  if (shopScanner) shopScanner.classList.add("hidden");
+  if (invScanner) invScanner.classList.add("hidden");
+}
+
+/**
+ * _flashSheetScanner() — Flashes the sheet scanner viewfinder border green
+ * to give visual feedback that a barcode was successfully detected.
+ */
+function _flashSheetScanner() {
+  const vfId = _sheetScanMode === "shop" ? "shopAddScannerVF" : "invAddScannerVF";
+  const vf = g(vfId);
+  if (!vf) return;
+  vf.classList.remove("scan-flash");
+  void vf.offsetWidth; // Force reflow to restart animation
+  vf.classList.add("scan-flash");
+  setTimeout(() => vf.classList.remove("scan-flash"), 450);
+}
+
+/**
+ * _autoAddFromSheet(prod) — Auto-adds a scanned product from the sheet scanner.
+ * In shopping mode, adds to the shopping list. In inventory mode, adds to supplies
+ * using the location selected in the add sheet's location picker.
+ * Shows a brief toast confirming the addition.
+ */
+async function _autoAddFromSheet(prod) {
+  const name = prod.name || "Unknown product";
+
+  if (_sheetScanMode === "shop") {
+    // Add to shopping list with consolidation (increments qty if already on list)
+    await consolidateShopItem({
+      id: Date.now().toString(),
+      name,
+      qty: 1,
+      checked: false,
+      src: "scan",
+      brand: prod.brand || "",
+      image: prod.image || null
+    });
+    showNotif(`Added: ${name} 🛒`);
+  } else if (_sheetScanMode === "inv") {
+    // Add to inventory — use the location from the add sheet's location picker
+    const loc = window._invAddLocation || "fridge";
+    const id = "item-" + (prod.barcode || Date.now()).toString().replace(/\W/g, "-");
+
+    // Check if item already exists (by barcode-derived ID) — increment qty if so
+    const existing = state.inv.find(i => i.id === id);
+    await svi({
+      id,
+      barcode: prod.barcode || "",
+      name,
+      brand: prod.brand || "",
+      unit: "Unit",
+      qty: existing ? existing.qty + 1 : 1,
+      location: loc,
+      category: prod.category || "General",
+      image: prod.image || null,
+      source: "scan",
+      expiry: null,
+      addedAt: existing ? existing.addedAt : new Date().toLocaleDateString()
+    });
+    showNotif(`Added: ${name} 📦`);
+  }
 }

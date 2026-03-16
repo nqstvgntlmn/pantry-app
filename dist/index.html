@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-CQKXM4Ds.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-jK1hf9ze.css">
+  <script type="module" crossorigin src="/assets/index-OkRqZTy-.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BgtrrRsX.css">
 </head>
 <body>
 
@@ -302,12 +302,24 @@
     </div>
   </div>
 
-  <!-- MULTI-DELETE BAR -->
+  <!-- MULTI-DELETE BAR — shown during select mode with Delete Selected + Delete All -->
   <div class="multi-bar" id="multi-bar">
     <div class="multi-bar-count"><strong id="multi-count">0</strong> selected</div>
     <div style="display:flex;gap:8px">
       <button class="btn bs bsm" onclick="cancelSelect()">Cancel</button>
       <button class="btn bd bsm" onclick="deleteSelected()" style="border-color:var(--rd);color:var(--rd)">🗑 Delete</button>
+      <button class="btn bd bsm" onclick="deleteAll()" style="border-color:var(--rd);color:var(--rd)">🗑️ Delete All</button>
+    </div>
+  </div>
+
+  <!-- UNDO TOAST — shown after item deletion with 5-second undo window -->
+  <div class="undo-toast" id="undo-toast">
+    <div class="undo-toast-body">
+      <span class="undo-toast-text" id="undo-toast-text">Item deleted</span>
+      <button class="undo-toast-btn" onclick="undoDelete()">Undo</button>
+    </div>
+    <div class="undo-toast-track">
+      <div class="undo-toast-bar" id="undo-bar"></div>
     </div>
   </div>
 
@@ -326,6 +338,13 @@
   <div class="bsheet" id="shopAddSheet">
     <div class="bsheet-handle"></div>
     <div class="bsheet-title">Add to list</div>
+    <!-- Persistent barcode scanner — auto-starts when sheet opens, self-checkout style -->
+    <div class="sheet-scanner hidden" id="shopAddScanner">
+      <div class="sheet-scanner-vf" id="shopAddScannerVF"></div>
+      <div class="sheet-scanner-controls">
+        <button class="sheet-scanner-stop" onclick="stopShopScanner()">Stop scanning</button>
+      </div>
+    </div>
     <!-- Text input shown immediately when sheet opens -->
     <div id="shopAddTypeForm">
       <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
@@ -339,13 +358,6 @@
     </div>
     <!-- Scan and voice options below the input -->
     <div class="bsheet-options" id="shopAddOptions" style="margin-top:12px">
-      <button class="bsheet-opt bsheet-opt-scan" onclick="shopAddScan()">
-        <span class="bsheet-opt-icon" style="font-size:1.8rem">📷</span>
-        <div style="flex:1">
-          <span class="bsheet-opt-text">Scan barcode</span>
-          <span class="bsheet-opt-sub">Point your camera at any product barcode</span>
-        </div>
-      </button>
       <button class="bsheet-opt" id="shopAddMicOpt" onclick="shopAddVoice()" style="display:none">
         <span class="bsheet-opt-icon">🎤</span>
         <span class="bsheet-opt-text">Voice input</span>
@@ -358,6 +370,13 @@
   <div class="bsheet" id="invAddSheet">
     <div class="bsheet-handle"></div>
     <div class="bsheet-title">Add to supplies</div>
+    <!-- Persistent barcode scanner — auto-starts when sheet opens, self-checkout style -->
+    <div class="sheet-scanner hidden" id="invAddScanner">
+      <div class="sheet-scanner-vf" id="invAddScannerVF"></div>
+      <div class="sheet-scanner-controls">
+        <button class="sheet-scanner-stop" onclick="stopInvScanner()">Stop scanning</button>
+      </div>
+    </div>
     <!-- Text input with live search dropdown (same UX as shopping) -->
     <div id="invAddTypeForm">
       <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>
@@ -379,15 +398,8 @@
       </div>
       <button class="btn bp bf" onclick="qaddInv()">Add</button>
     </div>
-    <!-- Scan and voice options below the input (same as shopping) -->
+    <!-- Voice option below the input (scan is now persistent in the scanner viewfinder above) -->
     <div class="bsheet-options" style="margin-top:12px">
-      <button class="bsheet-opt bsheet-opt-scan" onclick="invAddScan()">
-        <span class="bsheet-opt-icon" style="font-size:1.8rem">📷</span>
-        <div style="flex:1">
-          <span class="bsheet-opt-text">Scan barcode</span>
-          <span class="bsheet-opt-sub">Point your camera at any product barcode</span>
-        </div>
-      </button>
       <button class="bsheet-opt" id="invAddMicOpt" onclick="invAddVoice()" style="display:none">
         <span class="bsheet-opt-icon">🎤</span>
         <span class="bsheet-opt-text">Voice input</span>

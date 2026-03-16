@@ -589,7 +589,8 @@ export function toggleAddNote() {
 
 /**
  * openShopAddSheet() — Opens the add-item bottom sheet.
- * Immediately shows the text input with keyboard focused, plus scan/voice options below.
+ * Immediately shows the text input with keyboard focused, plus the persistent
+ * barcode scanner that auto-starts in the viewfinder area (self-checkout UX).
  */
 export function openShopAddSheet() {
   const backdrop = g("shopAddBackdrop");
@@ -598,12 +599,18 @@ export function openShopAddSheet() {
   if (sheet) sheet.classList.add("active");
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("shi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
+
+  // Start the persistent barcode scanner in the sheet viewfinder after sheet animation completes
+  // The 400ms delay ensures the bottom sheet is fully visible before Quagga measures dimensions
+  setTimeout(() => {
+    if (window.startSheetScanner) window.startSheetScanner("shopAddScannerVF", "shop");
+  }, 400);
 }
 
 /**
  * closeShopAddSheet() — Dismisses the add-item bottom sheet.
  * Called when tapping the backdrop or after an item is added.
- * Also clears the inline search dropdown to avoid stale results on next open.
+ * Stops the persistent scanner and clears inline search to avoid stale results.
  */
 export function closeShopAddSheet() {
   const backdrop = g("shopAddBackdrop");
@@ -611,6 +618,18 @@ export function closeShopAddSheet() {
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
   _clearInlineSearch();
+
+  // Stop the persistent barcode scanner when closing the sheet
+  if (window.stopSheetScanner) window.stopSheetScanner();
+}
+
+/**
+ * stopShopScanner() — Stops the persistent scanner in the shopping add sheet.
+ * Called when user taps "Stop scanning" — hides the camera view and lets user
+ * continue adding items via text input only.
+ */
+export function stopShopScanner() {
+  if (window.stopSheetScanner) window.stopSheetScanner();
 }
 
 /**

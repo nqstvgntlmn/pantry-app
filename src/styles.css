@@ -335,6 +335,61 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .multi-bar-count{font-size:.88rem;color:var(--tx2)}
 .multi-bar-count strong{color:var(--tx);font-weight:600}
 
+/* ── UNDO TOAST ── */
+/* Bottom toast shown after item deletion with a shrinking progress bar and Undo button */
+.undo-toast{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom) + 8px);left:50%;transform:translateX(-50%) translateY(120px);visibility:hidden;width:calc(100% - 32px);max-width:460px;background:var(--card2);border:1.5px solid var(--b1);border-radius:16px;padding:12px 16px 16px;z-index:160;transition:transform .3s cubic-bezier(.4,0,.2,1),visibility 0s .3s;box-shadow:0 -4px 24px rgba(0,0,0,.35);overflow:hidden}
+.undo-toast.visible{transform:translateX(-50%) translateY(0);visibility:visible;transition:transform .3s cubic-bezier(.4,0,.2,1),visibility 0s 0s}
+.undo-toast-body{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.undo-toast-text{font-size:.88rem;color:var(--tx)}
+.undo-toast-btn{color:var(--ac);font-weight:600;background:none;border:none;cursor:pointer;font-size:.92rem;padding:6px 12px;border-radius:8px;font-family:"DM Sans",sans-serif;min-height:44px;min-width:44px;transition:background .15s}
+.undo-toast-btn:active{background:var(--acd)}
+/* Progress bar at the bottom — shrinks from 100% to 0% over 5 seconds */
+.undo-toast-track{position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--b2)}
+.undo-toast-bar{height:100%;background:var(--ac);width:100%;transition:width 5s linear}
+.undo-toast-bar.shrinking{width:0%}
+
+/* ── SELECT MODE: TAP ANYWHERE TO SELECT ── */
+/* In select mode, disable pointer events on inner interactive elements so the
+   entire row click reaches the outer swipeRowTap handler for selection toggle */
+.swipe-wrap.selecting .shck,
+.swipe-wrap.selecting .shit>div[style*="flex:1"],
+.swipe-wrap.selecting .iit>div[style*="flex:1"],
+.swipe-wrap.selecting .sh-note-btn,
+.swipe-wrap.selecting .price-tag,
+.swipe-wrap.selecting .iit>div[style*="text-align:right"]{pointer-events:none}
+
+/* ── SHEET SCANNER ── */
+/* Inline barcode scanner embedded in the add-item bottom sheets */
+.sheet-scanner{margin-bottom:14px;border-radius:14px;overflow:hidden;position:relative;background:#000}
+.sheet-scanner-vf{width:100%;height:180px;position:relative;overflow:hidden}
+.sheet-scanner-vf video,.sheet-scanner-vf canvas{width:100%!important;height:100%!important;object-fit:cover;position:absolute;top:0;left:0}
+/* Laser-style scan line overlay */
+.sheet-scanner-vf::after{content:"";position:absolute;top:50%;left:10%;right:10%;height:2px;background:var(--ac);opacity:.7;box-shadow:0 0 8px var(--ac);z-index:5;animation:scanPulse 2s ease-in-out infinite}
+@keyframes scanPulse{0%,100%{opacity:.3}50%{opacity:.9}}
+.sheet-scanner-controls{display:flex;justify-content:center;padding:8px}
+.sheet-scanner-stop{font-size:.78rem;color:var(--mt);background:none;border:none;cursor:pointer;font-family:"DM Sans",sans-serif;padding:6px 14px;min-height:36px}
+.sheet-scanner-stop:active{color:var(--tx)}
+/* Green flash on successful scan in sheet scanner */
+.sheet-scanner-vf.scan-flash{animation:sheetFlash .4s ease-out}
+@keyframes sheetFlash{0%{box-shadow:inset 0 0 0 3px var(--gn)}100%{box-shadow:inset 0 0 0 0 transparent}}
+/* Status text inside the scanner viewfinder */
+.sheet-scanner-status{position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:.7rem;color:rgba(255,255,255,.75);z-index:6;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+/* Hidden state for scanner */
+.sheet-scanner.hidden{display:none}
+
+/* ── SCAN RESULT DISPLAY (truncation + expand) ── */
+/* Prominently displayed product name in scan result */
+.scan-result-name{font-size:1.2rem;font-weight:600;color:var(--tx);line-height:1.3}
+.scan-result-brand{font-size:.82rem;color:var(--mt);margin-top:2px}
+/* Truncated text with tap-to-expand */
+.scan-text-truncated{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.scan-text-truncated::after{content:" ▸";font-size:.7em;color:var(--ac);opacity:.7}
+.scan-text-expanded{white-space:normal;word-break:break-word}
+.scan-text-expanded::after{content:none}
+/* Not-found retry button */
+.scan-retry-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;margin-top:12px;border-radius:14px;border:1.5px solid var(--ac);background:var(--acd);color:var(--ac);font-family:"DM Sans",sans-serif;font-size:.95rem;font-weight:600;cursor:pointer;min-height:48px;transition:all .15s}
+.scan-retry-btn:active{background:var(--ac);color:var(--bg);transform:scale(.98)}
+
 /* ── OVERLAYS ── */
 .ov{position:fixed;inset:0;bottom:var(--nh);background:var(--bg);display:none;flex-direction:column;overflow-y:auto;z-index:100}
 .ov.active{display:flex}

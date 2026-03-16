@@ -596,19 +596,31 @@ export async function handleInvPhotoSelected(id) {
   // }
 }
 
-// Removes an inventory item from the database and closes the adjust overlay.
-// If the item was expiring or already expired, it also logs a waste entry
-// so the user can track food waste over time.
+// Removes an inventory item with a 5-second undo window.
+// Closes the detail sheet, defers the Firestore delete, and shows the undo toast.
+// If the item was expiring or already expired, waste tracking fires on commit
+// (after the undo window expires or is forfeited).
 export async function remItem(id) {
   const item = state.inv.find(i => i.id === id);
-  if (item) {
-    const s = xSt(item.expiry);
-    // Log waste only for items that went bad — not for items used normally
-    if (s && (s.c === "expired" || s.c === "expiring")) await addWasteEntry(item.name);
-  }
-  await dli(id); // delete from Firestore / local state
-  showNotif("Item removed");
+
+  // Close any open detail sheet or overlay before showing the undo toast
+  closeInvItemDetail();
   hideOv("adj");
+
+  // Use the centralized undo system — waste tracking happens on commit
+  if (window.deleteWithUndo) {
+    window.deleteWithUndo(id, "inv", {
+      onCommit: (deletedItem) => {
+        // Log waste only for items that went bad — not for items used normally
+        const s = xSt(deletedItem.expiry);
+        if (s && (s.c === "expired" || s.c === "expiring")) addWasteEntry(deletedItem.name);
+      }
+    });
+  } else {
+    // Fallback if undo system not available — immediate delete
+    await dli(id);
+    showNotif("Item removed");
+  }
 }
 
 // ── Adjust overlay inline handlers ──────────────────────────────────────────
@@ -1053,7 +1065,8 @@ const _INV_CACHE_MAX = 30;
 
 /**
  * openInvAddSheet() — Opens the add-to-pantry bottom sheet.
- * Shows the text input with keyboard focused, location picker, and scan/voice options.
+ * Shows the text input with keyboard focused, location picker, and the persistent
+ * barcode scanner that auto-starts in the viewfinder area (self-checkout UX).
  * Resets the location to "fridge" and clears previous input on each open.
  */
 export function openInvAddSheet() {
@@ -1068,13 +1081,21 @@ export function openInvAddSheet() {
   const fBtn = g("invAddLoc-fridge");
   if (fBtn) fBtn.classList.add("sel");
 
+  // Expose the current add-sheet location for the persistent scanner's auto-add
+  window._invAddLocation = _invAddLocation;
+
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("invi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
+
+  // Start the persistent barcode scanner in the sheet viewfinder after sheet animation completes
+  setTimeout(() => {
+    if (window.startSheetScanner) window.startSheetScanner("invAddScannerVF", "inv");
+  }, 400);
 }
 
 /**
  * closeInvAddSheet() — Dismisses the add-to-pantry bottom sheet.
- * Clears the search dropdown to avoid stale results on next open.
+ * Stops the persistent scanner and clears inline search to avoid stale results.
  */
 export function closeInvAddSheet() {
   const backdrop = g("invAddBackdrop");
@@ -1082,6 +1103,18 @@ export function closeInvAddSheet() {
   if (backdrop) backdrop.classList.remove("active");
   if (sheet) sheet.classList.remove("active");
   _clearInvSearch();
+
+  // Stop the persistent barcode scanner when closing the sheet
+  if (window.stopSheetScanner) window.stopSheetScanner();
+}
+
+/**
+ * stopInvScanner() — Stops the persistent scanner in the inventory add sheet.
+ * Called when user taps "Stop scanning" — hides the camera view and lets user
+ * continue adding items via text input only.
+ */
+export function stopInvScanner() {
+  if (window.stopSheetScanner) window.stopSheetScanner();
 }
 
 /**
@@ -1108,6 +1141,8 @@ export function invAddVoice() {
  */
 export function setInvAddLoc(loc, btn) {
   _invAddLocation = loc;
+  // Expose location for the persistent sheet scanner's auto-add
+  window._invAddLocation = loc;
   document.querySelectorAll("#invAddSheet .lbtn").forEach(b => b.classList.remove("sel"));
   if (btn) btn.classList.add("sel");
 }
