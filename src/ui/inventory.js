@@ -30,11 +30,12 @@ import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferr
 
 // ── UNITS OF MEASURE ────────────────────────────────────────────────────────
 // Shared list of available units for both Shopping and Supplies items.
+// Alphabetically sorted so dropdowns are easy to scan.
 // Exported so shopping.js can use the same list.
 export const UNITS = [
-  "Piece","Unit","Pack","Box","Bag","Bottle","Jar","Can","Bunch","Head",
-  "Loaf","Dozen","Carton","Tube","Roll","Gallon","Half Gallon","Liter",
-  "Pound","Oz","Clove"
+  "Bag","Bottle","Box","Bunch","Can","Carton","Clove","Dozen",
+  "Gallon","Half Gallon","Head","Jar","Liter","Loaf","Oz","Pack",
+  "Piece","Pound","Roll","Tube","Unit"
 ];
 
 // toTitleCase imported from helpers.js — used for uniform product name display

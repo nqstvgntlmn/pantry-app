@@ -1,16 +1,15 @@
 // ── BARCODE LOOKUP API ──────────────────────────────────────────────────────
-// Serverless function that looks up a barcode (UPC/EAN) against a waterfall
-// of five free product databases. Tries each in priority order and returns
-// the first successful match. This keeps all API keys server-side and
-// centralizes lookup logic so the frontend makes a single request.
-// Five databases are tried in priority order; the first match wins.
+// Serverless function that looks up a barcode (UPC/EAN) against five free
+// product databases IN PARALLEL. All databases are queried simultaneously
+// and the first high-quality result wins — no waiting for slower databases.
+// A hard 3-second timeout ensures fast response even if databases are slow.
 //
-// Waterfall order:
-//   1. Edamam         — best for food + nutritional data
-//   2. Open Food Facts — community-driven food database (no key needed)
-//   3. Open Beauty Facts — cosmetics, shampoos, personal care (no key needed)
-//   4. Open Pet Food Facts — pet food and treats (no key needed)
-//   5. UPC Item DB    — general products, 100 lookups/day free tier (no key needed for trial)
+// Priority order (when multiple respond):
+//   1. Open Food Facts — best coverage, community-driven (primary source)
+//   2. Edamam         — good for food + nutritional data
+//   3. Open Beauty Facts — cosmetics, personal care
+//   4. Open Pet Food Facts — pet food and treats
+//   5. UPC Item DB    — general products, 100 lookups/day free tier
 //
 // Request:  GET /api/barcode?code=013000006408
 // Response: { found: true, product: { barcode, name, brand, category, image, source, description, nutrition } }
@@ -328,10 +327,56 @@ async function tryUpcItemDb(bc) {
   return null;
 }
 
+// ── DATABASE PRIORITY ────────────────────────────────────────────────────────
+// When multiple databases return results, pick the best one using this priority.
+// Lower number = higher priority. Open Food Facts is primary (best coverage).
+const SOURCE_PRIORITY = {
+  "Open Food Facts": 1,
+  "Edamam": 2,
+  "Open Beauty Facts": 3,
+  "Open Pet Food Facts": 4,
+  "UPC Item DB": 5,
+};
+
+// Hard timeout — if no result found within this window, return not found
+const LOOKUP_TIMEOUT_MS = 3000;
+
+/**
+ * pickBestResult(results) — From an array of non-null results, pick the best one.
+ * Prefers high-quality names over low-quality ones, then uses SOURCE_PRIORITY
+ * to break ties. Merges missing fields (image, description) from runner-up results.
+ */
+function pickBestResult(results) {
+  if (!results.length) return null;
+
+  // Separate high-quality and low-quality name results
+  const highQ = results.filter(r => !isLowQualityName(r.name));
+  const pool = highQ.length ? highQ : results;
+
+  // Sort by source priority (lower = better)
+  pool.sort((a, b) => (SOURCE_PRIORITY[a.source] || 99) - (SOURCE_PRIORITY[b.source] || 99));
+  const best = pool[0];
+
+  // Merge missing fields from other results (image, description)
+  for (const other of results) {
+    if (other === best) continue;
+    if (!best.image && other.image) {
+      console.log(`[Barcode] Merging image from ${other.source}`);
+      best.image = other.image;
+    }
+    if (!best.description && other.description) best.description = other.description;
+    // Stop merging once we have both fields filled
+    if (best.image && best.description) break;
+  }
+
+  return best;
+}
+
 /**
  * Vercel serverless handler — accepts a GET request with a barcode query param,
- * runs the waterfall of product database lookups, and returns the first match.
- * If no database has the product, returns { found: false }.
+ * fires ALL database lookups in parallel, and returns the first high-quality
+ * result as soon as it arrives. A 3-second hard timeout ensures fast response
+ * even if some databases are slow or unreachable.
  */
 export default async function handler(req, res) {
   // --- CORS headers so the browser frontend can call this endpoint ---
@@ -346,77 +391,88 @@ export default async function handler(req, res) {
   const code = (req.query.code || "").trim();
   if (!code) return res.status(400).json({ error: "Missing 'code' query parameter" });
 
-  console.log(`[Barcode] ── Lookup started for barcode: ${code}`);
+  const startTime = Date.now();
+  console.log(`[Barcode] ── Parallel lookup started for barcode: ${code}`);
 
-  // Run the waterfall: try each database in order.
-  // If a result has a truncated or low-quality name (e.g. ends with "imp", cut off mid-word),
-  // keep it as a fallback but continue trying other databases for a better match.
-  // This ensures we return the most complete product info available.
-  const fns = [tryEdamam, tryOpenFoodFacts, tryOpenBeautyFacts, tryOpenPetFoodFacts, tryUpcItemDb];
-  const fnNames = ["Edamam", "Open Food Facts", "Open Beauty Facts", "Open Pet Food Facts", "UPC Item DB"];
-  let bestFallback = null;
+  // Fire all five database lookups simultaneously
+  const lookups = [
+    { fn: tryOpenFoodFacts, name: "Open Food Facts" },
+    { fn: tryEdamam, name: "Edamam" },
+    { fn: tryOpenBeautyFacts, name: "Open Beauty Facts" },
+    { fn: tryOpenPetFoodFacts, name: "Open Pet Food Facts" },
+    { fn: tryUpcItemDb, name: "UPC Item DB" },
+  ];
 
-  for (let i = 0; i < fns.length; i++) {
-    const result = await fns[i](code);
-    if (!result) {
-      console.log(`[Barcode] ${fnNames[i]}: no result`);
-      continue;
-    }
-
-    console.log(`[Barcode] ${fnNames[i]}: found "${result.name}" | image: ${result.image ? "YES" : "NONE"} | source: ${result.source}`);
-
-    // If the name looks complete and good, use it immediately
-    if (!isLowQualityName(result.name)) {
-      console.log(`[Barcode] Name quality OK — using ${fnNames[i]} as primary result`);
-
-      // Merge in any missing fields from the fallback (e.g. image, description)
-      if (bestFallback) {
-        if (!result.image && bestFallback.image) {
-          console.log(`[Barcode] Merging image from fallback (${bestFallback.source})`);
-          result.image = bestFallback.image;
+  // Wrap each lookup so it logs timing and never throws
+  const wrappedPromises = lookups.map(({ fn, name }) =>
+    fn(code)
+      .then(result => {
+        const elapsed = Date.now() - startTime;
+        if (result) {
+          console.log(`[Barcode] ${name}: found "${result.name}" in ${elapsed}ms | image: ${result.image ? "YES" : "NONE"}`);
+        } else {
+          console.log(`[Barcode] ${name}: no result (${elapsed}ms)`);
         }
-        if (!result.description && bestFallback.description) result.description = bestFallback.description;
-      }
-      // Clean the product name: strip artifacts and prepend brand if missing
-      result.name = cleanProductName(result.name, result.brand);
+        return result;
+      })
+      .catch(err => {
+        console.log(`[Barcode] ${name}: error — ${err.message} (${Date.now() - startTime}ms)`);
+        return null;
+      })
+  );
 
-      // If no image from any database, try Google Custom Search as a universal fallback
-      if (!result.image) {
-        console.log(`[Barcode] No image from any DB — invoking Google Custom Search fallback for "${result.name}"`);
-        result.image = await fetchGoogleImage(result.name);
-        console.log(`[Barcode] Google fallback result: ${result.image ? result.image : "null (no image found)"}`);
-      } else {
-        console.log(`[Barcode] Image present from DB — skipping Google fallback`);
-      }
+  // Race strategy: use Promise.allSettled with a hard timeout.
+  // This collects all results that arrive within 3 seconds, then picks the best.
+  const timeoutPromise = new Promise(resolve =>
+    setTimeout(() => resolve("TIMEOUT"), LOOKUP_TIMEOUT_MS)
+  );
 
-      console.log(`[Barcode] ── Returning product: "${result.name}" | image: ${result.image ? "YES" : "NONE"} | source: ${result.source}`);
-      return res.status(200).json({ found: true, product: result });
-    }
+  // Wait for either all lookups to finish OR the timeout — whichever comes first
+  const raceResult = await Promise.race([
+    Promise.allSettled(wrappedPromises).then(() => "ALL_DONE"),
+    timeoutPromise,
+  ]);
 
-    // Low-quality name — save as fallback and keep trying other databases
-    console.log(`[Barcode] ${fnNames[i]}: low-quality name "${result.name}" — saving as fallback, continuing waterfall`);
-    if (!bestFallback) bestFallback = result;
+  const elapsed = Date.now() - startTime;
+  if (raceResult === "TIMEOUT") {
+    console.log(`[Barcode] Hard timeout reached (${LOOKUP_TIMEOUT_MS}ms) — using results received so far`);
+  } else {
+    console.log(`[Barcode] All databases responded in ${elapsed}ms`);
   }
 
-  // No high-quality result found; return the best fallback we have (with cleaned name)
-  if (bestFallback) {
-    console.log(`[Barcode] No high-quality match — using fallback from ${bestFallback.source}: "${bestFallback.name}"`);
-    bestFallback.name = cleanProductName(bestFallback.name, bestFallback.brand);
+  // Collect whatever results have resolved by now (settled or not)
+  // Use a short delay (0ms) to flush any promises that resolved just before timeout
+  const settled = await Promise.allSettled(wrappedPromises.map(p =>
+    Promise.race([p, new Promise(resolve => setTimeout(() => resolve(null), 0))])
+  ));
+
+  // Extract non-null results
+  const results = settled
+    .map(s => s.status === "fulfilled" ? s.value : null)
+    .filter(Boolean);
+
+  console.log(`[Barcode] Got ${results.length} result(s) from ${lookups.length} databases`);
+
+  // Pick the best result based on name quality and source priority
+  const best = pickBestResult(results);
+
+  if (best) {
+    // Clean the product name: strip artifacts and prepend brand if missing
+    best.name = cleanProductName(best.name, best.brand);
 
     // If no image from any database, try Google Custom Search as a universal fallback
-    if (!bestFallback.image) {
-      console.log(`[Barcode] Fallback has no image — invoking Google Custom Search for "${bestFallback.name}"`);
-      bestFallback.image = await fetchGoogleImage(bestFallback.name);
-      console.log(`[Barcode] Google fallback result: ${bestFallback.image ? bestFallback.image : "null (no image found)"}`);
-    } else {
-      console.log(`[Barcode] Fallback has image — skipping Google fallback`);
+    if (!best.image) {
+      console.log(`[Barcode] No image from any DB — trying Google Custom Search for "${best.name}"`);
+      best.image = await fetchGoogleImage(best.name);
     }
 
-    console.log(`[Barcode] ── Returning fallback: "${bestFallback.name}" | image: ${bestFallback.image ? "YES" : "NONE"} | source: ${bestFallback.source}`);
-    return res.status(200).json({ found: true, product: bestFallback });
+    const totalMs = Date.now() - startTime;
+    console.log(`[Barcode] ── Returning: "${best.name}" | source: ${best.source} | image: ${best.image ? "YES" : "NONE"} | total: ${totalMs}ms`);
+    return res.status(200).json({ found: true, product: best });
   }
 
-  // All five databases returned nothing for this barcode
-  console.log(`[Barcode] ── All databases returned nothing for ${code}`);
+  // All databases returned nothing (or timed out) for this barcode
+  const totalMs = Date.now() - startTime;
+  console.log(`[Barcode] ── No results for ${code} (${totalMs}ms)`);
   return res.status(200).json({ found: false });
 }
