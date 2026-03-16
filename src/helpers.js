@@ -537,6 +537,13 @@ const _SIZE_PATTERN = /\b\d+[\d.,]*\s*(fl\.?\s*oz|oz|ml|l|liter|litre|g|kg|lb|lb
 // Common filler words to skip when extracting product type from name
 const _FILLER_WORDS = new Set(["for", "with", "and", "the", "a", "an", "in", "of", "by", "from"]);
 
+// Important product variant keywords that must always be preserved in titles.
+// These distinguish meaningfully different products (e.g. "Zero Sugar" vs regular).
+const _VARIANT_KEYWORDS = [
+  "zero sugar", "diet", "zero", "light", "lite", "decaf", "caffeine free",
+  "organic", "original", "classic", "extra", "plus", "pro", "max", "mini"
+];
+
 /**
  * formatScanResult(product) — Extracts smart display fields from a barcode scan product.
  * Uses existing database fields (category, description/generic_name) when available;
@@ -596,6 +603,8 @@ function _extractProductTitle(name, brand, description, category) {
  * _extractTypeFromName — Strips brand, size info, and filler words from a product name
  * to extract the core product type (e.g. "Body Lotion" from "Eos Shea Better Body Lotion...").
  * Takes the last 2-3 meaningful words, which tend to be the actual product type.
+ * Preserves important variant keywords (Zero Sugar, Diet, Organic, etc.) that distinguish
+ * meaningfully different products — e.g. "Baja Blast Zero Sugar" not just "Baja Blast".
  */
 function _extractTypeFromName(name, brand) {
   if (!name) return "";
@@ -617,6 +626,11 @@ function _extractTypeFromName(name, brand) {
   // Remove parenthesized info and trailing punctuation
   cleaned = cleaned.replace(/\s*\([^)]*\)\s*/g, " ").replace(/[,|]+\s*$/, "").trim();
 
+  // Detect variant keywords present in the cleaned name BEFORE word filtering.
+  // These get appended to the final title if they'd otherwise be lost.
+  const lowerCleaned = cleaned.toLowerCase();
+  const foundVariants = _VARIANT_KEYWORDS.filter(v => lowerCleaned.includes(v));
+
   // Split into words, filtering out filler words and bare numbers
   const words = cleaned.split(/\s+/).filter(w =>
     w.length >= 2 && !_FILLER_WORDS.has(w.toLowerCase()) && !/^\d+$/.test(w)
@@ -625,13 +639,23 @@ function _extractTypeFromName(name, brand) {
   if (words.length === 0) return toTitleCase(name.split(/\s+/).slice(0, 2).join(" "));
   if (words.length <= 3) return toTitleCase(words.join(" "));
 
-  // Take the last 2-3 words — product type tends to be at the end of the name
-  // Use 3 words if the last 2 are very short (< 8 chars combined)
+  // Take the last 2-3 words — product type tends to be at the end of the name.
+  // Use 3 words if the last 2 are very short (< 8 chars combined).
   const last2 = words.slice(-2);
   const last3 = words.slice(-3);
   const use3 = last2.join("").length < 8;
+  let result = (use3 ? last3 : last2).join(" ");
 
-  return toTitleCase((use3 ? last3 : last2).join(" "));
+  // Append any variant keywords that aren't already in the extracted result.
+  // This ensures "Mountain Dew Baja Blast Zero Sugar" → "Baja Blast Zero Sugar"
+  // instead of just "Baja Blast".
+  for (const variant of foundVariants) {
+    if (!result.toLowerCase().includes(variant)) {
+      result += " " + variant;
+    }
+  }
+
+  return toTitleCase(result);
 }
 
 export function guessAisle(name) {

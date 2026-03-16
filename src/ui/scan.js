@@ -424,9 +424,9 @@ async function lkup(bc) {
 
 // Renders the scan result overlay with product details (or a "not found" form).
 // Two distinct UI states:
-//   - Product found: shows a product card with image, name, brand, barcode, category,
-//     and description
+//   - Product found: shows a product card with title, subtitle, and brand
 //   - Product not found: shows the barcode and a text input so the user can manually name the item
+// Note: barcode number, raw category tag, and product images are intentionally hidden from users.
 function showRes(prod) {
   hideOv("scan");                          // Close the scan overlay before showing the result
   g("resttl").textContent = prod.notFound ? "Not Found" : "Product Found ✓";
@@ -475,7 +475,6 @@ function showRes(prod) {
       <div class="pnm" style="font-size:1.15rem;font-weight:700">${scanFmt.title}</div>
       <div class="pbr" style="font-size:.82rem;color:var(--mt);margin-top:2px"${subtitleExpand}>${subtitleText}</div>
       ${scanFmt.brand ? `<div style="font-size:.72rem;color:var(--mt);opacity:.7;margin-top:2px">${scanFmt.brand}</div>` : ""}
-      <div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>
     </div></div></div>`;
 
   }
