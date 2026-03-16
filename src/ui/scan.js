@@ -418,21 +418,9 @@ async function lkup(bc) {
   return { barcode: bc, name: "", brand: "", quantity: "", category: "General", image: null, source: null, description: "", notFound: true };
 }
 
-/**
- * srcUrl(source, barcode) — Returns the URL to the product's page on the source database website.
- * Used to make the source badge a tappable link so users can view full product details
- * on the original database. Returns "#" as a safe fallback for unknown sources.
- */
-function srcUrl(source, barcode) {
-  switch (source) {
-    case "Open Food Facts":     return `https://world.openfoodfacts.org/product/${barcode}`;
-    case "Open Beauty Facts":   return `https://world.openbeautyfacts.org/product/${barcode}`;
-    case "Open Pet Food Facts": return `https://world.openpetfoodfacts.org/product/${barcode}`;
-    case "UPC Item DB":         return `https://www.upcitemdb.com/upc/${barcode}`;
-    case "Edamam":              return `https://www.edamam.com/food-database/en/`;
-    default:                    return "#";
-  }
-}
+// [SOURCE LINKS REMOVED] — srcUrl() function and all database source attribution links
+// (Open Food Facts ↗, Open Beauty Facts ↗, UPC Item DB ↗, etc.) have been removed.
+// The source is still stored as metadata on the product object but no longer displayed to users.
 
 // Renders the scan result overlay with product details (or a "not found" form).
 // Two distinct UI states:
@@ -469,11 +457,11 @@ function showRes(prod) {
     // Store the smart title on the product object so addScannedToList() / addToInv() can persist it
     prod._scanTitle = scanFmt.title;
 
-    // Build product card with image (or placeholder icon)
-    const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
+    // [SCAN IMAGES DISABLED] — uncomment to re-enable product images in scan preview
+    // const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
+    const img = "";  // Image display disabled; image URL still fetched and stored for future use
 
-    // Build the source badge — if we can link to the product's page on the source database, make it tappable
-    const srcHtml = prod.source ? `<a href="${srcUrl(prod.source, prod.barcode)}" target="_blank" rel="noopener" class="srcb" style="text-decoration:none">${prod.source} ↗</a>` : "";
+    // [SOURCE LINKS REMOVED] — database source badge no longer displayed to users
 
     // Subtitle: full product name, truncated at 60 characters with tap-to-expand.
     // Uses data attribute + generic handler to avoid inline script injection from product names.
@@ -487,7 +475,7 @@ function showRes(prod) {
       <div class="pnm" style="font-size:1.15rem;font-weight:700">${scanFmt.title}</div>
       <div class="pbr" style="font-size:.82rem;color:var(--mt);margin-top:2px"${subtitleExpand}>${subtitleText}</div>
       ${scanFmt.brand ? `<div style="font-size:.72rem;color:var(--mt);opacity:.7;margin-top:2px">${scanFmt.brand}</div>` : ""}
-      <div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}
+      <div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>
     </div></div></div>`;
 
   }

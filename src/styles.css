@@ -406,7 +406,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .pbr{font-size:.78rem;color:var(--mt);margin-top:2px}
 .pbc{font-size:.68rem;color:var(--b2);margin-top:3px;font-family:monospace}
 .bdg{display:inline-block;padding:3px 9px;border-radius:20px;font-size:.7rem;background:var(--sf);color:var(--mt);border:1px solid var(--b1);margin-top:4px}
-.srcb{display:inline-block;padding:3px 9px;border-radius:20px;font-size:.68rem;background:transparent;color:var(--ac);border:1px solid rgba(212,168,83,.35);margin-top:4px;margin-left:4px}
+/* [SOURCE LINKS REMOVED] — .srcb badge class removed, database source links no longer displayed */
 .pdsc{font-size:.78rem;color:var(--mt);margin-top:10px;line-height:1.45;padding-top:10px;border-top:1px solid var(--b1)}
 /* .ngrd/.nb/.nv/.nl nutrition grid classes removed — nutrition data no longer shown */
 .nfb{background:var(--sf);border:1.5px solid var(--b2);border-radius:12px;padding:16px;margin-bottom:14px;font-size:.86rem;color:var(--mt);line-height:1.6}
