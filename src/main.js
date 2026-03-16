@@ -61,7 +61,7 @@ import { renderInsights } from './ui/insights.js';
 import { sendChat, sendPill, clrChat, ar, kitCtx, importChatRecipe } from './ui/chat.js';
 
 // Scanner: barcode/photo scanning, manual lookup, add scanned items to inventory or list
-import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, showManualNameInput, togManual, manLookup, selRL, valAdd, addToInv, chgAQ } from './ui/scan.js';
+import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, showManualNameInput, togManual, manLookup, selRL, valAdd, addToInv, chgAQ, editScanTitle, confirmScanTitle } from './ui/scan.js';
 
 // Swipe gestures: swipe-to-delete, row tap, multi-select mode, undo deletion, delete all
 import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected, undoDelete, deleteAll, deleteWithUndo } from './ui/swipe.js';
@@ -353,6 +353,8 @@ window.selRL = selRL;                           // Select a result from the barc
 window.valAdd = valAdd;                         // Validate the scanned-item add form
 window.addToInv = addToInv;                     // Add a scanned/looked-up item to inventory
 window.chgAQ = chgAQ;                           // Change quantity in the add-to-inventory form
+window.editScanTitle = editScanTitle;             // Switch scan title to inline edit mode
+window.confirmScanTitle = confirmScanTitle;       // Confirm edited scan title and save to customProducts
 
 // ── Swipe / Multi-select / Undo handlers ──
 window.swipeDelItem = swipeDelItem;   // Delete an item revealed by swipe gesture

@@ -16,7 +16,8 @@
 //   - Shopping list mode: scanned product is added as a shopping list item
 
 import { state } from '../state.js';            // Global app state (holds current product, inventory, scan destination, etc.)
-import { svi } from '../db.js';                   // svi = save inventory item (persists to Firebase)
+import { svi, dbSet, dbGet } from '../db.js';     // svi = save inventory item, dbSet/dbGet = Firestore CRUD
+import { getCurrentUser } from '../auth.js';       // getCurrentUser = get the signed-in Firebase Auth user
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list (deduplicates by name)
 import { g, showNotif, showOv, hideOv, formatScanResult } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels, formatScanResult = smart product type extraction
 
@@ -393,16 +394,20 @@ export async function manLookup() {
 }
 
 // Master product lookup — calls the /api/barcode serverless endpoint which
+// first checks the household's customProducts for a corrected name, then
 // tries five product databases in waterfall order:
-//   1. Edamam (food + nutrition data)
-//   2. Open Food Facts (community food DB)
+//   1. Open Food Facts (community food DB)
+//   2. UPC Item DB (general US products)
 //   3. Open Beauty Facts (cosmetics, personal care)
 //   4. Open Pet Food Facts (pet food and treats)
-//   5. UPC Item DB (general US products)
+//   5. Edamam (food + nutrition data)
+// Passes the household ID so the server can check for custom product overrides.
 // Returns the product object on success, or a "not found" placeholder if all fail.
 async function lkup(bc) {
   try {
-    const r = await fetch("/api/barcode?code=" + encodeURIComponent(bc));
+    // Include household ID so the server checks customProducts before external DBs
+    const hidParam = state.hid ? `&hid=${encodeURIComponent(state.hid)}` : "";
+    const r = await fetch("/api/barcode?code=" + encodeURIComponent(bc) + hidParam);
     if (r.ok) {
       const d = await r.json();
       if (d.found && d.product) {
@@ -470,9 +475,18 @@ function showRes(prod) {
       ? ` data-full="${scanFmt.subtitle.replace(/"/g, "&quot;")}" onclick="this.textContent=this.dataset.full" style="cursor:pointer"`
       : "";
 
-    // Assemble the product card with smart title (large), subtitle (smaller), brand (smallest)
+    // Assemble the product card with smart title (large + editable), subtitle (smaller), brand (smallest).
+    // The title row includes a pencil icon that toggles inline editing so users can correct product names.
+    // The original (database-provided) name is stored in a data attribute for revert-on-clear.
     html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1">
-      <div class="pnm" style="font-size:1.15rem;font-weight:700">${scanFmt.title}</div>
+      <div id="scan-title-row" style="display:flex;align-items:center;gap:6px">
+        <span id="scan-title-text" class="pnm" style="font-size:1.15rem;font-weight:700">${scanFmt.title}</span>
+        <span id="scan-edit-icon" onclick="editScanTitle()" style="cursor:pointer;font-size:.85rem;opacity:.6;flex-shrink:0" title="Edit product name">✏️</span>
+      </div>
+      <div id="scan-title-edit" style="display:none;gap:6px;align-items:center">
+        <input id="scan-title-input" class="fi" style="flex:1;font-size:1rem;padding:6px 10px;margin:0" data-original="${scanFmt.title.replace(/"/g, "&quot;")}" />
+        <button onclick="confirmScanTitle()" style="background:var(--gn);color:#fff;border:none;border-radius:8px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0" title="Save">✓</button>
+      </div>
       <div class="pbr" style="font-size:.82rem;color:var(--mt);margin-top:2px"${subtitleExpand}>${subtitleText}</div>
       ${scanFmt.brand ? `<div style="font-size:.72rem;color:var(--mt);opacity:.7;margin-top:2px">${scanFmt.brand}</div>` : ""}
     </div></div></div>`;
@@ -593,4 +607,93 @@ export async function addToInv() {
 export function chgAQ(d) {
   const i = g("aqty");
   i.value = Math.max(1, (parseInt(i.value) || 1) + d);
+}
+
+// ── EDITABLE SCAN TITLE ───────────────────────────────────────────────────────
+// Allows users to correct product names after a barcode scan. The corrected
+// name is saved to the household's customProducts collection so future scans
+// of the same barcode return the corrected name instantly (no external lookups).
+
+// Switches the scan title from display mode to inline edit mode.
+// Pre-fills the input with the current title text so the user can make small corrections.
+export function editScanTitle() {
+  const textEl = g("scan-title-row");
+  const editEl = g("scan-title-edit");
+  const inputEl = g("scan-title-input");
+  if (!textEl || !editEl || !inputEl) return;
+
+  // Pre-fill with current displayed title
+  const currentTitle = g("scan-title-text")?.textContent || "";
+  inputEl.value = currentTitle;
+
+  // Swap visibility: hide display row, show edit row
+  textEl.style.display = "none";
+  editEl.style.display = "flex";
+  inputEl.focus();
+  inputEl.select();
+}
+
+// Confirms the edited scan title. If the user typed a new name, saves it as a
+// custom product override in Firestore so future scans return this name instantly.
+// If the user cleared the field, reverts to the original database-provided name.
+export async function confirmScanTitle() {
+  const textEl = g("scan-title-row");
+  const editEl = g("scan-title-edit");
+  const inputEl = g("scan-title-input");
+  const titleSpan = g("scan-title-text");
+  if (!textEl || !editEl || !inputEl || !titleSpan) return;
+
+  const newName = inputEl.value.trim();
+  const originalName = inputEl.dataset.original || "";
+
+  // If the field is empty, revert to the original database name
+  const finalName = newName || originalName;
+
+  // Update the displayed title immediately for instant feedback
+  titleSpan.textContent = finalName;
+
+  // Also update the product object in state so addToInv() / addScannedToList() use the corrected name
+  if (state.cp) {
+    state.cp.name = finalName;
+    state.cp._scanTitle = finalName;
+  }
+
+  // Swap back to display mode
+  editEl.style.display = "none";
+  textEl.style.display = "flex";
+
+  // If the user actually changed the name (and didn't just revert), save to Firestore
+  if (newName && newName !== originalName && state.cp && state.cp.barcode) {
+    await _saveCustomProductName(state.cp.barcode, newName, state.cp);
+    showNotif("✓ Product name saved for future scans");
+  }
+}
+
+// Persists a corrected product name to the household's customProducts collection.
+// Document ID is keyed by barcode so future scans find the override instantly.
+// Stores the corrected name along with metadata (brand, category, who/when).
+async function _saveCustomProductName(barcode, correctedName, product) {
+  if (!state.hid || !barcode) return;
+
+  // Normalize the barcode for use as a Firestore document ID (strip non-alphanumeric chars)
+  const normalizedBarcode = barcode.replace(/[^a-zA-Z0-9]/g, "");
+  const docPath = `households/${state.hid}/customProducts/barcode_${normalizedBarcode}`;
+
+  // Get the current user's UID for the updatedBy audit field
+  const user = getCurrentUser();
+  const uid = user ? user.uid : "unknown";
+
+  // Save the corrected name and relevant product metadata to Firestore.
+  // On future scans, the api/barcode.js endpoint checks this before external DBs.
+  await dbSet(docPath, {
+    barcode: barcode,
+    correctedName: correctedName,
+    brand: product.brand || "",
+    category: product.category || "General",
+    image: product.image || null,
+    quantity: product.quantity || "",
+    description: product.description || "",
+    updatedAt: new Date().toISOString(),
+    updatedBy: uid,
+  });
 }
