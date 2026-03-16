@@ -61,7 +61,7 @@ import { renderInsights } from './ui/insights.js';
 import { sendChat, sendPill, clrChat, ar, kitCtx, importChatRecipe } from './ui/chat.js';
 
 // Scanner: barcode/photo scanning, manual lookup, add scanned items to inventory or list
-import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, togManual, manLookup, selRL, valAdd, addToInv, chgAQ } from './ui/scan.js';
+import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, showManualNameInput, togManual, manLookup, selRL, valAdd, addToInv, chgAQ } from './ui/scan.js';
 
 // Swipe gestures: swipe-to-delete, row tap, multi-select mode, undo deletion, delete all
 import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected, undoDelete, deleteAll, deleteWithUndo } from './ui/swipe.js';
@@ -346,6 +346,7 @@ window.openScanForList = openScanForList;       // Open scanner in "add to shopp
 window.openScanForInventory = openScanForInventory; // Open scanner in "add to inventory" mode
 window.addScannedToList = addScannedToList;     // Add a scanned item to the shopping list
 window.toggleScanNote = toggleScanNote;         // Toggle the optional note field in scan result overlay
+window.showManualNameInput = showManualNameInput; // Show manual name input after barcode not found
 window.togManual = togManual;                   // Toggle manual barcode entry mode
 window.manLookup = manLookup;                   // Look up a manually entered barcode
 window.selRL = selRL;                           // Select a result from the barcode lookup list

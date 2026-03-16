@@ -1,8 +1,9 @@
 // ── BARCODE LOOKUP API ──────────────────────────────────────────────────────
 // Serverless function that looks up a barcode (UPC/EAN) against five free
-// product databases IN PARALLEL. All databases are queried simultaneously
-// and the first high-quality result wins — no waiting for slower databases.
-// A hard 3-second timeout ensures fast response even if databases are slow.
+// product databases IN PARALLEL. All databases are queried simultaneously,
+// each with its own 3-second timeout. We wait for ALL to respond (or time out),
+// then pick the best result. This prevents a fast "not found" from one DB
+// from canceling slower DBs that might have the product.
 //
 // Priority order (when multiple respond):
 //   1. Open Food Facts — best coverage, community-driven (primary source)
@@ -374,9 +375,9 @@ function pickBestResult(results) {
 
 /**
  * Vercel serverless handler — accepts a GET request with a barcode query param,
- * fires ALL database lookups in parallel, and returns the first high-quality
- * result as soon as it arrives. A 3-second hard timeout ensures fast response
- * even if some databases are slow or unreachable.
+ * fires ALL database lookups in parallel with per-database timeouts, waits for
+ * ALL to finish, then picks the best result. This ensures no database's "not found"
+ * cancels other databases that might still find the product.
  */
 export default async function handler(req, res) {
   // --- CORS headers so the browser frontend can call this endpoint ---
@@ -403,9 +404,15 @@ export default async function handler(req, res) {
     { fn: tryUpcItemDb, name: "UPC Item DB" },
   ];
 
-  // Wrap each lookup so it logs timing and never throws
-  const wrappedPromises = lookups.map(({ fn, name }) =>
-    fn(code)
+  // Wrap each lookup with its own 3-second timeout so slow databases don't block
+  // the response, but a fast "not found" from one DB never cancels the others.
+  // Each promise resolves to a result or null — never rejects.
+  const wrappedPromises = lookups.map(({ fn, name }) => {
+    // Per-database timeout: if this DB hasn't responded in 3s, treat as no result
+    const dbTimeout = new Promise(resolve =>
+      setTimeout(() => resolve(null), LOOKUP_TIMEOUT_MS)
+    );
+    return Promise.race([fn(code), dbTimeout])
       .then(result => {
         const elapsed = Date.now() - startTime;
         if (result) {
@@ -418,40 +425,21 @@ export default async function handler(req, res) {
       .catch(err => {
         console.log(`[Barcode] ${name}: error — ${err.message} (${Date.now() - startTime}ms)`);
         return null;
-      })
-  );
+      });
+  });
 
-  // Race strategy: use Promise.allSettled with a hard timeout.
-  // This collects all results that arrive within 3 seconds, then picks the best.
-  const timeoutPromise = new Promise(resolve =>
-    setTimeout(() => resolve("TIMEOUT"), LOOKUP_TIMEOUT_MS)
-  );
+  // Wait for ALL databases to respond (each has its own 3s timeout cap).
+  // Promise.allSettled never rejects — it waits for every promise to settle.
+  // This way a fast "not found" from one DB doesn't cancel slower DBs that may have the product.
+  const settled = await Promise.allSettled(wrappedPromises);
 
-  // Wait for either all lookups to finish OR the timeout — whichever comes first
-  const raceResult = await Promise.race([
-    Promise.allSettled(wrappedPromises).then(() => "ALL_DONE"),
-    timeoutPromise,
-  ]);
-
-  const elapsed = Date.now() - startTime;
-  if (raceResult === "TIMEOUT") {
-    console.log(`[Barcode] Hard timeout reached (${LOOKUP_TIMEOUT_MS}ms) — using results received so far`);
-  } else {
-    console.log(`[Barcode] All databases responded in ${elapsed}ms`);
-  }
-
-  // Collect whatever results have resolved by now (settled or not)
-  // Use a short delay (0ms) to flush any promises that resolved just before timeout
-  const settled = await Promise.allSettled(wrappedPromises.map(p =>
-    Promise.race([p, new Promise(resolve => setTimeout(() => resolve(null), 0))])
-  ));
-
-  // Extract non-null results
+  // Extract non-null results from all settled promises
   const results = settled
     .map(s => s.status === "fulfilled" ? s.value : null)
     .filter(Boolean);
 
-  console.log(`[Barcode] Got ${results.length} result(s) from ${lookups.length} databases`);
+  const elapsed = Date.now() - startTime;
+  console.log(`[Barcode] All databases responded in ${elapsed}ms — got ${results.length} result(s) from ${lookups.length} databases`);
 
   // Pick the best result based on name quality and source priority
   const best = pickBestResult(results);

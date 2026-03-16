@@ -283,6 +283,18 @@ export function openScanForInventory() {
   startLiveScanner();                     // Begin live camera scanning immediately
 }
 
+// Reveals the manual name input when the user chooses "Add manually" after a
+// barcode lookup returns no results. Hides the scan-again/add-manually buttons
+// and shows the text input so the user can type the product name.
+export function showManualNameInput() {
+  const section = g("manual-name-section");
+  if (section) {
+    section.style.display = "block";
+    const inp = g("mnm");
+    if (inp) inp.focus();
+  }
+}
+
 // Toggles the optional note field in the scan result overlay.
 // Mirrors the toggleAddNote() behavior from the shopping list quick-add flow.
 // When shown, focuses the textarea so the user can start typing immediately.
@@ -434,9 +446,20 @@ function showRes(prod) {
 
   let html = "";
   if (prod.notFound) {
-    // Product not in any database — show a manual name input so the user can still add it
-    html = `<div class="nfb">⚠️ Barcode <code>${prod.barcode}</code> not found in any database. Enter name:<input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:10px"/></div>`;
-    // Disabled state is applied after buttons are rendered below
+    // Product not in any database — show two clear options:
+    // 1. "Scan again" to re-trigger the camera scanner
+    // 2. "Add manually" to reveal a name input and type the product name
+    html = `<div class="nfb">
+      <div style="text-align:center;margin-bottom:12px">⚠️ Barcode <code>${prod.barcode}</code> not found in any database.</div>
+      <div class="brow" style="gap:10px;margin-bottom:12px">
+        <button class="btn bs" style="flex:1;font-size:.95rem" onclick="resumeScanner()">🔄 Scan again</button>
+        <button class="btn bp" style="flex:1;font-size:.95rem" onclick="showManualNameInput()">✏️ Add manually</button>
+      </div>
+      <div id="manual-name-section" style="display:none">
+        <input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:4px"/>
+      </div>
+    </div>`;
+    // Disabled state for add button is applied after buttons are rendered below
   } else {
     // Product found — use formatScanResult() for smart product type extraction.
     // This maps category + name keywords to a concise product type title (e.g. "Chips", "Shampoo")
@@ -491,7 +514,14 @@ function showRes(prod) {
   // Add to Shopping List secondary) since users might want either from inventory context.
   const destEl = g("scan-dest-btns");
   if (destEl) {
-    if (state.scanDestList) {
+    if (prod.notFound) {
+      // Not found — "Scan again" is already in the nfb card above.
+      // Show only the add button here (disabled until user types a name).
+      // The add action depends on which tab triggered the scan.
+      const addAction = state.scanDestList ? "addScannedToList()" : "addToInv()";
+      const addLabel = state.scanDestList ? "🛒 Add to Shopping List" : "📦 Add to Pantry";
+      destEl.innerHTML = `<button class="btn bp" style="width:100%" id="addbtn" onclick="${addAction}">${addLabel}</button>`;
+    } else if (state.scanDestList) {
       // Shopping tab context — single primary action: add to shopping list
       destEl.innerHTML = `<div class="brow">
         <button class="btn bs" style="flex:1" onclick="resumeScanner()">← Back</button>
