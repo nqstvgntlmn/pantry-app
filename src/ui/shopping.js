@@ -511,7 +511,7 @@ export function sH(item) {
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
         <div class="shck" onclick="event.stopPropagation();togShop('${item.id}')">${item.checked ? "✓" : ""}</div>  <!-- Slim ring: tap to mark as bought; hidden in select mode (replaced by sel-cb) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
-          <div class="shnm">${toTitleCase(item.name)}${qtyBadge}</div>
+          ${item.scanTitle ? `<div class="shnm">${toTitleCase(item.scanTitle)}${qtyBadge}</div><div class="sh-brand" style="font-size:.78rem;color:var(--mt)">${toTitleCase(item.name)}</div>` : `<div class="shnm">${toTitleCase(item.name)}${qtyBadge}</div>`}
           ${_shouldShowBrand(item) ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand shown for barcode scans always; for text search only if the user's query matches the brand name -->
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
         </div>

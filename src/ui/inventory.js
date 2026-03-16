@@ -98,7 +98,7 @@ export function iH(item) {
         <!-- Slim outlined circle: tapping opens detail sheet -->
         <div class="shck" onclick="event.stopPropagation();openInvItemDetail('${item.id}')"></div>
         <div style="flex:1;min-width:0;cursor:pointer" onclick="event.stopPropagation();openInvItemDetail('${item.id}')">
-          <div class="inm">${toTitleCase(item.name)}</div>
+          ${item.scanTitle ? `<div class="inm">${toTitleCase(item.scanTitle)}</div><div class="sh-brand" style="font-size:.78rem;color:var(--mt)">${toTitleCase(item.name)}</div>` : `<div class="inm">${toTitleCase(item.name)}</div>`}
           ${brandHtml}
           ${item.note ? `<div class="shnote" style="margin-top:2px">📝 ${item.note}</div>` : ""}
           ${et}

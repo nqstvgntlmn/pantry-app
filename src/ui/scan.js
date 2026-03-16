@@ -18,7 +18,7 @@
 import { state } from '../state.js';            // Global app state (holds current product, inventory, scan destination, etc.)
 import { svi } from '../db.js';                   // svi = save inventory item (persists to Firebase)
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list (deduplicates by name)
-import { g, showNotif, showOv, hideOv } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels
+import { g, showNotif, showOv, hideOv, formatScanResult } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels, formatScanResult = smart product type extraction
 
 // Track whether the live scanner is currently active to avoid double-init
 let scannerRunning = false;
@@ -321,6 +321,7 @@ export function addScannedToList() {
   const item = { id: Date.now().toString(), name, qty, checked: false, src: "scan" };
   if (state.cp.brand) item.brand = state.cp.brand;   // Preserve brand separately for subtitle display
   if (state.cp.image) item.image = state.cp.image;   // Persist the product image for list thumbnail
+  if (state.cp._scanTitle) item.scanTitle = state.cp._scanTitle; // Persist smart product type title for list row display
   if (note) item.note = note;                         // Include note only if the user typed something
 
   // Consolidate with existing items instead of creating duplicates
@@ -437,17 +438,34 @@ function showRes(prod) {
     html = `<div class="nfb">⚠️ Barcode <code>${prod.barcode}</code> not found in any database. Enter name:<input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:10px"/></div>`;
     // Disabled state is applied after buttons are rendered below
   } else {
-    // Product found — build a product card with image (or placeholder icon), name, brand, etc.
-    const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
+    // Product found — use formatScanResult() for smart product type extraction.
+    // This maps category + name keywords to a concise product type title (e.g. "Chips", "Shampoo")
+    // and provides the full name as a subtitle for context.
+    const scanFmt = formatScanResult(prod);
 
-    // Build the description line if the API returned one
-    const desc = prod.description ? `<div class="pdsc">${prod.description}</div>` : "";
+    // Store the smart title on the product object so addScannedToList() / addToInv() can persist it
+    prod._scanTitle = scanFmt.title;
+
+    // Build product card with image (or placeholder icon)
+    const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
 
     // Build the source badge — if we can link to the product's page on the source database, make it tappable
     const srcHtml = prod.source ? `<a href="${srcUrl(prod.source, prod.barcode)}" target="_blank" rel="noopener" class="srcb" style="text-decoration:none">${prod.source} ↗</a>` : "";
 
-    // Assemble the full product card HTML with image, name, brand, category, source link, and description
-    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1"><div class="pnm">${prod.name}</div>${prod.brand ? `<div class="pbr">${prod.brand}</div>` : ""}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}</div></div>${desc}</div>`;
+    // Subtitle: full product name, truncated at 60 characters with tap-to-expand.
+    // Uses data attribute + generic handler to avoid inline script injection from product names.
+    const subtitleText = scanFmt.subtitle.length > 60 ? scanFmt.subtitle.slice(0, 60) + "…" : scanFmt.subtitle;
+    const subtitleExpand = scanFmt.subtitle.length > 60
+      ? ` data-full="${scanFmt.subtitle.replace(/"/g, "&quot;")}" onclick="this.textContent=this.dataset.full" style="cursor:pointer"`
+      : "";
+
+    // Assemble the product card with smart title (large), subtitle (smaller), brand (smallest)
+    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1">
+      <div class="pnm" style="font-size:1.15rem;font-weight:700">${scanFmt.title}</div>
+      <div class="pbr" style="font-size:.82rem;color:var(--mt);margin-top:2px"${subtitleExpand}>${subtitleText}</div>
+      ${scanFmt.brand ? `<div style="font-size:.72rem;color:var(--mt);opacity:.7;margin-top:2px">${scanFmt.brand}</div>` : ""}
+      <div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}
+    </div></div></div>`;
 
   }
 
@@ -534,7 +552,10 @@ export async function addToInv() {
 
   // Save to database — if the item already exists, add to its quantity and keep its original addedAt date
   // Save to Firestore — nutrition intentionally omitted (unreliable from text/barcode matching)
-  await svi({ id, barcode: state.cp.barcode, name: nm, brand: state.cp.brand || "", unit, qty: ex ? ex.qty + qty : qty, location: state.selR, category: state.cp.category || "General", image: state.cp.image || null, source: state.cp.source || null, expiry: exp, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() });
+  // scanTitle: persist the smart product type label so it shows on list rows (e.g. "Chips" instead of full name)
+  const itemData = { id, barcode: state.cp.barcode, name: nm, brand: state.cp.brand || "", unit, qty: ex ? ex.qty + qty : qty, location: state.selR, category: state.cp.category || "General", image: state.cp.image || null, source: state.cp.source || null, expiry: exp, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() };
+  if (state.cp._scanTitle) itemData.scanTitle = state.cp._scanTitle;
+  await svi(itemData);
 
   state.cp = null;                         // Clear the current product from state
 
