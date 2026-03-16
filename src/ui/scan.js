@@ -326,8 +326,9 @@ export function addScannedToList() {
   // Consolidate with existing items instead of creating duplicates
   consolidateShopItem(item);
 
-  showNotif("Added to list: " + name);    // Toast confirmation
-  hideOv("result"); hideOv("scan");       // Close both overlays (result and scan)
+  // Close scan overlays and return to the add-item sheet so the user can
+  // immediately scan another item without re-opening the sheet manually
+  hideOv("result"); hideOv("scan");
   state.scanDestList = false;             // Reset destination flag back to default
 
   // Reset and collapse the note field so it's clean for the next scan
@@ -335,7 +336,11 @@ export function addScannedToList() {
   const wrap = g("scanNoteWrap");
   if (wrap) wrap.style.display = "none";
 
-  window.showScreen("shopping");          // Navigate to the shopping list screen
+  // Reopen the add-item sheet in its default state, ready for the next scan
+  if (window.openShopAddSheet) window.openShopAddSheet();
+
+  // Brief success toast so the user knows the item was added
+  showNotif("✓ " + name + " added");
 }
 
 // Toggles visibility of the manual barcode entry section.
@@ -531,11 +536,17 @@ export async function addToInv() {
   // Save to Firestore — nutrition intentionally omitted (unreliable from text/barcode matching)
   await svi({ id, barcode: state.cp.barcode, name: nm, brand: state.cp.brand || "", unit, qty: ex ? ex.qty + qty : qty, location: state.selR, category: state.cp.category || "General", image: state.cp.image || null, source: state.cp.source || null, expiry: exp, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() });
 
-  // Show appropriate toast: "+2 added to Milk" for existing items, "Milk added!" for new items
-  showNotif(ex ? `+${qty} added to ${nm}` : `${nm} added!`);
-
   state.cp = null;                         // Clear the current product from state
-  hideOv("result");                        // Close the result overlay
+
+  // Close both overlays and return to the add-item sheet so the user can
+  // immediately scan another item without re-opening the sheet manually
+  hideOv("result"); hideOv("scan");
+
+  // Reopen the add-item sheet in its default state, ready for the next scan
+  if (window.openInvAddSheet) window.openInvAddSheet();
+
+  // Brief success toast so the user knows the item was added
+  showNotif(ex ? `✓ +${qty} added to ${nm}` : `✓ ${nm} added`);
 }
 
 // Increments or decrements the quantity field in the scan result overlay.
