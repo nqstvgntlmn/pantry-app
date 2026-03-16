@@ -487,6 +487,11 @@ function showRes(prod) {
         </div>
       </div>
       <button class="scan-retry-btn" onclick="resumeScanner()">📷 Try again</button>
+      <button class="scan-retry-btn" style="background:var(--cd2);margin-top:8px" onclick="showManualBarcodeEntry()">⌨️ Enter barcode manually</button>
+      <div id="manualBarcodeWrap" style="display:none;margin-top:12px">
+        <input class="fi" id="manualBarcodeInp" type="tel" inputmode="numeric" pattern="[0-9]*" placeholder="Enter barcode number" style="margin-bottom:8px;text-align:center;font-size:1.1rem;letter-spacing:1px"/>
+        <button class="btn bp" style="width:100%" onclick="manualBarcodeSearch()">🔍 Search</button>
+      </div>
       <div style="margin-top:14px;font-size:.85rem;color:var(--mt);text-align:center">or enter name manually:</div>
       <input class="fi" id="mnm" placeholder="Product name (required)" oninput="valAdd()" style="margin-top:8px"/>
     </div>`;
@@ -624,6 +629,54 @@ export async function addToInv() {
 export function chgAQ(d) {
   const i = g("aqty");
   i.value = Math.max(1, (parseInt(i.value) || 1) + d);
+}
+
+// ── MANUAL BARCODE ENTRY (from Not Found screen) ─────────────────────────────
+// When a barcode scan fails, the user can tap "Enter barcode manually" to reveal
+// a numeric input field. This runs the same lkup() pipeline as a physical scan.
+
+/**
+ * showManualBarcodeEntry() — Reveals the manual barcode input field in the
+ * "Not found" result view. Focuses the input for immediate typing.
+ */
+export function showManualBarcodeEntry() {
+  const wrap = g("manualBarcodeWrap");
+  if (!wrap) return;
+  wrap.style.display = "block";
+  const inp = g("manualBarcodeInp");
+  if (inp) inp.focus();
+}
+
+/**
+ * manualBarcodeSearch() — Looks up a barcode typed manually from the "Not found"
+ * result screen. Runs the exact same lkup() pipeline as a camera scan.
+ * If found, shows the result normally. If not found, shows "Not found" again
+ * with the same options (try again, enter barcode, enter name).
+ */
+export async function manualBarcodeSearch() {
+  const inp = g("manualBarcodeInp");
+  const code = inp ? inp.value.trim() : "";
+  if (!code) return; // Ignore empty input
+
+  // Show spinner while looking up the barcode
+  hideOv("result");
+  showOv("scan");
+  g("scanbody").style.display = "none";
+  g("scspin").style.display = "block";
+  g("scst").textContent = "Looking up " + code + "…";
+
+  const prod = await lkup(code);  // Query product databases with the entered barcode
+  state.cp = prod;                // Store result in global state
+
+  // Reset result form fields to defaults
+  g("aqty").value = 1; g("aexp").value = "";
+  selRL("fridge", g("rl-fridge"));
+
+  showRes(prod); // Display the product result (found or not found again)
+
+  // Restore scan body UI (hidden during spinner)
+  g("scanbody").style.display = "block";
+  g("scspin").style.display = "none";
 }
 
 // ── SCAN RESULT DISPLAY: TAP TO EXPAND ──────────────────────────────────────

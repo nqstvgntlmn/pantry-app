@@ -413,6 +413,118 @@ export const AISLES = {
 // These helpers extract a clean, short product type title from barcode scan
 // results using existing database fields (no AI API calls needed).
 
+// ── PRODUCT TYPE MAPPING TABLE ────────────────────────────────────────────────
+// Comprehensive local mapping that checks both the database category AND keywords
+// in the product name to determine a more specific, human-friendly product type.
+// Falls back to the existing formatScanResult() logic if no mapping matches.
+// Each entry: { category (regex or null for "any"), keywords (array of lowercase substrings), title }
+const PRODUCT_TYPE_MAP = [
+  // ── Universal matches (any category) ──
+  { category: null, keywords: ["chewing gum", "gum"],                                   title: "Gum" },
+  { category: null, keywords: ["eye drop", "eye relief", "visine", "contact"],           title: "Eye Drops" },
+
+  // ── Snacks ──
+  { category: /snack/i, keywords: ["chip", "crisp", "pringles"],                         title: "Chips" },
+  { category: /snack/i, keywords: ["cookie", "biscuit"],                                 title: "Cookies" },
+  { category: /snack/i, keywords: ["cracker"],                                           title: "Crackers" },
+  { category: /snack/i, keywords: ["popcorn"],                                           title: "Popcorn" },
+  { category: /snack/i, keywords: ["pretzel"],                                           title: "Pretzels" },
+  { category: /snack/i, keywords: ["granola bar", "energy bar", "protein bar"],          title: "Energy Bar" },
+  { category: /snack/i, keywords: ["candy", "chocolate", "gummy"],                      title: "Candy" },
+  { category: /snack/i, keywords: ["nut", "almond", "cashew", "peanut"],                title: "Nuts" },
+
+  // ── Beverages ──
+  { category: /beverage/i, keywords: ["water"],                                          title: "Water" },
+  { category: /beverage/i, keywords: ["juice"],                                          title: "Juice" },
+  { category: /beverage/i, keywords: ["soda", "cola", "pepsi", "coke"],                 title: "Soda" },
+  { category: /beverage/i, keywords: ["coffee"],                                         title: "Coffee" },
+  { category: /beverage/i, keywords: ["tea"],                                            title: "Tea" },
+  { category: /beverage/i, keywords: ["energy drink", "red bull", "monster"],            title: "Energy Drink" },
+
+  // ── Dairy ──
+  { category: /dairy/i, keywords: ["cream cheese"],                                      title: "Cream Cheese" },
+  { category: /dairy/i, keywords: ["milk"],                                              title: "Milk" },
+  { category: /dairy/i, keywords: ["yogurt", "yoghurt"],                                 title: "Yogurt" },
+  { category: /dairy/i, keywords: ["cheese"],                                            title: "Cheese" },
+  { category: /dairy/i, keywords: ["butter"],                                            title: "Butter" },
+
+  // ── Personal Care / Health ──
+  { category: /personal care/i, keywords: ["shampoo"],                                   title: "Shampoo" },
+  { category: /personal care/i, keywords: ["conditioner"],                                title: "Conditioner" },
+  { category: /personal care/i, keywords: ["body lotion", "lotion", "moisturizer"],      title: "Body Lotion" },
+  { category: /personal care/i, keywords: ["body wash", "shower gel"],                   title: "Body Wash" },
+  { category: /personal care/i, keywords: ["deodorant", "antiperspirant"],               title: "Deodorant" },
+  { category: /personal care/i, keywords: ["toothpaste"],                                title: "Toothpaste" },
+  { category: /personal care/i, keywords: ["toothbrush"],                                title: "Toothbrush" },
+  { category: /personal care/i, keywords: ["sunscreen", "spf"],                          title: "Sunscreen" },
+  { category: /personal care/i, keywords: ["face wash", "cleanser"],                     title: "Face Wash" },
+  { category: /personal care/i, keywords: ["vitamin", "supplement", "capsule", "tablet"], title: "Vitamins" },
+  { category: /personal care/i, keywords: ["pain relief", "tylenol", "advil", "ibuprofen"], title: "Pain Relief" },
+  { category: /personal care/i, keywords: ["band-aid", "bandage"],                      title: "Bandages" },
+
+  // ── Cleaning ──
+  { category: /clean/i, keywords: ["detergent", "laundry"],                              title: "Laundry Detergent" },
+  { category: /clean/i, keywords: ["dish soap", "dishwasher"],                           title: "Dish Soap" },
+  { category: /clean/i, keywords: ["bleach"],                                            title: "Bleach" },
+  { category: /clean/i, keywords: ["spray", "cleaner", "windex"],                       title: "Cleaning Spray" },
+
+  // ── Frozen ──
+  { category: /frozen/i, keywords: ["pizza"],                                            title: "Frozen Pizza" },
+  { category: /frozen/i, keywords: ["ice cream", "gelato"],                              title: "Ice Cream" },
+  { category: /frozen/i, keywords: ["fries", "potato"],                                  title: "Frozen Fries" },
+
+  // ── Condiments ──
+  { category: /condiment/i, keywords: ["ketchup"],                                       title: "Ketchup" },
+  { category: /condiment/i, keywords: ["mustard"],                                       title: "Mustard" },
+  { category: /condiment/i, keywords: ["mayo", "mayonnaise"],                            title: "Mayonnaise" },
+  { category: /condiment/i, keywords: ["hot sauce", "sriracha", "tabasco"],              title: "Hot Sauce" },
+  { category: /condiment/i, keywords: ["soy sauce"],                                     title: "Soy Sauce" },
+  { category: /condiment/i, keywords: ["olive oil", "vegetable oil", "cooking oil"],     title: "Cooking Oil" },
+  { category: /condiment/i, keywords: ["vinegar"],                                       title: "Vinegar" },
+
+  // ── Bread / Bakery ──
+  { category: /bread/i, keywords: ["bread"],                                             title: "Bread" },
+  { category: /bread/i, keywords: ["bagel"],                                             title: "Bagels" },
+  { category: /bread/i, keywords: ["tortilla", "wrap"],                                  title: "Tortillas" },
+
+  // ── Meat / Protein ──
+  { category: /meat/i, keywords: ["chicken"],                                            title: "Chicken" },
+  { category: /meat/i, keywords: ["beef", "ground beef"],                                title: "Beef" },
+  { category: /meat/i, keywords: ["pork", "bacon"],                                      title: "Pork" },
+  { category: /meat/i, keywords: ["turkey"],                                             title: "Turkey" },
+  { category: /meat/i, keywords: ["salmon", "tuna", "fish"],                             title: "Fish" },
+
+  // ── Pet ──
+  { category: /pet/i, keywords: ["dog food", "dog treat"],                               title: "Dog Food" },
+  { category: /pet/i, keywords: ["cat food", "cat treat"],                               title: "Cat Food" },
+];
+
+/**
+ * _matchProductType(name, category) — Checks the PRODUCT_TYPE_MAP for a matching
+ * product type based on the product's category and name keywords.
+ * Returns the mapped title string if found, or null if no mapping matches.
+ *
+ * @param {string} name - Full product name (checked for keyword substrings)
+ * @param {string} category - Product category from the database
+ * @returns {string|null} Mapped product type title, or null if no match
+ */
+function _matchProductType(name, category) {
+  const lowerName = (name || "").toLowerCase();
+  const lowerCat = (category || "").toLowerCase();
+
+  for (const entry of PRODUCT_TYPE_MAP) {
+    // Check category constraint: null = any category, regex = must match
+    if (entry.category !== null && !entry.category.test(lowerCat)) continue;
+
+    // Check if any keyword appears in the product name
+    if (entry.keywords.some(kw => lowerName.includes(kw))) {
+      return entry.title;
+    }
+  }
+
+  return null; // No mapping matched — fall back to existing logic
+}
+
 // Categories too generic to serve as meaningful product type titles
 const _GENERIC_CATEGORIES = new Set([
   "general", "food", "grocery", "personal care", "pet food",
@@ -453,9 +565,16 @@ export function formatScanResult(product) {
 
 /**
  * _extractProductTitle — Determines the best short product type label.
- * Priority: description/generic_name > specific category > extracted from name.
+ * Priority: PRODUCT_TYPE_MAP > description/generic_name > specific category > extracted from name.
+ * The local mapping table is checked first because database categories are often
+ * too generic (e.g. "Snacks" for gum, "Emulsion" for eye drops).
  */
 function _extractProductTitle(name, brand, description, category) {
+  // 0. Check local PRODUCT_TYPE_MAP first — combines category + name keywords
+  //    for more specific results than database fields alone
+  const mapped = _matchProductType(name, category);
+  if (mapped) return mapped;
+
   // 1. Use description (generic_name from Open Food Facts) if meaningful and concise
   if (description && description.length >= 3 && description.length <= 40
       && !_GENERIC_CATEGORIES.has(description.toLowerCase())) {

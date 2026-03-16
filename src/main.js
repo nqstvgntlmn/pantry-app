@@ -62,7 +62,7 @@ import { sendChat, sendPill, clrChat, ar, kitCtx, importChatRecipe } from './ui/
 
 // Scanner: barcode/photo scanning, manual lookup, add scanned items to inventory or list,
 // persistent sheet scanner, scan result expand toggle
-import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, togManual, manLookup, selRL, valAdd, addToInv, chgAQ, toggleScanExpand, startSheetScanner, stopSheetScanner, pauseSheetScanner } from './ui/scan.js';
+import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, togManual, manLookup, selRL, valAdd, addToInv, chgAQ, toggleScanExpand, startSheetScanner, stopSheetScanner, pauseSheetScanner, showManualBarcodeEntry, manualBarcodeSearch } from './ui/scan.js';
 
 // Swipe gestures: swipe-to-delete, row tap, multi-select mode, undo deletion, delete all
 import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected, undoDelete, deleteAll, deleteWithUndo } from './ui/swipe.js';
@@ -354,6 +354,8 @@ window.toggleScanExpand = toggleScanExpand;     // Toggle scan result text trunc
 window.startSheetScanner = startSheetScanner;   // Start persistent scanner in add sheet
 window.stopSheetScanner = stopSheetScanner;     // Stop persistent scanner in add sheet (full stop + hide)
 window.pauseSheetScanner = pauseSheetScanner;   // Pause persistent scanner (stop camera, don't hide)
+window.showManualBarcodeEntry = showManualBarcodeEntry; // Show manual barcode input on "Not found" screen
+window.manualBarcodeSearch = manualBarcodeSearch;       // Look up a manually typed barcode from "Not found" screen
 
 // ── Swipe / Multi-select / Undo handlers ──
 window.swipeDelItem = swipeDelItem;   // Delete an item revealed by swipe gesture
