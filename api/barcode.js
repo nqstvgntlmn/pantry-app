@@ -1,10 +1,10 @@
 // ── BARCODE LOOKUP API ──────────────────────────────────────────────────────
 // Serverless function that looks up a barcode (UPC/EAN) against five free
-// product databases. All five are queried in PARALLEL — the first database
-// to return a good-quality result wins (short-circuit). This keeps all API
-// keys server-side and centralizes lookup logic so the frontend makes a
-// single request. Parallel execution prevents a slow/timing-out DB from
-// blocking the entire lookup.
+// product databases using a SEQUENTIAL WATERFALL — each database is tried
+// one at a time in strict priority order. If a database returns a good-quality
+// result, we return immediately without querying the remaining databases.
+// This keeps all API keys server-side and centralizes lookup logic so the
+// frontend makes a single request.
 //
 // Custom product override:
 //   Before querying any external database, checks the household's
@@ -12,12 +12,12 @@
 //   correctedName exists, returns it immediately — skipping all external
 //   lookups (instant + free).
 //
-// Waterfall order:
-//   1. Open Food Facts   — community-driven food database (no key needed)
-//   2. UPC Item DB       — general products, often has complete variant names (e.g. "Zero Sugar", "Diet")
-//   3. Open Beauty Facts — cosmetics, shampoos, personal care (no key needed)
+// Sequential waterfall order (tried one at a time, stops on first good match):
+//   1. Open Food Facts     — FIRST — community-driven food database (no key needed), best coverage
+//   2. UPC Item DB         — general products, often has complete variant names (e.g. "Zero Sugar", "Diet")
+//   3. Open Beauty Facts   — cosmetics, shampoos, personal care (no key needed)
 //   4. Open Pet Food Facts — pet food and treats (no key needed)
-//   5. Edamam            — last resort, best for nutritional data but often lacks product variants
+//   5. Edamam              — last resort, best for nutritional data but often lacks product variants
 //
 // Request:  GET /api/barcode?code=013000006408&hid=householdId
 // Response: { found: true, product: { barcode, name, brand, category, image, source, description, nutrition } }
@@ -417,49 +417,44 @@ export default async function handler(req, res) {
     }
   }
 
-  // Fire ALL database lookups in parallel, then short-circuit on the first
-  // good-quality result. This prevents a slow/timing-out database from
-  // blocking the entire waterfall — every DB starts its HTTP request immediately.
-  const fns = [tryOpenFoodFacts, tryUpcItemDb, tryOpenBeautyFacts, tryOpenPetFoodFacts, tryEdamam];
-  const fnNames = ["Open Food Facts", "UPC Item DB", "Open Beauty Facts", "Open Pet Food Facts", "Edamam"];
+  // ── SEQUENTIAL WATERFALL ──────────────────────────────────────────────────
+  // Try each database one at a time in strict priority order.
+  // Open Food Facts is ALWAYS tried first. If it returns a good-quality
+  // result, we return immediately without querying any other database.
+  // Low-quality results (truncated names, etc.) are saved as fallback
+  // while we continue down the waterfall.
+  //
+  // Order: 1) Open Food Facts  2) UPC Item DB  3) Open Beauty Facts
+  //        4) Open Pet Food Facts  5) Edamam
+  const waterfall = [
+    { fn: tryOpenFoodFacts,     name: "Open Food Facts" },
+    { fn: tryUpcItemDb,         name: "UPC Item DB" },
+    { fn: tryOpenBeautyFacts,   name: "Open Beauty Facts" },
+    { fn: tryOpenPetFoodFacts,  name: "Open Pet Food Facts" },
+    { fn: tryEdamam,            name: "Edamam" },
+  ];
 
-  // Wrap each lookup so it always resolves (never rejects) with {result, idx}
-  const wrappers = fns.map((fn, i) =>
-    fn(code)
-      .then(result => ({ result, idx: i }))
-      .catch(() => ({ result: null, idx: i }))
-  );
-
-  // As each promise settles, check if we have a good result and short-circuit.
-  // Uses a racing pattern: repeatedly Promise.race the remaining promises,
-  // process the winner, remove it, and repeat until we find a match or exhaust all.
   let bestFallback = null;
-  const pending = new Set(wrappers.map((p, i) => {
-    // Tag each promise so we can identify and remove it after it settles
-    const tagged = p.then(v => { tagged._settled = v; return v; });
-    tagged._idx = i;
-    return tagged;
-  }));
 
-  while (pending.size > 0) {
-    // Race remaining promises — first to settle wins this iteration
-    const { result, idx } = await Promise.race(pending);
-
-    // Remove the settled promise from the pending set
-    for (const p of pending) {
-      if (p._settled && p._settled.idx === idx) { pending.delete(p); break; }
+  for (const { fn, name: dbName } of waterfall) {
+    let result = null;
+    try {
+      result = await fn(code);
+    } catch {
+      // Non-fatal — if a database throws, skip it and try the next one
+      console.log(`[Barcode] ${dbName}: exception — skipping`);
     }
 
     if (!result) {
-      console.log(`[Barcode] ${fnNames[idx]}: no result`);
+      console.log(`[Barcode] ${dbName}: no result`);
       continue;
     }
 
-    console.log(`[Barcode] ${fnNames[idx]}: found "${result.name}" | image: ${result.image ? "YES" : "NONE"} | source: ${result.source}`);
+    console.log(`[Barcode] ${dbName}: found "${result.name}" | image: ${result.image ? "YES" : "NONE"} | source: ${result.source}`);
 
     // If the name looks complete and good, return immediately (short-circuit)
     if (!isLowQualityName(result.name)) {
-      console.log(`[Barcode] Name quality OK — using ${fnNames[idx]} as primary result (${pending.size} lookup(s) still in-flight, abandoned)`);
+      console.log(`[Barcode] Name quality OK — using ${dbName} as primary result`);
 
       // Merge in any missing fields from a previously-seen fallback
       if (bestFallback) {
@@ -485,8 +480,8 @@ export default async function handler(req, res) {
       return res.status(200).json({ found: true, product: result });
     }
 
-    // Low-quality name — save as fallback and keep waiting for other databases
-    console.log(`[Barcode] ${fnNames[idx]}: low-quality name "${result.name}" — saving as fallback, waiting for remaining`);
+    // Low-quality name — save as fallback and continue to next database
+    console.log(`[Barcode] ${dbName}: low-quality name "${result.name}" — saving as fallback, trying next DB`);
     if (!bestFallback) bestFallback = result;
   }
 
