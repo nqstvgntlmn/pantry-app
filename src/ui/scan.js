@@ -18,7 +18,7 @@
 import { state } from '../state.js';            // Global app state (holds current product, inventory, scan destination, etc.)
 import { svi } from '../db.js';                   // svi = save inventory item (persists to Firebase)
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list (deduplicates by name)
-import { g, showNotif, showOv, hideOv } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels
+import { g, showNotif, showOv, hideOv, formatScanResult } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels, formatScanResult = smart product name formatting
 
 // Track whether the live scanner is currently active to avoid double-init
 let scannerRunning = false;
@@ -357,9 +357,16 @@ export function addScannedToList() {
   // Read quantity from the result overlay (default 1)
   const qty = parseInt(g("aqty").value) || 1;
 
+  // Compute smart display title using formatScanResult so list rows show
+  // a clean product type instead of the full long name
+  const formatted = formatScanResult(state.cp);
+
   // Build the shopping list item with brand stored as a separate field
   // so it renders as a subtitle in the list, not concatenated into the name
   const item = { id: Date.now().toString(), name, qty, checked: false, src: "scan" };
+  if (formatted.title && formatted.title.toLowerCase() !== name.toLowerCase()) {
+    item.scanTitle = formatted.title;                  // Short product type for prominent list display
+  }
   if (state.cp.brand) item.brand = state.cp.brand;   // Preserve brand separately for subtitle display
   if (state.cp.image) item.image = state.cp.image;   // Persist the product image for list thumbnail
   if (note) item.note = note;                         // Include note only if the user typed something
@@ -459,8 +466,8 @@ function srcUrl(source, barcode) {
 
 // Renders the scan result overlay with product details (or a "not found" form).
 // Two distinct UI states:
-//   - Product found: shows product name prominently at top, brand smaller below,
-//     with truncation at 40 chars and tap-to-expand behavior.
+//   - Product found: smart 3-tier display — short product type title (large),
+//     full product name as subtitle (smaller, tap to expand), brand (smallest).
 //   - Product not found: shows the barcode, a text input for manual entry,
 //     and a prominent "Try Again" button to re-trigger the scanner.
 function showRes(prod) {
@@ -485,29 +492,31 @@ function showRes(prod) {
     </div>`;
     // Disabled state is applied after buttons are rendered below
   } else {
-    // Product found — prominent name/brand display with truncation.
-    // Names exceeding 40 chars are truncated with "..." and a tap-to-expand indicator.
+    // Product found — smart title/subtitle/brand display using formatScanResult.
+    // Title: short product type (from category, description, or extracted from name)
+    // Subtitle: full product name with tap-to-expand truncation
+    // Brand: shown smallest at bottom
+    const formatted = formatScanResult(prod);
+
     const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
 
     // Build the source badge — if we can link to the product's page on the source database, make it tappable
     const srcHtml = prod.source ? `<a href="${srcUrl(prod.source, prod.barcode)}" target="_blank" rel="noopener" class="srcb" style="text-decoration:none">${prod.source} ↗</a>` : "";
 
-    // Truncated name display — prominent at top, truncated if > 40 chars with tap-to-expand
-    const nameClass = (prod.name && prod.name.length > 40) ? "scan-result-name scan-text-truncated" : "scan-result-name";
-    const nameHtml = `<div class="${nameClass}" onclick="toggleScanExpand(this)">${prod.name}</div>`;
+    // Title: short product type displayed prominently
+    const titleHtml = `<div class="scan-result-name">${formatted.title}</div>`;
 
-    // Brand name — shown smaller below the product name
-    const brandHtml = prod.brand ? `<div class="scan-result-brand">${prod.brand}</div>` : "";
+    // Subtitle: full product name — truncated with tap-to-expand if different from title
+    const showSubtitle = formatted.subtitle && formatted.subtitle.toLowerCase() !== formatted.title.toLowerCase();
+    const subtitleHtml = showSubtitle
+      ? `<div class="scan-result-subtitle scan-text-truncated" onclick="toggleScanExpand(this)">${formatted.subtitle}</div>`
+      : "";
 
-    // Description — also truncated at 40 chars with tap-to-expand
-    let descHtml = "";
-    if (prod.description) {
-      const descClass = prod.description.length > 40 ? "pdsc scan-text-truncated" : "pdsc";
-      descHtml = `<div class="${descClass}" onclick="toggleScanExpand(this)">${prod.description}</div>`;
-    }
+    // Brand name — shown smallest below the subtitle
+    const brandHtml = formatted.brand ? `<div class="scan-result-brand">${formatted.brand}</div>` : "";
 
-    // Assemble the product card with prominent name, brand, image, and metadata
-    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1">${nameHtml}${brandHtml}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}</div></div>${descHtml}</div>`;
+    // Assemble the product card with smart title, subtitle, brand, image, and metadata
+    html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1">${titleHtml}${subtitleHtml}${brandHtml}<div class="pbc">${prod.barcode}</div><span class="bdg">${prod.category}</span>${srcHtml}</div></div></div>`;
 
   }
 
@@ -592,9 +601,15 @@ export async function addToInv() {
   // This lets us detect duplicates: if you scan the same barcode twice, it updates the existing item.
   const id = "item-" + state.cp.barcode.replace(/\W/g, "-"), ex = state.inv.find(i => i.id === id);
 
+  // Compute smart display title for clean list rendering
+  const formatted = formatScanResult(state.cp);
+  const scanTitle = (formatted.title && formatted.title.toLowerCase() !== nm.toLowerCase()) ? formatted.title : null;
+
   // Save to database — if the item already exists, add to its quantity and keep its original addedAt date
   // Save to Firestore — nutrition intentionally omitted (unreliable from text/barcode matching)
-  await svi({ id, barcode: state.cp.barcode, name: nm, brand: state.cp.brand || "", unit, qty: ex ? ex.qty + qty : qty, location: state.selR, category: state.cp.category || "General", image: state.cp.image || null, source: state.cp.source || null, expiry: exp, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() });
+  const itemData = { id, barcode: state.cp.barcode, name: nm, brand: state.cp.brand || "", unit, qty: ex ? ex.qty + qty : qty, location: state.selR, category: state.cp.category || "General", image: state.cp.image || null, source: state.cp.source || null, expiry: exp, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() };
+  if (scanTitle) itemData.scanTitle = scanTitle;       // Short product type for prominent list display
+  await svi(itemData);
 
   // Show appropriate toast: "+2 added to Milk" for existing items, "Milk added!" for new items
   showNotif(ex ? `+${qty} added to ${nm}` : `${nm} added!`);
@@ -707,13 +722,24 @@ function _initSheetQuagga(target) {
 
 /**
  * stopSheetScanner() — Stops the persistent sheet scanner and hides the viewfinder.
- * Called when user taps "Stop scanning" or closes the add-item sheet.
+ * Called when user closes the add-item sheet (full stop + hide).
  */
 export function stopSheetScanner() {
   _sheetScanMode = null;
   _lastSheetCode = null;
   stopLiveScanner();
   _hideSheetScanner();
+}
+
+/**
+ * pauseSheetScanner() — Stops the camera without hiding the scanner container.
+ * Called when user taps "Stop scanning" to toggle off the camera while keeping
+ * the sheet open. The scanner can be restarted via startSheetScanner().
+ */
+export function pauseSheetScanner() {
+  _sheetScanMode = null;
+  _lastSheetCode = null;
+  stopLiveScanner();
 }
 
 /**
@@ -750,9 +776,13 @@ function _flashSheetScanner() {
 async function _autoAddFromSheet(prod) {
   const name = prod.name || "Unknown product";
 
+  // Compute smart display title so list rows show a clean product type
+  const formatted = formatScanResult(prod);
+  const scanTitle = (formatted.title && formatted.title.toLowerCase() !== name.toLowerCase()) ? formatted.title : null;
+
   if (_sheetScanMode === "shop") {
     // Add to shopping list with consolidation (increments qty if already on list)
-    await consolidateShopItem({
+    const item = {
       id: Date.now().toString(),
       name,
       qty: 1,
@@ -760,8 +790,10 @@ async function _autoAddFromSheet(prod) {
       src: "scan",
       brand: prod.brand || "",
       image: prod.image || null
-    });
-    showNotif(`Added: ${name} 🛒`);
+    };
+    if (scanTitle) item.scanTitle = scanTitle;          // Short product type for prominent list display
+    await consolidateShopItem(item);
+    showNotif(`Added: ${formatted.title || name} 🛒`);
   } else if (_sheetScanMode === "inv") {
     // Add to inventory — use the location from the add sheet's location picker
     const loc = window._invAddLocation || "fridge";
@@ -769,7 +801,7 @@ async function _autoAddFromSheet(prod) {
 
     // Check if item already exists (by barcode-derived ID) — increment qty if so
     const existing = state.inv.find(i => i.id === id);
-    await svi({
+    const itemData = {
       id,
       barcode: prod.barcode || "",
       name,
@@ -782,7 +814,9 @@ async function _autoAddFromSheet(prod) {
       source: "scan",
       expiry: null,
       addedAt: existing ? existing.addedAt : new Date().toLocaleDateString()
-    });
-    showNotif(`Added: ${name} 📦`);
+    };
+    if (scanTitle) itemData.scanTitle = scanTitle;      // Short product type for prominent list display
+    await svi(itemData);
+    showNotif(`Added: ${formatted.title || name} 📦`);
   }
 }

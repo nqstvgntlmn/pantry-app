@@ -409,6 +409,112 @@ export const AISLES = {
  * @param {string} name - The item name (e.g., "cheddar cheese").
  * @returns {string} An aisle name like "Dairy & Eggs", or "Other" as fallback.
  */
+// ── SMART SCAN RESULT FORMATTING ─────────────────────────────────────────────
+// These helpers extract a clean, short product type title from barcode scan
+// results using existing database fields (no AI API calls needed).
+
+// Categories too generic to serve as meaningful product type titles
+const _GENERIC_CATEGORIES = new Set([
+  "general", "food", "grocery", "personal care", "pet food",
+  "household", "other", "generic foods", "beverages", ""
+]);
+
+// Regex to match and strip size/quantity info from product names (e.g. "16 Fl Oz", "500ml")
+const _SIZE_PATTERN = /\b\d+[\d.,]*\s*(fl\.?\s*oz|oz|ml|l|liter|litre|g|kg|lb|lbs|ct|count|pack|pk|piece|pc|qt|gal|gallon|pt|pint)\b/gi;
+
+// Common filler words to skip when extracting product type from name
+const _FILLER_WORDS = new Set(["for", "with", "and", "the", "a", "an", "in", "of", "by", "from"]);
+
+/**
+ * formatScanResult(product) — Extracts smart display fields from a barcode scan product.
+ * Uses existing database fields (category, description/generic_name) when available;
+ * falls back to extracting the product type from the full name.
+ *
+ * @param {Object} product - Product object from barcode API (name, brand, category, description)
+ * @returns {{ title: string, subtitle: string, brand: string }}
+ *   - title: Short product type (e.g. "Body Lotion") for prominent display
+ *   - subtitle: Full product name for smaller display below
+ *   - brand: Brand name as-is
+ */
+export function formatScanResult(product) {
+  if (!product) return { title: "", subtitle: "", brand: "" };
+
+  const name = (product.name || "").trim();
+  const brand = (product.brand || "").trim();
+  const description = (product.description || "").trim();
+  const category = (product.category || "").trim();
+
+  // Determine the short title (product type) from available fields
+  const title = _extractProductTitle(name, brand, description, category);
+
+  // Subtitle: full product name (truncation handled by CSS, tap to expand)
+  return { title: title || name, subtitle: name, brand };
+}
+
+/**
+ * _extractProductTitle — Determines the best short product type label.
+ * Priority: description/generic_name > specific category > extracted from name.
+ */
+function _extractProductTitle(name, brand, description, category) {
+  // 1. Use description (generic_name from Open Food Facts) if meaningful and concise
+  if (description && description.length >= 3 && description.length <= 40
+      && !_GENERIC_CATEGORIES.has(description.toLowerCase())) {
+    return toTitleCase(description);
+  }
+
+  // 2. Use category if specific enough (not a generic catch-all)
+  if (category && !_GENERIC_CATEGORIES.has(category.toLowerCase())) {
+    // Clean up Open Food Facts category format (e.g. "dairy-products" → "Dairy Products")
+    const cleanCat = category.replace(/-/g, " ");
+    if (cleanCat.length <= 30) return toTitleCase(cleanCat);
+  }
+
+  // 3. Extract product type from the full name by stripping brand, size, and fluff
+  return _extractTypeFromName(name, brand);
+}
+
+/**
+ * _extractTypeFromName — Strips brand, size info, and filler words from a product name
+ * to extract the core product type (e.g. "Body Lotion" from "Eos Shea Better Body Lotion...").
+ * Takes the last 2-3 meaningful words, which tend to be the actual product type.
+ */
+function _extractTypeFromName(name, brand) {
+  if (!name) return "";
+
+  let cleaned = name;
+
+  // Strip brand name from the beginning (case-insensitive)
+  if (brand) {
+    const escaped = brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    cleaned = cleaned.replace(new RegExp("^" + escaped + "\\s*", "i"), "");
+  }
+
+  // Split on dash/em-dash separators — take only the first segment (before flavor/variant info)
+  cleaned = cleaned.split(/\s*[—–-]\s*/)[0].trim();
+
+  // Remove size/quantity info (e.g. "16 Fl Oz", "500ml")
+  cleaned = cleaned.replace(_SIZE_PATTERN, "").trim();
+
+  // Remove parenthesized info and trailing punctuation
+  cleaned = cleaned.replace(/\s*\([^)]*\)\s*/g, " ").replace(/[,|]+\s*$/, "").trim();
+
+  // Split into words, filtering out filler words and bare numbers
+  const words = cleaned.split(/\s+/).filter(w =>
+    w.length >= 2 && !_FILLER_WORDS.has(w.toLowerCase()) && !/^\d+$/.test(w)
+  );
+
+  if (words.length === 0) return toTitleCase(name.split(/\s+/).slice(0, 2).join(" "));
+  if (words.length <= 3) return toTitleCase(words.join(" "));
+
+  // Take the last 2-3 words — product type tends to be at the end of the name
+  // Use 3 words if the last 2 are very short (< 8 chars combined)
+  const last2 = words.slice(-2);
+  const last3 = words.slice(-3);
+  const use3 = last2.join("").length < 8;
+
+  return toTitleCase((use3 ? last3 : last2).join(" "));
+}
+
 export function guessAisle(name) {
   const n = name.toLowerCase();
   // Check each aisle's keyword list; first match wins

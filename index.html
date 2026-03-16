@@ -343,6 +343,8 @@
         <button class="sheet-scanner-stop" onclick="stopShopScanner()">Stop scanning</button>
       </div>
     </div>
+    <!-- Scan barcode button — shown when scanner is stopped, tap to re-activate camera -->
+    <button class="sheet-scan-toggle-btn hidden" id="shopScanStartBtn" onclick="restartShopScanner()">📷 Scan barcode</button>
     <!-- Text input shown immediately when sheet opens -->
     <div id="shopAddTypeForm">
       <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
@@ -375,6 +377,8 @@
         <button class="sheet-scanner-stop" onclick="stopInvScanner()">Stop scanning</button>
       </div>
     </div>
+    <!-- Scan barcode button — shown when scanner is stopped, tap to re-activate camera -->
+    <button class="sheet-scan-toggle-btn hidden" id="invScanStartBtn" onclick="restartInvScanner()">📷 Scan barcode</button>
     <!-- Text input with live search dropdown (same UX as shopping) -->
     <div id="invAddTypeForm">
       <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>

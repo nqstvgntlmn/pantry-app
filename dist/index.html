@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-OkRqZTy-.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-BgtrrRsX.css">
+  <script type="module" crossorigin src="/assets/index-D6Gr3kpD.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DMD8b7Kg.css">
 </head>
 <body>
 
@@ -345,6 +345,8 @@
         <button class="sheet-scanner-stop" onclick="stopShopScanner()">Stop scanning</button>
       </div>
     </div>
+    <!-- Scan barcode button — shown when scanner is stopped, tap to re-activate camera -->
+    <button class="sheet-scan-toggle-btn hidden" id="shopScanStartBtn" onclick="restartShopScanner()">📷 Scan barcode</button>
     <!-- Text input shown immediately when sheet opens -->
     <div id="shopAddTypeForm">
       <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
@@ -377,6 +379,8 @@
         <button class="sheet-scanner-stop" onclick="stopInvScanner()">Stop scanning</button>
       </div>
     </div>
+    <!-- Scan barcode button — shown when scanner is stopped, tap to re-activate camera -->
+    <button class="sheet-scan-toggle-btn hidden" id="invScanStartBtn" onclick="restartInvScanner()">📷 Scan barcode</button>
     <!-- Text input with live search dropdown (same UX as shopping) -->
     <div id="invAddTypeForm">
       <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>
