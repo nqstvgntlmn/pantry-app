@@ -7,7 +7,8 @@
 
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
 import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
-import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, formatScanResult } from '../helpers.js';
+import { defaultThreshold } from '../helpers.js';  // Smart restock threshold by unit — used for "already have" inventory check
+import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, formatScanResult, getStoreAisleOrder, parseVoiceMultiItems } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
 // gcat = guess category for inventory, showNotif = toast notification,
@@ -152,6 +153,23 @@ export async function consolidateShopItem(newItem) {
   );
 
   if (!existing) {
+    // ── "Already have this" check — warns if item is well-stocked in Supplies ──
+    // Only fires for genuinely new items (not consolidations). Checks inventory
+    // by normalized name, and warns if current qty is ABOVE the restock threshold
+    // (meaning the user isn't running low). If at/below threshold, adds silently.
+    const invMatch = state.inv.find(i => _normalizeForMatch(i.name) === normName);
+    if (invMatch) {
+      const thresh = invMatch.restockThreshold != null
+        ? invMatch.restockThreshold
+        : defaultThreshold(invMatch.unit);
+      if (invMatch.qty > thresh) {
+        // Item is well-stocked — ask user to confirm before adding
+        const qtyLabel = invMatch.qty + (invMatch.unit ? " " + invMatch.unit : "");
+        const proceed = confirm(`You already have ${invMatch.name} in Supplies (${qtyLabel}). Add to shopping list anyway?`);
+        if (!proceed) return { action: "skipped", item: newItem };
+      }
+    }
+
     // No match — add as a new item
     await svShopItem(newItem);
     return { action: "new", item: newItem };
@@ -308,32 +326,111 @@ export function toggleVoice() {
     _manualStop = false;
     _setMicUI(false);
 
-    // If we got recognized text, add it to the shopping list directly
-    // (bypasses the bottom sheet since voice already captured the text)
+    // If we got recognized text, parse it for multiple items or add directly
     if (transcript) {
-      // Parse optional quantity from common patterns (e.g. "5 apples", "eggs x3")
-      let name = transcript, qty = 1;
-      const leadMatch = transcript.match(/^(\d+)\s+(.+)/);
-      const trailMatch = transcript.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
-      if (trailMatch) { name = trailMatch[1].trim(); qty = parseInt(trailMatch[2], 10) || 1; }
-      else if (leadMatch) { name = leadMatch[2].trim(); qty = parseInt(leadMatch[1], 10) || 1; }
+      // Parse the transcript for multiple items separated by commas, "and", "also", "plus"
+      const parsedItems = parseVoiceMultiItems(transcript);
 
-      const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
-      // Consolidate with existing items instead of creating duplicates
-      consolidateShopItem(item);
-      showNotif(`Added "${transcript}" 🎤`);
+      if (parsedItems.length > 1) {
+        // Multiple items detected — show confirmation sheet with checkboxes
+        _showVoiceConfirmSheet(parsedItems);
+      } else {
+        // Single item — add directly (existing behavior)
+        const { name, qty } = parsedItems[0];
+        const item = { id: Date.now().toString(), name, qty, checked: false, src: "manual" };
+        consolidateShopItem(item);
+        showNotif(`Added "${name}" 🎤`);
+      }
 
-      // Clear the input field since the item has been committed
+      // Clear the input field since the item has been committed or shown in confirmation
       const inp = g("shi");
       if (inp) inp.value = "";
-
-      // [SEARCH DISABLED] — uncomment to re-enable
-      // Trigger enrichment search for the voice-added item
-      // searchAndEnrich(item.id, name, "shop");
     }
   };
 
   _recognition.start();
+}
+
+// ── VOICE MULTI-ITEM PARSING ─────────────────────────────────────────────────
+// Parses a spoken transcript into individual items by splitting on natural
+// delimiters: commas, "and", "also", "plus". Strips filler words like "add".
+
+// _parseVoiceMultiItems is imported as parseVoiceMultiItems from helpers.js
+// (shared with Supplies tab voice input)
+
+/**
+ * _showVoiceConfirmSheet(items) — Shows a confirmation bottom sheet listing
+ * all parsed voice items with checkboxes. User can deselect items before confirming.
+ * @param {Array<{name: string, qty: number}>} items — Parsed items from voice input
+ */
+function _showVoiceConfirmSheet(items) {
+  // Store items in module state so confirmVoiceMultiAdd can access them
+  _pendingVoiceItems = items;
+
+  const backdrop = g("voiceConfirmBackdrop");
+  const sheet = g("voiceConfirmSheet");
+  if (!backdrop || !sheet) {
+    // Fallback: if the confirmation sheet doesn't exist in DOM, add all items directly
+    items.forEach(({ name, qty }) => {
+      consolidateShopItem({ id: Date.now().toString() + Math.random().toString(36).slice(2), name, qty, checked: false, src: "manual" });
+    });
+    showNotif(`Added ${items.length} items 🎤`);
+    return;
+  }
+
+  // Build the item list with checkboxes
+  const listEl = g("voiceConfirmList");
+  if (listEl) {
+    listEl.innerHTML = items.map((item, i) => `
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--b1);cursor:pointer">
+        <input type="checkbox" checked data-vi="${i}" style="width:20px;height:20px;accent-color:var(--ac)"/>
+        <span style="flex:1;font-size:.92rem;color:var(--tx)">${toTitleCase(item.name)}</span>
+        ${item.qty > 1 ? `<span style="font-size:.78rem;color:var(--mt)">×${item.qty}</span>` : ""}
+      </label>
+    `).join("");
+  }
+
+  // Update the header count
+  const countEl = g("voiceConfirmCount");
+  if (countEl) countEl.textContent = `Adding ${items.length} items:`;
+
+  backdrop.classList.add("active");
+  sheet.classList.add("active");
+}
+
+/** Pending voice items stored between showing the confirmation sheet and confirming */
+let _pendingVoiceItems = [];
+
+/**
+ * confirmVoiceMultiAdd() — Adds all checked items from the voice confirmation sheet
+ * to the shopping list. Called when user taps "Add all" in the confirmation sheet.
+ */
+export async function confirmVoiceMultiAdd() {
+  const checkboxes = document.querySelectorAll("#voiceConfirmList input[type=checkbox]:checked");
+  const indices = [...checkboxes].map(cb => parseInt(cb.dataset.vi, 10));
+  const items = indices.map(i => _pendingVoiceItems[i]).filter(Boolean);
+
+  // Add each selected item to the shopping list
+  for (const { name, qty } of items) {
+    await consolidateShopItem({
+      id: Date.now().toString() + Math.random().toString(36).slice(2),
+      name, qty, checked: false, src: "manual"
+    });
+  }
+
+  showNotif(`Added ${items.length} item${items.length > 1 ? "s" : ""} 🎤`);
+  cancelVoiceMulti();
+}
+
+/**
+ * cancelVoiceMulti() — Closes the voice multi-item confirmation sheet without adding.
+ */
+export function cancelVoiceMulti() {
+  _pendingVoiceItems = [];
+  const backdrop = g("voiceConfirmBackdrop");
+  const sheet = g("voiceConfirmSheet");
+  if (backdrop) backdrop.classList.remove("active");
+  if (sheet) sheet.classList.remove("active");
 }
 
 /**
@@ -480,8 +577,22 @@ export function renderShop() {
     // Category-grouped mode: bucket unchecked items by their guessed product category
     const grps = {};
     un.forEach(i => { const a = guessAisle(i.name); if (!grps[a]) grps[a] = []; grps[a].push(i); });
+
+    // Sort aisles: use favourite store's layout order if set, otherwise alphabetical
+    const storeOrder = getStoreAisleOrder(state.cfg.favouriteStore);
+    let sortedEntries;
+    if (storeOrder) {
+      // Sort by the store's aisle walk-through order; unknown categories go to the end
+      sortedEntries = Object.entries(grps).sort(([a], [b]) => {
+        const ai = storeOrder.indexOf(a), bi = storeOrder.indexOf(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      });
+    } else {
+      sortedEntries = Object.entries(grps).sort();
+    }
+
     // Render each category group with a section header, followed by checked ("Done") items at the bottom
-    c.innerHTML = Object.entries(grps).sort().map(([aisle, its]) => `<div class="shsec">${aisle}</div>${its.map(sH).join("")}`).join("") + (ch.length ? `<div class="shsec">Done</div>${ch.map(sH).join("")}` : "");
+    c.innerHTML = sortedEntries.map(([aisle, its]) => `<div class="shsec">${aisle}</div>${its.map(sH).join("")}`).join("") + (ch.length ? `<div class="shsec">Done</div>${ch.map(sH).join("")}` : "");
   } else {
     // Flat mode: "To buy" section, then "Done" section
     c.innerHTML = (un.length ? `<div class="shsec">To buy (${un.length})</div>${un.map(sH).join("")}` : "") + (ch.length ? `<div class="shsec">Done</div>${ch.map(sH).join("")}` : "");

@@ -26,6 +26,11 @@ let scannerRunning = false;
 // Debounce flag: prevents multiple rapid detections from triggering concurrent lookups
 let processingBarcode = false;
 
+// Time-based debounce: rejects detections within 500ms of the last detection attempt.
+// Reduces CPU thrash from rapid consecutive reads on noisy/blurry frames.
+let _lastDetectTime = 0;
+const _DETECT_COOLDOWN = 500; // milliseconds between detection attempts
+
 // Holds a manually acquired camera stream (used as a fallback on iOS Safari
 // when Quagga's built-in getUserMedia produces a black feed)
 let _manualStream = null;
@@ -71,20 +76,23 @@ function _initQuagga(target, statusEl) {
       target: target,             // DOM element where the video + canvas get injected
       constraints: {
         facingMode: "environment", // Use rear camera (front-facing would be "user")
-        width: { ideal: 1280 },   // Request HD resolution for better barcode detection
-        height: { ideal: 720 }
-      }
+        width: { ideal: 640 },    // Reduced from 1280 — lower resolution is faster for barcode detection
+        height: { ideal: 480 }    // Reduced from 720 — barcodes don't need HD resolution
+      },
+      // Only analyze the center 60% of the frame — most barcodes are centered,
+      // reduces processing area significantly for faster detection
+      area: { top: "20%", right: "10%", left: "10%", bottom: "20%" }
     },
     locator: {
-      patchSize: "medium",        // Balance between speed and accuracy for locating barcodes
+      patchSize: "small",         // Changed from "medium" — faster processing, still accurate for centered barcodes
       halfSample: true            // Downsample for faster frame processing on mobile
     },
     decoder: {
-      // Support all common retail barcode formats
-      readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader", "code_39_reader"]
+      // Focused on the most common retail barcode formats — removed code_39 (rarely used in retail)
+      readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader"]
     },
     locate: true,                 // Auto-detect barcode region within each frame
-    frequency: 10                 // Analyze 10 frames per second (good balance of speed vs CPU)
+    frequency: 15                 // Increased from 10 — more attempts per second at lower resolution
   }, function(err) {
     if (err) {
       // Camera access denied or not available — show error and suggest manual entry
@@ -147,7 +155,7 @@ async function _ensureCameraVisible(target) {
   console.warn("Camera feed appears black — retrying with manual getUserMedia");
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+      video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } }
     });
     _manualStream = stream;
 
@@ -193,6 +201,10 @@ export function stopLiveScanner() {
 async function onBarcodeDetected(result) {
   if (processingBarcode) return;           // Already processing a detection, ignore this one
 
+  // Time-based debounce: skip if a detection was attempted recently (reduces CPU thrash)
+  const now = Date.now();
+  if (now - _lastDetectTime < _DETECT_COOLDOWN) return;
+
   const code = result && result.codeResult && result.codeResult.code;
   if (!code) return;
 
@@ -202,14 +214,16 @@ async function onBarcodeDetected(result) {
     ?.filter(d => d.error !== undefined)
     ?.map(d => d.error) || [];
   const avgError = errors.length ? errors.reduce((a, b) => a + b, 0) / errors.length : 1;
-  if (avgError > 0.25) return;             // Skip low-confidence reads (threshold tuned for live scanning)
+  if (avgError > 0.25) { _lastDetectTime = now; return; } // Skip low-confidence reads, but mark time to debounce
+
+  // Record successful detection time for debounce
+  _lastDetectTime = now;
 
   // ── PERSISTENT SHEET SCANNER MODE ──
   // In sheet scanner mode, auto-add the scanned item and keep scanning.
   // Implements a cooldown to prevent re-scanning the same barcode immediately.
   if (_sheetScanMode) {
     // Cooldown: skip if same barcode was just scanned
-    const now = Date.now();
     if (code === _lastSheetCode && (now - _lastSheetScanTime) < SHEET_SCAN_COOLDOWN) return;
 
     processingBarcode = true;
@@ -284,6 +298,13 @@ function showSuccessFlash() {
   // Force a reflow so re-applying the animation actually replays it
   void el.offsetHeight;
   el.style.animation = "";
+
+  // Flash the laser line green on successful scan detection
+  const laserLine = document.querySelector(".reticle-line");
+  if (laserLine) {
+    laserLine.classList.add("scan-success-flash");
+    setTimeout(() => laserLine.classList.remove("scan-success-flash"), 500);
+  }
 
   // Hide after the animation completes (450ms matches the CSS animation duration)
   setTimeout(() => { el.style.display = "none"; }, 500);
@@ -742,16 +763,18 @@ function _initSheetQuagga(target) {
       target: target,
       constraints: {
         facingMode: "environment",
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      }
+        width: { ideal: 640 },    // Reduced for faster processing
+        height: { ideal: 480 }
+      },
+      // Center-crop: only decode the middle portion of the frame
+      area: { top: "20%", right: "10%", left: "10%", bottom: "20%" }
     },
-    locator: { patchSize: "medium", halfSample: true },
+    locator: { patchSize: "small", halfSample: true },
     decoder: {
-      readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader", "code_39_reader"]
+      readers: ["ean_reader", "ean_8_reader", "upc_reader", "upc_e_reader", "code_128_reader"]
     },
     locate: true,
-    frequency: 10
+    frequency: 15
   }, function(err) {
     if (err) {
       console.warn("Sheet scanner init error:", err);

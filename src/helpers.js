@@ -642,3 +642,86 @@ export function guessAisle(name) {
   }
   return "Other";
 }
+
+// ── STORE AISLE ORDERING ────────────────────────────────────────────────────
+// When the user selects a favourite store in Settings, the Shopping list "By category"
+// sort follows that store's typical aisle layout instead of alphabetical order.
+// This ordering represents the general walk-through path for each store chain.
+// "Other" is always last. Categories not listed use alphabetical fallback position.
+const _STORE_AISLE_ORDER = {
+  "ShopRite":      ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "Whole Foods":   ["Produce", "Dairy & Eggs", "Meat & Fish", "Pantry", "Frozen", "Snacks & Drinks", "Other"],
+  "Trader Joe's":  ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "Walmart":       ["Produce", "Dairy & Eggs", "Meat & Fish", "Pantry", "Frozen", "Snacks & Drinks", "Other"],
+  "Target":        ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "Costco":        ["Produce", "Dairy & Eggs", "Meat & Fish", "Pantry", "Frozen", "Snacks & Drinks", "Other"],
+  "Kroger":        ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "Safeway":       ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "Publix":        ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "Aldi":          ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "Stop & Shop":   ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "Wegmans":       ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "Amazon Fresh":  ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+};
+
+/**
+ * getStoreAisleOrder(storeName) — Returns an ordered array of aisle/category names
+ * for the given store. If no store is selected or unrecognized, returns null
+ * (caller falls back to alphabetical sort).
+ */
+export function getStoreAisleOrder(storeName) {
+  if (!storeName) return null;
+  return _STORE_AISLE_ORDER[storeName] || null;
+}
+
+// ── RESTOCK THRESHOLD DEFAULTS ──────────────────────────────────────────────
+// Smart default restock thresholds based on unit type. Container-type units
+// (bottles, jars, etc.) default to 1; quantity-type units (pieces, bags, etc.)
+// default to 2. Used by "Running Low" on Home and "Already have" check in Shopping.
+
+const _THRESH_ONE_SET = new Set(["Bottle","Jar","Can","Carton","Bunch","Head","Loaf","Dozen","Tube","Roll","Gallon","Half Gallon","Liter"]);
+const _THRESH_TWO_SET = new Set(["Piece","Unit","Pack","Box","Bag","Pound","Oz","Clove"]);
+
+/**
+ * defaultThreshold(unit) — Returns the smart default restock threshold
+ * based on the unit of measure. Container-type units default to 1,
+ * quantity-type units default to 2.
+ */
+export function defaultThreshold(unit) {
+  if (!unit) return 2;
+  if (_THRESH_ONE_SET.has(unit)) return 1;
+  if (_THRESH_TWO_SET.has(unit)) return 2;
+  return 2;
+}
+
+// ── VOICE MULTI-ITEM PARSING ────────────────────────────────────────────────
+// Shared parser used by both Shopping and Supplies voice input to split a
+// spoken transcript into multiple items (e.g. "milk, bread, and eggs").
+
+/**
+ * parseVoiceMultiItems(text) — Splits a voice transcript into individual items.
+ * Handles patterns like "milk, bread, and eggs" or "add milk also bread plus eggs".
+ * Strips common filler words ("add", "get", "buy", etc.) from the beginning.
+ * Each item gets optional quantity parsing (e.g. "5 apples" → qty 5, name "apples").
+ * @returns {Array<{name: string, qty: number}>}
+ */
+export function parseVoiceMultiItems(text) {
+  // Strip common leading filler words
+  let cleaned = text.replace(/^(add|get|buy|grab|pick up|i need|we need)\s+/i, "").trim();
+
+  // Split on commas, " and ", " also ", " plus "
+  const parts = cleaned
+    .split(/\s*,\s*|\s+and\s+|\s+also\s+|\s+plus\s+/i)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  // Parse each segment for optional leading/trailing quantity
+  return parts.map(segment => {
+    let name = segment, qty = 1;
+    const leadMatch = segment.match(/^(\d+)\s+(.+)/);
+    const trailMatch = segment.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
+    if (trailMatch) { name = trailMatch[1].trim(); qty = parseInt(trailMatch[2], 10) || 1; }
+    else if (leadMatch) { name = leadMatch[2].trim(); qty = parseInt(leadMatch[1], 10) || 1; }
+    return { name, qty };
+  });
+}

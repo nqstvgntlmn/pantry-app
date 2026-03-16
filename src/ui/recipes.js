@@ -1674,10 +1674,40 @@ export function openRecipeView(id) {
     ? `<div class="rv-section">Notes</div><div style="font-size:.86rem;color:var(--tx2);line-height:1.6;font-style:italic;padding:10px 14px;background:var(--card);border-radius:10px;border:1px solid var(--b1)">${_esc(r.notes)}</div>`
     : "";
 
+  // ── "Made this before" — cooking history from the activity feed ──
+  // Scans activity entries for "cooked" actions matching this recipe's name,
+  // shows the last 5 dates. Hidden entirely if this recipe has never been cooked.
+  let cookHistoryHtml = "";
+  const recipeLower = (r.name || "").toLowerCase();
+  if (recipeLower) {
+    const cookedDates = (state.activity || [])
+      .filter(e => e.action === "cooked" && (e.itemName || "").toLowerCase().includes(recipeLower))
+      .map(e => new Date(e.timestamp))
+      .sort((a, b) => b - a) // most recent first
+      .slice(0, 5)
+      .map(d => d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+    if (cookedDates.length) {
+      cookHistoryHtml = `<div style="margin-top:14px;padding:10px 14px;background:var(--card);border-radius:10px;border:1px solid var(--b1)">
+        <div style="font-size:.78rem;font-weight:600;color:var(--tx2);margin-bottom:4px">🍳 Made this before</div>
+        <div style="font-size:.84rem;color:var(--tx)">${cookedDates.join(", ")}</div>
+      </div>`;
+    }
+  }
+
   // ── Source link ──
   const sourceHtml = r.sourceUrl
     ? `<div style="margin-top:16px"><a href="${r.sourceUrl}" target="_blank" style="font-size:.82rem;color:var(--ac);text-decoration:none">🔗 View original recipe ↗</a></div>`
     : "";
+
+  // ── Household Notes — editable personal notes per recipe ──
+  // Shown as a "📝 Household Notes" section that's editable inline.
+  // Tap to edit, blur to save. Hidden entirely if no note exists (shows "Add a note" prompt instead).
+  const hhNotes = r.householdNotes || "";
+  const hhNotesHtml = `<div style="margin-top:14px" id="rv-hh-notes-section">
+    <div style="font-size:.78rem;font-weight:600;color:var(--tx2);margin-bottom:4px">📝 Household Notes</div>
+    <div id="rv-hh-notes-display" onclick="editHouseholdNotes('${r.id}')" style="cursor:pointer;padding:10px 14px;background:var(--card);border-radius:10px;border:1px solid var(--b1);font-size:.84rem;color:${hhNotes ? 'var(--tx)' : 'var(--mt)'};line-height:1.6;min-height:40px;font-style:${hhNotes ? 'normal' : 'italic'}">${hhNotes ? _esc(hhNotes) : 'Tap to add a note…'}</div>
+    <textarea id="rv-hh-notes-edit" style="display:none;width:100%;padding:10px 14px;background:var(--card);border-radius:10px;border:1px solid var(--ac);font-size:.84rem;color:var(--tx);line-height:1.6;font-family:'DM Sans',sans-serif;resize:vertical;min-height:70px" onblur="saveHouseholdNotes('${r.id}')" placeholder="e.g. Add extra garlic next time, Double the sauce…">${hhNotes}</textarea>
+  </div>`;
 
   // ── Action buttons ──
   const actionsHtml = `<div class="rv-actions">
@@ -1699,10 +1729,52 @@ export function openRecipeView(id) {
     ${rawDescHtml}
     ${storageHtml}
     ${notesHtml}
+    ${hhNotesHtml}
+    ${cookHistoryHtml}
     ${sourceHtml}
   `;
 
   showOv("erec");
+}
+
+/**
+ * editHouseholdNotes — switches the household notes display to an editable textarea.
+ * Called when the user taps the notes display area in the recipe read-only view.
+ */
+export function editHouseholdNotes(recipeId) {
+  const display = g("rv-hh-notes-display");
+  const edit = g("rv-hh-notes-edit");
+  if (!display || !edit) return;
+  display.style.display = "none";
+  edit.style.display = "block";
+  edit.focus();
+}
+
+/**
+ * saveHouseholdNotes — saves the household notes field when the user taps outside
+ * (blur event). Persists to Firestore and updates local state.
+ * @param {string} recipeId — The recipe ID to update
+ */
+export async function saveHouseholdNotes(recipeId) {
+  const edit = g("rv-hh-notes-edit");
+  const display = g("rv-hh-notes-display");
+  if (!edit) return;
+
+  const notes = edit.value.trim();
+  const r = state.recs.find(r => r.id === recipeId);
+  if (r) {
+    r.householdNotes = notes;
+    await svr(r); // Persist to Firestore
+  }
+
+  // Switch back to display mode with updated content
+  if (display) {
+    display.textContent = notes || "Tap to add a note…";
+    display.style.color = notes ? "var(--tx)" : "var(--mt)";
+    display.style.fontStyle = notes ? "normal" : "italic";
+    display.style.display = "block";
+  }
+  edit.style.display = "none";
 }
 
 /**

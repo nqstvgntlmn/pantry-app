@@ -14,7 +14,7 @@ import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add 
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, formatScanResult } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, formatScanResult, parseVoiceMultiItems } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 // _defaultThreshold returns the smart restock threshold based on unit type
 import { updExport, _defaultThreshold } from './home.js';
@@ -1600,26 +1600,36 @@ export function toggleInvVoice() {
 
     if (!text) return;
 
-    // Check for saved product preferences (location + unit) in a single read
-    const pref = await _getProductPreference(text);
+    // Parse the transcript for multiple items (e.g. "eggs, milk, and bread")
+    const parsedItems = parseVoiceMultiItems(text);
 
-    // Add to inventory with preferred or guessed storage location and unit
-    const id = "itm-" + text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
-    const loc = pref?.preferredLocation || guessLocation(text);
-    svi({
-      id, barcode: id, name: text, brand: "", unit: pref?.preferredUnit || "unit", qty: 1,
-      location: loc, category: gcat({ name: text }),
-      image: null, source: "Voice",
-      expiry: null, addedAt: new Date().toLocaleDateString()
-    });
-    showNotif(`Added "${text}" to ${loc}`);
+    // Add each parsed item to inventory
+    for (const { name } of parsedItems) {
+      // Check for saved product preferences (location + unit) in a single read
+      const pref = await _getProductPreference(name);
+      const id = "itm-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
+      const loc = pref?.preferredLocation || guessLocation(name);
+      svi({
+        id, barcode: id, name, brand: "", unit: pref?.preferredUnit || "unit", qty: 1,
+        location: loc, category: gcat({ name }),
+        image: null, source: "Voice",
+        expiry: null, addedAt: new Date().toLocaleDateString()
+      });
+      // Trigger enrichment search for each item
+      searchAndEnrich(id, name, "inv");
+    }
+
+    // Show appropriate notification
+    if (parsedItems.length > 1) {
+      showNotif(`Added ${parsedItems.length} items 🎤`);
+    } else {
+      const loc = guessLocation(parsedItems[0].name);
+      showNotif(`Added "${parsedItems[0].name}" to ${loc}`);
+    }
 
     // Clear the input field
     const inp = g("invi");
     if (inp) inp.value = "";
-
-    // Trigger enrichment search so user can pick a richer product match
-    searchAndEnrich(id, text, "inv");
   };
 
   _invRecognition.start();

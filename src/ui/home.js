@@ -69,6 +69,7 @@ export function renderHome() {
   renderExp();      // expiring-soon item list
   renderLowStock(); // "Running Low" item list
   renderTonight();  // "Tonight's Dinner" card
+  renderLastCooked(); // "Last cooked" line below Tonight's Dinner
   renderActivityFeed(); // Recent household activity
   updExport();      // plain-text inventory export panel
   // Apply collapsed/expanded state to collapsible sections
@@ -159,6 +160,38 @@ export function renderTonight() {
     if (d) d.innerHTML = `<span style="font-size:.9rem;color:var(--mt);font-style:italic">No meal planned yet</span>`;
     if (a) a.innerHTML = `<button class="btn bsm bs" onclick="event.stopPropagation();openRecipeMatch()">🔍 Find recipes</button><button class="btn bsm bs" onclick="event.stopPropagation();showScreen('chat')">Ask Claude →</button>`;
   }
+}
+
+// renderLastCooked() — shows the most recently cooked meal below Tonight's Dinner.
+// Scans the activity feed for entries with action="cooked", picks the most recent,
+// and displays "Last cooked: [Name] — [X days ago]". Hidden if nothing has been cooked.
+function renderLastCooked() {
+  const el = g("lastcooked");
+  if (!el) return;
+
+  // Find the most recent "cooked" entry in the activity feed
+  const entries = state.activity || [];
+  const cooked = entries.find(e => e.action === "cooked");
+
+  if (!cooked) {
+    el.style.display = "none";
+    return;
+  }
+
+  // Extract the recipe name from the itemName field (strip trailing " tonight 🍳" suffix)
+  const recipeName = (cooked.itemName || "").replace(/\s*tonight\s*🍳?\s*$/i, "").trim();
+  if (!recipeName) { el.style.display = "none"; return; }
+
+  // Calculate days ago from the timestamp
+  const diff = Date.now() - new Date(cooked.timestamp).getTime();
+  const days = Math.floor(diff / 86400000);
+  let agoText;
+  if (days === 0) agoText = "today";
+  else if (days === 1) agoText = "yesterday";
+  else agoText = days + " days ago";
+
+  el.style.display = "block";
+  el.innerHTML = `🍳 Last cooked: <strong style="color:var(--tx)">${recipeName}</strong> — ${agoText}`;
 }
 
 // ── WEEK NAVIGATION STATE ─────────────────────────────────────────────────────

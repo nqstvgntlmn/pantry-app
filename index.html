@@ -126,6 +126,8 @@
           <div class="tna" id="tna"></div>
         </div>
       </div>
+      <!-- Last Cooked line — shows the most recent "cooked" activity entry below Tonight's Dinner -->
+      <div id="lastcooked" style="display:none;font-size:.8rem;color:var(--tx2);margin-bottom:14px;padding:0 4px;font-style:italic"></div>
       <div id="variety-nudge" style="display:none;background:var(--amd);border:1px solid var(--am);border-radius:14px;padding:12px 16px;font-size:.82rem;color:var(--tx2);line-height:1.6;margin-bottom:16px"></div>
       <div class="hsec-lbl" style="display:flex;align-items:center;justify-content:space-between">
         <span>🗓 <span id="weekLbl">This Week</span></span>
@@ -328,6 +330,20 @@
     <div class="ni" id="nav-shopping" onclick="showScreen('shopping')"><span class="ico">🛒</span><span class="lbl">Shop</span></div>
     <div class="ni" id="nav-insights" onclick="showScreen('insights')"><span class="ico">📊</span><span class="lbl">Stats</span></div>
     <div class="ni" id="nav-chat" onclick="showScreen('chat')"><span class="ico">✨</span><span class="lbl">Claude</span></div>
+  </div>
+
+  <!-- BOTTOM SHEET: VOICE MULTI-ITEM CONFIRMATION -->
+  <!-- Shown when voice input detects multiple items (e.g. "milk, bread, and eggs"). -->
+  <!-- Each item has a checkbox so the user can deselect before adding. -->
+  <div class="bsheet-backdrop" id="voiceConfirmBackdrop" onclick="cancelVoiceMulti()"></div>
+  <div class="bsheet" id="voiceConfirmSheet" style="max-height:60vh">
+    <div class="bsheet-handle"></div>
+    <div class="bsheet-title" id="voiceConfirmCount">Adding items:</div>
+    <div id="voiceConfirmList" style="padding:0 16px;max-height:40vh;overflow-y:auto"></div>
+    <div style="padding:12px 16px;display:flex;gap:8px">
+      <button class="btn bs bsm" style="flex:1" onclick="cancelVoiceMulti()">Cancel</button>
+      <button class="btn bp bsm" style="flex:2" onclick="confirmVoiceMultiAdd()">✓ Add all</button>
+    </div>
   </div>
 
   <!-- BOTTOM SHEET: ADD ITEM TO SHOPPING LIST -->
@@ -872,6 +888,26 @@
         <div class="frow"><label class="flbl">Weeknight cook time</label>
           <select class="fsel" id="setCookTime"><option value="20-30 min">20–30 min</option><option value="30-45 min">30–45 min</option><option value="40-60 min" selected>40–60 min</option><option value="60+ min">60+ min</option></select>
         </div>
+        <!-- Favourite store — organizes Shopping list "By category" sort to match store aisle layout -->
+        <div class="frow"><label class="flbl">Favourite store</label>
+          <select class="fsel" id="setFavStore">
+            <option value="">None</option>
+            <option value="ShopRite">ShopRite</option>
+            <option value="Whole Foods">Whole Foods</option>
+            <option value="Trader Joe's">Trader Joe's</option>
+            <option value="Walmart">Walmart</option>
+            <option value="Target">Target</option>
+            <option value="Costco">Costco</option>
+            <option value="Kroger">Kroger</option>
+            <option value="Safeway">Safeway</option>
+            <option value="Publix">Publix</option>
+            <option value="Aldi">Aldi</option>
+            <option value="Stop & Shop">Stop &amp; Shop</option>
+            <option value="Wegmans">Wegmans</option>
+            <option value="Amazon Fresh">Amazon Fresh</option>
+          </select>
+        </div>
+        <div style="font-size:.72rem;color:var(--mt);margin-top:4px;line-height:1.5">Organizes your Shopping list "By category" to match this store's typical aisle layout.</div>
       </div>
       <!-- Utilities row — tappable row that opens the dedicated Utilities page (owner only) -->
       <div id="utilitiesRow" style="display:none;cursor:pointer" onclick="openUtilities()">

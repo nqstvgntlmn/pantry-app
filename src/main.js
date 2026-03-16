@@ -48,11 +48,11 @@ import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit,
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, stopShopScanner, restartShopScanner } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, stopShopScanner, restartShopScanner, confirmVoiceMultiAdd, cancelVoiceMulti } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
-import { renderRecs, togFav, valR, importFromUrl, setImportMode, startBulkImport, retryBulkImport, saveRec, openER, openRecipeView, handleRecipeBack, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, clearComRating, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif, triggerCoverUpload, handleCoverSelected, handleCoverDrop, removeCoverPhoto, triggerStepPhotoUpload, handleStepPhotoSelected, removeStepPhoto, openPhotoViewer, closePhotoViewer, photoViewerNav, triggerCommentPhotoUpload, handleCommentPhotosSelected, removeCommentPhoto, recipeTimeChanged, markTotalTimeManual, selectDifficulty, setRecSearch, setRecSort, toggleFilterPanel, setRecDifficulty, setRecCookTime, setRecServes, toggleRecProtein, toggleRecTag, toggleRecTagsExpand, clearRecFilters, toggleComTagsPanel, clearComFilters, setViewStar, editComRecipe, saveComRecipeEdit, parseRecipeWithAI, closeParsePreview, applyParsedRecipe } from './ui/recipes.js';
+import { renderRecs, togFav, valR, importFromUrl, setImportMode, startBulkImport, retryBulkImport, saveRec, openER, openRecipeView, handleRecipeBack, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, clearComRating, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif, triggerCoverUpload, handleCoverSelected, handleCoverDrop, removeCoverPhoto, triggerStepPhotoUpload, handleStepPhotoSelected, removeStepPhoto, openPhotoViewer, closePhotoViewer, photoViewerNav, triggerCommentPhotoUpload, handleCommentPhotosSelected, removeCommentPhoto, recipeTimeChanged, markTotalTimeManual, selectDifficulty, setRecSearch, setRecSort, toggleFilterPanel, setRecDifficulty, setRecCookTime, setRecServes, toggleRecProtein, toggleRecTag, toggleRecTagsExpand, clearRecFilters, toggleComTagsPanel, clearComFilters, setViewStar, editComRecipe, saveComRecipeEdit, parseRecipeWithAI, closeParsePreview, applyParsedRecipe, editHouseholdNotes, saveHouseholdNotes } from './ui/recipes.js';
 
 // Insights screen: usage analytics and charts
 import { renderInsights } from './ui/insights.js';
@@ -329,6 +329,9 @@ window.setViewStar = setViewStar;               // Rate a recipe from the read-o
 // ── Community recipe editing / forking (Feature 10) ──
 window.editComRecipe = editComRecipe;           // Open edit overlay for author's own community recipe
 window.saveComRecipeEdit = saveComRecipeEdit;   // Save edits to a community recipe (author only)
+// ── Household notes on recipe view ──
+window.editHouseholdNotes = editHouseholdNotes; // Switch household notes to edit mode (textarea)
+window.saveHouseholdNotes = saveHouseholdNotes; // Save household notes on blur and switch back to display
 
 // ── Chat screen handlers ──
 window.sendChat = sendChat;     // Send a chat message to the AI assistant
@@ -370,6 +373,9 @@ window.deleteAll = deleteAll;         // Delete ALL items in current list (with 
 window.deleteWithUndo = deleteWithUndo; // Deferred delete with undo — used by inventory remItem
 window.stopShopScanner = stopShopScanner;   // Stop persistent scanner in shopping add sheet
 window.restartShopScanner = restartShopScanner; // Re-activate scanner after stopping
+// ── Voice multi-item add ──
+window.confirmVoiceMultiAdd = confirmVoiceMultiAdd; // Add checked items from voice confirmation sheet
+window.cancelVoiceMulti = cancelVoiceMulti;         // Close voice confirmation sheet without adding
 window.stopInvScanner = stopInvScanner;     // Stop persistent scanner in inventory add sheet
 window.restartInvScanner = restartInvScanner; // Re-activate scanner after stopping
 

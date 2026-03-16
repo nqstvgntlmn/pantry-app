@@ -20,7 +20,8 @@ export const CFG_DEFAULT = {
   other: "",                      // catch-all for additional dietary notes
   cuisines: "Bangladeshi, Turkish, Mediterranean, American", // preferred cuisine styles (fed to AI recipe generation)
   cookTime: "40-60 min",          // target cook time per meal (fed to AI recipe generation)
-  zipcode: ""                     // user's zipcode for local grocery deal searches (Flipp API)
+  zipcode: "",                    // user's zipcode for local grocery deal searches (Flipp API)
+  favouriteStore: ""              // preferred grocery store — used to sort Shopping list by that store's aisle layout
 };
 
 // ── Shared mutable state object ──────────────────────────────────────────────
