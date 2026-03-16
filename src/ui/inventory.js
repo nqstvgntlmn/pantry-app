@@ -14,7 +14,7 @@ import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add 
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS, getItemEmoji } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 // _defaultThreshold returns the smart restock threshold based on unit type
 import { updExport, _defaultThreshold } from './home.js';
@@ -32,8 +32,10 @@ import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferr
 // Shared list of available units for both Shopping and Supplies items.
 // Alphabetically sorted so dropdowns are easy to scan.
 // Exported so shopping.js can use the same list.
+// Alphabetically sorted — "Unit" sits naturally at the end.
+// "Bar" added for granola bars, protein bars, soap bars, etc.
 export const UNITS = [
-  "Bag","Bottle","Box","Bunch","Can","Carton","Clove","Dozen",
+  "Bag","Bar","Bottle","Box","Bunch","Can","Carton","Clove","Dozen",
   "Gallon","Half Gallon","Head","Jar","Liter","Loaf","Oz","Pack",
   "Piece","Pound","Roll","Tube","Unit"
 ];
@@ -70,8 +72,8 @@ function _shouldShowInvBrand(item) {
  *   - Brand shown only for barcode scans or brand-matched searches
  */
 export function iH(item) {
-  // Resolve the category emoji; fall back to a shopping-cart icon
-  const ic = CATS[gcat(item)] || "🛒";
+  // Resolve a smart emoji icon based on product name/type/category
+  const ic = getItemEmoji(item);
   // [IMAGES DISABLED] — Product images commented out pending decision.
   // See session notes: images caused false positives from external databases,
   // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
@@ -85,8 +87,9 @@ export function iH(item) {
     // et = small expiry tag badge shown below the item name
     et = ex ? `<div class="etag ${ex.c}">${ex.l}</div>` : "";
 
-  // Brand line — only shown for barcode scans or brand-matched text searches
-  const brandHtml = _shouldShowInvBrand(item) ? `<div class="sh-brand">${item.brand}</div>` : "";
+  // Brand and subtitle intentionally NOT shown on list rows (Fix #8, #9).
+  // Brand is only shown on the scan result preview and in the detail sheet.
+  // Subtitle is only shown in the detail sheet when the user taps to open it.
 
   // Build the full row HTML mirroring shopping list structure:
   //   .swipe-wrap  – outermost container, carries the item id for JS lookups
@@ -99,14 +102,7 @@ export function iH(item) {
         <!-- Slim outlined circle: tapping opens detail sheet -->
         <div class="shck" onclick="event.stopPropagation();openInvItemDetail('${item.id}')"></div>
         <div style="flex:1;min-width:0;cursor:pointer" onclick="event.stopPropagation();openInvItemDetail('${item.id}')">
-          ${item.scanTitle ? (() => {
-            // Clean the subtitle by removing redundant brand/abbreviation duplicates
-            const cleanSub = deduplicateSubtitle(item.name, item.brand || "");
-            // Hide subtitle if it matches the title (case-insensitive) — avoids redundant text
-            const showSub = cleanSub.toLowerCase().trim() !== item.scanTitle.toLowerCase().trim();
-            return `<div class="inm">${toTitleCase(item.scanTitle)}</div>${showSub ? `<div class="sh-brand" style="font-size:.78rem;color:var(--mt)">${toTitleCase(cleanSub)}</div>` : ""}`;
-          })() : `<div class="inm">${toTitleCase(item.name)}</div>`}
-          ${brandHtml}
+          <div class="inm">${toTitleCase(item.scanTitle || item.name)}</div>
           ${item.note ? `<div class="shnote" style="margin-top:2px">📝 ${item.note}</div>` : ""}
           ${et}
         </div>
@@ -245,8 +241,8 @@ export async function openInvItemDetail(id) {
   //   ? `<div class="item-detail-change-photo" onclick="triggerInvPhotoUpload('${item.id}')">Change photo</div>`
   //   : "";
 
-  // No-image display: simple category emoji placeholder
-  const ic = CATS[gcat(item)] || "🛒";
+  // No-image display: smart emoji placeholder based on product name/type
+  const ic = getItemEmoji(item);
   const img = `<div class="item-detail-img-ph" style="display:flex;align-items:center;justify-content:center">
     <div style="font-size:1.6rem">${ic}</div>
   </div>`;
@@ -266,27 +262,30 @@ export async function openInvItemDetail(id) {
   // Subtitle: show the raw DB name only when it differs from the display name
   const detailSubtitle = item.scanTitle && item.scanTitle !== item.name ? item.name : "";
 
+  // Build the header with combined inline title+subtitle editing (Fix #11).
+  // Tapping ✏️ reveals both fields at once with a Save button below.
   let html = `<div class="item-detail-header">
     <div>${img}${changePhotoLink}</div>
     <div style="flex:1;min-width:0">
-      <div class="detail-editable" onclick="editInvDetailName('${item.id}')">
-        <span class="item-detail-name" id="inv-detail-name-${item.id}">${toTitleCase(displayName)}</span>
-        <span class="detail-edit-hint">✏️</span>
+      <div id="inv-detail-display-${item.id}">
+        <div class="detail-editable" onclick="editInvDetailCombined('${item.id}')">
+          <span class="item-detail-name" id="inv-detail-name-${item.id}">${toTitleCase(displayName)}</span>
+          <span class="detail-edit-hint">✏️</span>
+        </div>
+        ${detailSubtitle ? `<div class="item-detail-brand" style="margin-top:2px">${toTitleCase(detailSubtitle)}</div>` : ""}
       </div>
-      <div id="inv-detail-name-edit-${item.id}" style="display:none">
+      <div id="inv-detail-edit-${item.id}" style="display:none">
         <input class="detail-edit-input" id="inv-detail-name-input-${item.id}" value="${toTitleCase(displayName).replace(/"/g, '&quot;')}"
-          data-item-id="${item.id}" onblur="saveInvDetailName('${item.id}')" onkeydown="if(event.key==='Enter')this.blur()" style="font-size:1.1rem;font-weight:700"/>
+          placeholder="Title" oninput="applyTitleCaseWhileTyping(this)"
+          onkeydown="if(event.key==='Enter')document.getElementById('inv-detail-sub-input-${item.id}').focus()"
+          style="font-size:1.1rem;font-weight:700;margin-bottom:6px"/>
+        <input class="detail-edit-input" id="inv-detail-sub-input-${item.id}" value="${toTitleCase(detailSubtitle || item.name).replace(/"/g, '&quot;')}"
+          placeholder="Subtitle (full product name)" oninput="applyTitleCaseWhileTyping(this)"
+          onkeydown="if(event.key==='Enter')saveInvDetailCombined('${item.id}')"
+          style="font-size:.82rem;margin-bottom:6px"/>
+        <button class="btn bp" onclick="saveInvDetailCombined('${item.id}')" style="font-size:.85rem;padding:6px 16px;width:100%">Save</button>
       </div>
-      ${detailSubtitle ? `
-      <div class="detail-editable" onclick="editInvDetailSubtitle('${item.id}')" style="margin-top:2px">
-        <span class="item-detail-brand" id="inv-detail-sub-${item.id}">${toTitleCase(detailSubtitle)}</span>
-        <span class="detail-edit-hint">✏️</span>
-      </div>
-      <div id="inv-detail-sub-edit-${item.id}" style="display:none">
-        <input class="detail-edit-input" id="inv-detail-sub-input-${item.id}" value="${toTitleCase(detailSubtitle).replace(/"/g, '&quot;')}"
-          data-item-id="${item.id}" onblur="saveInvDetailSubtitle('${item.id}')" onkeydown="if(event.key==='Enter')this.blur()" style="font-size:.82rem"/>
-      </div>` : ""}
-      ${showBrand && !detailSubtitle ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
+      ${showBrand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
       <div style="font-size:.7rem;color:var(--mt);margin-top:4px">Added ${item.addedAt || "—"}</div>
     </div>
   </div>`;
@@ -960,77 +959,61 @@ export async function changeInvNote(id) {
 // persist to customProducts/{barcode} so future scans use the corrected name.
 
 /**
- * editInvDetailName(id) — Switches the name display to an inline input field.
+ * editInvDetailCombined(id) — Shows both title and subtitle as inline editable
+ * fields with a Save button below. Replaces the old separate edit/save pattern.
+ * Auto-applies Title Case as the user types in both fields.
  */
-export function editInvDetailName(id) {
-  const display = g(`inv-detail-name-${id}`)?.parentElement;
-  const editRow = g(`inv-detail-name-edit-${id}`);
-  const input = g(`inv-detail-name-input-${id}`);
-  if (!display || !editRow || !input) return;
-  display.style.display = "none";
-  editRow.style.display = "block";
-  input.focus();
-  input.select();
+export function editInvDetailCombined(id) {
+  const displayEl = g(`inv-detail-display-${id}`);
+  const editEl = g(`inv-detail-edit-${id}`);
+  const titleInput = g(`inv-detail-name-input-${id}`);
+  if (!displayEl || !editEl || !titleInput) return;
+  displayEl.style.display = "none";
+  editEl.style.display = "block";
+  titleInput.focus();
+  titleInput.select();
 }
 
 /**
- * saveInvDetailName(id) — Saves the edited name on blur or Enter.
- * Updates the item name (and scanTitle if set) in Firestore.
- * For barcoded items, also saves to customProducts for future scans.
+ * saveInvDetailCombined(id) — Saves both title and subtitle from the combined
+ * edit form. Updates scanTitle/name in Firestore. For barcoded items, also
+ * persists correctedName to customProducts/{barcode} for future scans.
  */
-export async function saveInvDetailName(id) {
+export async function saveInvDetailCombined(id) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
-  const input = g(`inv-detail-name-input-${id}`);
-  const newName = (input?.value || "").trim();
-  if (!newName) return; // Don't allow empty names
+  const titleInput = g(`inv-detail-name-input-${id}`);
+  const subInput = g(`inv-detail-sub-input-${id}`);
+  const newTitle = (titleInput?.value || "").trim();
+  const newSub = (subInput?.value || "").trim();
+  if (!newTitle) return; // Title is required
 
-  // Update the display name — if item has a scanTitle, update that; otherwise update name directly
+  // Build update: title goes to scanTitle (or name if no scanTitle), subtitle goes to name
   const updates = { ...item };
-  if (item.scanTitle) {
-    updates.scanTitle = newName;
+  if (item.scanTitle || newSub) {
+    // Item has or will have separate title/subtitle — store title in scanTitle, subtitle in name
+    updates.scanTitle = newTitle;
+    if (newSub) updates.name = newSub;
   } else {
-    updates.name = newName;
+    // No subtitle — store title directly as name
+    updates.name = newTitle;
   }
   await svi(updates);
 
-  // For barcoded items, save the corrected name to customProducts so future scans use it
+  // For barcoded items, save correctedName to customProducts for future barcode scans
   if (item.barcode && state.hid) {
-    await _saveInvCustomProductName(item.barcode, newName);
+    await _saveInvCustomProductName(item.barcode, newTitle);
   }
 
   showNotif("✓ Name updated");
   openInvItemDetail(id); // Refresh the sheet to reflect changes
 }
 
-/**
- * editInvDetailSubtitle(id) — Switches the subtitle display to an inline input field.
- */
-export function editInvDetailSubtitle(id) {
-  const display = g(`inv-detail-sub-${id}`)?.parentElement;
-  const editRow = g(`inv-detail-sub-edit-${id}`);
-  const input = g(`inv-detail-sub-input-${id}`);
-  if (!display || !editRow || !input) return;
-  display.style.display = "none";
-  editRow.style.display = "block";
-  input.focus();
-  input.select();
-}
-
-/**
- * saveInvDetailSubtitle(id) — Saves the edited subtitle (raw product name) on blur or Enter.
- * Updates item.name in Firestore since the subtitle shows the original DB name.
- */
-export async function saveInvDetailSubtitle(id) {
-  const item = state.inv.find(i => i.id === id);
-  if (!item) return;
-  const input = g(`inv-detail-sub-input-${id}`);
-  const newSub = (input?.value || "").trim();
-  if (!newSub) return;
-  await svi({ ...item, name: newSub });
-  showNotif("✓ Subtitle updated");
-  openInvItemDetail(id);
-}
+// Keep legacy functions as aliases so any remaining callers don't break
+export function editInvDetailName(id) { editInvDetailCombined(id); }
+export async function saveInvDetailName(id) { await saveInvDetailCombined(id); }
+export function editInvDetailSubtitle(id) { editInvDetailCombined(id); }
+export async function saveInvDetailSubtitle(id) { await saveInvDetailCombined(id); }
 
 /**
  * _saveInvCustomProductName(barcode, correctedName) — Saves a corrected name

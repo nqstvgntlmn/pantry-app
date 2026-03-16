@@ -19,7 +19,7 @@ import { state } from '../state.js';            // Global app state (holds curre
 import { svi, dbSet, dbGet } from '../db.js';     // svi = save inventory item, dbSet/dbGet = Firestore CRUD
 import { getCurrentUser } from '../auth.js';       // getCurrentUser = get the signed-in Firebase Auth user
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list (deduplicates by name)
-import { g, showNotif, showOv, hideOv, formatScanResult, combineQty } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels, formatScanResult = smart product type extraction, combineQty = combine whole + fraction
+import { g, showNotif, showOv, hideOv, formatScanResult, combineQty, applyTitleCaseWhileTyping, toTitleCase } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels, formatScanResult = smart product type extraction, combineQty = combine whole + fraction, applyTitleCaseWhileTyping = auto Title Case on input, toTitleCase = string Title Case
 
 // ── SCAN CACHE ──────────────────────────────────────────────────────────────
 // Client-side cache for barcode lookup results stored in localStorage.
@@ -552,8 +552,9 @@ export function addScannedToList() {
   // Reopen the add-item sheet in its default state, ready for the next scan
   if (window.openShopAddSheet) window.openShopAddSheet();
 
-  // Brief success toast so the user knows the item was added
-  showNotif("✓ " + name + " added");
+  // Brief success toast — use the clean scanTitle for readability, not the raw DB name
+  const toastName = state.cp ? (state.cp._scanTitle || name) : name;
+  showNotif("✓ Added: " + toastName);
 }
 
 // Toggles visibility of the manual barcode entry section.
@@ -616,6 +617,9 @@ async function lkup(bc) {
       const docPath = `households/${state.hid}/customProducts/barcode_${normalizedBarcode}`;
       const customData = await dbGet(docPath);
       if (customData && customData.correctedName) {
+        // Use correctedName as the display TITLE (_scanTitle), not just the raw name.
+        // This ensures rescanning a product with a saved correction shows the corrected
+        // name prominently, and formatScanResult() won't overwrite it.
         console.log(`[Scan] Custom product override: "${customData.correctedName}"`);
         return {
           barcode: bc,
@@ -629,6 +633,7 @@ async function lkup(bc) {
           nutrition: null,
           customOverride: true,
           notFound: false,
+          _scanTitle: customData.correctedName,  // Use corrected name as the display title
         };
       }
     } catch {
@@ -723,8 +728,9 @@ function showRes(prod) {
     // and provides the full name as a subtitle for context.
     const scanFmt = formatScanResult(prod);
 
-    // Store the smart title on the product object so addScannedToList() / addToInv() can persist it
-    prod._scanTitle = scanFmt.title;
+    // Store the smart title on the product object so addScannedToList() / addToInv() can persist it.
+    // If _scanTitle is already set (e.g. from customProducts override), preserve the user's correction.
+    if (!prod._scanTitle) prod._scanTitle = scanFmt.title;
 
     // [SCAN IMAGES DISABLED] — uncomment to re-enable product images in scan preview
     // const img = prod.image ? `<img src="${prod.image}" class="pimg" onerror="this.style.display='none'"/>` : `<div class="pimg" style="display:flex;align-items:center;justify-content:center;font-size:1.8rem">🛒</div>`;
@@ -732,8 +738,11 @@ function showRes(prod) {
 
     // [SOURCE LINKS REMOVED] — database source badge no longer displayed to users
 
+    // Use the display title (which preserves custom override names)
+    const displayTitle = prod._scanTitle || scanFmt.title;
+
     // Hide subtitle entirely if it matches the title (case-insensitive) — avoids redundant text
-    const subtitleHidden = scanFmt.subtitle.toLowerCase().trim() === scanFmt.title.toLowerCase().trim();
+    const subtitleHidden = scanFmt.subtitle.toLowerCase().trim() === displayTitle.toLowerCase().trim();
 
     // Subtitle: full product name, truncated at 60 characters with tap-to-expand.
     // Uses data attribute + generic handler to avoid inline script injection from product names.
@@ -745,13 +754,14 @@ function showRes(prod) {
     // Assemble the product card with smart title (large + editable), subtitle (smaller), brand (smallest).
     // The title row includes a pencil icon that toggles inline editing so users can correct product names.
     // The original (database-provided) name is stored in a data attribute for revert-on-clear.
+    // The title input auto-applies Title Case as the user types (Fix #2).
     html = `<div class="pcard"><div class="phdr">${img}<div style="flex:1">
       <div id="scan-title-row" style="display:flex;align-items:center;gap:6px">
-        <span id="scan-title-text" class="pnm" style="font-size:1.15rem;font-weight:700">${scanFmt.title}</span>
+        <span id="scan-title-text" class="pnm" style="font-size:1.15rem;font-weight:700">${displayTitle}</span>
         <span id="scan-edit-icon" onclick="editScanTitle()" style="cursor:pointer;font-size:.85rem;opacity:.6;flex-shrink:0" title="Edit product name">✏️</span>
       </div>
       <div id="scan-title-edit" style="display:none;gap:6px;align-items:center">
-        <input id="scan-title-input" class="fi" style="flex:1;font-size:1rem;padding:6px 10px;margin:0" data-original="${scanFmt.title.replace(/"/g, "&quot;")}" />
+        <input id="scan-title-input" class="fi" style="flex:1;font-size:1rem;padding:6px 10px;margin:0" data-original="${displayTitle.replace(/"/g, "&quot;")}" oninput="applyTitleCaseWhileTyping(this)" />
         <button onclick="confirmScanTitle()" style="background:var(--gn);color:#fff;border:none;border-radius:8px;width:36px;height:36px;font-size:1.1rem;cursor:pointer;flex-shrink:0" title="Save">✓</button>
       </div>
       ${subtitleHidden ? "" : `<div class="pbr" style="font-size:.82rem;color:var(--mt);margin-top:2px"${subtitleExpand}>${subtitleText}</div>`}
@@ -853,6 +863,9 @@ export async function addToInv() {
   // scanTitle: persist the smart product type label so it shows on list rows (e.g. "Chips" instead of full name)
   const itemData = { id, barcode: state.cp.barcode, name: nm, brand: state.cp.brand || "", unit, qty: ex ? ex.qty + qty : qty, location: state.selR, category: state.cp.category || "General", image: state.cp.image || null, source: state.cp.source || null, expiry: exp, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() };
   if (state.cp._scanTitle) itemData.scanTitle = state.cp._scanTitle;
+
+  // Capture the display name for the toast BEFORE clearing state.cp
+  const toastName = state.cp._scanTitle || nm;
   await svi(itemData);
 
   state.cp = null;                         // Clear the current product from state
@@ -864,8 +877,8 @@ export async function addToInv() {
   // Reopen the add-item sheet in its default state, ready for the next scan
   if (window.openInvAddSheet) window.openInvAddSheet();
 
-  // Brief success toast so the user knows the item was added
-  showNotif(ex ? `✓ +${qty} added to ${nm}` : `✓ ${nm} added`);
+  // Brief success toast — use the clean scanTitle for readability
+  showNotif(ex ? `✓ Added: +${qty} ${toastName}` : `✓ Added: ${toastName}`);
 }
 
 // Increments or decrements the whole-number quantity field in the scan result overlay.
@@ -910,7 +923,8 @@ export async function confirmScanTitle() {
   const titleSpan = g("scan-title-text");
   if (!textEl || !editEl || !inputEl || !titleSpan) return;
 
-  const newName = inputEl.value.trim();
+  // Apply Title Case to the final value before saving
+  const newName = toTitleCase(inputEl.value.trim());
   const originalName = inputEl.dataset.original || "";
 
   // If the field is empty, revert to the original database name

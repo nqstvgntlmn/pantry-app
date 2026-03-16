@@ -11,12 +11,12 @@ import { state } from './state.js';
 // between the two representations and render the fraction picker controls.
 
 /** Map of supported fraction decimals → display labels */
-const FRAC_MAP = { 0: "+½", 0.25: "1/4", [1/3]: "1/3", 0.5: "1/2", [2/3]: "2/3", 0.75: "3/4" };
+const FRAC_MAP = { 0: "·/·", 0.25: "1/4", [1/3]: "1/3", 0.5: "1/2", [2/3]: "2/3", 0.75: "3/4" };
 
 /** Fraction options for <select> dropdowns — value is the decimal stored in Firestore.
- *  The "none" option shows a subtle "+½" placeholder instead of "None" to avoid confusing users. */
+ *  The "none" option shows "·/·" placeholder when no fraction is selected. */
 export const FRAC_OPTIONS = [
-  { value: 0,    label: "＋½" },
+  { value: 0,    label: "·/·" },
   { value: 0.25, label: "¼" },
   { value: 1/3,  label: "⅓" },
   { value: 0.5,  label: "½" },
@@ -228,6 +228,92 @@ export const CATS = {
   Condiments: "🧴", Snacks: "🍿", Beverages: "🥤", Frozen: "❄️",
   General: "📦", Imported: "📥"
 };
+
+// ── SMART EMOJI MAPPING ─────────────────────────────────────────────────────
+// Maps product types, categories, and name keywords to specific emoji icons.
+// Falls back to 🛒 for unknown items. Used by inventory and shopping list rows
+// to display a more relevant icon than the generic category-level emoji.
+
+/** Keyword → emoji mapping table, checked top-to-bottom (first match wins) */
+const _EMOJI_MAP = [
+  // Bread & bakery
+  { keywords: ["bread", "pita", "bagel", "tortilla", "naan", "flatbread", "bun", "roll", "croissant", "muffin"], emoji: "🫓" },
+  { keywords: ["loaf"], emoji: "🫓" },
+  // Spices & herbs
+  { keywords: ["peppercorn", "spice", "herb", "cumin", "turmeric", "paprika", "cinnamon", "oregano", "basil", "thyme", "rosemary", "cayenne", "chili flake", "seasoning"], emoji: "🌶️" },
+  // Chocolate & candy
+  { keywords: ["chocolate bar"], emoji: "🍫" },
+  { keywords: ["chocolate"], emoji: "🍫" },
+  { keywords: ["candy", "gummy", "gum"], emoji: "🍬" },
+  // Beverages
+  { keywords: ["soda", "cola", "pepsi", "coke", "sprite", "fanta", "energy drink", "red bull", "monster"], emoji: "🥤" },
+  { keywords: ["water", "sparkling water", "seltzer"], emoji: "💧" },
+  { keywords: ["coffee", "espresso"], emoji: "☕" },
+  { keywords: ["tea", "matcha", "chai"], emoji: "🍵" },
+  // Dairy
+  { keywords: ["milk", "oat milk", "almond milk", "soy milk"], emoji: "🥛" },
+  { keywords: ["cheese", "cheddar", "mozzarella", "parmesan", "brie", "gouda", "feta"], emoji: "🧀" },
+  { keywords: ["butter", "margarine", "ghee"], emoji: "🧈" },
+  { keywords: ["egg"], emoji: "🥚" },
+  // Proteins
+  { keywords: ["chicken", "poultry", "turkey"], emoji: "🍗" },
+  { keywords: ["beef", "steak", "meat", "lamb", "pork", "bacon", "sausage", "ground"], emoji: "🥩" },
+  { keywords: ["fish", "salmon", "tuna", "cod", "shrimp", "seafood", "crab", "lobster"], emoji: "🐟" },
+  // Produce
+  { keywords: ["apple", "banana", "orange", "grape", "berry", "berries", "strawberry", "blueberry", "mango", "peach", "pear", "plum", "kiwi", "melon", "watermelon", "pineapple", "cherry", "lemon", "lime", "avocado", "fruit"], emoji: "🍎" },
+  { keywords: ["broccoli", "carrot", "celery", "cabbage", "tomato", "onion", "garlic", "spinach", "mushroom", "squash", "lettuce", "cucumber", "pepper", "potato", "corn", "zucchini", "eggplant", "vegetable", "produce", "jalap", "kale"], emoji: "🥦" },
+  // Snacks
+  { keywords: ["chip", "crisp", "pringles", "snack", "pretzel", "popcorn", "cracker"], emoji: "🍿" },
+  // Frozen
+  { keywords: ["ice cream", "gelato", "sorbet", "frozen yogurt"], emoji: "🍦" },
+  { keywords: ["frozen"], emoji: "🧊" },
+  // Cleaning
+  { keywords: ["cleaning", "cleaner", "detergent", "bleach", "dish soap", "windex", "sponge", "mop", "broom"], emoji: "🧹" },
+  // Personal care
+  { keywords: ["lotion", "shampoo", "conditioner", "body wash", "deodorant", "sunscreen", "face wash", "moisturizer", "soap"], emoji: "🧴" },
+  // Health
+  { keywords: ["vitamin", "medicine", "supplement", "capsule", "tablet", "pain relief", "tylenol", "advil", "ibuprofen"], emoji: "💊" },
+  // Baby
+  { keywords: ["baby food", "baby formula", "diaper", "baby"], emoji: "👶" },
+  // Pet
+  { keywords: ["pet food", "dog food", "cat food", "dog treat", "cat treat", "pet"], emoji: "🐾" },
+  // Nuts
+  { keywords: ["nut", "almond", "cashew", "peanut", "walnut", "pecan", "pistachio"], emoji: "🥜" },
+  // Grains & pasta
+  { keywords: ["rice", "pasta", "noodle", "grain", "oat", "cereal", "flour", "quinoa"], emoji: "🌾" },
+  // Sauces & condiments
+  { keywords: ["sauce", "ketchup", "mustard", "mayo", "mayonnaise", "hot sauce", "sriracha", "soy sauce", "vinegar", "salsa", "dressing", "condiment", "jam", "jelly"], emoji: "🫙" },
+  // Oil
+  { keywords: ["oil", "olive oil", "cooking oil", "vegetable oil", "coconut oil"], emoji: "🫒" },
+];
+
+/**
+ * getItemEmoji(item) — Returns a specific emoji icon for a product based on its
+ * name, scanTitle, and category. Uses keyword matching against _EMOJI_MAP.
+ * Falls back to 🛒 (shopping cart) for unknown items.
+ *
+ * @param {object} item - Item with at least { name } and optionally { scanTitle, category }
+ * @returns {string} A single emoji character
+ */
+export function getItemEmoji(item) {
+  if (!item) return "🛒";
+
+  // Build a combined lowercase string from all available text fields for matching
+  const text = [
+    item.scanTitle || "",
+    item.name || "",
+    item.category || ""
+  ].join(" ").toLowerCase();
+
+  // Check each emoji mapping entry — first keyword match wins
+  for (const entry of _EMOJI_MAP) {
+    if (entry.keywords.some(kw => text.includes(kw))) {
+      return entry.emoji;
+    }
+  }
+
+  return "🛒"; // Default: shopping cart for unrecognized items
+}
 
 /**
  * Infers the best food category for a pantry item by inspecting its name and
@@ -457,6 +543,8 @@ const PRODUCT_TYPE_MAP = [
   // ── Universal matches (any category) ──
   { category: null, keywords: ["chewing gum", "gum"],                                   title: "Gum" },
   { category: null, keywords: ["eye drop", "eye relief", "visine", "contact"],           title: "Eye Drops" },
+  { category: null, keywords: ["chocolate bar"],                                         title: "Chocolate Bar" },
+  { category: null, keywords: ["dark chocolate", "milk chocolate", "white chocolate", "chocolate"], title: "Chocolate" },
 
   // ── Snacks ──
   { category: /snack/i, keywords: ["chip", "crisp", "pringles"],                         title: "Chips" },
@@ -465,7 +553,9 @@ const PRODUCT_TYPE_MAP = [
   { category: /snack/i, keywords: ["popcorn"],                                           title: "Popcorn" },
   { category: /snack/i, keywords: ["pretzel"],                                           title: "Pretzels" },
   { category: /snack/i, keywords: ["granola bar", "energy bar", "protein bar"],          title: "Energy Bar" },
-  { category: /snack/i, keywords: ["candy", "chocolate", "gummy"],                      title: "Candy" },
+  { category: /snack/i, keywords: ["chocolate bar"],                                    title: "Chocolate Bar" },
+  { category: /snack/i, keywords: ["dark chocolate", "milk chocolate", "white chocolate", "chocolate"], title: "Chocolate" },
+  { category: /snack/i, keywords: ["candy", "gummy"],                                  title: "Candy" },
   { category: /snack/i, keywords: ["nut", "almond", "cashew", "peanut"],                title: "Nuts" },
 
   // ── Beverages ──
@@ -790,7 +880,7 @@ export function getStoreAisleOrder(storeName) {
 // default to 2. Used by "Running Low" on Home and "Already have" check in Shopping.
 
 const _THRESH_ONE_SET = new Set(["Bottle","Jar","Can","Carton","Bunch","Head","Loaf","Dozen","Tube","Roll","Gallon","Half Gallon","Liter"]);
-const _THRESH_TWO_SET = new Set(["Piece","Unit","Pack","Box","Bag","Pound","Oz","Clove"]);
+const _THRESH_TWO_SET = new Set(["Piece","Unit","Pack","Box","Bag","Bar","Pound","Oz","Clove"]);
 
 /**
  * defaultThreshold(unit) — Returns the smart default restock threshold

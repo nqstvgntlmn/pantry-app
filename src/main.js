@@ -22,7 +22,7 @@ import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli,
 
 // DOM/UI helpers: g = getElementById shorthand, showNotif = toast notifications,
 // showOv/hideOv = overlay open/close, renderStars = star rating HTML, tk = tracking util
-import { g, showNotif, showOv, hideOv, renderStars, tk } from './helpers.js';
+import { g, showNotif, showOv, hideOv, renderStars, tk, applyTitleCaseWhileTyping } from './helpers.js';
 
 // Firebase Auth wrappers: onAuth listens for auth state changes,
 // sign-in/sign-up/sign-out functions, getCurrentUser returns the Firebase user object
@@ -44,11 +44,11 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, initInvQtyToolbar, invQtyStep, invFracChange } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, editInvDetailCombined, saveInvDetailCombined, initInvQtyToolbar, invQtyStep, invFracChange } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, initShopQtyToolbar, shopQtyStep, shopFracChange } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, editShopDetailCombined, saveShopDetailCombined, initShopQtyToolbar, shopQtyStep, shopFracChange } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -176,10 +176,12 @@ window.clearInvExpiry = clearInvExpiry;                // Clear expiry date (set
 window.setInvExpiry = setInvExpiry;                    // Switch from "No expiry" badge to date picker (sets today as default)
 window.changeInvNote = changeInvNote;                  // Save notes from detail sheet textarea
 // Editable name/subtitle in inventory detail sheet
-window.editInvDetailName = editInvDetailName;           // Switch name to inline edit mode
-window.saveInvDetailName = saveInvDetailName;           // Save edited name on blur/Enter
-window.editInvDetailSubtitle = editInvDetailSubtitle;   // Switch subtitle to inline edit mode
-window.saveInvDetailSubtitle = saveInvDetailSubtitle;   // Save edited subtitle on blur/Enter
+window.editInvDetailName = editInvDetailName;           // Legacy alias → editInvDetailCombined
+window.saveInvDetailName = saveInvDetailName;           // Legacy alias → saveInvDetailCombined
+window.editInvDetailSubtitle = editInvDetailSubtitle;   // Legacy alias → editInvDetailCombined
+window.saveInvDetailSubtitle = saveInvDetailSubtitle;   // Legacy alias → saveInvDetailCombined
+window.editInvDetailCombined = editInvDetailCombined;   // Combined title+subtitle edit mode
+window.saveInvDetailCombined = saveInvDetailCombined;   // Save both title+subtitle at once
 // Inventory add-to-pantry bottom sheet (mirrors shopping add-item sheet)
 window.openInvAddSheet = openInvAddSheet;     // Open the add-to-pantry bottom sheet
 window.closeInvAddSheet = closeInvAddSheet;   // Close the add-to-pantry bottom sheet
@@ -236,10 +238,12 @@ window.changeShopQty = changeShopQty;         // Adjust shopping item quantity w
 window.changeShopQtyDirect = changeShopQtyDirect; // Direct input of quantity whole part from detail sheet stepper
 window.changeShopFrac = changeShopFrac;       // Fraction dropdown change for shopping quantity
 // Editable name/subtitle in shopping detail sheet
-window.editShopDetailName = editShopDetailName;           // Switch name to inline edit mode
-window.saveShopDetailName = saveShopDetailName;           // Save edited name on blur/Enter
-window.editShopDetailSubtitle = editShopDetailSubtitle;   // Switch subtitle to inline edit mode
-window.saveShopDetailSubtitle = saveShopDetailSubtitle;   // Save edited subtitle on blur/Enter
+window.editShopDetailName = editShopDetailName;           // Legacy alias → editShopDetailCombined
+window.saveShopDetailName = saveShopDetailName;           // Legacy alias → saveShopDetailCombined
+window.editShopDetailSubtitle = editShopDetailSubtitle;   // Legacy alias → editShopDetailCombined
+window.saveShopDetailSubtitle = saveShopDetailSubtitle;   // Legacy alias → saveShopDetailCombined
+window.editShopDetailCombined = editShopDetailCombined;   // Combined title+subtitle edit mode
+window.saveShopDetailCombined = saveShopDetailCombined;   // Save both title+subtitle at once
 window.deleteItemImage = deleteItemImage;     // Remove product image from a shopping item (keeps other fields)
 window.triggerProductPhotoUpload = triggerProductPhotoUpload; // Open file picker to upload a custom product photo
 window.handleProductPhotoSelected = handleProductPhotoSelected; // Process the selected product photo file
@@ -414,6 +418,7 @@ window.switchHousehold = switchHousehold;   // Switch to a different household
 window.removeHousehold = removeHousehold;   // Leave/remove a household
 window.setMode = setMode;                   // Set light/dark/auto theme mode
 window.showNotif = showNotif;               // Show a toast notification (used from settings HTML)
+window.applyTitleCaseWhileTyping = applyTitleCaseWhileTyping; // Auto Title Case on inline edit inputs (used in detail sheet oninput)
 window.copyInviteCode = copyInviteCode;     // Copy household invite code to clipboard
 window.shareInviteCode = shareInviteCode;   // Share invite code via Web Share API
 window.regenInviteCode = regenInviteCode;   // Regenerate a new invite code (owner only)

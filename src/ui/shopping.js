@@ -511,15 +511,9 @@ export function sH(item) {
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
         <div class="shck" onclick="event.stopPropagation();togShop('${item.id}')">${item.checked ? "✓" : ""}</div>  <!-- Slim ring: tap to mark as bought; hidden in select mode (replaced by sel-cb) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
-          ${item.scanTitle ? (() => {
-            // Clean the subtitle by removing redundant brand/abbreviation duplicates
-            const cleanSub = deduplicateSubtitle(item.name, item.brand || "");
-            // Hide subtitle if it matches the title (case-insensitive) — avoids redundant text
-            const showSub = cleanSub.toLowerCase().trim() !== item.scanTitle.toLowerCase().trim();
-            return `<div class="shnm">${toTitleCase(item.scanTitle)}${qtyBadge}</div>${showSub ? `<div class="sh-brand" style="font-size:.78rem;color:var(--mt)">${toTitleCase(cleanSub)}</div>` : ""}`;
-          })() : `<div class="shnm">${toTitleCase(item.name)}${qtyBadge}</div>`}
-          ${_shouldShowBrand(item) ? `<div class="sh-brand">${item.brand}</div>` : ""}  <!-- Brand shown for barcode scans always; for text search only if the user's query matches the brand name -->
+          <div class="shnm">${toTitleCase(item.scanTitle || item.name)}${qtyBadge}</div>
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
+          <!-- Brand and subtitle intentionally hidden on list rows (Fix #8, #9). Visible in detail sheet only. -->
         </div>
         ${item.price ? `<div class="price-tag">~$${item.price}</div>` : ""}  <!-- Estimated price if available -->
         <button class="sh-note-btn" onclick="toggleShNote(event,'${item.id}')" title="Add note">✏️</button>
@@ -1567,26 +1561,29 @@ export async function openItemDetail(id) {
   // Subtitle: show the raw DB name only when it differs from the display name
   const detailSubtitle = item.scanTitle && item.scanTitle !== item.name ? item.name : "";
 
+  // Build the header with combined inline title+subtitle editing (Fix #11).
+  // Tapping ✏️ reveals both fields at once with a Save button below.
   let html = `<div class="item-detail-header">
     <div style="flex:1;min-width:0">
-      <div class="detail-editable" onclick="editShopDetailName('${item.id}')">
-        <span class="item-detail-name" id="shop-detail-name-${item.id}">${toTitleCase(displayName)}</span>
-        <span class="detail-edit-hint">✏️</span>
+      <div id="shop-detail-display-${item.id}">
+        <div class="detail-editable" onclick="editShopDetailCombined('${item.id}')">
+          <span class="item-detail-name" id="shop-detail-name-${item.id}">${toTitleCase(displayName)}</span>
+          <span class="detail-edit-hint">✏️</span>
+        </div>
+        ${detailSubtitle ? `<div class="item-detail-brand" style="margin-top:2px">${toTitleCase(detailSubtitle)}</div>` : ""}
       </div>
-      <div id="shop-detail-name-edit-${item.id}" style="display:none">
+      <div id="shop-detail-edit-${item.id}" style="display:none">
         <input class="detail-edit-input" id="shop-detail-name-input-${item.id}" value="${toTitleCase(displayName).replace(/"/g, '&quot;')}"
-          data-item-id="${item.id}" onblur="saveShopDetailName('${item.id}')" onkeydown="if(event.key==='Enter')this.blur()" style="font-size:1.1rem;font-weight:700"/>
+          placeholder="Title" oninput="applyTitleCaseWhileTyping(this)"
+          onkeydown="if(event.key==='Enter')document.getElementById('shop-detail-sub-input-${item.id}').focus()"
+          style="font-size:1.1rem;font-weight:700;margin-bottom:6px"/>
+        <input class="detail-edit-input" id="shop-detail-sub-input-${item.id}" value="${toTitleCase(detailSubtitle || item.name).replace(/"/g, '&quot;')}"
+          placeholder="Subtitle (full product name)" oninput="applyTitleCaseWhileTyping(this)"
+          onkeydown="if(event.key==='Enter')saveShopDetailCombined('${item.id}')"
+          style="font-size:.82rem;margin-bottom:6px"/>
+        <button class="btn bp" onclick="saveShopDetailCombined('${item.id}')" style="font-size:.85rem;padding:6px 16px;width:100%">Save</button>
       </div>
-      ${detailSubtitle ? `
-      <div class="detail-editable" onclick="editShopDetailSubtitle('${item.id}')" style="margin-top:2px">
-        <span class="item-detail-brand" id="shop-detail-sub-${item.id}">${toTitleCase(detailSubtitle)}</span>
-        <span class="detail-edit-hint">✏️</span>
-      </div>
-      <div id="shop-detail-sub-edit-${item.id}" style="display:none">
-        <input class="detail-edit-input" id="shop-detail-sub-input-${item.id}" value="${toTitleCase(detailSubtitle).replace(/"/g, '&quot;')}"
-          data-item-id="${item.id}" onblur="saveShopDetailSubtitle('${item.id}')" onkeydown="if(event.key==='Enter')this.blur()" style="font-size:.82rem"/>
-      </div>` : ""}
-      ${showBrand && !detailSubtitle ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
+      ${showBrand ? `<div class="item-detail-brand">${item.brand}</div>` : ""}
       ${item.checked ? `<div style="margin-top:4px"><span class="item-detail-badge" style="background:var(--gnd);color:var(--gn)">✓ Purchased</span></div>` : ""}
     </div>
   </div>`;
@@ -1735,77 +1732,61 @@ export async function changeShopFrac(id) {
 // persist to customProducts/{barcode} so future scans use the corrected name.
 
 /**
- * editShopDetailName(id) — Switches the name display to an inline input field.
+ * editShopDetailCombined(id) — Shows both title and subtitle as inline editable
+ * fields with a Save button below. Replaces the old separate edit/save pattern.
+ * Auto-applies Title Case as the user types in both fields.
  */
-export function editShopDetailName(id) {
-  const display = g(`shop-detail-name-${id}`)?.parentElement;
-  const editRow = g(`shop-detail-name-edit-${id}`);
-  const input = g(`shop-detail-name-input-${id}`);
-  if (!display || !editRow || !input) return;
-  display.style.display = "none";
-  editRow.style.display = "block";
-  input.focus();
-  input.select();
+export function editShopDetailCombined(id) {
+  const displayEl = g(`shop-detail-display-${id}`);
+  const editEl = g(`shop-detail-edit-${id}`);
+  const titleInput = g(`shop-detail-name-input-${id}`);
+  if (!displayEl || !editEl || !titleInput) return;
+  displayEl.style.display = "none";
+  editEl.style.display = "block";
+  titleInput.focus();
+  titleInput.select();
 }
 
 /**
- * saveShopDetailName(id) — Saves the edited name on blur or Enter.
- * Updates the item name (and scanTitle if set) in Firestore.
- * For barcoded items, also saves to customProducts for future scans.
+ * saveShopDetailCombined(id) — Saves both title and subtitle from the combined
+ * edit form. Updates scanTitle/name in Firestore. For barcoded items, also
+ * persists correctedName to customProducts/{barcode} for future scans.
  */
-export async function saveShopDetailName(id) {
+export async function saveShopDetailCombined(id) {
   const item = state.shop.find(i => i.id === id);
   if (!item) return;
-  const input = g(`shop-detail-name-input-${id}`);
-  const newName = (input?.value || "").trim();
-  if (!newName) return; // Don't allow empty names
+  const titleInput = g(`shop-detail-name-input-${id}`);
+  const subInput = g(`shop-detail-sub-input-${id}`);
+  const newTitle = (titleInput?.value || "").trim();
+  const newSub = (subInput?.value || "").trim();
+  if (!newTitle) return; // Title is required
 
-  // Update the display name — if item has a scanTitle, update that; otherwise update name directly
+  // Build update: title goes to scanTitle (or name if no scanTitle), subtitle goes to name
   const updates = { ...item };
-  if (item.scanTitle) {
-    updates.scanTitle = newName;
+  if (item.scanTitle || newSub) {
+    // Item has or will have separate title/subtitle — store title in scanTitle, subtitle in name
+    updates.scanTitle = newTitle;
+    if (newSub) updates.name = newSub;
   } else {
-    updates.name = newName;
+    // No subtitle — store title directly as name
+    updates.name = newTitle;
   }
   await svShopItem(updates);
 
-  // For barcoded items, save the corrected name to customProducts so future scans use it
+  // For barcoded items, save correctedName to customProducts for future barcode scans
   if (item.barcode && state.hid) {
-    await _saveShopCustomProductName(item.barcode, newName);
+    await _saveShopCustomProductName(item.barcode, newTitle);
   }
 
   showNotif("✓ Name updated");
   openItemDetail(id); // Refresh the sheet to reflect changes
 }
 
-/**
- * editShopDetailSubtitle(id) — Switches the subtitle display to an inline input field.
- */
-export function editShopDetailSubtitle(id) {
-  const display = g(`shop-detail-sub-${id}`)?.parentElement;
-  const editRow = g(`shop-detail-sub-edit-${id}`);
-  const input = g(`shop-detail-sub-input-${id}`);
-  if (!display || !editRow || !input) return;
-  display.style.display = "none";
-  editRow.style.display = "block";
-  input.focus();
-  input.select();
-}
-
-/**
- * saveShopDetailSubtitle(id) — Saves the edited subtitle (raw product name) on blur or Enter.
- * Updates item.name in Firestore since the subtitle shows the original DB name.
- */
-export async function saveShopDetailSubtitle(id) {
-  const item = state.shop.find(i => i.id === id);
-  if (!item) return;
-  const input = g(`shop-detail-sub-input-${id}`);
-  const newSub = (input?.value || "").trim();
-  if (!newSub) return;
-  await svShopItem({ ...item, name: newSub });
-  showNotif("✓ Subtitle updated");
-  openItemDetail(id);
-}
+// Keep legacy functions as aliases so any remaining callers don't break
+export function editShopDetailName(id) { editShopDetailCombined(id); }
+export async function saveShopDetailName(id) { await saveShopDetailCombined(id); }
+export function editShopDetailSubtitle(id) { editShopDetailCombined(id); }
+export async function saveShopDetailSubtitle(id) { await saveShopDetailCombined(id); }
 
 /**
  * _saveShopCustomProductName(barcode, correctedName) — Saves a corrected name
