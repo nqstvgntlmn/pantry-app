@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-C1_aI1Cd.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DT_deuij.css">
+  <script type="module" crossorigin src="/assets/index-BBlyvhSz.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DIWLRy1T.css">
 </head>
 <body>
 
@@ -353,15 +353,14 @@
   <div class="bsheet" id="shopAddSheet">
     <div class="bsheet-handle"></div>
     <div class="bsheet-title">Add to list</div>
-    <!-- Persistent barcode scanner — auto-starts when sheet opens, self-checkout style -->
+    <!-- Scan result banner — shows after a barcode is scanned (success/error/loading) -->
+    <div class="scan-result-banner hidden" id="shopScanBanner"></div>
+    <!-- Scan barcode button — tap to activate camera for a single scan -->
+    <button class="sheet-scan-toggle-btn" id="shopScanBtn" onclick="startTapScan('shopAddScannerVF','shop')">📷 Scan barcode</button>
+    <!-- Scanner viewfinder — shown only while camera is active (tap-to-scan) -->
     <div class="sheet-scanner hidden" id="shopAddScanner">
       <div class="sheet-scanner-vf" id="shopAddScannerVF"></div>
-      <div class="sheet-scanner-controls">
-        <button class="sheet-scanner-stop" onclick="stopShopScanner()">Stop scanning</button>
-      </div>
     </div>
-    <!-- Scan barcode button — shown when scanner is stopped, tap to re-activate camera -->
-    <button class="sheet-scan-toggle-btn hidden" id="shopScanStartBtn" onclick="restartShopScanner()">📷 Scan barcode</button>
     <!-- Text input shown immediately when sheet opens -->
     <div id="shopAddTypeForm">
       <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
@@ -387,15 +386,14 @@
   <div class="bsheet" id="invAddSheet">
     <div class="bsheet-handle"></div>
     <div class="bsheet-title">Add to supplies</div>
-    <!-- Persistent barcode scanner — auto-starts when sheet opens, self-checkout style -->
+    <!-- Scan result banner — shows after a barcode is scanned (success/error/loading) -->
+    <div class="scan-result-banner hidden" id="invScanBanner"></div>
+    <!-- Scan barcode button — tap to activate camera for a single scan -->
+    <button class="sheet-scan-toggle-btn" id="invScanBtn" onclick="startTapScan('invAddScannerVF','inv')">📷 Scan barcode</button>
+    <!-- Scanner viewfinder — shown only while camera is active (tap-to-scan) -->
     <div class="sheet-scanner hidden" id="invAddScanner">
       <div class="sheet-scanner-vf" id="invAddScannerVF"></div>
-      <div class="sheet-scanner-controls">
-        <button class="sheet-scanner-stop" onclick="stopInvScanner()">Stop scanning</button>
-      </div>
     </div>
-    <!-- Scan barcode button — shown when scanner is stopped, tap to re-activate camera -->
-    <button class="sheet-scan-toggle-btn hidden" id="invScanStartBtn" onclick="restartInvScanner()">📷 Scan barcode</button>
     <!-- Text input with live search dropdown (same UX as shopping) -->
     <div id="invAddTypeForm">
       <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>

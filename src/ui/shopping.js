@@ -704,8 +704,8 @@ export function toggleAddNote() {
 
 /**
  * openShopAddSheet() — Opens the add-item bottom sheet.
- * Immediately shows the text input with keyboard focused, plus the persistent
- * barcode scanner that auto-starts in the viewfinder area (self-checkout UX).
+ * Shows the text input with keyboard focused and a "📷 Scan barcode" button.
+ * Camera does NOT auto-start — user taps the scan button to activate (tap-to-scan).
  */
 export function openShopAddSheet() {
   const backdrop = g("shopAddBackdrop");
@@ -715,21 +715,17 @@ export function openShopAddSheet() {
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("shi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
 
-  // Ensure the "Scan barcode" start button is hidden (in case it was shown from a previous stop)
-  const startBtn = g("shopScanStartBtn");
-  if (startBtn) startBtn.classList.add("hidden");
-
-  // Start the persistent barcode scanner in the sheet viewfinder after sheet animation completes
-  // The 400ms delay ensures the bottom sheet is fully visible before Quagga measures dimensions
-  setTimeout(() => {
-    if (window.startSheetScanner) window.startSheetScanner("shopAddScannerVF", "shop");
-  }, 400);
+  // Ensure the scan button is visible and scanner is hidden (clean state)
+  const scanBtn = g("shopScanBtn");
+  if (scanBtn) scanBtn.classList.remove("hidden");
+  const scanner = g("shopAddScanner");
+  if (scanner) scanner.classList.add("hidden");
 }
 
 /**
  * closeShopAddSheet() — Dismisses the add-item bottom sheet.
  * Called when tapping the backdrop or after an item is added.
- * Stops the persistent scanner and clears inline search to avoid stale results.
+ * Stops any active tap-to-scan camera and clears inline search to avoid stale results.
  */
 export function closeShopAddSheet() {
   const backdrop = g("shopAddBackdrop");
@@ -738,35 +734,8 @@ export function closeShopAddSheet() {
   if (sheet) sheet.classList.remove("active");
   _clearInlineSearch();
 
-  // Stop the persistent barcode scanner when closing the sheet
-  if (window.stopSheetScanner) window.stopSheetScanner();
-}
-
-/**
- * stopShopScanner() — Pauses the persistent scanner in the shopping add sheet.
- * Called when user taps "Stop scanning" — stops the camera and shows a
- * "📷 Scan barcode" button so the user can re-activate scanning later.
- */
-export function stopShopScanner() {
-  // Pause (stop camera without hiding container) instead of full stop
-  if (window.pauseSheetScanner) window.pauseSheetScanner();
-
-  // Hide the scanner viewfinder, show the "Scan barcode" start button
-  const scanner = g("shopAddScanner");
-  const startBtn = g("shopScanStartBtn");
-  if (scanner) scanner.classList.add("hidden");
-  if (startBtn) startBtn.classList.remove("hidden");
-}
-
-/**
- * restartShopScanner() — Re-activates the persistent scanner after user stopped it.
- * Hides the "Scan barcode" button and restarts the camera in the viewfinder.
- */
-export function restartShopScanner() {
-  // Hide the start button, restart the scanner (startSheetScanner shows the container)
-  const startBtn = g("shopScanStartBtn");
-  if (startBtn) startBtn.classList.add("hidden");
-  if (window.startSheetScanner) window.startSheetScanner("shopAddScannerVF", "shop");
+  // Stop the tap-to-scan camera if it's running when sheet closes
+  if (window.stopTapScan) window.stopTapScan();
 }
 
 /**
