@@ -493,9 +493,9 @@ export function sH(item) {
     // Mixed-unit consolidation: show the descriptive amounts string
     qtyBadge = `<span class="sh-qty sh-qty-mixed"> — ${item.consolidatedAmounts}</span>`;
   } else {
-    // Standard display: show qty × unit with fraction formatting; qty=1 gets muted style
+    // Standard display: show qty × unit with fraction formatting (always muted)
     const qtyDisplay = formatQty(qty);
-    qtyBadge = `<span class="sh-qty${qty === 1 ? ' sh-qty-one' : ''}"> × ${qtyDisplay} ${unit}</span>`;
+    qtyBadge = `<span class="sh-qty"> × ${qtyDisplay} ${unit}</span>`;
   }
 
   // [IMAGES DISABLED] — Product images commented out pending decision.
