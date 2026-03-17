@@ -309,7 +309,8 @@ export async function openInvItemDetail(id) {
     <div class="qty-combo">
       <div class="qty-group">
         <button class="qbtn" onclick="changeInvQty('${item.id}',-1)">−</button>
-        <input class="qinp" id="inv-qty-${item.id}" type="number" min="0" max="99" value="${invWhole}" style="width:48px;text-align:center" onblur="changeInvQtyDirect('${item.id}')"/>
+        <!-- inputmode="numeric" forces numeric keypad on mobile instead of full QWERTY -->
+        <input class="qinp" id="inv-qty-${item.id}" type="number" inputmode="numeric" min="0" max="99" value="${invWhole}" style="width:48px;text-align:center" onblur="changeInvQtyDirect('${item.id}')"/>
         <button class="qbtn" onclick="changeInvQty('${item.id}',1)">+</button>
       </div>
       <div class="frac-group">
@@ -359,7 +360,8 @@ export async function openInvItemDetail(id) {
     <div class="qty-combo">
       <div class="qty-group">
         <button class="qbtn" onclick="changeInvThreshold('${item.id}',-1)">−</button>
-        <input class="qinp" id="inv-thresh-${item.id}" type="number" min="0" max="99" value="${threshWhole}" style="width:48px;text-align:center" onblur="changeInvThresholdDirect('${item.id}')"/>
+        <!-- inputmode="numeric" forces numeric keypad on mobile instead of full QWERTY -->
+        <input class="qinp" id="inv-thresh-${item.id}" type="number" inputmode="numeric" min="0" max="99" value="${threshWhole}" style="width:48px;text-align:center" onblur="changeInvThresholdDirect('${item.id}')"/>
         <button class="qbtn" onclick="changeInvThreshold('${item.id}',1)">+</button>
       </div>
       <div class="frac-group">

@@ -1604,7 +1604,8 @@ export async function openItemDetail(id) {
     <div class="qty-combo">
       <div class="qty-group">
         <button class="qbtn" onclick="changeShopQty('${item.id}',-1)">−</button>
-        <input class="qinp" id="shop-qty-${item.id}" type="number" min="0" max="99" value="${shopWhole}" style="width:48px;text-align:center" onblur="changeShopQtyDirect('${item.id}')"/>
+        <!-- inputmode="numeric" forces numeric keypad on mobile instead of full QWERTY -->
+        <input class="qinp" id="shop-qty-${item.id}" type="number" inputmode="numeric" min="0" max="99" value="${shopWhole}" style="width:48px;text-align:center" onblur="changeShopQtyDirect('${item.id}')"/>
         <button class="qbtn" onclick="changeShopQty('${item.id}',1)">+</button>
       </div>
       <div class="frac-group">
