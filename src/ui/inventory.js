@@ -1128,14 +1128,14 @@ export async function importDoc() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ── INVENTORY BOTTOM SHEET (ADD TO PANTRY) ──────────────────────────────────
+// ── INVENTORY BOTTOM SHEET (ADD TO SUPPLIES) ────────────────────────────────
 // Mirrors the Shopping screen's bottom sheet add-item flow:
 //   - Text input with keyboard auto-focused
 //   - Live search dropdown with debounced product database lookup
-//   - Location picker (fridge / freezer / pantry)
+//   - Location picker (fridge / freezer / pantry / household)
 //   - Optional note field
 //   - "Scan barcode" and "Voice input" options
-// Items added here go to the pantry/inventory collection, not shopping list.
+// Items added here go to the supplies/inventory collection, not shopping list.
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Module-level state for the inventory add flow ──

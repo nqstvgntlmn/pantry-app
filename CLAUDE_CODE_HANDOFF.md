@@ -191,7 +191,7 @@ Bottom navigation (left to right):
 ## Home Tab Features
 
 - Greeting with user name and date
-- **Scan + Add + Refresh** buttons in header
+- **＋ Add + Refresh** buttons in header (universal add sheet with Supplies/Shopping toggle)
 - **Tonight's Dinner** card: `[Find recipes]` `[Ask Claude →]` buttons
 - **This Week:** 7-day calendar for meal planning
 - **What to Cook Tonight?** — collapsible section
@@ -396,7 +396,7 @@ Reusable iOS-style edge swipe-back utility (`src/ui/swipeback.js`) applied to al
 
 - Works in both Shop and Supplies tabs
 - **Shop context:** shows "Add to Shopping List" only
-- **Supplies context:** shows "Add to Pantry" primary, "Add to Shopping" secondary
+- **Supplies context:** shows "Add to Supplies" as the only action
 - **Searches:** Open Food Facts, Open Beauty Facts, UPC Item DB
 - Brand name always shown for barcode-scanned items
 

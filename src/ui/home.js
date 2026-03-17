@@ -11,9 +11,10 @@
 //   ll(loc)     — human-readable storage-location label ("fridge" → "🌡 Fridge")
 
 import { state, J, Js } from '../state.js';
-import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase, formatQtyWithUnit } from '../helpers.js';
-import { saveMp, dbList } from '../db.js';
-import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
+import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase, formatQtyWithUnit, combineQty, applyTitleCaseWhileTyping, gcat, FRAC_OPTIONS } from '../helpers.js';
+import { saveMp, dbList, svi } from '../db.js';
+import { consolidateShopItem, _getProductPreference } from './shopping.js'; // Consolidation-aware add to shopping list + product preferences
+import { UNITS } from './inventory.js'; // Shared unit list for the qty toolbar
 
 // initHome() — called once on app boot.
 // Sets the time-aware greeting ("Good morning/afternoon/evening"), displays
@@ -753,4 +754,292 @@ export function updExport() {
 
   const el = g("expbox"); // the <textarea> or <pre> that displays the export
   if (el) el.textContent = t || "No items yet.";
+}
+
+// ── UNIVERSAL ADD SHEET (HOME TAB) ──────────────────────────────────────────
+// A single "＋ Add" button on the Home tab opens this bottom sheet, which lets
+// users add items to either Supplies or Shopping from one place. Includes the
+// same text input, qty/fraction/unit toolbar, location picker, barcode scan,
+// and voice input as the dedicated Shopping and Supplies add sheets.
+
+/** Current selected storage location in the universal add sheet (default "fridge") */
+let _uniAddLocation = "fridge";
+/** Current whole-number quantity in the universal add toolbar (default 1) */
+let _uniToolbarQty = 1;
+/** Current fraction value in the universal add toolbar (default 0 = none) */
+let _uniToolbarFrac = 0;
+
+/**
+ * initUniQtyToolbar() — Populates the fraction and unit dropdowns in the
+ * universal add-item toolbar. Called once on app init.
+ */
+export function initUniQtyToolbar() {
+  // Build fraction dropdown options from FRAC_OPTIONS
+  const fracSel = g("uniQtyFrac");
+  if (fracSel) {
+    fracSel.innerHTML = FRAC_OPTIONS.map(o =>
+      `<option value="${o.value}">${o.value === 0 ? "·/· ▼" : o.label + " ▼"}</option>`
+    ).join("");
+  }
+  // Build unit dropdown — "Unit" selected by default, then all units alphabetically
+  const unitSel = g("uniQtyUnit");
+  if (unitSel) {
+    unitSel.innerHTML = UNITS.map(u =>
+      `<option value="${u}"${u === "Unit" ? " selected" : ""}>${u}</option>`
+    ).join("");
+  }
+}
+
+/**
+ * _resetUniQtyToolbar() — Resets the toolbar to defaults (qty 1, no fraction, Unit).
+ * Called each time the universal add sheet opens.
+ */
+function _resetUniQtyToolbar() {
+  _uniToolbarQty = 1;
+  _uniToolbarFrac = 0;
+  const valEl = g("uniQtyVal");
+  if (valEl) valEl.textContent = "1";
+  const fracSel = g("uniQtyFrac");
+  if (fracSel) fracSel.value = "0";
+  const unitSel = g("uniQtyUnit");
+  if (unitSel) unitSel.value = "Unit";
+}
+
+/**
+ * openUniversalAdd() — Opens the universal add bottom sheet from the Home tab.
+ * Resets all fields (input, qty, location, note) and focuses the text input.
+ */
+export function openUniversalAdd() {
+  const backdrop = g("uniAddBackdrop");
+  const sheet = g("uniAddSheet");
+  if (backdrop) backdrop.classList.add("active");
+  if (sheet) sheet.classList.add("active");
+
+  // Reset location picker to default (fridge)
+  _uniAddLocation = "fridge";
+  document.querySelectorAll("#uniAddSheet .lbtn").forEach(b => b.classList.remove("sel"));
+  const fBtn = g("uniAddLoc-fridge");
+  if (fBtn) fBtn.classList.add("sel");
+
+  // Reset qty/unit toolbar to defaults
+  _resetUniQtyToolbar();
+
+  // Clear note field
+  const noteWrap = g("uniAddNoteWrap");
+  if (noteWrap) noteWrap.style.display = "none";
+  const noteInp = g("uniAddNoteInp");
+  if (noteInp) noteInp.value = "";
+
+  // Clear search dropdown
+  const dropdown = g("uniSearchDropdown");
+  if (dropdown) { dropdown.innerHTML = ""; dropdown.classList.remove("active"); }
+
+  // Auto-focus the input so the keyboard pops up immediately
+  setTimeout(() => { const inp = g("uniAddInput"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
+}
+
+/**
+ * closeUniversalAdd() — Dismisses the universal add bottom sheet.
+ * Called when tapping the backdrop or after an item is added to both lists.
+ */
+export function closeUniversalAdd() {
+  const backdrop = g("uniAddBackdrop");
+  const sheet = g("uniAddSheet");
+  if (backdrop) backdrop.classList.remove("active");
+  if (sheet) sheet.classList.remove("active");
+  // Clear search dropdown
+  const dropdown = g("uniSearchDropdown");
+  if (dropdown) { dropdown.innerHTML = ""; dropdown.classList.remove("active"); }
+}
+
+/**
+ * uniQtyStep(delta) — Increments or decrements the universal toolbar whole qty.
+ * Clamps to 1–99 range.
+ */
+export function uniQtyStep(delta) {
+  _uniToolbarQty = Math.max(1, Math.min(99, _uniToolbarQty + delta));
+  const valEl = g("uniQtyVal");
+  if (valEl) valEl.textContent = _uniToolbarQty;
+}
+
+/**
+ * uniFracChange() — Updates the stored fraction value when the user picks
+ * a fraction from the universal toolbar dropdown.
+ */
+export function uniFracChange() {
+  const fracSel = g("uniQtyFrac");
+  _uniToolbarFrac = fracSel ? parseFloat(fracSel.value) || 0 : 0;
+}
+
+/**
+ * _getUniToolbarValues() — Returns the current toolbar qty, fraction, and unit
+ * as a combined quantity decimal + unit string.
+ */
+function _getUniToolbarValues() {
+  const fracSel = g("uniQtyFrac");
+  const unitSel = g("uniQtyUnit");
+  const frac = fracSel ? parseFloat(fracSel.value) || 0 : 0;
+  const unit = unitSel ? unitSel.value : "Unit";
+  const qty = combineQty(_uniToolbarQty, frac);
+  return { qty, unit };
+}
+
+/**
+ * setUniAddLoc(loc, btn) — Sets the storage location in the universal add sheet.
+ * Updates the module state and highlights the selected location button.
+ */
+export function setUniAddLoc(loc, btn) {
+  _uniAddLocation = loc;
+  document.querySelectorAll("#uniAddSheet .lbtn").forEach(b => b.classList.remove("sel"));
+  if (btn) btn.classList.add("sel");
+}
+
+/**
+ * toggleUniAddNote() — Toggles the optional note field in the universal add sheet.
+ * When shown, focuses the textarea so the user can start typing immediately.
+ */
+export function toggleUniAddNote() {
+  const wrap = g("uniAddNoteWrap");
+  if (!wrap) return;
+  const showing = wrap.style.display === "none";
+  wrap.style.display = showing ? "block" : "none";
+  if (showing) {
+    const inp = g("uniAddNoteInp");
+    if (inp) inp.focus();
+  }
+}
+
+/**
+ * onUniAddInput() — Called on every keystroke in the universal add input.
+ * Applies Title Case as the user types (search is disabled per project settings).
+ */
+export function onUniAddInput() {
+  const inp = g("uniAddInput");
+  if (inp) applyTitleCaseWhileTyping(inp);
+}
+
+/**
+ * _parseUniInput() — Parses the universal add input, extracting optional quantity
+ * from common patterns (e.g. "5 Apples", "Eggs x3"). Returns { name, qty, unit, note }.
+ */
+function _parseUniInput() {
+  const inp = g("uniAddInput");
+  const v = inp ? inp.value.trim() : "";
+  if (!v) return null;
+
+  // Try to parse a quantity from common text patterns
+  let name = v, textQty = null;
+  const leadMatch = v.match(/^(\d+)\s+(.+)/);
+  const trailMatch = v.match(/^(.+?)\s*[x×]\s*(\d+)$/i);
+  if (trailMatch) { name = trailMatch[1].trim(); textQty = parseInt(trailMatch[2], 10) || null; }
+  else if (leadMatch) { name = leadMatch[2].trim(); textQty = parseInt(leadMatch[1], 10) || null; }
+
+  // Use toolbar qty/unit — text-parsed qty overrides only the whole number
+  const tb = _getUniToolbarValues();
+  const qty = textQty || tb.qty;
+  const unit = tb.unit;
+
+  // Capture optional note
+  const noteInp = g("uniAddNoteInp");
+  const note = noteInp ? noteInp.value.trim() : "";
+
+  return { name, qty, unit, note };
+}
+
+/**
+ * _resetUniAfterAdd() — Clears the input and note fields after adding an item.
+ * Keeps the sheet open so the user can immediately add the next item.
+ */
+function _resetUniAfterAdd() {
+  const inp = g("uniAddInput");
+  if (inp) { inp.value = ""; inp.focus(); }
+  const noteInp = g("uniAddNoteInp");
+  if (noteInp) noteInp.value = "";
+  const noteWrap = g("uniAddNoteWrap");
+  if (noteWrap) noteWrap.style.display = "none";
+  // Clear search dropdown
+  const dropdown = g("uniSearchDropdown");
+  if (dropdown) { dropdown.innerHTML = ""; dropdown.classList.remove("active"); }
+  // Reset toolbar for next item
+  _resetUniQtyToolbar();
+}
+
+/**
+ * uniAddToSupplies() — Adds the current input as an inventory/supplies item.
+ * Checks for saved product preferences (location + unit), saves to Firestore,
+ * and keeps the sheet open for the next item.
+ */
+export async function uniAddToSupplies() {
+  const parsed = _parseUniInput();
+  if (!parsed) return;
+
+  const { name, qty, note } = parsed;
+
+  // Check for saved product preferences (location + unit)
+  const pref = await _getProductPreference(name);
+  const loc = pref?.preferredLocation || _uniAddLocation;
+  // Toolbar unit takes priority, then saved preference, then default "unit"
+  const unit = parsed.unit !== "Unit" ? parsed.unit : (pref?.preferredUnit || "unit");
+
+  // Generate a unique ID for the new inventory item
+  const id = "itm-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
+
+  // Build and save the inventory item
+  const item = {
+    id, barcode: id, name, brand: "", unit, qty,
+    location: loc, category: gcat({ name }),
+    image: null, source: "Manual",
+    expiry: null, addedAt: new Date().toLocaleDateString()
+  };
+  if (note) item.note = note;
+  svi(item);
+
+  showNotif(`${name} added to Supplies 🧺`);
+  _resetUniAfterAdd();
+}
+
+/**
+ * uniAddToShopping() — Adds the current input as a shopping list item.
+ * Uses consolidation to prevent duplicates if the item is already on the list.
+ * Keeps the sheet open for the next item.
+ */
+export async function uniAddToShopping() {
+  const parsed = _parseUniInput();
+  if (!parsed) return;
+
+  const { name, qty, unit, note } = parsed;
+
+  const item = { id: Date.now().toString(), name, qty, unit, checked: false, src: "manual" };
+  if (note) item.note = note;
+
+  // Consolidate with existing shopping list items to prevent duplicates
+  const result = await consolidateShopItem(item);
+
+  if (result.action === "new") {
+    showNotif(`${name} added to Shopping 🛒`);
+  } else if (result.action === "consolidated") {
+    showNotif(`${name} quantity updated on Shopping 🛒`);
+  } else if (result.action === "skipped") {
+    return; // User cancelled from the "already have" prompt
+  }
+
+  _resetUniAfterAdd();
+}
+
+/**
+ * uniAddScan() — Opens the barcode scanner from the universal add sheet.
+ * Closes the sheet and opens the scanner in inventory mode (default).
+ */
+export function uniAddScan() {
+  closeUniversalAdd();
+  if (window.openScanForInventory) window.openScanForInventory();
+}
+
+/**
+ * uniAddVoice() — Opens voice input from the universal add sheet.
+ * Closes the sheet and starts voice recognition for inventory.
+ */
+export function uniAddVoice() {
+  closeUniversalAdd();
+  if (window.toggleInvVoice) window.toggleInvVoice();
 }

@@ -475,7 +475,7 @@ export function openScanForInventory() {
   state.scanDestList = false;             // Flag: route scanned items to inventory (default behavior)
   showOv("scan");                         // Show the scan overlay panel
   const ttl = g("scanovttl"); if (ttl) ttl.textContent = "Scan Barcode";
-  const hint = g("scan-dest-hint"); if (hint) hint.textContent = "Scan a barcode to add to your pantry or shopping list.";
+  const hint = g("scan-dest-hint"); if (hint) hint.textContent = "Scan a barcode to add to your supplies.";
   g("scerr").style.display = "none";     // Clear any previous errors
   startLiveScanner();                     // Begin live camera scanning immediately
 }
@@ -785,9 +785,10 @@ function showRes(prod) {
 
   // Dynamically render the action buttons based on which tab triggered the scan.
   // Shopping tab context (scanDestList=true): only show "Add to Shopping List" as primary —
-  // the user is clearly in shopping mode, so "Add to Pantry" is irrelevant and confusing.
-  // Pantry tab context (scanDestList=false): keep both options (Add to Pantry primary,
-  // Add to Shopping List secondary) since users might want either from inventory context.
+  // the user is clearly in shopping mode, so "Add to Supplies" is irrelevant and confusing.
+  // Supplies tab context (scanDestList=false): show only "Add to Supplies" as primary.
+  // The "Add to Shopping" option is available from the Supplies item detail sheet for
+  // existing items that are running low — not needed here on the scan result screen.
   const destEl = g("scan-dest-btns");
   if (destEl) {
     if (prod.notFound) {
@@ -795,7 +796,7 @@ function showRes(prod) {
       // Show only the add button here (disabled until user types a name).
       // The add action depends on which tab triggered the scan.
       const addAction = state.scanDestList ? "addScannedToList()" : "addToInv()";
-      const addLabel = state.scanDestList ? "🛒 Add to Shopping List" : "📦 Add to Pantry";
+      const addLabel = state.scanDestList ? "🛒 Add to Shopping List" : "🧺 Add to Supplies";
       destEl.innerHTML = `<button class="btn bp" style="width:100%" id="addbtn" onclick="${addAction}">${addLabel}</button>`;
     } else if (state.scanDestList) {
       // Shopping tab context — single primary action: add to shopping list
@@ -804,12 +805,11 @@ function showRes(prod) {
         <button class="btn bp" style="flex:2;background:var(--gn);border-color:var(--gn)" id="addbtn" onclick="addScannedToList()">🛒 Add to Shopping List</button>
       </div>`;
     } else {
-      // Pantry tab context — primary: add to pantry, secondary: add to shopping list
+      // Supplies tab context — single primary action: add to supplies
       destEl.innerHTML = `<div class="brow">
         <button class="btn bs" style="flex:1" onclick="resumeScanner()">← Back</button>
-        <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">📦 Add to Pantry</button>
-      </div>
-      <button class="btn bs bf" style="margin-top:8px;border-color:var(--gn);color:var(--gn)" onclick="addScannedToList()">🛒 Add to Shopping List instead</button>`;
+        <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">🧺 Add to Supplies</button>
+      </div>`;
     }
   }
 

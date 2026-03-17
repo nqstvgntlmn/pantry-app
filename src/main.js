@@ -40,7 +40,7 @@ window.getIdToken = getIdToken;
 // so they can be attached to `window` for HTML onclick access.
 
 // Home screen: dashboard rendering, weekly/tonight views, export panel
-import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection, openRecipeMatch, showMoreMatches, addMissingToShop, changeWeek } from './ui/home.js';
+import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection, openRecipeMatch, showMoreMatches, addMissingToShop, changeWeek, openUniversalAdd, closeUniversalAdd, uniQtyStep, uniFracChange, setUniAddLoc, toggleUniAddNote, onUniAddInput, uniAddToSupplies, uniAddToShopping, uniAddScan, uniAddVoice, initUniQtyToolbar } from './ui/home.js';
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
@@ -142,6 +142,18 @@ window.addMissingToShop = addMissingToShop;   // Add a missing ingredient to sho
 window.changeWeek = changeWeek;               // Navigate week calendar forward/backward
 // toggleExp — toggle the export panel's visibility (show/hide)
 window.toggleExp = function() { const p = g("exppanel"); p.style.display = p.style.display === "none" ? "block" : "none"; };
+// ── Universal add sheet handlers (Home tab "＋ Add" button) ──
+window.openUniversalAdd = openUniversalAdd;     // Open the universal add bottom sheet
+window.closeUniversalAdd = closeUniversalAdd;   // Close the universal add bottom sheet
+window.uniQtyStep = uniQtyStep;                 // Increment/decrement universal toolbar qty
+window.uniFracChange = uniFracChange;           // Update universal toolbar fraction
+window.setUniAddLoc = setUniAddLoc;             // Set location in universal add sheet
+window.toggleUniAddNote = toggleUniAddNote;     // Toggle note field in universal add sheet
+window.onUniAddInput = onUniAddInput;           // Title Case as user types in universal add
+window.uniAddToSupplies = uniAddToSupplies;     // Add item to Supplies from universal sheet
+window.uniAddToShopping = uniAddToShopping;     // Add item to Shopping from universal sheet
+window.uniAddScan = uniAddScan;                 // Scan barcode from universal add sheet
+window.uniAddVoice = uniAddVoice;               // Voice input from universal add sheet
 
 // ── Inventory screen handlers ──
 window.openAdj = openAdj;       // Open the adjust-item overlay for a specific inventory item
@@ -182,9 +194,9 @@ window.editInvDetailSubtitle = editInvDetailSubtitle;   // Legacy alias → edit
 window.saveInvDetailSubtitle = saveInvDetailSubtitle;   // Legacy alias → saveInvDetailCombined
 window.editInvDetailCombined = editInvDetailCombined;   // Combined title+subtitle edit mode
 window.saveInvDetailCombined = saveInvDetailCombined;   // Save both title+subtitle at once
-// Inventory add-to-pantry bottom sheet (mirrors shopping add-item sheet)
-window.openInvAddSheet = openInvAddSheet;     // Open the add-to-pantry bottom sheet
-window.closeInvAddSheet = closeInvAddSheet;   // Close the add-to-pantry bottom sheet
+// Inventory add-to-supplies bottom sheet (mirrors shopping add-item sheet)
+window.openInvAddSheet = openInvAddSheet;     // Open the add-to-supplies bottom sheet
+window.closeInvAddSheet = closeInvAddSheet;   // Close the add-to-supplies bottom sheet
 window.invAddScan = invAddScan;               // Scan barcode from inventory bottom sheet
 window.invAddVoice = invAddVoice;             // Start voice input from inventory bottom sheet
 window.invQtyStep = invQtyStep;               // Increment/decrement inventory toolbar qty
@@ -725,9 +737,10 @@ window._appStart = async function(code) {
   initVoice();
   initInvVoice();
 
-  // Populate the qty/fraction/unit toolbar dropdowns in both add-item sheets
+  // Populate the qty/fraction/unit toolbar dropdowns in all add-item sheets
   initShopQtyToolbar();
   initInvQtyToolbar();
+  initUniQtyToolbar();
 
   // ── Real-time sync ──
   // Instead of polling every 30 seconds, we use Firestore onSnapshot listeners

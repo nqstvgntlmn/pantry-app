@@ -110,9 +110,9 @@
           <div class="setbtn" onclick="showOv('settings')">⚙️</div>
         </div>
       </div>
+      <!-- Single universal "+ Add" button — opens the universal add sheet -->
       <div class="arow">
-        <button class="btn bp bsm" style="flex:1" onclick="openScanForInventory()">📷 Scan</button>
-        <button class="btn bs bsm" style="flex:1" onclick="showOv('madd')">✏️ Add</button>
+        <button class="btn bp bsm" style="flex:1" onclick="openUniversalAdd()">＋ Add</button>
       </div>
     </div>
     <div class="hbody">
@@ -440,6 +440,61 @@
     </div>
   </div>
 
+  <!-- BOTTOM SHEET: UNIVERSAL ADD (Home tab — adds to Supplies or Shopping) -->
+  <div class="bsheet-backdrop" id="uniAddBackdrop" onclick="closeUniversalAdd()"></div>
+  <div class="bsheet" id="uniAddSheet" style="max-height:85vh">
+    <div class="bsheet-handle"></div>
+    <div class="bsheet-title">Add item</div>
+    <!-- Text input with live search dropdown (same pattern as Shopping/Supplies) -->
+    <div id="uniAddForm">
+      <input class="fi" id="uniAddInput" placeholder="e.g. Milk, Eggs, Bread…" oninput="onUniAddInput()" onkeydown="if(event.key==='Enter')uniAddToSupplies()"/>
+      <div id="uniSearchDropdown"></div>
+      <!-- Qty/fraction/unit toolbar — same as Shopping and Supplies add sheets -->
+      <div class="qty-toolbar" id="uniQtyToolbar">
+        <div class="qt-stepper">
+          <button type="button" onclick="uniQtyStep(-1)">−</button>
+          <span class="qt-val" id="uniQtyVal">1</span>
+          <button type="button" onclick="uniQtyStep(1)">+</button>
+        </div>
+        <select class="qt-frac" id="uniQtyFrac" onchange="uniFracChange()"></select>
+        <select class="qt-unit" id="uniQtyUnit"></select>
+      </div>
+      <!-- Storage location picker (same as Supplies add sheet) -->
+      <div class="frow" style="margin-top:10px;margin-bottom:0">
+        <label class="flbl">Location</label>
+        <div class="lpick">
+          <button class="lbtn sel" id="uniAddLoc-fridge" onclick="setUniAddLoc('fridge',this)">🌡 Fridge</button>
+          <button class="lbtn" id="uniAddLoc-freezer" onclick="setUniAddLoc('freezer',this)">🧊 Freezer</button>
+          <button class="lbtn" id="uniAddLoc-pantry" onclick="setUniAddLoc('pantry',this)">🥫 Pantry</button>
+          <button class="lbtn" id="uniAddLoc-household" onclick="setUniAddLoc('household',this)">🏠 Household</button>
+        </div>
+      </div>
+      <div style="margin-top:6px;margin-bottom:10px"><button class="sh-add-note-toggle" onclick="toggleUniAddNote()">+ Note</button></div>
+      <div class="sh-add-note-wrap" id="uniAddNoteWrap" style="display:none">
+        <textarea class="sh-note-inp" id="uniAddNoteInp" rows="2" placeholder="Add a note… (e.g. brand, size, store)"></textarea>
+      </div>
+      <!-- Two action buttons: primary = Add to Supplies (gold), secondary = Add to Shopping -->
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn bp bf" style="flex:1" onclick="uniAddToSupplies()">🧺 Add to Supplies</button>
+        <button class="btn bs bf" style="flex:1" onclick="uniAddToShopping()">🛒 Add to Shopping</button>
+      </div>
+    </div>
+    <!-- Scan and voice options below (same as Shopping/Supplies sheets) -->
+    <div class="bsheet-options" style="margin-top:12px">
+      <button class="bsheet-opt bsheet-opt-scan" onclick="uniAddScan()">
+        <span class="bsheet-opt-icon" style="font-size:1.8rem">📷</span>
+        <div style="flex:1">
+          <span class="bsheet-opt-text">Scan barcode</span>
+          <span class="bsheet-opt-sub">Point your camera at any product barcode</span>
+        </div>
+      </button>
+      <button class="bsheet-opt" id="uniAddMicOpt" onclick="uniAddVoice()">
+        <span class="bsheet-opt-icon">🎤</span>
+        <span class="bsheet-opt-text">Voice input</span>
+      </button>
+    </div>
+  </div>
+
   <!-- BOTTOM SHEET: PRODUCT DETAIL (tap a shopping item to see info) -->
   <div class="bsheet-backdrop" id="itemDetailBackdrop" onclick="closeItemDetail()"></div>
   <div class="bsheet" id="itemDetailSheet">
@@ -489,7 +544,7 @@
   <div class="ov" id="ov-scan">
     <div class="ovhdr"><div class="bkbtn" onclick="stopLiveScanner();hideOv('scan')">←</div><div class="ovttl" id="scanovttl">Scan Barcode</div></div>
     <div class="ovbody">
-      <p id="scan-dest-hint" style="font-size:.78rem;color:var(--mt);padding:8px 0 4px;text-align:center">Scan a barcode to add to your pantry or shopping list.</p>
+      <p id="scan-dest-hint" style="font-size:.78rem;color:var(--mt);padding:8px 0 4px;text-align:center">Scan a barcode to add to your supplies.</p>
       <div id="scanbody">
         <!-- Live camera viewfinder: streams the rear camera and auto-detects barcodes in real time -->
         <div id="scanner-viewport">
@@ -556,9 +611,8 @@
       <div id="scan-dest-btns">
         <div class="brow">
           <button class="btn bs" style="flex:1" onclick="resumeScanner()">← Back</button>
-          <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">📦 Add to Supplies</button>
+          <button class="btn bp" style="flex:2" id="addbtn" onclick="addToInv()">🧺 Add to Supplies</button>
         </div>
-        <button class="btn bs bf" style="margin-top:8px;border-color:var(--gn);color:var(--gn)" onclick="addScannedToList()">🛒 Add to Shopping List instead</button>
       </div>
     </div>
   </div>
