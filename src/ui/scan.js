@@ -787,7 +787,7 @@ function showRes(prod) {
   // Shopping tab context (scanDestList=true): only show "Add to Shopping List" as primary —
   // the user is clearly in shopping mode, so "Add to Supplies" is irrelevant and confusing.
   // Supplies tab context (scanDestList=false): show only "Add to Supplies" as primary.
-  // The "Add to Shopping" option is available from the Supplies item detail sheet for
+  // The "Add to Shopping List" option is available from the Supplies item detail sheet for
   // existing items that are running low — not needed here on the scan result screen.
   const destEl = g("scan-dest-btns");
   if (destEl) {

@@ -631,7 +631,7 @@ export async function openRecipeMatch() {
  * _renderMatchPage(el) — Renders the next page of matched recipe cards.
  * Shows 5 recipes at a time with a "Show 5 more" button for pagination.
  * Three tiers: 🟢 Ready (80-100%), 🟡 Almost there (60-79%), 🟠 Just a few things (40-59%).
- * Missing ingredients shown for 🟡 and 🟠 tiers with quick "Add to Shopping" buttons.
+ * Missing ingredients shown for 🟡 and 🟠 tiers with quick "Add to Shopping List" buttons.
  */
 function _renderMatchPage(el) {
   // No recipes met the 40% threshold — distinct from "no community recipes" or errors
@@ -656,7 +656,7 @@ function _renderMatchPage(el) {
       ? `<img src="${recipe.imageUrl}" style="width:100%;height:140px;object-fit:cover;border-radius:12px 12px 0 0" alt="" onerror="this.style.display='none'"/>`
       : `<div style="width:100%;height:80px;background:var(--sf);border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:center;font-size:2rem">🍽</div>`;
 
-    // Missing ingredients list with "Add to Shopping" buttons — shown for 🟡 and 🟠 tiers
+    // Missing ingredients list with "Add to Shopping List" buttons — shown for 🟡 and 🟠 tiers
     // 🟢 tier (80-100%) doesn't show missing ingredients since user is ready to cook
     const showMissing = recipe.matchPct < 80 && recipe.missing.length > 0;
     const missingHtml = showMissing
