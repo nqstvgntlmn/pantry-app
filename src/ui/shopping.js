@@ -480,22 +480,28 @@ function _shouldShowBrand(item) {
   return false;
 }
 
+/**
+ * sH(item) — Builds a single shopping list row's HTML.
+ *
+ * Layout matches Supplies rows: item name on the left, quantity and unit
+ * stacked vertically on the right (quantity on top, unit below).
+ * Tapping the row opens the detail sheet for editing — no inline pencil icon.
+ */
 export function sH(item) {
   // Default to qty 1 if the field is missing (backwards compat with old items)
   const qty = item.qty || 1;
   const unit = item.unit || "Unit";
 
-  // Quantity badge: two display modes depending on whether units were consolidated
-  //   1. Normal: "× 3 Unit" — when all quantities share the same unit
-  //   2. Consolidated mixed: "— 2 tbsp + 1 tsp" — when different units were merged
-  let qtyBadge;
+  // Format quantity for the right-side display — handles fractions (e.g. "1 ½")
+  // For consolidated mixed-unit items, show the descriptive amounts string instead
+  let qtyDisplay, unitDisplay;
   if (item.consolidatedAmounts) {
-    // Mixed-unit consolidation: show the descriptive amounts string
-    qtyBadge = `<span class="sh-qty sh-qty-mixed"> — ${item.consolidatedAmounts}</span>`;
+    // Mixed-unit consolidation: show combined amounts as the quantity, no separate unit
+    qtyDisplay = item.consolidatedAmounts;
+    unitDisplay = "";
   } else {
-    // Standard display: show qty × unit with fraction formatting (always muted)
-    const qtyDisplay = formatQty(qty);
-    qtyBadge = `<span class="sh-qty"> × ${qtyDisplay} ${unit}</span>`;
+    qtyDisplay = formatQty(qty);
+    unitDisplay = unit;
   }
 
   // [IMAGES DISABLED] — Product images commented out pending decision.
@@ -511,17 +517,16 @@ export function sH(item) {
         <div class="sel-cb">✓</div>           <!-- Multi-select checkbox (hidden unless selectMode is active) -->
         <div class="shck" onclick="event.stopPropagation();togShop('${item.id}')">${item.checked ? "✓" : ""}</div>  <!-- Slim ring: tap to mark as bought; hidden in select mode (replaced by sel-cb) -->
         <div style="flex:1;min-width:0;cursor:pointer" onclick="openItemDetail('${item.id}')">
-          <div class="shnm">${toTitleCase(item.scanTitle || item.name)}${qtyBadge}</div>
+          <div class="shnm">${toTitleCase(item.scanTitle || item.name)}</div>
           ${item.note ? `<div class="shnote">📝 ${item.note}</div>` : ""}  <!-- Optional user note shown below name -->
           <!-- Brand and subtitle intentionally hidden on list rows (Fix #8, #9). Visible in detail sheet only. -->
         </div>
         ${item.price ? `<div class="price-tag">~$${item.price}</div>` : ""}  <!-- Estimated price if available -->
-        <button class="sh-note-btn" onclick="toggleShNote(event,'${item.id}')" title="Add note">✏️</button>
-      </div>
-      <!-- Inline qty editor removed — quantity is now edited via the detail sheet stepper -->
-      <!-- Expandable note editor (hidden by default, toggled by toggleShNote) -->
-      <div class="sh-note-edit" id="sne-${item.id}">
-        <textarea class="sh-note-inp" id="sni-${item.id}" rows="2" placeholder="Add a note… (e.g. brand, size, store)" onblur="saveShNote('${item.id}')">${item.note || ""}</textarea>
+        <!-- Quantity and unit stacked on the right — matches Supplies row layout -->
+        <div style="text-align:right;flex-shrink:0">
+          <div class="iqt">${qtyDisplay}</div>
+          ${unitDisplay ? `<div class="iun">${unitDisplay}</div>` : ""}
+        </div>
       </div>
     </div>
     <!-- Delete zone: slides in from right on swipe. Trash can lid animates open past threshold. -->

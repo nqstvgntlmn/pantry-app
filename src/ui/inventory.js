@@ -106,10 +106,10 @@ export function iH(item) {
           ${item.note ? `<div class="shnote" style="margin-top:2px">📝 ${item.note}</div>` : ""}
           ${et}
         </div>
+        <!-- Quantity and unit stacked on the right — clean row, no restock indicator (visible in detail sheet toggle) -->
         <div style="text-align:right;flex-shrink:0">
           <div class="iqt">${formatQty(item.qty)}</div>
           <div class="iun">${item.unit || "Unit"}</div>
-          ${item.doNotRestock ? '<div style="font-size:.55rem;color:var(--mt);margin-top:1px;opacity:.7">No restock</div>' : ""}
         </div>
       </div>
     </div>
