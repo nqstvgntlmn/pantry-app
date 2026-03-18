@@ -633,7 +633,8 @@ async function lkup(bc) {
           nutrition: null,
           customOverride: true,
           notFound: false,
-          _scanTitle: customData.correctedName,  // Use corrected name as the display title
+          _scanTitle: customData.correctedName,   // Corrected name as the display title
+          _originalName: customData.originalName || "",  // Raw database name for subtitle reference
         };
       }
     } catch {
@@ -728,6 +729,11 @@ function showRes(prod) {
     // and provides the full name as a subtitle for context.
     const scanFmt = formatScanResult(prod);
 
+    // Preserve the original database product name on first render so confirmScanTitle()
+    // can persist it alongside any user correction. On custom override rescans, _originalName
+    // comes from Firestore; on fresh scans, it's the raw database name from the API.
+    if (!prod._originalName) prod._originalName = prod.name;
+
     // Store the smart title on the product object so addScannedToList() / addToInv() can persist it.
     // If _scanTitle is already set (e.g. from customProducts override), preserve the user's correction.
     if (!prod._scanTitle) prod._scanTitle = scanFmt.title;
@@ -741,14 +747,21 @@ function showRes(prod) {
     // Use the display title (which preserves custom override names)
     const displayTitle = prod._scanTitle || scanFmt.title;
 
+    // For custom override products, show the original database product name as subtitle
+    // so users still see what the barcode database returned (e.g. "Dairies") below
+    // the corrected title (e.g. "Cheese"). For normal products, use the standard subtitle.
+    const subtitleRaw = (prod.customOverride && prod._originalName)
+      ? prod._originalName
+      : scanFmt.subtitle;
+
     // Hide subtitle entirely if it matches the title (case-insensitive) — avoids redundant text
-    const subtitleHidden = scanFmt.subtitle.toLowerCase().trim() === displayTitle.toLowerCase().trim();
+    const subtitleHidden = subtitleRaw.toLowerCase().trim() === displayTitle.toLowerCase().trim();
 
     // Subtitle: full product name, truncated at 60 characters with tap-to-expand.
     // Uses data attribute + generic handler to avoid inline script injection from product names.
-    const subtitleText = scanFmt.subtitle.length > 60 ? scanFmt.subtitle.slice(0, 60) + "…" : scanFmt.subtitle;
-    const subtitleExpand = scanFmt.subtitle.length > 60
-      ? ` data-full="${scanFmt.subtitle.replace(/"/g, "&quot;")}" onclick="this.textContent=this.dataset.full" style="cursor:pointer"`
+    const subtitleText = subtitleRaw.length > 60 ? subtitleRaw.slice(0, 60) + "…" : subtitleRaw;
+    const subtitleExpand = subtitleRaw.length > 60
+      ? ` data-full="${subtitleRaw.replace(/"/g, "&quot;")}" onclick="this.textContent=this.dataset.full" style="cursor:pointer"`
       : "";
 
     // Assemble the product card with smart title (large + editable), subtitle (smaller), brand (smallest).
@@ -943,17 +956,20 @@ export async function confirmScanTitle() {
   editEl.style.display = "none";
   textEl.style.display = "flex";
 
-  // If the user actually changed the name (and didn't just revert), save to Firestore
+  // If the user actually changed the name (and didn't just revert), save to Firestore.
+  // Pass the original database name so future rescans can show it as subtitle reference.
   if (newName && newName !== originalName && state.cp && state.cp.barcode) {
-    await _saveCustomProductName(state.cp.barcode, newName, state.cp);
+    await _saveCustomProductName(state.cp.barcode, newName, state.cp, state.cp._originalName || originalName);
     showNotif("✓ Product name saved for future scans");
   }
 }
 
 // Persists a corrected product name to the household's customProducts collection.
 // Document ID is keyed by barcode so future scans find the override instantly.
-// Stores the corrected name along with metadata (brand, category, who/when).
-async function _saveCustomProductName(barcode, correctedName, product) {
+// Stores the corrected name, original database name (for subtitle), and metadata.
+// Also invalidates the localStorage scan cache for this barcode so stale entries
+// don't resurface if the Firestore custom product check ever fails silently.
+async function _saveCustomProductName(barcode, correctedName, product, originalName) {
   if (!state.hid || !barcode) return;
 
   // Normalize the barcode for use as a Firestore document ID (strip non-alphanumeric chars)
@@ -965,10 +981,12 @@ async function _saveCustomProductName(barcode, correctedName, product) {
   const uid = user ? user.uid : "unknown";
 
   // Save the corrected name and relevant product metadata to Firestore.
-  // On future scans, the api/barcode.js endpoint checks this before external DBs.
+  // originalName preserves the raw database product name so rescans can show it
+  // as a subtitle for reference (e.g. "Dairies" below the corrected "Cheese").
   await dbSet(docPath, {
     barcode: barcode,
     correctedName: correctedName,
+    originalName: originalName || "",
     brand: product.brand || "",
     category: product.category || "General",
     image: product.image || null,
@@ -977,4 +995,9 @@ async function _saveCustomProductName(barcode, correctedName, product) {
     updatedAt: new Date().toISOString(),
     updatedBy: uid,
   });
+
+  // Invalidate the localStorage scan cache for this barcode so stale entries
+  // (with the old uncorrected name) don't resurface on future scans if the
+  // Firestore custom product check fails due to network issues
+  try { localStorage.removeItem(SCAN_CACHE_PREFIX + barcode); } catch { /* non-fatal */ }
 }
