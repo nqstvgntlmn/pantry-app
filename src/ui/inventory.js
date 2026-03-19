@@ -14,7 +14,7 @@ import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add 
 // gcat     – guess/get category for an item
 // CATS     – map of category name → emoji icon
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, renderFracSelect, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS, getItemEmoji } from '../helpers.js';
+import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, pluralizeUnit, renderFracSelect, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS, getItemEmoji } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 // _defaultThreshold returns the smart restock threshold based on unit type
 import { updExport, _defaultThreshold } from './home.js';
@@ -109,7 +109,7 @@ export function iH(item) {
         <!-- Quantity and unit stacked on the right — clean row, no restock indicator (visible in detail sheet toggle) -->
         <div style="text-align:right;flex-shrink:0">
           <div class="iqt">${formatQty(item.qty)}</div>
-          <div class="iun">${item.unit || "Unit"}</div>
+          <div class="iun">${pluralizeUnit(item.unit || "Unit", item.qty)}</div>
         </div>
       </div>
     </div>

@@ -75,15 +75,53 @@ export function formatQty(qty) {
   return `${whole || 1}`;                                // integer only, minimum display "1"
 }
 
+// ── UNIT PLURALIZATION ────────────────────────────────────────────────────────
+// Automatically pluralizes unit names when quantity > 1 (whole number part).
+// Fraction-only quantities (e.g. ½, ¼) stay singular. Mixed numbers like "2 ½"
+// use plural because the whole part > 1. Some units never change (Oz, Dozen).
+
+/** Lookup table mapping singular unit names (lowercase) to their plural forms */
+const PLURAL_MAP = {
+  bag: "Bags", bar: "Bars", bottle: "Bottles", box: "Boxes",
+  bunch: "Bunches", can: "Cans", carton: "Cartons", clove: "Cloves",
+  gallon: "Gallons", "half gallon": "Half Gallons", head: "Heads",
+  jar: "Jars", liter: "Liters", loaf: "Loaves", pack: "Packs",
+  piece: "Pieces", pound: "Pounds", roll: "Rolls", tube: "Tubes",
+  unit: "Units"
+};
+
+/**
+ * pluralizeUnit(unit, qty) — Returns the correct singular or plural form of a unit.
+ *
+ * Rules:
+ *   - qty > 1 (whole number part): plural form (e.g. "Bags")
+ *   - qty = 1 or fraction-only (e.g. ½, ¼): singular form (e.g. "Bag")
+ *   - Mixed number with whole > 1 (e.g. 2½): plural (whole part drives it)
+ *   - Oz and Dozen never change (inherently plural or invariant)
+ *
+ * @param {string} unit - Singular unit name (e.g. "Bag", "Loaf", "Oz")
+ * @param {number} qty - Decimal quantity (e.g. 1, 2.5, 0.25)
+ * @returns {string} Correctly pluralized unit string
+ */
+export function pluralizeUnit(unit, qty) {
+  if (!unit) return "Unit";
+  const n = Number(qty) || 0;
+  // Use the whole-number part to decide: fractions alone (0.25, 0.5) stay singular
+  const whole = Math.floor(n);
+  if (whole <= 1) return unit; // singular for 0, 1, or fraction-only
+  // Look up the plural form; fall back to the original if not in the map
+  return PLURAL_MAP[unit.toLowerCase()] || unit;
+}
+
 /**
  * formatQtyWithUnit(qty, unit) — Formats quantity + unit for display.
- * Combines formatQty() output with the unit string.
+ * Combines formatQty() output with the pluralized unit string.
  * @param {number} qty - Decimal quantity
  * @param {string} unit - Unit of measure (e.g. "Gallon", "Piece")
  * @returns {string} e.g. "5 ½ Gallons", "½ Gallon"
  */
 export function formatQtyWithUnit(qty, unit) {
-  return `${formatQty(qty)} ${unit || "Unit"}`;
+  return `${formatQty(qty)} ${pluralizeUnit(unit || "Unit", qty)}`;
 }
 
 /**

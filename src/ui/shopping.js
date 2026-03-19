@@ -8,7 +8,7 @@
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
 import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
 import { defaultThreshold } from '../helpers.js';  // Smart restock threshold by unit — used for "already have" inventory check
-import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS } from '../helpers.js';
+import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, pluralizeUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
 // gcat = guess category for inventory, showNotif = toast notification,
@@ -501,7 +501,8 @@ export function sH(item) {
     unitDisplay = "";
   } else {
     qtyDisplay = formatQty(qty);
-    unitDisplay = unit;
+    // Pluralize the unit based on quantity (e.g. "2 Bags" vs "1 Bag")
+    unitDisplay = pluralizeUnit(unit, qty);
   }
 
   // [IMAGES DISABLED] — Product images commented out pending decision.
