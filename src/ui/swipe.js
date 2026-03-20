@@ -825,7 +825,10 @@ export function undoDelete() {
 
 /**
  * _showUndoToast(itemName) — Displays the undo toast with a gold drain line.
- * The drain line shrinks from full width to 0% over exactly 5 seconds via CSS.
+ * The drain line shrinks from full width to 0% over exactly 5 seconds via CSS keyframe animation.
+ * Uses a double-requestAnimationFrame to guarantee the browser has painted the
+ * reset state before the animation class is applied — this prevents the animation
+ * from being batched with the DOM insertion and silently skipped.
  */
 function _showUndoToast(itemName) {
   const toast = g("undo-toast");
@@ -836,28 +839,44 @@ function _showUndoToast(itemName) {
   // Update the toast text with the deleted item's name
   if (text) text.textContent = `${itemName} deleted`;
 
-  // Reset the drain line to full width before starting the animation
-  bar.classList.remove("shrinking");
+  // Reset the drain line — remove animation class AND force-kill any running/stuck
+  // animation via inline style. Without the inline override, the browser can batch
+  // the class removal + re-addition and skip the animation restart entirely.
+  bar.classList.remove("draining");
+  bar.style.animation = "none";
   bar.style.width = "100%";
-  // Force reflow so the browser registers the reset before we start shrinking
-  void bar.offsetWidth;
 
-  // Show the toast and start the drain line countdown
+  // Show the toast first so the bar is in a visible layout context
   toast.classList.add("visible");
-  // Start the shrinking animation in the next frame
+
+  // Force reflow AFTER toast is visible so the browser commits the width:100% reset,
+  // then use double-rAF to guarantee the paint is flushed before starting the drain.
+  // The first rAF waits for the next frame, the forced reflow ensures the reset is
+  // committed, and the second rAF ensures a new frame starts before we re-apply.
   requestAnimationFrame(() => {
-    bar.classList.add("shrinking");
+    void bar.offsetWidth;
+    // Clear inline overrides so the CSS class animation can take effect
+    bar.style.animation = "";
+    bar.style.width = "";
+    requestAnimationFrame(() => {
+      bar.classList.add("draining");
+    });
   });
 }
 
 /**
- * _hideUndoToast() — Hides the undo toast and resets the drain line.
+ * _hideUndoToast() — Hides the undo toast and resets the drain line animation.
  */
 function _hideUndoToast() {
   const toast = g("undo-toast");
   const bar = g("undo-bar");
   if (toast) toast.classList.remove("visible");
-  if (bar) { bar.classList.remove("shrinking"); bar.style.width = "100%"; }
+  // Remove animation class AND clear any inline overrides to fully reset for next use
+  if (bar) {
+    bar.classList.remove("draining");
+    bar.style.animation = "";
+    bar.style.width = "";
+  }
 }
 
 // ── DELETE ALL ──────────────────────────────────────────────────────────────
