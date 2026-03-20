@@ -638,12 +638,19 @@ export function toggleShopDone() {
   localStorage.setItem("ks-shop-done-collapsed", isCollapsed ? "1" : "0");
 }
 
+// Flag to ensure stagger entrance animation only plays once per tab activation,
+// not on every re-render (e.g. after checking off an item or editing)
+let _shopStaggerPlayed = false;
+
 /**
  * _applyStaggerAnimation(container) — Applies staggered entrance animation to list items.
  * First 8 .swipe-wrap items get a cascading 40ms delay (total ~320ms entrance).
  * Items beyond 8 appear instantly to prevent long animation waits on large lists.
+ * Only runs once per tab load — subsequent re-renders skip animation to prevent flicker.
  */
 function _applyStaggerAnimation(container) {
+  if (_shopStaggerPlayed) return;
+  _shopStaggerPlayed = true;
   const items = container.querySelectorAll(".swipe-wrap");
   items.forEach((item, i) => {
     if (i < 8) {
@@ -652,6 +659,12 @@ function _applyStaggerAnimation(container) {
     }
   });
 }
+
+/**
+ * resetShopStagger() — Resets the stagger flag so the next renderShop() plays entrance animation.
+ * Called when switching tabs so the list animates in fresh on tab activation.
+ */
+export function resetShopStagger() { _shopStaggerPlayed = false; }
 
 /**
  * qadd() — Quick-add: reads the text input (#shi), creates a new shopping item.

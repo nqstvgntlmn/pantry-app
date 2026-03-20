@@ -40,6 +40,33 @@ export const UNITS = [
   "Oz","Pack","Piece","Pound","Roll","Tube","Unit"
 ];
 
+// Flag to ensure stagger entrance animation only plays once per tab activation,
+// not on every re-render (e.g. after checkoff, sub-tab switch within same tab)
+let _invStaggerPlayed = false;
+
+/**
+ * _applyInvStagger(container) — Applies staggered entrance animation to inventory list items.
+ * First 8 .swipe-wrap items get a cascading 40ms delay (total ~320ms entrance).
+ * Only runs once per tab load — subsequent re-renders skip animation to prevent flicker.
+ */
+function _applyInvStagger(container) {
+  if (_invStaggerPlayed) return;
+  _invStaggerPlayed = true;
+  const items = container.querySelectorAll(".swipe-wrap");
+  items.forEach((item, i) => {
+    if (i < 8) {
+      item.classList.add("stagger-item");
+      item.style.animationDelay = `${i * 40}ms`;
+    }
+  });
+}
+
+/**
+ * resetInvStagger() — Resets the stagger flag so the next renderInv() plays entrance animation.
+ * Called when switching tabs so the list animates in fresh on tab activation.
+ */
+export function resetInvStagger() { _invStaggerPlayed = false; }
+
 // toTitleCase imported from helpers.js — used for uniform product name display
 
 /**
@@ -165,15 +192,9 @@ export function renderInv() {
     document.querySelectorAll("#ibody .swipe-wrap").forEach(w => { w.classList.add("selecting"); if (state.selectedIds.has(w.dataset.id)) w.classList.add("selected"); });
   }
 
-  // Apply staggered entrance animation — first 8 items slide in with 40ms delay each,
-  // remaining items appear instantly to avoid long waits
-  const items = c.querySelectorAll(".swipe-wrap");
-  items.forEach((item, i) => {
-    if (i < 8) {
-      item.classList.add("stagger-item");
-      item.style.animationDelay = `${i * 40}ms`;
-    }
-  });
+  // Apply staggered entrance animation only on first render per tab activation.
+  // Subsequent re-renders (e.g. after checkoff, edit) skip animation to prevent flicker.
+  _applyInvStagger(c);
 }
 
 // [ADJUST OVERLAY DISABLED] — All fields merged into detail sheet. Uncomment to restore.

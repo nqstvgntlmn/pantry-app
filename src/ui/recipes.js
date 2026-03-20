@@ -33,6 +33,33 @@ let _pendingCommentPhotos = []; // Array of File objects for comment photo attac
 let _photoViewerImages = [];  // Array of image URLs for the fullscreen photo viewer
 let _photoViewerIndex = 0;    // Current index in the photo viewer
 
+// Flag to ensure stagger entrance animation only plays once per tab activation,
+// not on every re-render (e.g. after filtering, sorting, favoriting)
+let _recipeStaggerPlayed = false;
+
+/**
+ * _applyRecipeStagger(container) — Applies staggered entrance animation to recipe cards.
+ * First 8 .rcd cards get a cascading 40ms delay (total ~320ms entrance).
+ * Only runs once per tab load — subsequent re-renders skip animation to prevent flicker.
+ */
+function _applyRecipeStagger(container) {
+  if (_recipeStaggerPlayed) return;
+  _recipeStaggerPlayed = true;
+  const cards = container.querySelectorAll(".rcd");
+  cards.forEach((card, i) => {
+    if (i < 8) {
+      card.classList.add("stagger-item");
+      card.style.animationDelay = `${i * 40}ms`;
+    }
+  });
+}
+
+/**
+ * resetRecipeStagger() — Resets the stagger flag so the next render plays entrance animation.
+ * Called when switching tabs so the list animates in fresh on tab activation.
+ */
+export function resetRecipeStagger() { _recipeStaggerPlayed = false; }
+
 // ── TIME/SERVES HELPERS ──────────────────────────────────────────────────────
 // These handle the prep/cook/total time inputs with auto-calculation logic.
 // Each time field accepts either a numeric value (paired with a unit dropdown)
@@ -711,15 +738,9 @@ export function renderRecs() {
   // Render search/sort + filter panel + all matching recipe cards in responsive grid
   c.innerHTML = searchSortHtml + `<div class="recipe-grid">${f.map(rH).join("")}</div>`;
 
-  // Apply staggered entrance animation — first 8 recipe cards slide in with 40ms delay each,
-  // remaining cards appear instantly to avoid long waits on large collections
-  const cards = c.querySelectorAll(".rcd");
-  cards.forEach((card, i) => {
-    if (i < 8) {
-      card.classList.add("stagger-item");
-      card.style.animationDelay = `${i * 40}ms`;
-    }
-  });
+  // Apply staggered entrance animation only on first render per tab activation.
+  // Subsequent re-renders (e.g. after filtering, sorting) skip animation to prevent flicker.
+  _applyRecipeStagger(c);
 }
 
 // ── FAVORITE TOGGLE ──────────────────────────────────────────────────────────
