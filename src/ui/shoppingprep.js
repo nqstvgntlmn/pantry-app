@@ -577,11 +577,31 @@ export function prepQtyStep(itemId, delta) {
 
 /**
  * prepAddNewItem() — Opens the standard add-item sheet pre-set to Shopping list.
- * Closes Shopping Prep temporarily so the add sheet is accessible.
+ * Elevates the sheet's z-index above the Shopping Prep overlay so it renders
+ * in the foreground even on iOS Safari (where fixed-inside-fixed stacking
+ * contexts can cause layering issues).
  */
 export function prepAddNewItem() {
+  // Elevate the add-item sheet and backdrop above the Shopping Prep overlay
+  // (z-index 100) so the sheet always appears on top regardless of DOM nesting.
+  const backdrop = g("shopAddBackdrop");
+  const sheet = g("shopAddSheet");
+  if (backdrop) backdrop.style.zIndex = "250";
+  if (sheet) sheet.style.zIndex = "260";
+
   // Use the existing add-to-shopping sheet
   if (window.openShopAddSheet) {
     window.openShopAddSheet();
   }
+
+  // Restore default z-index when the sheet closes so it doesn't interfere
+  // with normal (non-prep) usage. Listen for the sheet losing .active class.
+  const observer = new MutationObserver(() => {
+    if (sheet && !sheet.classList.contains("active")) {
+      if (backdrop) backdrop.style.zIndex = "";
+      if (sheet) sheet.style.zIndex = "";
+      observer.disconnect();
+    }
+  });
+  if (sheet) observer.observe(sheet, { attributes: true, attributeFilter: ["class"] });
 }
