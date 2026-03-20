@@ -725,8 +725,11 @@ function updateMultiBar() {
 // If another item is deleted while the undo is active, the previous delete
 // commits immediately and the new one starts its own 5-second window.
 
-/** Holds the pending undo state: { id, list, item, index, timer, onCommit } */
+/** Holds the pending undo state: { id, list, item, index, onCommit } */
 let _undoState = null;
+
+/** requestAnimationFrame ID for the JS-driven drain line animation */
+let _drainAnimId = null;
 
 /**
  * deleteWithUndo(id, list, opts) — Defers a delete with a 5-second undo window.
@@ -762,13 +765,11 @@ export function deleteWithUndo(id, list, opts = {}) {
     renderCallbacks.renderSum?.();
   }
 
-  // Show the undo toast with the item name
+  // Show the undo toast — the JS drain animation handles the 5-second countdown
+  // and automatically calls _commitPendingDelete() when the bar reaches 0%
   _showUndoToast(toTitleCase(item.name));
 
-  // Start 5-second timer — after which the delete becomes permanent
-  const timer = setTimeout(() => _commitPendingDelete(), 5000);
-
-  _undoState = { id, list, item: { ...item }, index, timer, onCommit: opts.onCommit || null };
+  _undoState = { id, list, item: { ...item }, index, onCommit: opts.onCommit || null };
 }
 
 /**
@@ -780,8 +781,7 @@ export function deleteWithUndo(id, list, opts = {}) {
  */
 function _commitPendingDelete() {
   if (!_undoState) return;
-  const { id, list, item, timer, onCommit } = _undoState;
-  clearTimeout(timer);
+  const { id, list, item, onCommit } = _undoState;
   _undoState = null;
   _hideUndoToast();
 
@@ -804,8 +804,7 @@ function _commitPendingDelete() {
  */
 export function undoDelete() {
   if (!_undoState) return;
-  const { id, list, item, index, timer } = _undoState;
-  clearTimeout(timer);
+  const { id, list, item, index } = _undoState;
   _undoState = null;
   _hideUndoToast();
 
@@ -824,11 +823,10 @@ export function undoDelete() {
 }
 
 /**
- * _showUndoToast(itemName) — Displays the undo toast with a gold drain line.
- * The drain line shrinks from full width to 0% over exactly 5 seconds via CSS keyframe animation.
- * Uses a double-requestAnimationFrame to guarantee the browser has painted the
- * reset state before the animation class is applied — this prevents the animation
- * from being batched with the DOM insertion and silently skipped.
+ * _showUndoToast(itemName) — Displays the undo toast with a JS-driven drain line.
+ * Uses requestAnimationFrame to smoothly reduce the bar width from 100% to 0% over
+ * 5 seconds. This bypasses all CSS animation timing issues that caused the drain line
+ * to not animate in previous implementations. When width reaches 0, commits the delete.
  */
 function _showUndoToast(itemName) {
   const toast = g("undo-toast");
@@ -836,47 +834,60 @@ function _showUndoToast(itemName) {
   const bar = g("undo-bar");
   if (!toast || !bar) return;
 
+  // Cancel any previously running drain animation
+  if (_drainAnimId) {
+    cancelAnimationFrame(_drainAnimId);
+    _drainAnimId = null;
+  }
+
   // Update the toast text with the deleted item's name
   if (text) text.textContent = `${itemName} deleted`;
 
-  // Reset the drain line — remove animation class AND force-kill any running/stuck
-  // animation via inline style. Without the inline override, the browser can batch
-  // the class removal + re-addition and skip the animation restart entirely.
-  bar.classList.remove("draining");
-  bar.style.animation = "none";
+  // Reset bar to full width and show the toast
   bar.style.width = "100%";
-
-  // Show the toast first so the bar is in a visible layout context
   toast.classList.add("visible");
 
-  // Force reflow AFTER toast is visible so the browser commits the width:100% reset,
-  // then use double-rAF to guarantee the paint is flushed before starting the drain.
-  // The first rAF waits for the next frame, the forced reflow ensures the reset is
-  // committed, and the second rAF ensures a new frame starts before we re-apply.
-  requestAnimationFrame(() => {
-    void bar.offsetWidth;
-    // Clear inline overrides so the CSS class animation can take effect
-    bar.style.animation = "";
-    bar.style.width = "";
-    requestAnimationFrame(() => {
-      bar.classList.add("draining");
-    });
-  });
+  // JS-driven drain animation — reduce width from 100% to 0% over 5000ms
+  // using requestAnimationFrame for smooth 60fps updates. When the bar
+  // reaches 0%, the pending delete is committed automatically.
+  const DRAIN_DURATION = 5000;
+  const startTime = performance.now();
+
+  function drainStep(now) {
+    const elapsed = now - startTime;
+    const remaining = Math.max(0, 1 - elapsed / DRAIN_DURATION);
+    bar.style.width = (remaining * 100) + "%";
+
+    if (remaining > 0) {
+      // Continue animating — schedule next frame
+      _drainAnimId = requestAnimationFrame(drainStep);
+    } else {
+      // Drain complete — commit the delete
+      _drainAnimId = null;
+      _commitPendingDelete();
+    }
+  }
+
+  _drainAnimId = requestAnimationFrame(drainStep);
 }
 
 /**
- * _hideUndoToast() — Hides the undo toast and resets the drain line animation.
+ * _hideUndoToast() — Hides the undo toast and stops the JS drain animation.
+ * Called when undo is tapped or when the delete commits.
  */
 function _hideUndoToast() {
   const toast = g("undo-toast");
   const bar = g("undo-bar");
-  if (toast) toast.classList.remove("visible");
-  // Remove animation class AND clear any inline overrides to fully reset for next use
-  if (bar) {
-    bar.classList.remove("draining");
-    bar.style.animation = "";
-    bar.style.width = "";
+
+  // Stop the JS drain animation if it's running
+  if (_drainAnimId) {
+    cancelAnimationFrame(_drainAnimId);
+    _drainAnimId = null;
   }
+
+  if (toast) toast.classList.remove("visible");
+  // Reset bar width for next use
+  if (bar) bar.style.width = "100%";
 }
 
 // ── DELETE ALL ──────────────────────────────────────────────────────────────
