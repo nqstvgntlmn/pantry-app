@@ -378,9 +378,9 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .undo-toast-text{font-size:.88rem;color:var(--tx)}
 .undo-toast-btn{color:var(--ac);font-weight:600;background:none;border:none;cursor:pointer;font-size:.92rem;padding:6px 12px;border-radius:8px;font-family:"DM Sans",sans-serif;min-height:44px;min-width:44px;transition:background .15s}
 .undo-toast-btn:active{background:var(--acd)}
-/* Progress bar at the bottom — shrinks from 100% to 0% over 5 seconds */
-.undo-toast-track{position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--b2)}
-.undo-toast-bar{height:100%;background:var(--ac);width:100%;transition:width 5s linear}
+/* Drain line at the bottom — gold line shrinks right-to-left over 5 seconds */
+.undo-toast-track{position:absolute;bottom:0;left:0;right:0;height:2px;background:transparent}
+.undo-toast-bar{height:100%;background:#D4A853;width:100%;transition:width 5s linear}
 .undo-toast-bar.shrinking{width:0%}
 
 /* ── SELECT MODE: TAP ANYWHERE TO SELECT ── */

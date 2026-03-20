@@ -720,7 +720,7 @@ function updateMultiBar() {
 
 // ── UNDO DELETION SYSTEM ───────────────────────────────────────────────────
 // When an item is deleted (swipe or Remove button), the Firestore delete is
-// deferred for 5 seconds. A bottom toast with a shrinking progress bar gives
+// deferred for 5 seconds. A bottom toast with a gold drain line gives
 // the user an "Undo" button. After 5 seconds the delete commits permanently.
 // If another item is deleted while the undo is active, the previous delete
 // commits immediately and the new one starts its own 5-second window.
@@ -731,7 +731,7 @@ let _undoState = null;
 /**
  * deleteWithUndo(id, list, opts) — Defers a delete with a 5-second undo window.
  * Removes the item from in-memory state immediately for instant UI feedback,
- * then shows the undo toast. After 5 seconds, commits the Firestore delete.
+ * then shows the undo toast with a gold drain line. After 5 seconds, commits the Firestore delete.
  *
  * @param {string} id - Item ID to delete
  * @param {string} list - "shop" or "inv"
@@ -824,8 +824,8 @@ export function undoDelete() {
 }
 
 /**
- * _showUndoToast(itemName) — Displays the undo toast with a shrinking progress bar.
- * The progress bar animates from 100% to 0% width over exactly 5 seconds via CSS.
+ * _showUndoToast(itemName) — Displays the undo toast with a gold drain line.
+ * The drain line shrinks from full width to 0% over exactly 5 seconds via CSS.
  */
 function _showUndoToast(itemName) {
   const toast = g("undo-toast");
@@ -836,13 +836,13 @@ function _showUndoToast(itemName) {
   // Update the toast text with the deleted item's name
   if (text) text.textContent = `${itemName} deleted`;
 
-  // Reset the progress bar to full width before starting the animation
+  // Reset the drain line to full width before starting the animation
   bar.classList.remove("shrinking");
   bar.style.width = "100%";
   // Force reflow so the browser registers the reset before we start shrinking
   void bar.offsetWidth;
 
-  // Show the toast and start the progress bar countdown
+  // Show the toast and start the drain line countdown
   toast.classList.add("visible");
   // Start the shrinking animation in the next frame
   requestAnimationFrame(() => {
@@ -851,7 +851,7 @@ function _showUndoToast(itemName) {
 }
 
 /**
- * _hideUndoToast() — Hides the undo toast and resets the progress bar.
+ * _hideUndoToast() — Hides the undo toast and resets the drain line.
  */
 function _hideUndoToast() {
   const toast = g("undo-toast");
