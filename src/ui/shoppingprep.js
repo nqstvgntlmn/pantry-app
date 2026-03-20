@@ -576,32 +576,24 @@ export function prepQtyStep(itemId, delta) {
 }
 
 /**
- * prepAddNewItem() — Opens the standard add-item sheet pre-set to Shopping list.
- * Elevates the sheet's z-index above the Shopping Prep overlay so it renders
- * in the foreground even on iOS Safari (where fixed-inside-fixed stacking
- * contexts can cause layering issues).
+ * prepAddNewItem() — Dismisses Shopping Prep, switches to the Shopping tab,
+ * and opens the standard add-item sheet. This avoids z-index stacking issues
+ * on iOS Safari by not layering sheets on top of the prep overlay. The user
+ * lands on the Shopping tab where the new item will live — cleaner UX.
  */
 export function prepAddNewItem() {
-  // Elevate the add-item sheet and backdrop above the Shopping Prep overlay
-  // (z-index 100) so the sheet always appears on top regardless of DOM nesting.
-  const backdrop = g("shopAddBackdrop");
-  const sheet = g("shopAddSheet");
-  if (backdrop) backdrop.style.zIndex = "250";
-  if (sheet) sheet.style.zIndex = "260";
+  // Close Shopping Prep without showing the summary toast — we're continuing
+  // the workflow, not finishing it. Clear pending save timers and swipe-back.
+  _saveTimers.forEach(timerId => clearTimeout(timerId));
+  _saveTimers.clear();
+  disableSwipeBack();
+  hideOv("shoppingprep");
 
-  // Use the existing add-to-shopping sheet
-  if (window.openShopAddSheet) {
-    window.openShopAddSheet();
-  }
+  // Switch to the Shopping tab so the add-item sheet renders in its normal context
+  if (window.showScreen) window.showScreen("shopping");
 
-  // Restore default z-index when the sheet closes so it doesn't interfere
-  // with normal (non-prep) usage. Listen for the sheet losing .active class.
-  const observer = new MutationObserver(() => {
-    if (sheet && !sheet.classList.contains("active")) {
-      if (backdrop) backdrop.style.zIndex = "";
-      if (sheet) sheet.style.zIndex = "";
-      observer.disconnect();
-    }
-  });
-  if (sheet) observer.observe(sheet, { attributes: true, attributeFilter: ["class"] });
+  // Open the add-item sheet after a brief delay to let the tab transition settle
+  setTimeout(() => {
+    if (window.openShopAddSheet) window.openShopAddSheet();
+  }, 150);
 }
