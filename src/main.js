@@ -75,6 +75,9 @@ import { scheduleMealReminders } from './ui/reminders.js';
 // checkMembershipOnInteraction: verifies user still belongs to household (kick detection)
 import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, removeMyCommRecipes, removeHouseholdCommRecipes, deleteAccount, scanRecipesForIssues, closeScanResults, fixAllFlaggedRecipes, openUtilities, closeUtilities, clearScanCacheUI } from './ui/settings.js';
 
+// Shopping Prep: pre-shop audit flow — walk through categories, verify quantities, build shopping list
+import { openShoppingPrep, closeShoppingPrep, openPrepCategory, backToGrid, prepToggleVerify, prepAddToShop, prepAddAllLow, prepQtyStep, prepAddNewItem } from './ui/shoppingprep.js';
+
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
 
@@ -218,6 +221,17 @@ window.deleteInvItemImage = deleteInvItemImage;         // Remove product image 
 window.triggerInvPhotoUpload = triggerInvPhotoUpload;   // Open file picker to upload a custom product photo for inventory
 window.handleInvPhotoSelected = handleInvPhotoSelected; // Process the selected product photo file for inventory
 window.addInvToShopping = addInvToShopping;             // Add an inventory item to the shopping list
+
+// ── Shopping Prep screen handlers ──
+window.openShoppingPrep = openShoppingPrep;   // Open Shopping Prep full-screen audit flow
+window.closeShoppingPrep = closeShoppingPrep; // Close Shopping Prep and show summary toast
+window.openPrepCategory = openPrepCategory;   // Open category detail view in Shopping Prep
+window.backToGrid = backToGrid;               // Return from category detail to category grid
+window.prepToggleVerify = prepToggleVerify;   // Toggle audit verify checkbox on an item
+window.prepAddToShop = prepAddToShop;         // Add a single item to shopping list from prep
+window.prepAddAllLow = prepAddAllLow;         // Add all low-stock items in a category to shopping
+window.prepQtyStep = prepQtyStep;             // Adjust item quantity +/- from prep detail view
+window.prepAddNewItem = prepAddNewItem;       // Open add-item sheet from prep detail view
 
 // ── Shopping screen handlers ──
 window.qadd = qadd;             // Quick-add an item to the shopping list

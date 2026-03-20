@@ -163,6 +163,8 @@
       <!-- Prominent add button (mirrors Shopping's "+ Add item") -->
       <div style="padding:12px 16px 0">
         <button class="btn bp bf shop-add-btn" onclick="openInvAddSheet()">+ Add item</button>
+        <!-- Shopping Prep button — opens the pre-shop audit flow -->
+        <button class="btn bs bf" style="margin-top:8px;font-size:.88rem" onclick="openShoppingPrep()">🛒 Shopping Prep</button>
         <!-- Voice listening status (shown when voice input is active) -->
         <div class="mic-status" id="inv-micstatus"><span class="mic-wave"><span class="bar"></span></span> Listening...<button class="mic-stop-btn" onclick="toggleInvVoice()">Stop</button></div>
       </div>
@@ -998,6 +1000,16 @@
       </div>
     </div>
   </div>
+</div>
+
+<!-- SHOPPING PREP — full-screen pre-shop audit overlay -->
+<!-- Opened from Supplies tab. Two-panel navigation: category grid → category detail. -->
+<div class="ov" id="ov-shoppingprep">
+  <div class="ovhdr">
+    <div class="bkbtn" id="prep-back" onclick="closeShoppingPrep()">←</div>
+    <div class="ovttl" id="prep-title">Shopping Prep</div>
+  </div>
+  <div class="ovbody" id="prep-body"></div>
 </div>
 
 <!-- UTILITIES PAGE — full-screen overlay opened from Settings > Utilities row -->

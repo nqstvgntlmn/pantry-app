@@ -964,3 +964,53 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .tc-icon{display:flex;align-items:center;justify-content:center}
 /* Ensure all inline emoji in headers/sections are consistently sized */
 .hsec-lbl>span:first-child{font-size:.9rem}
+
+/* ── SHOPPING PREP ──
+   Full-screen pre-shop audit flow with category grid and detail views.
+   Two-level navigation inside a single overlay. */
+
+/* Category grid — 2-column responsive grid of aisle category cards */
+.prep-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:4px 0}
+.prep-cat-card{background:var(--card);border:1px solid var(--card-border);border-top-color:var(--card-border-top);border-radius:14px;padding:16px 12px;text-align:center;cursor:pointer;transition:transform .15s,border-color .15s}
+.prep-cat-card:active{transform:scale(.97);border-color:var(--ac)}
+.prep-emoji{font-size:2rem;line-height:1.2}
+.prep-cat-name{font-size:.82rem;font-weight:600;color:var(--tx);margin-top:6px;line-height:1.3}
+.prep-cat-count{font-size:.72rem;color:var(--mt);margin-top:2px}
+/* Amber badge shown when category has items at/below restock threshold */
+.prep-low-badge{display:inline-block;margin-top:6px;padding:2px 8px;border-radius:8px;font-size:.68rem;font-weight:600;background:var(--amd);color:var(--am);border:1px solid var(--am)}
+/* Subtle amber top border on cards with low-stock items */
+.prep-cat-low{border-top:2px solid var(--am)}
+
+/* Category detail — individual item rows */
+.prep-item{display:flex;align-items:center;gap:10px;padding:14px 0;border-bottom:1px solid var(--b1)}
+/* Amber left border highlight for low-stock items */
+.prep-item-low{background:var(--amd);border-radius:10px;padding:14px 10px;margin:4px 0;border-bottom:none}
+/* Verified items get a subtle dimming so unchecked items stand out */
+.prep-item-verified{opacity:.65}
+
+/* Verify checkbox — circular, styled like the existing slim circles */
+.prep-verify{width:28px;height:28px;min-width:28px;border:2px solid var(--b2);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.8rem;font-weight:700;color:transparent;transition:all .15s;flex-shrink:0}
+.prep-verify.checked{background:var(--ac);border-color:var(--ac);color:#0c0c0a}
+.prep-verify:active{transform:scale(.9)}
+
+/* Item info area */
+.prep-item-info{flex:1;min-width:0}
+.prep-item-name{font-size:.9rem;font-weight:500;color:var(--tx);line-height:1.3}
+.prep-item-meta{font-size:.7rem;color:var(--mt);margin-top:2px}
+
+/* Inline quantity stepper — compact row of [−] qty [+] */
+.prep-qty-group{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.prep-qty-btn{width:30px;height:30px;border-radius:8px;border:1.5px solid var(--b2);background:var(--card2);color:var(--tx);font-size:1rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;font-family:"DM Sans",sans-serif}
+.prep-qty-btn:active{background:var(--ac);color:#0c0c0a;border-color:var(--ac);transform:scale(.92)}
+.prep-qty-val{min-width:28px;text-align:center;font-size:.88rem;font-weight:600;color:var(--tx)}
+.prep-unit{font-size:.72rem;color:var(--mt);min-width:30px;text-align:center;flex-shrink:0}
+
+/* Add to Shopping List button — compact, green accent */
+.prep-shop-btn{padding:6px 10px;border-radius:8px;border:1.5px solid var(--gn);background:var(--gnd);color:var(--gn);font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:"DM Sans",sans-serif;min-height:34px}
+.prep-shop-btn:active{transform:scale(.95)}
+/* "✓ Added" state — muted, non-interactive */
+.prep-shop-added{opacity:.5;cursor:default;border-color:var(--b2);background:var(--card);color:var(--mt)}
+.prep-shop-added:active{transform:none}
+
+/* "Add all low items" button at top of category detail */
+.prep-add-all-low{margin-bottom:12px;font-size:.88rem}
