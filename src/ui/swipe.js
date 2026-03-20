@@ -16,7 +16,7 @@
 //   </div>
 
 import { state } from '../state.js';
-import { dli, dlShopItem, renderCallbacks } from '../db.js';
+import { dli, dlShopItem, dbDelete, logActivity, renderCallbacks } from '../db.js';
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list
 import { g, showNotif, toTitleCase } from '../helpers.js';
 
@@ -774,8 +774,9 @@ export function deleteWithUndo(id, list, opts = {}) {
 /**
  * _commitPendingDelete() — Executes the actual Firestore delete for the pending undo.
  * Called when the 5-second timer expires or when another delete supersedes this one.
- * Temporarily re-inserts the item into state so the delete function can find it
- * for activity logging, then calls the standard delete function.
+ * Deletes directly from Firestore and logs activity WITHOUT re-adding the item to
+ * state — this prevents the deleted item from briefly reappearing when a second
+ * delete supersedes the first (fixes the undo toast stacking visual bug).
  */
 function _commitPendingDelete() {
   if (!_undoState) return;
@@ -787,14 +788,13 @@ function _commitPendingDelete() {
   // Run any extra commit logic (e.g. waste tracking for expired inventory items)
   if (onCommit) onCommit(item);
 
-  // Re-add item to state so the delete function finds it for activity logging
-  if (list === "shop") {
-    state.shop.push(item);
-    dlShopItem(id);
-  } else {
-    state.inv.push(item);
-    dli(id);
-  }
+  // Delete directly from Firestore and log activity — item is already removed
+  // from in-memory state so we skip the re-add → re-render cycle that caused
+  // the stacking bug where deleted items briefly reappeared on consecutive deletes
+  const collection = list === "shop" ? "shopping" : "inventory";
+  const label = list === "shop" ? "Shopping List" : "Supplies";
+  dbDelete(`households/${state.hid}/${collection}/${id}`);
+  logActivity("removed", toTitleCase(item.name) + ` from ${label}`);
 }
 
 /**

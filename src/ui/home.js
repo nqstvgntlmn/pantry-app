@@ -364,7 +364,7 @@ export function renderExp() {
 // Each item can be added to the shopping list with one tap.
 
 // Units that typically come in single-count containers — threshold 1
-const _THRESH_ONE = new Set(["Bottle","Jar","Can","Carton","Bunch","Head","Loaf","Dozen","Tube","Roll","Gallon","Half Gallon","Liter"]);
+const _THRESH_ONE = new Set(["Bottle","Jar","Can","Carton","Bucket","Bunch","Container","Head","Loaf","Dozen","Tube","Roll","Gallon","Half Gallon","Liter"]);
 // Units that typically come in multi-count — threshold 2
 const _THRESH_TWO = new Set(["Piece","Unit","Pack","Box","Bag","Pound","Oz","Clove"]);
 

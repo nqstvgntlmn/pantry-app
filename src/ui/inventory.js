@@ -35,9 +35,9 @@ import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferr
 // Alphabetically sorted — "Unit" sits naturally at the end.
 // "Bar" added for granola bars, protein bars, soap bars, etc.
 export const UNITS = [
-  "Bag","Bar","Bottle","Box","Bunch","Can","Carton","Clove","Dozen",
-  "Gallon","Half Gallon","Head","Jar","Liter","Loaf","Oz","Pack",
-  "Piece","Pound","Roll","Tube","Unit"
+  "Bag","Bar","Bottle","Box","Bucket","Bunch","Can","Carton","Clove",
+  "Container","Dozen","Gallon","Half Gallon","Head","Jar","Liter","Loaf",
+  "Oz","Pack","Piece","Pound","Roll","Tube","Unit"
 ];
 
 // toTitleCase imported from helpers.js — used for uniform product name display

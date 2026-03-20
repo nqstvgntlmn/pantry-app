@@ -83,7 +83,8 @@ export function formatQty(qty) {
 /** Lookup table mapping singular unit names (lowercase) to their plural forms */
 const PLURAL_MAP = {
   bag: "Bags", bar: "Bars", bottle: "Bottles", box: "Boxes",
-  bunch: "Bunches", can: "Cans", carton: "Cartons", clove: "Cloves",
+  bucket: "Buckets", bunch: "Bunches", can: "Cans", carton: "Cartons",
+  clove: "Cloves", container: "Containers",
   gallon: "Gallons", "half gallon": "Half Gallons", head: "Heads",
   jar: "Jars", liter: "Liters", loaf: "Loaves", pack: "Packs",
   piece: "Pieces", pound: "Pounds", roll: "Rolls", tube: "Tubes",
@@ -917,7 +918,7 @@ export function getStoreAisleOrder(storeName) {
 // (bottles, jars, etc.) default to 1; quantity-type units (pieces, bags, etc.)
 // default to 2. Used by "Running Low" on Home and "Already have" check in Shopping.
 
-const _THRESH_ONE_SET = new Set(["Bottle","Jar","Can","Carton","Bunch","Head","Loaf","Dozen","Tube","Roll","Gallon","Half Gallon","Liter"]);
+const _THRESH_ONE_SET = new Set(["Bottle","Jar","Can","Carton","Bucket","Bunch","Container","Head","Loaf","Dozen","Tube","Roll","Gallon","Half Gallon","Liter"]);
 const _THRESH_TWO_SET = new Set(["Piece","Unit","Pack","Box","Bag","Bar","Pound","Oz","Clove"]);
 
 /**
