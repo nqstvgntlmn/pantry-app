@@ -37,8 +37,8 @@ const SNAP_THRESHOLD = 0.10;     // 10% of row width = snap/lock open (show dele
 const AUTO_DELETE_THRESHOLD = 0.70; // 70% of row width = auto-complete delete (no confirmation needed)
 const DIRECTION_LOCK_PX = 8;     // Pixels of movement before locking to horizontal/vertical
 
-// Spring easing for snap animations — mimics Apple's bounce
-const SPRING_EASE = 'cubic-bezier(0.25, 1.5, 0.5, 1)';
+// Spring easing for snap animations — pronounced overshoot for satisfying bounce
+const SPRING_EASE = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 const SMOOTH_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)';
 
 // Registers all touch and mouse event listeners for swipe-to-delete behavior.

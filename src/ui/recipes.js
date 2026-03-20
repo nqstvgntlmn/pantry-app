@@ -576,8 +576,9 @@ function rH(r) {
   // label (e.g. "Manual"), show it as a badge; otherwise nothing
   const srcLink = r.sourceUrl ? `<a href="${r.sourceUrl}" target="_blank" onclick="event.stopPropagation()" style="font-size:.68rem;color:var(--ac);text-decoration:none;border:1px solid rgba(212,168,83,.3);border-radius:20px;padding:2px 8px;background:transparent">🔗 View original</a>` : r.source ? `<span class="sbdg">${r.source}</span>` : "";
 
-  // Cover image: show a hero image at the top of the card if available
-  const imgHtml = r.imageUrl ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;max-height:140px"><img src="${r.imageUrl}" alt="" style="width:100%;height:140px;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>` : "";
+  // Cover image: full-bleed hero with gradient overlay — recipe name sits ON photo
+  // Gradient goes from transparent at top → dark at bottom so text stays legible
+  const imgHtml = r.imageUrl ? `<div class="rcd-cover"><img src="${r.imageUrl}" alt="" onerror="this.parentElement.style.display='none'"/></div>` : "";
 
   // Time/servings metadata pills — show if imported via AI
   const metaParts = [
@@ -709,6 +710,16 @@ export function renderRecs() {
 
   // Render search/sort + filter panel + all matching recipe cards in responsive grid
   c.innerHTML = searchSortHtml + `<div class="recipe-grid">${f.map(rH).join("")}</div>`;
+
+  // Apply staggered entrance animation — first 8 recipe cards slide in with 40ms delay each,
+  // remaining cards appear instantly to avoid long waits on large collections
+  const cards = c.querySelectorAll(".rcd");
+  cards.forEach((card, i) => {
+    if (i < 8) {
+      card.classList.add("stagger-item");
+      card.style.animationDelay = `${i * 40}ms`;
+    }
+  });
 }
 
 // ── FAVORITE TOGGLE ──────────────────────────────────────────────────────────

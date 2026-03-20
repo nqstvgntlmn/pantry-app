@@ -155,8 +155,8 @@ export function renderInv() {
   const c = g("ibody");
   if (!c) return;
 
-  // Empty-state placeholder when no items match the current filter
-  if (!f.length) { c.innerHTML = `<div class="es"><div class="ei">🧺</div><p>No items here yet.<br/>Tap + Add item to get started.</p></div>`; return; }
+  // Enhanced empty-state with warm, inviting message
+  if (!f.length) { c.innerHTML = `<div class="es"><div class="ei">🧺</div><p>Your kitchen is bare — time to stock up.</p></div>`; return; }
 
   // Render flat list for the selected location sub-tab
   c.innerHTML = `<div class="ilst">${f.map(iH).join("")}</div>`;
@@ -164,6 +164,16 @@ export function renderInv() {
   if (state.selectMode === "inv") {
     document.querySelectorAll("#ibody .swipe-wrap").forEach(w => { w.classList.add("selecting"); if (state.selectedIds.has(w.dataset.id)) w.classList.add("selected"); });
   }
+
+  // Apply staggered entrance animation — first 8 items slide in with 40ms delay each,
+  // remaining items appear instantly to avoid long waits
+  const items = c.querySelectorAll(".swipe-wrap");
+  items.forEach((item, i) => {
+    if (i < 8) {
+      item.classList.add("stagger-item");
+      item.style.animationDelay = `${i * 40}ms`;
+    }
+  });
 }
 
 // [ADJUST OVERLAY DISABLED] — All fields merged into detail sheet. Uncomment to restore.
@@ -867,7 +877,13 @@ export async function changeInvQty(id, delta) {
   const combined = combineQty(newWhole, curFrac);
   // If combined is at minimum (0.25) and delta is negative, do nothing
   if (delta < 0 && combineQty(curWhole, curFrac) <= 0.25) return;
-  if (el) el.value = Math.floor(combined);
+  // Snappy number flip animation (150ms) — rolls up for increment, down for decrement
+  if (el) {
+    el.classList.remove("num-flip-up", "num-flip-down");
+    void el.offsetWidth; // Force reflow to restart animation
+    el.classList.add(delta > 0 ? "num-flip-up" : "num-flip-down");
+    el.value = Math.floor(combined);
+  }
   // If whole went to 0 and no fraction, auto-set fraction to smallest
   if (newWhole === 0 && curFrac === 0 && fracEl) fracEl.value = "0.25";
   await svi({ ...item, qty: combined });
@@ -1250,7 +1266,13 @@ export function resetInvQtyToolbar() {
 export function invQtyStep(delta) {
   _invToolbarQty = Math.max(1, Math.min(99, _invToolbarQty + delta));
   const valEl = g("invQtyVal");
-  if (valEl) valEl.textContent = _invToolbarQty;
+  if (valEl) {
+    // Snappy number flip animation (150ms) — rolls up for increment, down for decrement
+    valEl.classList.remove("num-flip-up", "num-flip-down");
+    void valEl.offsetWidth; // Force reflow to restart animation
+    valEl.classList.add(delta > 0 ? "num-flip-up" : "num-flip-down");
+    valEl.textContent = _invToolbarQty;
+  }
 }
 
 /**

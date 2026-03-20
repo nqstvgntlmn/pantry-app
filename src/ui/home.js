@@ -158,7 +158,8 @@ export function renderTonight() {
     }
   } else {
     // No meal planned: show placeholder text with "Find recipes" and "Ask Claude" buttons
-    if (d) d.innerHTML = `<span style="font-size:.9rem;color:var(--mt);font-style:italic">No meal planned yet</span>`;
+    // Enhanced empty state — warm, inviting prompt
+    if (d) d.innerHTML = `<span style="font-size:.9rem;color:var(--mt);font-style:italic">Nothing planned yet — what are you craving? 🍽️</span>`;
     if (a) a.innerHTML = `<button class="btn bsm bs" onclick="event.stopPropagation();openRecipeMatch()">🔍 Find recipes</button><button class="btn bsm bs" onclick="event.stopPropagation();showScreen('chat')">Ask Claude →</button>`;
   }
 }

@@ -573,8 +573,17 @@ export function renderShop() {
 
   if (!c) return; // Safety: if the list container doesn't exist in DOM, bail
 
-  // Empty state placeholder
-  if (!state.shop.length) { c.innerHTML = `<div class="es"><div class="ei">🛒</div><p>Your list is empty!<br/>Add items or use "Build from meal plan".</p></div>`; return; }
+  // Enhanced empty state with warm, inviting message
+  if (!state.shop.length) { c.innerHTML = `<div class="es"><div class="ei">🛒</div><p>Your list is clear — enjoy the peace.</p></div>`; return; }
+
+  // Build the enhanced "Done" section HTML with gold divider, count badge,
+  // collapsible toggle, and "Clear all done" button
+  const doneCollapsed = localStorage.getItem("ks-shop-done-collapsed") === "1";
+  const doneHtml = ch.length ? `<div class="done-section-hdr" onclick="toggleShopDone()">
+    Done <span class="done-count">${ch.length}</span>
+    <button class="clear-done-btn" onclick="event.stopPropagation();clrChk()">Clear all</button>
+  </div>
+  <div class="done-section-body${doneCollapsed ? " collapsed" : ""}" id="shopDoneBody">${ch.map(sH).join("")}</div>` : "";
 
   if (state.aisleMode && un.length) {
     // Category-grouped mode: bucket unchecked items by their guessed product category
@@ -594,11 +603,11 @@ export function renderShop() {
       sortedEntries = Object.entries(grps).sort();
     }
 
-    // Render each category group with a section header, followed by checked ("Done") items at the bottom
-    c.innerHTML = sortedEntries.map(([aisle, its]) => `<div class="shsec">${aisle}</div>${its.map(sH).join("")}`).join("") + (ch.length ? `<div class="shsec">Done</div>${ch.map(sH).join("")}` : "");
+    // Render each category group with a section header, followed by enhanced Done section at the bottom
+    c.innerHTML = sortedEntries.map(([aisle, its]) => `<div class="shsec">${aisle}</div>${its.map(sH).join("")}`).join("") + doneHtml;
   } else {
-    // Flat mode: "To buy" section, then "Done" section
-    c.innerHTML = (un.length ? `<div class="shsec">To buy (${un.length})</div>${un.map(sH).join("")}` : "") + (ch.length ? `<div class="shsec">Done</div>${ch.map(sH).join("")}` : "");
+    // Flat mode: "To buy" section, then enhanced Done section with collapsible toggle
+    c.innerHTML = (un.length ? `<div class="shsec">To buy (${un.length})</div>${un.map(sH).join("")}` : "") + doneHtml;
   }
 
   // If multi-select mode is active for the shopping list, mark rows as "selecting"
@@ -609,9 +618,39 @@ export function renderShop() {
     if (body) body.style.paddingLeft = "52px"; // Shift body right to make room for selection checkboxes
   }
 
+  // Apply staggered entrance animation — first 8 items slide in with 40ms delay each,
+  // remaining items appear instantly to avoid long waits
+  _applyStaggerAnimation(c);
+
   // Auto-enrich any Reminders items that arrived without product images.
   // Runs in the background — no UI interruption, results applied silently.
   enrichRemindersItems();
+}
+
+/**
+ * toggleShopDone() — Toggles visibility of the Done section in the shopping list.
+ * Saves collapsed state to localStorage so it persists across renders.
+ */
+export function toggleShopDone() {
+  const body = g("shopDoneBody");
+  if (!body) return;
+  const isCollapsed = body.classList.toggle("collapsed");
+  localStorage.setItem("ks-shop-done-collapsed", isCollapsed ? "1" : "0");
+}
+
+/**
+ * _applyStaggerAnimation(container) — Applies staggered entrance animation to list items.
+ * First 8 .swipe-wrap items get a cascading 40ms delay (total ~320ms entrance).
+ * Items beyond 8 appear instantly to prevent long animation waits on large lists.
+ */
+function _applyStaggerAnimation(container) {
+  const items = container.querySelectorAll(".swipe-wrap");
+  items.forEach((item, i) => {
+    if (i < 8) {
+      item.classList.add("stagger-item");
+      item.style.animationDelay = `${i * 40}ms`;
+    }
+  });
 }
 
 /**
@@ -783,7 +822,13 @@ export function resetShopQtyToolbar() {
 export function shopQtyStep(delta) {
   _shopToolbarQty = Math.max(1, Math.min(99, _shopToolbarQty + delta));
   const valEl = g("shopQtyVal");
-  if (valEl) valEl.textContent = _shopToolbarQty;
+  if (valEl) {
+    // Snappy number flip animation (150ms) — rolls up for increment, down for decrement
+    valEl.classList.remove("num-flip-up", "num-flip-down");
+    void valEl.offsetWidth; // Force reflow to restart animation
+    valEl.classList.add(delta > 0 ? "num-flip-up" : "num-flip-down");
+    valEl.textContent = _shopToolbarQty;
+  }
 }
 
 /**
@@ -1693,7 +1738,13 @@ export async function changeShopQty(id, delta) {
   if (delta < 0 && combineQty(curWhole, curFrac) <= 0.25) return;
   const newWhole = Math.max(0, Math.min(99, curWhole + delta));
   const combined = combineQty(newWhole, curFrac);
-  if (el) el.value = Math.floor(combined);
+  // Trigger snappy number flip animation (150ms) — rolls up for increment, down for decrement
+  if (el) {
+    el.classList.remove("num-flip-up", "num-flip-down");
+    void el.offsetWidth; // Force reflow to restart animation
+    el.classList.add(delta > 0 ? "num-flip-up" : "num-flip-down");
+    el.value = Math.floor(combined);
+  }
   // If whole went to 0 and no fraction, auto-set fraction to smallest
   if (newWhole === 0 && curFrac === 0 && fracEl) fracEl.value = "0.25";
   await svShopItem({ ...item, qty: combined });

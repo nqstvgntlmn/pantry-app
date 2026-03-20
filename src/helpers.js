@@ -422,7 +422,8 @@ export function showNotif(msg, duration = 2500) {
   // was already animating from a previous notification.
   el.style.animation = "none";
   void el.offsetWidth; // Force reflow — without this the browser won't restart the animation
-  el.style.animation = `fn ${duration / 1000}s ease forwards`;
+  // Spring overshoot animation — toast slides in from top with bounce, fades out after delay
+  el.style.animation = `toastSpring ${duration / 1000}s ease forwards`;
   // Cancel any existing hide-timer so rapid-fire notifications don't
   // disappear too early
   if (_notifTimer) clearTimeout(_notifTimer);
