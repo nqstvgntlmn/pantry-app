@@ -19,6 +19,8 @@ import { g, xSt, showNotif, showOv, hideOv, isValidIngredient } from '../helpers
 import { initHome } from './home.js';
 // getCurrentUser: returns the currently signed-in Firebase Auth user (or null)
 import { getCurrentUser } from '../auth.js';
+// Custom category management for Shopping Prep
+import { getCustomCategories, deleteCustomCategory, renameCustomCategory, CUSTOM_EMOJI_OPTIONS } from './categorypicker.js';
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,140 @@ export function loadCfgUI() {
 
   // Show/hide the one-time bulk publish button
   showBulkPublishBtn();
+
+  // Render custom prep categories management UI
+  renderCustomCategories();
+}
+
+/**
+ * renderCustomCategories() — Renders the custom Shopping Prep categories list
+ * in the settings overlay. Shows each custom category with emoji, name, and
+ * edit/delete buttons. Includes an "Add" form at the bottom.
+ */
+export function renderCustomCategories() {
+  const container = g("customCategoriesList");
+  if (!container) return;
+
+  const customs = getCustomCategories();
+  let html = "";
+
+  if (!customs.length) {
+    html += `<div style="font-size:.78rem;color:var(--mt);padding:8px 0">No custom categories yet. Create one from any add sheet or here.</div>`;
+  }
+
+  // Render each custom category with edit/delete controls
+  for (const cat of customs) {
+    html += `<div class="srow" style="align-items:center;padding:8px 0" id="custom-cat-row-${cat.key}">
+      <span style="font-size:1.1rem;margin-right:8px">${cat.emoji}</span>
+      <span class="srlbl" style="flex:1">${cat.name}</span>
+      <button class="btn bs bsm" style="font-size:.7rem;padding:4px 8px;margin-right:4px" onclick="editCustomCat('${cat.key}')">Edit</button>
+      <button class="btn bs bsm" style="font-size:.7rem;padding:4px 8px;color:var(--rd);border-color:var(--rd)" onclick="deleteCustomCategory('${cat.key}');renderCustomCategories()">Delete</button>
+    </div>`;
+  }
+
+  // Inline add form
+  html += `<div style="margin-top:10px">
+    <div class="cat-create-emoji-row" id="settingsCatEmojiRow">
+      ${CUSTOM_EMOJI_OPTIONS.map((e, i) =>
+        `<button class="cat-emoji-btn${i === 0 ? " cat-emoji-selected" : ""}" onclick="pickSettingsCatEmoji(this,'${e}')">${e}</button>`
+      ).join("")}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input class="fi" id="settingsCatName" placeholder="New category name..." style="flex:1;font-size:.85rem"/>
+      <button class="btn bp bsm" onclick="addCustomCatFromSettings()">+ Add</button>
+    </div>
+  </div>`;
+
+  container.innerHTML = html;
+}
+
+/**
+ * editCustomCat(key) — Shows an inline edit form for a custom category.
+ * Replaces the row with inputs for name + emoji selection.
+ */
+export function editCustomCat(key) {
+  const customs = getCustomCategories();
+  const cat = customs.find(c => c.key === key);
+  if (!cat) return;
+
+  const row = g(`custom-cat-row-${key}`);
+  if (!row) return;
+
+  row.innerHTML = `
+    <div style="width:100%">
+      <div class="cat-create-emoji-row" id="editCatEmojiRow-${key}">
+        ${CUSTOM_EMOJI_OPTIONS.map(e =>
+          `<button class="cat-emoji-btn${e === cat.emoji ? " cat-emoji-selected" : ""}" onclick="pickEditCatEmoji(this,'${key}','${e}')">${e}</button>`
+        ).join("")}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input class="fi" id="editCatName-${key}" value="${cat.name}" style="flex:1;font-size:.85rem"/>
+        <button class="btn bp bsm" onclick="saveEditCustomCat('${key}')">Save</button>
+        <button class="btn bs bsm" onclick="renderCustomCategories()">Cancel</button>
+      </div>
+    </div>`;
+}
+
+// Track selected emoji for settings add and edit forms
+let _settingsCatEmoji = CUSTOM_EMOJI_OPTIONS[0];
+let _editCatEmojis = {}; // key → emoji for each editing category
+
+/**
+ * pickSettingsCatEmoji(el, emoji) — Selects an emoji in the settings add form.
+ */
+export function pickSettingsCatEmoji(el, emoji) {
+  _settingsCatEmoji = emoji;
+  document.querySelectorAll("#settingsCatEmojiRow .cat-emoji-btn").forEach(b => b.classList.remove("cat-emoji-selected"));
+  if (el) el.classList.add("cat-emoji-selected");
+}
+
+/**
+ * pickEditCatEmoji(el, key, emoji) — Selects an emoji in the edit form for a category.
+ */
+export function pickEditCatEmoji(el, key, emoji) {
+  _editCatEmojis[key] = emoji;
+  document.querySelectorAll(`#editCatEmojiRow-${key} .cat-emoji-btn`).forEach(b => b.classList.remove("cat-emoji-selected"));
+  if (el) el.classList.add("cat-emoji-selected");
+}
+
+/**
+ * saveEditCustomCat(key) — Saves edits to a custom category (name + emoji).
+ */
+export async function saveEditCustomCat(key) {
+  const nameInp = g(`editCatName-${key}`);
+  const newName = nameInp ? nameInp.value.trim() : "";
+  if (!newName) { showNotif("Please enter a name"); return; }
+
+  const newEmoji = _editCatEmojis[key] || null;
+  await renameCustomCategory(key, newName, newEmoji);
+  delete _editCatEmojis[key];
+  renderCustomCategories();
+}
+
+/**
+ * addCustomCatFromSettings() — Creates a new custom category from the Settings form.
+ */
+export async function addCustomCatFromSettings() {
+  const inp = g("settingsCatName");
+  const name = inp ? inp.value.trim() : "";
+  if (!name) { showNotif("Please enter a category name"); return; }
+
+  // Generate key and save
+  const key = "custom-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 40) + "-" + Date.now();
+  const newCat = { key, name, emoji: _settingsCatEmoji };
+  const existing = state.cfg.customPrepCategories || [];
+  state.cfg.customPrepCategories = [...existing, newCat];
+
+  try {
+    await dbSet(`households/${state.hid}/settings/config`, state.cfg);
+    showNotif(`${_settingsCatEmoji} ${name} category created!`);
+    if (inp) inp.value = "";
+    _settingsCatEmoji = CUSTOM_EMOJI_OPTIONS[0];
+    renderCustomCategories();
+  } catch (e) {
+    console.error("Failed to save custom category:", e);
+    showNotif("Failed to save category");
+  }
 }
 
 /**

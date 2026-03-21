@@ -356,6 +356,9 @@
     <!-- Text input shown immediately when sheet opens -->
     <div id="shopAddTypeForm">
       <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
+      <!-- Category badge: collapsed pill showing auto-detected category, tappable to change -->
+      <div id="shopAddCatBadge" style="display:none"></div>
+      <input type="hidden" id="shopAddCatKey" value=""/>
       <!-- Live search results dropdown: populated as user types (debounced) -->
       <div id="shopSearchDropdown"></div>
       <!-- Qty/fraction/unit toolbar — sits above keyboard for quick entry -->
@@ -398,6 +401,9 @@
     <!-- Text input with live search dropdown (same UX as shopping) -->
     <div id="invAddTypeForm">
       <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>
+      <!-- Category badge: collapsed pill showing auto-detected category, tappable to change -->
+      <div id="invAddCatBadge" style="display:none"></div>
+      <input type="hidden" id="invAddCatKey" value=""/>
       <!-- Live search results dropdown: populated as user types (debounced) -->
       <div id="invSearchDropdown"></div>
       <!-- Qty/fraction/unit toolbar — sits above keyboard for quick entry -->
@@ -450,6 +456,9 @@
     <!-- Text input with live search dropdown (same pattern as Shopping/Supplies) -->
     <div id="uniAddForm">
       <input class="fi" id="uniAddInput" placeholder="e.g. Milk, Eggs, Bread…" oninput="onUniAddInput()" onkeydown="if(event.key==='Enter')uniAddToSupplies()"/>
+      <!-- Category badge: collapsed pill showing auto-detected category, tappable to change -->
+      <div id="uniAddCatBadge" style="display:none"></div>
+      <input type="hidden" id="uniAddCatKey" value=""/>
       <div id="uniSearchDropdown"></div>
       <!-- Qty/fraction/unit toolbar — same as Shopping and Supplies add sheets -->
       <div class="qty-toolbar" id="uniQtyToolbar">
@@ -983,6 +992,11 @@
         </div>
         <div style="font-size:.72rem;color:var(--mt);margin-top:4px;line-height:1.5">Organizes your Shopping list "By category" to match this store's typical aisle layout.</div>
       </div>
+      <!-- Custom Shopping Prep categories — manage household-wide custom categories -->
+      <div class="sset"><div class="ssetttl">Shopping Prep Categories</div>
+        <div style="font-size:.72rem;color:var(--mt);margin-bottom:8px;line-height:1.5">Custom categories appear in Shopping Prep alongside default aisles. Both household members can see them.</div>
+        <div id="customCategoriesList"></div>
+      </div>
       <!-- Utilities row — tappable row that opens the dedicated Utilities page (owner only) -->
       <div id="utilitiesRow" style="display:none;cursor:pointer" onclick="openUtilities()">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--card);border:1px solid var(--b2);border-radius:14px;margin-bottom:12px">
@@ -1010,6 +1024,15 @@
     <div class="ovttl" id="prep-title">Shopping Prep</div>
   </div>
   <div class="ovbody" id="prep-body"></div>
+</div>
+
+<!-- BOTTOM SHEET: CATEGORY PICKER — shared by all add surfaces and detail views -->
+<!-- Opens when user taps the category badge pill to change an item's prep category -->
+<div class="bsheet-backdrop" id="catPickerBackdrop" onclick="closeCategoryPicker()"></div>
+<div class="bsheet" id="catPickerSheet" style="max-height:70vh;overflow-y:auto">
+  <div class="bsheet-handle"></div>
+  <div class="bsheet-title">Choose category</div>
+  <div id="catPickerBody"></div>
 </div>
 
 <!-- UTILITIES PAGE — full-screen overlay opened from Settings > Utilities row -->

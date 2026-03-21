@@ -20,6 +20,7 @@ import { svi, dbSet, dbGet } from '../db.js';     // svi = save inventory item, 
 import { getCurrentUser } from '../auth.js';       // getCurrentUser = get the signed-in Firebase Auth user
 import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add to shopping list (deduplicates by name)
 import { g, showNotif, showOv, hideOv, formatScanResult, combineQty, applyTitleCaseWhileTyping, toTitleCase } from '../helpers.js'; // g = getElementById shorthand, showNotif = toast notification, showOv/hideOv = show/hide overlay panels, formatScanResult = smart product type extraction, combineQty = combine whole + fraction, applyTitleCaseWhileTyping = auto Title Case on input, toTitleCase = string Title Case
+import { autoCategorize, getCategoryDisplay, renderCategoryBadge, openCategoryPicker } from './categorypicker.js';
 
 // ── SCAN CACHE ──────────────────────────────────────────────────────────────
 // Client-side cache for barcode lookup results stored in localStorage.
@@ -512,6 +513,21 @@ export function toggleScanNote() {
 // Preserves the full product name and brand as separate fields so they display
 // correctly in the shopping list (name as main text, brand as subtitle).
 // Also persists the product image URL for thumbnail display.
+/**
+ * openScanCatPicker() — Opens the category picker from the scan result screen.
+ * Updates the badge and hidden field when a category is selected.
+ */
+export function openScanCatPicker() {
+  const hiddenKey = g("scanCatKey");
+  const currentCat = hiddenKey ? hiddenKey.value : "other";
+  openCategoryPicker(currentCat, (catKey) => {
+    if (hiddenKey) hiddenKey.value = catKey;
+    if (state.cp) state.cp._prepCategory = catKey;
+    const wrap = g("scanCatBadgeWrap");
+    if (wrap) wrap.innerHTML = renderCategoryBadge(catKey, "openScanCatPicker()");
+  });
+}
+
 export function addScannedToList() {
   if (!state.cp) return;                  // Guard: no scanned product available
 
@@ -538,6 +554,10 @@ export function addScannedToList() {
   // Persist raw Open Food Facts categories for Shopping Prep's hybrid category mapper
   if (state.cp.offCategory) item.offCategory = state.cp.offCategory;
   if (note) item.note = note;                         // Include note only if the user typed something
+
+  // Persist the prep category — use user's pick from the badge, or auto-detected
+  const scanCatEl = g("scanCatKey");
+  item.prepCategory = (scanCatEl && scanCatEl.value) || state.cp._prepCategory || "other";
 
   // Consolidate with existing items instead of creating duplicates
   consolidateShopItem(item);
@@ -785,6 +805,16 @@ function showRes(prod) {
       ${scanFmt.brand ? `<div style="font-size:.72rem;color:var(--mt);opacity:.7;margin-top:2px">${scanFmt.brand}</div>` : ""}
     </div></div></div>`;
 
+    // Category badge pill — auto-detected from OFF data + product name
+    const scanCatKey = autoCategorize({
+      name: prod.name || "", scanTitle: prod._scanTitle || "",
+      offCategory: prod.offCategory || "", category: prod.category || ""
+    });
+    // Store the detected category on the product so addScannedToList/addToInv can persist it
+    prod._prepCategory = scanCatKey;
+    html += `<div id="scanCatBadgeWrap">${renderCategoryBadge(scanCatKey, "openScanCatPicker()")}</div>`;
+    html += `<input type="hidden" id="scanCatKey" value="${scanCatKey}"/>`;
+
   }
 
   g("resbody").innerHTML = html;           // Inject the built HTML into the result overlay body
@@ -882,6 +912,10 @@ export async function addToInv() {
   if (state.cp._scanTitle) itemData.scanTitle = state.cp._scanTitle;
   // Persist raw Open Food Facts categories for Shopping Prep's hybrid category mapper
   if (state.cp.offCategory) itemData.offCategory = state.cp.offCategory;
+
+  // Persist the prep category — use user's pick from the badge, or auto-detected
+  const scanCatEl = g("scanCatKey");
+  itemData.prepCategory = (scanCatEl && scanCatEl.value) || state.cp._prepCategory || "other";
 
   // Capture the display name for the toast BEFORE clearing state.cp
   const toastName = state.cp._scanTitle || nm;

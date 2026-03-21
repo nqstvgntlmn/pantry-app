@@ -17,132 +17,9 @@ import { g, showNotif, showOv, hideOv, toTitleCase, formatQty, splitQty, combine
 import { consolidateShopItem } from './shopping.js';
 import { _defaultThreshold } from './home.js';
 import { enableSwipeBack, disableSwipeBack } from './swipeback.js';
+import { PREP_CATEGORIES, getAllCategories, getCategoryDisplay, autoCategorize, openCategoryPicker, changeInvItemCategory, deleteCustomCategory } from './categorypicker.js';
 
-// ── PREP CATEGORY DEFINITIONS ──────────────────────────────────────────────
-// Each category has a display name, emoji, and keyword lists for mapping
-// inventory items to grocery store aisle categories.
-const PREP_CATEGORIES = [
-  {
-    key: "produce",
-    name: "Produce",
-    emoji: "🥦",
-    keywords: ["vegetable", "fruit", "fresh herb", "cucumber", "tomato", "lettuce",
-      "onion", "garlic", "pepper", "carrot", "potato", "banana", "apple", "avocado",
-      "broccoli", "spinach", "kale", "celery", "mushroom", "corn", "zucchini",
-      "squash", "cabbage", "cauliflower", "sweet potato", "green bean", "asparagus",
-      "berry", "blueberry", "strawberry", "raspberry", "grape", "orange", "lemon",
-      "lime", "mango", "pineapple", "watermelon", "peach", "pear", "plum",
-      "cilantro", "parsley", "basil", "mint", "dill", "ginger", "jalap",
-      "scallion", "radish", "beet", "turnip", "eggplant", "artichoke"]
-  },
-  {
-    key: "dairy",
-    name: "Dairy, Eggs & Milk",
-    emoji: "🥛",
-    keywords: ["milk", "cheese", "butter", "yogurt", "cream", "egg", "dairy",
-      "sour cream", "cottage cheese", "cream cheese", "half and half",
-      "whipped cream", "ghee", "curd", "paneer", "mozzarella", "cheddar",
-      "parmesan", "feta", "ricotta", "gouda", "brie", "provolone"]
-  },
-  {
-    key: "meat",
-    name: "Meat & Seafood",
-    emoji: "🥩",
-    keywords: ["chicken", "beef", "pork", "fish", "salmon", "tuna", "shrimp",
-      "turkey", "lamb", "meat", "steak", "bacon", "sausage", "ground",
-      "tilapia", "cod", "crab", "lobster", "scallop", "clam", "mussel",
-      "prawn", "veal", "brisket", "ribs", "wing", "thigh", "breast",
-      "drumstick", "ham", "pepperoni", "salami", "deli"]
-  },
-  {
-    key: "bakery",
-    name: "Bakery & Bread",
-    emoji: "🧁",
-    keywords: ["bread", "pita", "bagel", "tortilla", "muffin", "croissant",
-      "roll", "loaf", "bun", "cake", "cookie", "donut", "pastry", "naan",
-      "flatbread", "ciabatta", "sourdough", "brioche", "biscuit", "waffle",
-      "pancake", "english muffin", "wrap"]
-  },
-  {
-    key: "frozen",
-    name: "Frozen",
-    emoji: "🧊",
-    keywords: ["frozen", "ice cream", "popsicle", "freezer"]
-  },
-  {
-    key: "canned",
-    name: "Canned & Dry Goods",
-    emoji: "🥫",
-    keywords: ["can", "canned", "beans", "lentils", "chickpeas", "soup",
-      "broth", "stock", "tomato paste", "tomato sauce", "diced tomato",
-      "tuna can", "sardine", "coconut milk", "evaporated milk",
-      "condensed milk", "corn can", "peas can", "dried"]
-  },
-  {
-    key: "snacks",
-    name: "Snacks & Beverages",
-    emoji: "🍿",
-    keywords: ["chips", "crackers", "popcorn", "soda", "juice", "water",
-      "energy drink", "gum", "candy", "snack", "pretzel", "granola bar",
-      "protein bar", "trail mix", "nuts", "dried fruit", "chocolate",
-      "cookie", "tea", "coffee", "sparkling", "kombucha", "sports drink",
-      "seltzer", "lemonade"]
-  },
-  {
-    key: "personal",
-    name: "Personal Care",
-    emoji: "🧴",
-    keywords: ["shampoo", "conditioner", "lotion", "soap", "toothpaste",
-      "deodorant", "vitamins", "vitamin", "supplement", "sunscreen",
-      "razor", "body wash", "face wash", "moisturizer", "floss",
-      "mouthwash", "band-aid", "bandage", "medicine", "aspirin",
-      "ibuprofen", "cotton", "tissue", "q-tip"]
-  },
-  {
-    key: "cleaning",
-    name: "Cleaning & Household",
-    emoji: "🧹",
-    keywords: ["detergent", "bleach", "cleaner", "dish soap", "sponge",
-      "trash bag", "paper towel", "toilet paper", "aluminum foil",
-      "plastic wrap", "ziplock", "ziploc", "battery", "light bulb",
-      "air freshener", "laundry", "fabric softener", "dryer sheet",
-      "disinfectant", "wipes", "broom", "mop"]
-  },
-  {
-    key: "grains",
-    name: "Grains, Pasta & Rice",
-    emoji: "🌾",
-    keywords: ["rice", "pasta", "flour", "oats", "quinoa", "cereal", "grain",
-      "noodle", "spaghetti", "penne", "macaroni", "couscous", "barley",
-      "bulgur", "farro", "polenta", "cornmeal", "breadcrumb", "pancake mix",
-      "oatmeal", "granola"]
-  },
-  {
-    key: "condiments",
-    name: "Condiments & Sauces",
-    emoji: "🫙",
-    keywords: ["ketchup", "mustard", "mayo", "mayonnaise", "hot sauce",
-      "soy sauce", "olive oil", "vinegar", "sauce", "condiment", "dressing",
-      "salsa", "bbq sauce", "barbecue", "teriyaki", "sriracha", "pesto",
-      "hummus", "tahini", "honey", "jam", "jelly", "peanut butter",
-      "almond butter", "nutella", "syrup", "marinade", "relish",
-      "worcestershire", "fish sauce", "oyster sauce", "chili paste",
-      "seasoning", "spice", "salt", "pepper", "cumin", "paprika",
-      "cinnamon", "oregano", "thyme", "turmeric", "curry", "chili powder",
-      "garlic powder", "onion powder", "baking soda", "baking powder",
-      "vanilla", "sugar", "brown sugar", "powdered sugar",
-      // Pickled/preserved items and herbs that were previously falling through to "other"
-      "olive", "olives", "black olive", "green olive", "caper", "capers",
-      "pickle", "pickles", "gherkin", "preserve", "marmalade",
-      "herb", "rosemary", "sage", "bay leaf", "tarragon", "chive"]
-  },
-  {
-    key: "other",
-    name: "Other",
-    emoji: "🍳",
-    keywords: [] // catch-all — items that don't match any other category
-  }
-];
+// PREP_CATEGORIES now imported from categorypicker.js (single source of truth)
 
 // ── SESSION STATE ──────────────────────────────────────────────────────────
 // Ephemeral state that lives only while Shopping Prep is open.
@@ -158,57 +35,49 @@ let _qtyCounted = new Set();     // item IDs whose qty change has been counted f
 
 /**
  * _categorizeItem(item) — Maps a single inventory item to a prep category key.
- * Uses a hybrid resolution order for maximum accuracy:
- *   1. Open Food Facts category (offCategory) → mapOffCategory() — most accurate
+ * Resolution order (most authoritative first):
+ *   0. Stored prepCategory — user's explicit choice (highest priority)
+ *   1. Open Food Facts category (offCategory) → mapOffCategory() — most accurate auto
  *   2. Item location (Freezer → "frozen") — physical location override
  *   3. Keyword matching on item name/scanTitle — fallback heuristic
  *   4. "other" — catch-all when nothing matches
  */
 function _categorizeItem(item) {
-  // 1. Try Open Food Facts category first — most accurate source because OFF
-  //    has human-curated taxonomy (e.g. "Olives" correctly maps to Condiments)
-  if (item.offCategory) {
-    const offMatch = mapOffCategory(item.offCategory);
-    if (offMatch) return offMatch;
+  // 0. Use stored prepCategory if the user has explicitly assigned one.
+  //    Validates that the key still exists (default or custom) to handle
+  //    deleted custom categories gracefully — falls through if orphaned.
+  if (item.prepCategory) {
+    const allCats = getAllCategories();
+    if (allCats.some(c => c.key === item.prepCategory)) return item.prepCategory;
   }
 
-  // 2. Freezer location items always go to Frozen category regardless of name
-  if (item.location === "freezer") return "frozen";
-
-  // 3. Fall back to keyword matching on item name, scanTitle, and category fields
-  const searchStr = [
-    item.scanTitle || "",
-    item.name || "",
-    item.category || ""
-  ].join(" ").toLowerCase();
-
-  // Check each category's keywords (skip "other" which has no keywords)
-  for (const cat of PREP_CATEGORIES) {
-    if (cat.key === "other") continue;
-    for (const kw of cat.keywords) {
-      if (searchStr.includes(kw)) return cat.key;
-    }
-  }
-
-  return "other";
+  // 1–4. Fall back to auto-detection (OFF data, location, keywords)
+  return autoCategorize(item);
 }
 
 /**
  * _groupByCategory() — Groups all inventory items into prep categories.
+ * Includes both default and custom household categories.
  * Returns a Map<categoryKey, item[]> with only non-empty categories.
  */
 function _groupByCategory() {
   const groups = new Map();
+  const allCats = getAllCategories();
 
-  // Initialize all categories as empty arrays
-  for (const cat of PREP_CATEGORIES) {
+  // Initialize all categories (default + custom) as empty arrays
+  for (const cat of allCats) {
     groups.set(cat.key, []);
   }
 
   // Assign each inventory item to its category
   for (const item of state.inv) {
     const catKey = _categorizeItem(item);
-    groups.get(catKey).push(item);
+    // If catKey isn't in groups (orphaned custom category), put in "other"
+    if (groups.has(catKey)) {
+      groups.get(catKey).push(item);
+    } else {
+      groups.get("other").push(item);
+    }
   }
 
   // Sort items within each category alphabetically by display name
@@ -316,16 +185,30 @@ function _renderGrid() {
   if (backBtn) backBtn.setAttribute("onclick", "closeShoppingPrep()");
 
   const groups = _groupByCategory();
+  const allCats = getAllCategories();
+  const customs = (state.cfg.customPrepCategories || []);
+  const customKeys = new Set(customs.map(c => c.key));
 
   let html = '<div class="prep-grid">';
+  let customDividerAdded = false;
 
-  for (const cat of PREP_CATEGORIES) {
+  for (const cat of allCats) {
     const items = groups.get(cat.key) || [];
     // Count items that are at or below restock threshold
     const lowCount = items.filter(i => _isLowStock(i)).length;
+    const isCustom = customKeys.has(cat.key);
 
-    // Show card even if empty (with 0 count) for complete category coverage
-    html += `<div class="prep-cat-card${lowCount > 0 ? " prep-cat-low" : ""}" onclick="openPrepCategory('${cat.key}')">
+    // Add a divider before the first custom category card
+    if (isCustom && !customDividerAdded) {
+      html += `<div class="prep-custom-divider">Custom Categories</div>`;
+      customDividerAdded = true;
+    }
+
+    // Show card even if empty (with 0 count) for complete category coverage.
+    // Custom categories support long-press to delete.
+    const longPressAttr = isCustom ? ` ontouchstart="prepCatLongPress(event,'${cat.key}')" oncontextmenu="prepCatLongPress(event,'${cat.key}')"` : "";
+
+    html += `<div class="prep-cat-card${lowCount > 0 ? " prep-cat-low" : ""}" onclick="openPrepCategory('${cat.key}')"${longPressAttr}>
       <div class="prep-emoji">${cat.emoji}</div>
       <div class="prep-cat-name">${cat.name}</div>
       <div class="prep-cat-count">${items.length} item${items.length !== 1 ? "s" : ""}</div>
@@ -374,7 +257,7 @@ function _renderDetail(categoryKey) {
   const body = g("prep-body");
   if (!body) return;
 
-  const cat = PREP_CATEGORIES.find(c => c.key === categoryKey);
+  const cat = getAllCategories().find(c => c.key === categoryKey);
   if (!cat) return;
 
   // Update overlay header
@@ -420,7 +303,8 @@ function _renderDetail(categoryKey) {
       </div>
       <div class="prep-item-info">
         <div class="prep-item-name">${displayName}</div>
-        <div class="prep-item-meta">Updated ${_timeAgo(item.addedAt)}</div>
+        <!-- Category badge: tappable pill to recategorize this item -->
+        <div class="prep-cat-badge" onclick="event.stopPropagation();prepRecategorize('${item.id}')">${getCategoryDisplay(_categorizeItem(item)).emoji} ${getCategoryDisplay(_categorizeItem(item)).name} ▼</div>
       </div>
       <!-- Inline quantity stepper: auto-saves to Firestore with 500ms debounce -->
       <div class="prep-qty-group">
@@ -595,6 +479,41 @@ export function prepQtyStep(itemId, delta) {
  * on iOS Safari by not layering sheets on top of the prep overlay. The user
  * lands on the Shopping tab where the new item will live — cleaner UX.
  */
+/**
+ * prepRecategorize(itemId) — Opens the category picker for an item in the
+ * Shopping Prep detail view. When the user picks a new category, updates the
+ * item's prepCategory in Firestore and re-renders the current detail view
+ * so the item moves to its new category.
+ */
+export function prepRecategorize(itemId) {
+  const item = state.inv.find(i => i.id === itemId);
+  if (!item) return;
+
+  const currentCat = _categorizeItem(item);
+  openCategoryPicker(currentCat, async (newCatKey) => {
+    // Save the new category to the item
+    await changeInvItemCategory(itemId, newCatKey);
+    // Re-render the current detail view to reflect the move
+    if (_currentCategory) {
+      _renderDetail(_currentCategory);
+    }
+    const { name: catName } = getCategoryDisplay(newCatKey);
+    showNotif(`Moved to ${catName}`);
+  });
+}
+
+/**
+ * prepCatLongPress(event, catKey) — Handles long-press / context menu on a
+ * custom category card in the grid. Shows a confirm dialog to delete the category.
+ */
+export async function prepCatLongPress(event, catKey) {
+  event.preventDefault();
+  event.stopPropagation();
+  // Delete the custom category and re-render the grid
+  await deleteCustomCategory(catKey);
+  _renderGrid();
+}
+
 export function prepAddNewItem() {
   // Close Shopping Prep without showing the summary toast — we're continuing
   // the workflow, not finishing it. Clear pending save timers and swipe-back.

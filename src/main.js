@@ -40,15 +40,15 @@ window.getIdToken = getIdToken;
 // so they can be attached to `window` for HTML onclick access.
 
 // Home screen: dashboard rendering, weekly/tonight views, export panel
-import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection, openRecipeMatch, showMoreMatches, addMissingToShop, changeWeek, openUniversalAdd, closeUniversalAdd, uniQtyStep, uniFracChange, setUniAddLoc, toggleUniAddNote, onUniAddInput, uniAddToSupplies, uniAddToShopping, uniAddScan, uniAddVoice, initUniQtyToolbar } from './ui/home.js';
+import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection, openRecipeMatch, showMoreMatches, addMissingToShop, changeWeek, openUniversalAdd, closeUniversalAdd, uniQtyStep, uniFracChange, setUniAddLoc, toggleUniAddNote, onUniAddInput, uniAddToSupplies, uniAddToShopping, uniAddScan, uniAddVoice, initUniQtyToolbar, openUniAddCatPicker } from './ui/home.js';
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, editInvDetailCombined, saveInvDetailCombined, initInvQtyToolbar, invQtyStep, invFracChange, resetInvStagger } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, editInvDetailCombined, saveInvDetailCombined, initInvQtyToolbar, invQtyStep, invFracChange, resetInvStagger, openInvAddCatPicker, changeInvCategory } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, editShopDetailCombined, saveShopDetailCombined, initShopQtyToolbar, shopQtyStep, shopFracChange, toggleShopDone, resetShopStagger } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, editShopDetailCombined, saveShopDetailCombined, initShopQtyToolbar, shopQtyStep, shopFracChange, toggleShopDone, resetShopStagger, openShopAddCatPicker, changeShopCategory } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -61,7 +61,7 @@ import { renderInsights } from './ui/insights.js';
 import { sendChat, sendPill, clrChat, ar, kitCtx, importChatRecipe } from './ui/chat.js';
 
 // Scanner: barcode/photo scanning, manual lookup, add scanned items to inventory or list
-import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, showManualNameInput, togManual, manLookup, selRL, valAdd, addToInv, chgAQ, editScanTitle, confirmScanTitle } from './ui/scan.js';
+import { stopLiveScanner, resumeScanner, openScanForList, openScanForInventory, addScannedToList, toggleScanNote, showManualNameInput, togManual, manLookup, selRL, valAdd, addToInv, chgAQ, editScanTitle, confirmScanTitle, openScanCatPicker } from './ui/scan.js';
 
 // Swipe gestures: swipe-to-delete, row tap, multi-select mode, undo deletion, delete all
 import { initSwipe, swipeDelItem, swipeAddItem, swipeRowTap, togShopSelect, togInvSelect, cancelSelect, deleteSelected, undoDelete, deleteAll, deleteWithUndo } from './ui/swipe.js';
@@ -73,10 +73,11 @@ import { scheduleMealReminders } from './ui/reminders.js';
 // Settings: config UI, push notifications, household management, theme/dark mode
 // Household member management: remove, transfer ownership, leave/delete household
 // checkMembershipOnInteraction: verifies user still belongs to household (kick detection)
-import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, removeMyCommRecipes, removeHouseholdCommRecipes, deleteAccount, scanRecipesForIssues, closeScanResults, fixAllFlaggedRecipes, openUtilities, closeUtilities, clearScanCacheUI } from './ui/settings.js';
+import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, removeMyCommRecipes, removeHouseholdCommRecipes, deleteAccount, scanRecipesForIssues, closeScanResults, fixAllFlaggedRecipes, openUtilities, closeUtilities, clearScanCacheUI, editCustomCat, pickSettingsCatEmoji, pickEditCatEmoji, saveEditCustomCat, addCustomCatFromSettings, renderCustomCategories } from './ui/settings.js';
 
 // Shopping Prep: pre-shop audit flow — walk through categories, verify quantities, build shopping list
-import { openShoppingPrep, closeShoppingPrep, openPrepCategory, backToGrid, prepToggleVerify, prepAddToShop, prepAddAllLow, prepQtyStep, prepAddNewItem } from './ui/shoppingprep.js';
+import { openShoppingPrep, closeShoppingPrep, openPrepCategory, backToGrid, prepToggleVerify, prepAddToShop, prepAddAllLow, prepQtyStep, prepAddNewItem, prepRecategorize, prepCatLongPress } from './ui/shoppingprep.js';
+import { selectCategory, closeCategoryPicker, showCreateCustomCategory, pickCustomEmoji, confirmCreateCustomCategory, deleteCustomCategory } from './ui/categorypicker.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
@@ -232,6 +233,22 @@ window.prepAddToShop = prepAddToShop;         // Add a single item to shopping l
 window.prepAddAllLow = prepAddAllLow;         // Add all low-stock items in a category to shopping
 window.prepQtyStep = prepQtyStep;             // Adjust item quantity +/- from prep detail view
 window.prepAddNewItem = prepAddNewItem;       // Open add-item sheet from prep detail view
+window.prepRecategorize = prepRecategorize;   // Open category picker to recategorize an item in prep
+window.prepCatLongPress = prepCatLongPress;   // Long-press handler for custom category cards in prep grid
+
+// ── Category picker handlers (shared across all surfaces) ──
+window.selectCategory = selectCategory;                       // Select a category in the picker sheet
+window.closeCategoryPicker = closeCategoryPicker;             // Close the category picker sheet
+window.showCreateCustomCategory = showCreateCustomCategory;   // Show inline create form in picker
+window.pickCustomEmoji = pickCustomEmoji;                     // Pick an emoji for custom category
+window.confirmCreateCustomCategory = confirmCreateCustomCategory; // Save a new custom category
+window.deleteCustomCategory = deleteCustomCategory;           // Delete a custom category from settings
+window.openShopAddCatPicker = openShopAddCatPicker;           // Open category picker from Shopping add sheet
+window.changeShopCategory = changeShopCategory;               // Change category on a shopping item detail
+window.openInvAddCatPicker = openInvAddCatPicker;             // Open category picker from Supplies add sheet
+window.changeInvCategory = changeInvCategory;                 // Change category on an inventory item detail
+window.openUniAddCatPicker = openUniAddCatPicker;             // Open category picker from universal add sheet
+window.openScanCatPicker = openScanCatPicker;                 // Open category picker from scan result screen
 
 // ── Shopping screen handlers ──
 window.qadd = qadd;             // Quick-add an item to the shopping list
@@ -469,6 +486,12 @@ window.fixAllFlaggedRecipes = fixAllFlaggedRecipes; // Fix all flagged recipes v
 window.openUtilities = openUtilities;               // Open the dedicated Utilities page from Settings
 window.closeUtilities = closeUtilities;             // Close the Utilities page and return to Settings
 window.clearScanCacheUI = clearScanCacheUI;         // Clear cached barcode scan results (Settings > Utilities > Data)
+window.editCustomCat = editCustomCat;               // Edit a custom Shopping Prep category in Settings
+window.pickSettingsCatEmoji = pickSettingsCatEmoji;  // Pick emoji in Settings custom category add form
+window.pickEditCatEmoji = pickEditCatEmoji;          // Pick emoji in Settings custom category edit form
+window.saveEditCustomCat = saveEditCustomCat;        // Save edits to a custom category in Settings
+window.addCustomCatFromSettings = addCustomCatFromSettings; // Create a new custom category from Settings
+window.renderCustomCategories = renderCustomCategories;     // Re-render custom categories list in Settings (used after delete)
 
 // manualRefresh(target) — Safety valve to force re-fetch all items from Firestore.
 // Triggered by the subtle ↻ button on Shopping/Inventory screens when real-time

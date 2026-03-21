@@ -22,6 +22,7 @@ import { updExport, _defaultThreshold } from './home.js';
 // scoreSearchResult — relevance scoring for search results
 // _savePreferredLocation / _getPreferredLocation — remember where user stores each product
 import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferredLocation, _savePreferredUnit, _getPreferredUnit, _getProductPreference } from './shopping.js';
+import { autoCategorizeByName, autoCategorize, getCategoryDisplay, renderCategoryBadge, openCategoryPicker, changeInvItemCategory } from './categorypicker.js';
 // [IMAGES DISABLED] — Product images commented out pending decision.
 // See session notes: images caused false positives from external databases,
 // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
@@ -320,6 +321,10 @@ export async function openInvItemDetail(id) {
       <div style="font-size:.7rem;color:var(--mt);margin-top:4px">Added ${item.addedAt || "—"}</div>
     </div>
   </div>`;
+
+  // Category badge — tappable pill to view/change the item's prep category
+  const invItemCat = item.prepCategory || autoCategorize(item);
+  html += renderCategoryBadge(invItemCat, `changeInvCategory('${item.id}')`);
 
   // Location picker — four buttons, selected one is highlighted
   html += `<div class="item-detail-section">
@@ -1218,6 +1223,12 @@ export function openInvAddSheet() {
   // Reset the qty/unit toolbar to defaults each time the sheet opens
   resetInvQtyToolbar();
 
+  // Reset category badge — hidden until user types enough chars
+  const catBadge = g("invAddCatBadge");
+  if (catBadge) { catBadge.style.display = "none"; catBadge.innerHTML = ""; }
+  const catKey = g("invAddCatKey");
+  if (catKey) { catKey.value = ""; catKey.dataset.manual = ""; }
+
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("invi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
 }
@@ -1396,12 +1407,17 @@ export async function qaddInv() {
   // Generate a unique ID for the new inventory item
   const id = "itm-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
 
+  // Auto-detect prep category or use the manually picked one from the add sheet badge
+  const pickedCat = g("invAddCatKey");
+  const prepCategory = (pickedCat && pickedCat.value) || autoCategorizeByName(name);
+
   // Save the item to inventory with toolbar qty/unit and preferred location
   const item = {
     id, barcode: id, name, brand: "", unit, qty,
     location: loc, category: gcat({ name }),
     image: null, source: "Manual",
-    expiry: null, addedAt: new Date().toLocaleDateString()
+    expiry: null, addedAt: new Date().toLocaleDateString(),
+    prepCategory
   };
   if (note) item.note = note;
   svi(item);
@@ -1436,6 +1452,9 @@ export function onInvInput() {
   const inp = g("invi");
   if (inp) applyTitleCaseWhileTyping(inp);
 
+  // Update the category badge pill as the user types — auto-detects from the name
+  _updateInvAddCatBadge(inp ? inp.value.trim() : "");
+
   // [SEARCH DISABLED] — uncomment to re-enable product search
   // Text search on keystroke is disabled. The input field still works for
   // plain-text adds via qaddInv(). Debounce and _runInvSearch calls are
@@ -1457,6 +1476,67 @@ export function onInvInput() {
   //
   // // Wait 350ms after the user stops typing before searching (debounce)
   // _invSearchTimer = setTimeout(() => _runInvSearch(query), 350);
+}
+
+// ── CATEGORY BADGE ON ADD SHEET ──────────────────────────────────────────────
+// Shows a collapsed category pill below the input that auto-updates as the user types.
+
+/**
+ * _updateInvAddCatBadge(name) — Updates the category badge pill on the Supplies
+ * add sheet based on the current input text. Shows the badge once 2+ chars are typed.
+ */
+function _updateInvAddCatBadge(name) {
+  const badge = g("invAddCatBadge");
+  const hiddenKey = g("invAddCatKey");
+  if (!badge) return;
+
+  if (!name || name.length < 2) {
+    badge.style.display = "none";
+    if (hiddenKey) hiddenKey.value = "";
+    return;
+  }
+
+  // If user manually picked a category, keep it
+  if (hiddenKey && hiddenKey.value && hiddenKey.dataset.manual === "true") {
+    badge.style.display = "block";
+    return;
+  }
+
+  const catKey = autoCategorizeByName(name);
+  badge.innerHTML = renderCategoryBadge(catKey, "openInvAddCatPicker()");
+  badge.style.display = "block";
+  if (hiddenKey) { hiddenKey.value = catKey; hiddenKey.dataset.manual = ""; }
+}
+
+/**
+ * openInvAddCatPicker() — Opens the category picker from the Supplies add sheet.
+ * When a category is selected, updates the badge and hidden field.
+ */
+export function openInvAddCatPicker() {
+  const hiddenKey = g("invAddCatKey");
+  const currentCat = hiddenKey ? hiddenKey.value : "other";
+  openCategoryPicker(currentCat, (catKey) => {
+    if (hiddenKey) { hiddenKey.value = catKey; hiddenKey.dataset.manual = "true"; }
+    const badge = g("invAddCatBadge");
+    if (badge) badge.innerHTML = renderCategoryBadge(catKey, "openInvAddCatPicker()");
+  });
+}
+
+/**
+ * changeInvCategory(id) — Opens the category picker for an existing inventory
+ * item (from its detail sheet). Saves the new category to Firestore on selection.
+ */
+export function changeInvCategory(id) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+  const currentCat = item.prepCategory || autoCategorize(item);
+  openCategoryPicker(currentCat, async (catKey) => {
+    await changeInvItemCategory(id, catKey);
+    // Refresh the detail sheet to show updated badge
+    openInvItemDetail(id);
+    const { name: catName } = getCategoryDisplay(catKey);
+    showNotif(`Category: ${catName}`);
+  });
 }
 
 /**

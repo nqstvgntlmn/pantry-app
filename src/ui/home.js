@@ -15,6 +15,7 @@ import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase, formatQ
 import { saveMp, dbList, svi } from '../db.js';
 import { consolidateShopItem, _getProductPreference } from './shopping.js'; // Consolidation-aware add to shopping list + product preferences
 import { UNITS } from './inventory.js'; // Shared unit list for the qty toolbar
+import { autoCategorizeByName, getCategoryDisplay, renderCategoryBadge, openCategoryPicker } from './categorypicker.js';
 
 // initHome() — called once on app boot.
 // Sets the time-aware greeting ("Good morning/afternoon/evening"), displays
@@ -835,6 +836,12 @@ export function openUniversalAdd() {
   const dropdown = g("uniSearchDropdown");
   if (dropdown) { dropdown.innerHTML = ""; dropdown.classList.remove("active"); }
 
+  // Reset category badge — hidden until user types enough chars
+  const catBadge = g("uniAddCatBadge");
+  if (catBadge) { catBadge.style.display = "none"; catBadge.innerHTML = ""; }
+  const catKeyEl = g("uniAddCatKey");
+  if (catKeyEl) { catKeyEl.value = ""; catKeyEl.dataset.manual = ""; }
+
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("uniAddInput"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
 }
@@ -917,6 +924,49 @@ export function toggleUniAddNote() {
 export function onUniAddInput() {
   const inp = g("uniAddInput");
   if (inp) applyTitleCaseWhileTyping(inp);
+
+  // Update the category badge pill as the user types
+  _updateUniAddCatBadge(inp ? inp.value.trim() : "");
+}
+
+/**
+ * _updateUniAddCatBadge(name) — Updates the category badge pill on the universal
+ * add sheet based on the current input text. Shows the badge once 2+ chars are typed.
+ */
+function _updateUniAddCatBadge(name) {
+  const badge = g("uniAddCatBadge");
+  const hiddenKey = g("uniAddCatKey");
+  if (!badge) return;
+
+  if (!name || name.length < 2) {
+    badge.style.display = "none";
+    if (hiddenKey) hiddenKey.value = "";
+    return;
+  }
+
+  // If user manually picked a category, keep it
+  if (hiddenKey && hiddenKey.value && hiddenKey.dataset.manual === "true") {
+    badge.style.display = "block";
+    return;
+  }
+
+  const catKey = autoCategorizeByName(name);
+  badge.innerHTML = renderCategoryBadge(catKey, "openUniAddCatPicker()");
+  badge.style.display = "block";
+  if (hiddenKey) { hiddenKey.value = catKey; hiddenKey.dataset.manual = ""; }
+}
+
+/**
+ * openUniAddCatPicker() — Opens the category picker from the universal add sheet.
+ */
+export function openUniAddCatPicker() {
+  const hiddenKey = g("uniAddCatKey");
+  const currentCat = hiddenKey ? hiddenKey.value : "other";
+  openCategoryPicker(currentCat, (catKey) => {
+    if (hiddenKey) { hiddenKey.value = catKey; hiddenKey.dataset.manual = "true"; }
+    const badge = g("uniAddCatBadge");
+    if (badge) badge.innerHTML = renderCategoryBadge(catKey, "openUniAddCatPicker()");
+  });
 }
 
 /**
@@ -961,6 +1011,11 @@ function _resetUniAfterAdd() {
   // Clear search dropdown
   const dropdown = g("uniSearchDropdown");
   if (dropdown) { dropdown.innerHTML = ""; dropdown.classList.remove("active"); }
+  // Reset category badge for next item
+  const catBadge = g("uniAddCatBadge");
+  if (catBadge) { catBadge.style.display = "none"; catBadge.innerHTML = ""; }
+  const catKeyEl = g("uniAddCatKey");
+  if (catKeyEl) { catKeyEl.value = ""; catKeyEl.dataset.manual = ""; }
   // Reset toolbar for next item
   _resetUniQtyToolbar();
 }
@@ -985,12 +1040,17 @@ export async function uniAddToSupplies() {
   // Generate a unique ID for the new inventory item
   const id = "itm-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
 
+  // Auto-detect prep category or use the manually picked one from the add sheet badge
+  const pickedCat = g("uniAddCatKey");
+  const prepCategory = (pickedCat && pickedCat.value) || autoCategorizeByName(name);
+
   // Build and save the inventory item
   const item = {
     id, barcode: id, name, brand: "", unit, qty,
     location: loc, category: gcat({ name }),
     image: null, source: "Manual",
-    expiry: null, addedAt: new Date().toLocaleDateString()
+    expiry: null, addedAt: new Date().toLocaleDateString(),
+    prepCategory
   };
   if (note) item.note = note;
   svi(item);
@@ -1010,7 +1070,11 @@ export async function uniAddToShopping() {
 
   const { name, qty, unit, note } = parsed;
 
-  const item = { id: Date.now().toString(), name, qty, unit, checked: false, src: "manual" };
+  // Auto-detect prep category or use the manually picked one from the add sheet badge
+  const pickedCat = g("uniAddCatKey");
+  const prepCategory = (pickedCat && pickedCat.value) || autoCategorizeByName(name);
+
+  const item = { id: Date.now().toString(), name, qty, unit, checked: false, src: "manual", prepCategory };
   if (note) item.note = note;
 
   // Consolidate with existing shopping list items to prevent duplicates

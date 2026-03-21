@@ -17,6 +17,7 @@ import { svi } from '../db.js';       // svi = save/upsert an inventory item to 
 // UNITS list shared with inventory for consistent unit-of-measure options
 import { UNITS } from './inventory.js';
 import { wDates } from '../helpers.js'; // wDates = returns array of Date objects for the current week (Mon–Sun)
+import { autoCategorizeByName, getCategoryDisplay, renderCategoryBadge, openCategoryPicker, changeShopItemCategory } from './categorypicker.js';
 // [IMAGES DISABLED] — Product images commented out pending decision.
 // See session notes: images caused false positives from external databases,
 // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
@@ -717,6 +718,11 @@ export function qadd() {
   const item = { id: Date.now().toString(), name, qty, unit, checked: false, src: "manual" };
   if (note) item.note = note; // Only include note field if the user typed something
 
+  // Auto-detect prep category from the item name so Shopping Prep can use it later.
+  // If the user picked a category from the badge on the add sheet, use that instead.
+  const pickedCat = g("shopAddCatKey");
+  item.prepCategory = (pickedCat && pickedCat.value) || autoCategorizeByName(name);
+
   // Consolidate with existing items instead of creating duplicates
   consolidateShopItem(item);
   i.value = ""; // Clear the input after adding
@@ -765,6 +771,11 @@ export function openShopAddSheet() {
   if (sheet) sheet.classList.add("active");
   // Reset the qty/unit toolbar to defaults each time the sheet opens
   resetShopQtyToolbar();
+  // Reset category badge — hidden until user types enough chars
+  const catBadge = g("shopAddCatBadge");
+  if (catBadge) { catBadge.style.display = "none"; catBadge.innerHTML = ""; }
+  const catKey = g("shopAddCatKey");
+  if (catKey) { catKey.value = ""; catKey.dataset.manual = ""; }
   // Auto-focus the input so the keyboard pops up immediately
   setTimeout(() => { const inp = g("shi"); if (inp) { inp.value = ""; inp.focus(); } }, 150);
 }
@@ -916,6 +927,9 @@ export function onShopInput() {
   const inp = g("shi");
   if (inp) applyTitleCaseWhileTyping(inp);
 
+  // Update the category badge pill as the user types — auto-detects from the name
+  _updateShopAddCatBadge(inp ? inp.value.trim() : "");
+
   // [SEARCH DISABLED] — uncomment to re-enable product search
   // Text search on keystroke is disabled. The input field still works for
   // plain-text adds via qadd(). Debounce and _runInlineSearch calls are
@@ -938,6 +952,70 @@ export function onShopInput() {
   //
   // // Wait 350ms after the user stops typing before searching (debounce)
   // _searchDebounceTimer = setTimeout(() => _runInlineSearch(query), 350);
+}
+
+// ── CATEGORY BADGE ON ADD SHEET ──────────────────────────────────────────────
+// Shows a collapsed category pill below the input that auto-updates as the user types.
+
+/**
+ * _updateShopAddCatBadge(name) — Updates the category badge pill on the Shopping
+ * add sheet based on the current input text. Shows the badge once 2+ chars are typed.
+ */
+function _updateShopAddCatBadge(name) {
+  const badge = g("shopAddCatBadge");
+  const hiddenKey = g("shopAddCatKey");
+  if (!badge) return;
+
+  if (!name || name.length < 2) {
+    badge.style.display = "none";
+    if (hiddenKey) hiddenKey.value = "";
+    return;
+  }
+
+  // Auto-detect category from the name — but only if user hasn't manually picked one
+  if (hiddenKey && hiddenKey.value && hiddenKey.dataset.manual === "true") {
+    // User made a manual selection — keep it, just make sure badge is visible
+    badge.style.display = "block";
+    return;
+  }
+
+  const catKey = autoCategorizeByName(name);
+  const { emoji, name: catName } = getCategoryDisplay(catKey);
+  badge.innerHTML = renderCategoryBadge(catKey, "openShopAddCatPicker()");
+  badge.style.display = "block";
+  if (hiddenKey) { hiddenKey.value = catKey; hiddenKey.dataset.manual = ""; }
+}
+
+/**
+ * openShopAddCatPicker() — Opens the category picker from the Shopping add sheet.
+ * When a category is selected, updates the badge and hidden field.
+ */
+export function openShopAddCatPicker() {
+  const hiddenKey = g("shopAddCatKey");
+  const currentCat = hiddenKey ? hiddenKey.value : "other";
+  openCategoryPicker(currentCat, (catKey) => {
+    if (hiddenKey) { hiddenKey.value = catKey; hiddenKey.dataset.manual = "true"; }
+    const { emoji, name: catName } = getCategoryDisplay(catKey);
+    const badge = g("shopAddCatBadge");
+    if (badge) badge.innerHTML = renderCategoryBadge(catKey, "openShopAddCatPicker()");
+  });
+}
+
+/**
+ * changeShopCategory(id) — Opens the category picker for an existing shopping
+ * item (from its detail sheet). Saves the new category to Firestore on selection.
+ */
+export function changeShopCategory(id) {
+  const item = state.shop.find(i => i.id === id);
+  if (!item) return;
+  const currentCat = item.prepCategory || autoCategorizeByName(item.name);
+  openCategoryPicker(currentCat, async (catKey) => {
+    await changeShopItemCategory(id, catKey);
+    // Refresh the detail sheet to show updated badge
+    openItemDetail(id);
+    const { name: catName } = getCategoryDisplay(catKey);
+    showNotif(`Category: ${catName}`);
+  });
 }
 
 // ── RECIPE/DISH NAME DETECTION (client-side mirror of server logic) ──────────
@@ -1655,8 +1733,9 @@ export async function openItemDetail(id) {
   // <input type="file" id="productPhotoInput" accept="image/*" style="display:none"
   //   onchange="handleProductPhotoSelected('${item.id}')" />`;
 
-  // Category/source tags removed — hyphenated category names (e.g. "plant-based-foods-and-beverages")
-  // and source labels ("via reminders") added no user value and looked ugly/technical.
+  // Category badge — tappable pill to view/change the item's prep category
+  const shopItemCat = item.prepCategory || autoCategorizeByName(item.name);
+  html += renderCategoryBadge(shopItemCat, `changeShopCategory('${item.id}')`);
 
   // Quantity stepper — layout: [−] [qty] [+] [frac ▼] [unit ▼] all inline.
   // Stored as a single decimal in Firestore (e.g. 5.5), split here for UI display.
