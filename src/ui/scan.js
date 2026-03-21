@@ -525,6 +525,15 @@ export function openScanCatPicker() {
     if (state.cp) state.cp._prepCategory = catKey;
     const wrap = g("scanCatBadgeWrap");
     if (wrap) wrap.innerHTML = renderCategoryBadge(catKey, "openScanCatPicker()");
+
+    // Persist the user's category choice to customProducts so future scans
+    // of this barcode use the corrected category instead of auto-detection
+    if (state.cp && state.cp.barcode && state.hid) {
+      const normalizedBarcode = state.cp.barcode.replace(/[^a-zA-Z0-9]/g, "");
+      const docPath = `households/${state.hid}/customProducts/barcode_${normalizedBarcode}`;
+      // dbSet uses PATCH under the hood — only updates the specified fields
+      dbSet(docPath, { prepCategory: catKey, updatedAt: new Date().toISOString() });
+    }
   });
 }
 
@@ -644,7 +653,7 @@ async function lkup(bc) {
         // This ensures rescanning a product with a saved correction shows the corrected
         // name prominently, and formatScanResult() won't overwrite it.
         console.log(`[Scan] Custom product override: "${customData.correctedName}"`);
-        return {
+        const result = {
           barcode: bc,
           name: customData.correctedName,
           brand: customData.brand || "",
@@ -659,6 +668,10 @@ async function lkup(bc) {
           _scanTitle: customData.correctedName,   // Corrected name as the display title
           _originalName: customData.originalName || "",  // Raw database name for subtitle reference
         };
+        // If a prepCategory was saved from a prior user correction, include it
+        // so the scan result screen uses it instead of re-running auto-detection
+        if (customData.prepCategory) result._prepCategory = customData.prepCategory;
+        return result;
       }
     } catch {
       // Non-fatal — if custom product check fails, fall through to server lookup
@@ -805,12 +818,13 @@ function showRes(prod) {
       ${scanFmt.brand ? `<div style="font-size:.72rem;color:var(--mt);opacity:.7;margin-top:2px">${scanFmt.brand}</div>` : ""}
     </div></div></div>`;
 
-    // Category badge pill — auto-detected from OFF data + product name
-    const scanCatKey = autoCategorize({
+    // Category badge pill — if a prepCategory was saved from a prior user correction
+    // (via customProducts), use it directly; otherwise auto-detect from product data
+    const scanCatKey = prod._prepCategory || autoCategorize({
       name: prod.name || "", scanTitle: prod._scanTitle || "",
       offCategory: prod.offCategory || "", category: prod.category || ""
     });
-    // Store the detected category on the product so addScannedToList/addToInv can persist it
+    // Store the category on the product so addScannedToList/addToInv can persist it
     prod._prepCategory = scanCatKey;
     html += `<div id="scanCatBadgeWrap">${renderCategoryBadge(scanCatKey, "openScanCatPicker()")}</div>`;
     html += `<input type="hidden" id="scanCatKey" value="${scanCatKey}"/>`;
@@ -1020,10 +1034,17 @@ async function _saveCustomProductName(barcode, correctedName, product, originalN
   const user = getCurrentUser();
   const uid = user ? user.uid : "unknown";
 
+  // Read the current prepCategory from the scan result badge (user may have changed it)
+  const scanCatEl = g("scanCatKey");
+  const prepCategory = (scanCatEl && scanCatEl.value) ||
+    (state.cp && state.cp._prepCategory) || null;
+
   // Save the corrected name and relevant product metadata to Firestore.
   // originalName preserves the raw database product name so rescans can show it
   // as a subtitle for reference (e.g. "Dairies" below the corrected "Cheese").
-  await dbSet(docPath, {
+  // prepCategory is persisted so future scans use the user's chosen category
+  // instead of re-running auto-detection (which may be wrong).
+  const saveData = {
     barcode: barcode,
     correctedName: correctedName,
     originalName: originalName || "",
@@ -1034,7 +1055,10 @@ async function _saveCustomProductName(barcode, correctedName, product, originalN
     description: product.description || "",
     updatedAt: new Date().toISOString(),
     updatedBy: uid,
-  });
+  };
+  // Only persist prepCategory if one was explicitly set — avoids storing null
+  if (prepCategory) saveData.prepCategory = prepCategory;
+  await dbSet(docPath, saveData);
 
   // Invalidate the localStorage scan cache for this barcode so stale entries
   // (with the old uncorrected name) don't resurface on future scans if the

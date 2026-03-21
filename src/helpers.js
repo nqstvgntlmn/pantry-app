@@ -597,8 +597,9 @@ export function mapOffCategory(offCategory) {
   // Cleaning & Household
   if (/cleaning|household|laundry|detergent|disinfectant/.test(lc)) return "cleaning";
 
-  // Personal Care
-  if (/personal care|hygiene|cosmetic|vitamin|supplement|medicine|pharmaceutical|beauty|shampoo|soap/.test(lc)) return "personal";
+  // Personal Care — checked before Meat & Seafood to prevent false positives
+  // (e.g. "body wash" shouldn't match meat keywords)
+  if (/personal care|hygiene|cosmetic|vitamin|supplement|medicine|pharmaceutical|beauty|shampoo|conditioner|lotion|body wash|soap|deodorant|toothpaste|toothbrush|moisturizer|sunscreen|face wash|cleanser|hair|skin care/.test(lc)) return "personal";
 
   // Frozen — check before other food categories since frozen items span many types
   if (/frozen/.test(lc)) return "frozen";
@@ -674,8 +675,11 @@ const PRODUCT_TYPE_MAP = [
   { category: /dairy/i, keywords: ["butter"],                                            title: "Butter" },
 
   // ── Personal Care / Health ──
-  { category: /personal care/i, keywords: ["shampoo"],                                   title: "Shampoo" },
+  // "shampoo and conditioner" / "2-in-1" checked first (most specific), then
+  // "conditioner" before "shampoo" so "VO5 Conditioner" doesn't match "Shampoo"
+  { category: /personal care/i, keywords: ["shampoo and conditioner", "shampoo & conditioner", "2-in-1", "2 in 1"], title: "Shampoo & Conditioner" },
   { category: /personal care/i, keywords: ["conditioner"],                                title: "Conditioner" },
+  { category: /personal care/i, keywords: ["shampoo"],                                   title: "Shampoo" },
   { category: /personal care/i, keywords: ["body lotion", "lotion", "moisturizer"],      title: "Body Lotion" },
   { category: /personal care/i, keywords: ["body wash", "shower gel"],                   title: "Body Wash" },
   { category: /personal care/i, keywords: ["deodorant", "antiperspirant"],               title: "Deodorant" },

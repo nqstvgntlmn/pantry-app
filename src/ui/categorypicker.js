@@ -37,6 +37,19 @@ export const PREP_CATEGORIES = [
       "scallion", "radish", "beet", "turnip", "eggplant", "artichoke"]
   },
   {
+    key: "personal",
+    name: "Personal Care",
+    emoji: "🧴",
+    // Checked BEFORE meat/seafood to prevent false positives — personal care
+    // product names should never fall through to food categories
+    keywords: ["shampoo", "conditioner", "lotion", "soap", "toothpaste",
+      "deodorant", "vitamins", "vitamin", "supplement", "sunscreen",
+      "razor", "body wash", "face wash", "moisturizer", "floss",
+      "mouthwash", "band-aid", "bandage", "medicine", "aspirin",
+      "ibuprofen", "cotton", "tissue", "q-tip", "cleanser",
+      "hair", "skin care", "personal care"]
+  },
+  {
     key: "dairy",
     name: "Dairy, Eggs & Milk",
     emoji: "🥛",
@@ -88,16 +101,6 @@ export const PREP_CATEGORIES = [
       "protein bar", "trail mix", "nuts", "dried fruit", "chocolate",
       "cookie", "tea", "coffee", "sparkling", "kombucha", "sports drink",
       "seltzer", "lemonade"]
-  },
-  {
-    key: "personal",
-    name: "Personal Care",
-    emoji: "🧴",
-    keywords: ["shampoo", "conditioner", "lotion", "soap", "toothpaste",
-      "deodorant", "vitamins", "vitamin", "supplement", "sunscreen",
-      "razor", "body wash", "face wash", "moisturizer", "floss",
-      "mouthwash", "band-aid", "bandage", "medicine", "aspirin",
-      "ibuprofen", "cotton", "tissue", "q-tip"]
   },
   {
     key: "cleaning",
