@@ -72,6 +72,7 @@ function _setCachedScan(barcode, product) {
       name: product.name || "",
       brand: product.brand || "",
       category: product.category || "General",
+      offCategory: product.offCategory || "",  // Raw OFF categories for Shopping Prep mapping
       scanTitle: product._scanTitle || "",
       image: product.image || null,
       source: product.source || null,
@@ -534,6 +535,8 @@ export function addScannedToList() {
   if (state.cp.brand) item.brand = state.cp.brand;   // Preserve brand separately for subtitle display
   if (state.cp.image) item.image = state.cp.image;   // Persist the product image for list thumbnail
   if (state.cp._scanTitle) item.scanTitle = state.cp._scanTitle; // Persist smart product type title for list row display
+  // Persist raw Open Food Facts categories for Shopping Prep's hybrid category mapper
+  if (state.cp.offCategory) item.offCategory = state.cp.offCategory;
   if (note) item.note = note;                         // Include note only if the user typed something
 
   // Consolidate with existing items instead of creating duplicates
@@ -654,6 +657,7 @@ async function lkup(bc) {
       brand: cached.brand,
       quantity: "",
       category: cached.category || "General",
+      offCategory: cached.offCategory || "",  // Preserved from original OFF lookup
       image: cached.image || null,
       source: cached.source || null,
       description: "",
@@ -876,6 +880,8 @@ export async function addToInv() {
   // scanTitle: persist the smart product type label so it shows on list rows (e.g. "Chips" instead of full name)
   const itemData = { id, barcode: state.cp.barcode, name: nm, brand: state.cp.brand || "", unit, qty: ex ? ex.qty + qty : qty, location: state.selR, category: state.cp.category || "General", image: state.cp.image || null, source: state.cp.source || null, expiry: exp, addedAt: ex ? ex.addedAt : new Date().toLocaleDateString() };
   if (state.cp._scanTitle) itemData.scanTitle = state.cp._scanTitle;
+  // Persist raw Open Food Facts categories for Shopping Prep's hybrid category mapper
+  if (state.cp.offCategory) itemData.offCategory = state.cp.offCategory;
 
   // Capture the display name for the toast BEFORE clearing state.cp
   const toastName = state.cp._scanTitle || nm;

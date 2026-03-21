@@ -216,6 +216,9 @@ async function tryOpenFoodFacts(bc) {
         quantity: p.quantity || "",
         // Category tags are prefixed with language code (e.g. "en:dairy"), strip it
         category: ((p.categories_tags || [])[0] || "").replace("en:", "") || "General",
+        // Raw OFF categories string — used by Shopping Prep's hybrid category mapper
+        // to accurately categorize items (e.g. "Olives" → Condiments instead of Snacks)
+        offCategory: p.categories || "",
         // Prefer high-res front image, fall back to standard, then small thumbnail
         image: p.image_front_url || p.image_url || p.image_small_url || null,
         source: "Open Food Facts",

@@ -13,7 +13,7 @@
 
 import { state } from '../state.js';
 import { svi } from '../db.js';
-import { g, showNotif, showOv, hideOv, toTitleCase, formatQty, splitQty, combineQty } from '../helpers.js';
+import { g, showNotif, showOv, hideOv, toTitleCase, formatQty, splitQty, combineQty, mapOffCategory } from '../helpers.js';
 import { consolidateShopItem } from './shopping.js';
 import { _defaultThreshold } from './home.js';
 import { enableSwipeBack, disableSwipeBack } from './swipeback.js';
@@ -130,7 +130,11 @@ const PREP_CATEGORIES = [
       "seasoning", "spice", "salt", "pepper", "cumin", "paprika",
       "cinnamon", "oregano", "thyme", "turmeric", "curry", "chili powder",
       "garlic powder", "onion powder", "baking soda", "baking powder",
-      "vanilla", "sugar", "brown sugar", "powdered sugar"]
+      "vanilla", "sugar", "brown sugar", "powdered sugar",
+      // Pickled/preserved items and herbs that were previously falling through to "other"
+      "olive", "olives", "black olive", "green olive", "caper", "capers",
+      "pickle", "pickles", "gherkin", "preserve", "marmalade",
+      "herb", "rosemary", "sage", "bay leaf", "tarragon", "chive"]
   },
   {
     key: "other",
@@ -154,14 +158,24 @@ let _qtyCounted = new Set();     // item IDs whose qty change has been counted f
 
 /**
  * _categorizeItem(item) — Maps a single inventory item to a prep category key.
- * Checks item location (Freezer → "frozen"), then matches scanTitle/name
- * against keyword lists. Falls back to "other" if no match.
+ * Uses a hybrid resolution order for maximum accuracy:
+ *   1. Open Food Facts category (offCategory) → mapOffCategory() — most accurate
+ *   2. Item location (Freezer → "frozen") — physical location override
+ *   3. Keyword matching on item name/scanTitle — fallback heuristic
+ *   4. "other" — catch-all when nothing matches
  */
 function _categorizeItem(item) {
-  // Freezer location items always go to Frozen category regardless of name
+  // 1. Try Open Food Facts category first — most accurate source because OFF
+  //    has human-curated taxonomy (e.g. "Olives" correctly maps to Condiments)
+  if (item.offCategory) {
+    const offMatch = mapOffCategory(item.offCategory);
+    if (offMatch) return offMatch;
+  }
+
+  // 2. Freezer location items always go to Frozen category regardless of name
   if (item.location === "freezer") return "frozen";
 
-  // Build a search string from all relevant item fields
+  // 3. Fall back to keyword matching on item name, scanTitle, and category fields
   const searchStr = [
     item.scanTitle || "",
     item.name || "",

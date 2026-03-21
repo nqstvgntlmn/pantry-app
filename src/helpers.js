@@ -570,6 +570,66 @@ export const AISLES = {
  * @param {string} name - The item name (e.g., "cheddar cheese").
  * @returns {string} An aisle name like "Dairy & Eggs", or "Other" as fallback.
  */
+// ── OPEN FOOD FACTS CATEGORY → SHOPPING PREP CATEGORY MAPPER ─────────────────
+// Maps the raw `categories` string from Open Food Facts to one of the Shopping
+// Prep aisle categories. This is the most accurate categorization source because
+// OFF has human-curated category taxonomies (e.g. "Olives,Condiments,Pickled foods").
+// The keyword-based name matching in Shopping Prep is the fallback when this data
+// is unavailable.
+
+/**
+ * mapOffCategory(offCategory) — Maps an Open Food Facts categories string to a
+ * Shopping Prep category key. Checks the OFF string for known keywords in priority
+ * order (most specific first) and returns the matching prep category key.
+ * Returns null if no match — caller should fall back to other heuristics.
+ *
+ * @param {string} offCategory - Raw categories string from OFF (e.g. "Olives,Condiments")
+ * @returns {string|null} Shopping Prep category key (e.g. "condiments") or null
+ */
+export function mapOffCategory(offCategory) {
+  if (!offCategory) return null;
+  const lc = offCategory.toLowerCase();
+
+  // ── Priority-ordered keyword → category mapping ──
+  // More specific terms checked first to avoid false positives
+  // (e.g. "ice cream" before generic "cream" which would match dairy)
+
+  // Cleaning & Household
+  if (/cleaning|household|laundry|detergent|disinfectant/.test(lc)) return "cleaning";
+
+  // Personal Care
+  if (/personal care|hygiene|cosmetic|vitamin|supplement|medicine|pharmaceutical|beauty|shampoo|soap/.test(lc)) return "personal";
+
+  // Frozen — check before other food categories since frozen items span many types
+  if (/frozen/.test(lc)) return "frozen";
+
+  // Meat & Seafood
+  if (/\bmeat|poultry|chicken|beef|pork|fish|seafood|deli|sausage|bacon|ham\b/.test(lc)) return "meat";
+
+  // Dairy, Eggs & Milk
+  if (/dairy|milk|cheese|yogurt|yoghurt|butter|cream|egg|curd|paneer/.test(lc)) return "dairy";
+
+  // Produce
+  if (/vegetable|produce|fresh fruit|salad|fresh herb/.test(lc)) return "produce";
+
+  // Condiments & Sauces — broad set including olives, capers, pickles, spices, oils
+  if (/olive|pickle|caper|condiment|sauce|dressing|vinegar|oil|ketchup|mustard|mayo|relish|spice|seasoning|herb|pepper|salt|cumin|oregano|thyme|jam|jelly|preserve|marmalade|honey|syrup|hummus|tahini|pesto|salsa/.test(lc)) return "condiments";
+
+  // Bakery & Bread
+  if (/bread|bakery|pastry|baguette|croissant|muffin|bagel|tortilla|naan|pita|flatbread/.test(lc)) return "bakery";
+
+  // Grains, Pasta & Rice
+  if (/cereal|grain|pasta|rice|flour|oat|noodle|couscous|quinoa|barley|bulgur/.test(lc)) return "grains";
+
+  // Canned & Dry Goods
+  if (/canned|preserved|tinned|bean|legume|lentil|chickpea|broth|stock/.test(lc)) return "canned";
+
+  // Snacks & Beverages — checked late so specific categories above take priority
+  if (/snack|chip|crisp|popcorn|nut|beverage|drink|soda|juice|water|coffee|tea|chocolate|candy|sweet|confection|dessert|ice cream|cookie|biscuit|cake|energy drink/.test(lc)) return "snacks";
+
+  return null; // No match — caller should fall back to name-based keyword matching
+}
+
 // ── SMART SCAN RESULT FORMATTING ─────────────────────────────────────────────
 // These helpers extract a clean, short product type title from barcode scan
 // results using existing database fields (no AI API calls needed).
