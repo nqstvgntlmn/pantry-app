@@ -1039,6 +1039,26 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .cat-emoji-btn:active{transform:scale(.9)}
 .cat-emoji-selected{border-color:var(--ac);background:var(--ac);box-shadow:0 0 0 2px var(--ac)}
 .cat-create-input{font-size:.88rem}
+/* ── EMOJI TRIGGER BUTTON ─────────────────────────────────────────────────── */
+/* Large tappable button that shows the currently selected emoji and opens the picker */
+.emoji-trigger-btn{width:44px;height:44px;border-radius:12px;border:1.5px solid var(--b2);background:var(--card2);font-size:1.4rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.emoji-trigger-btn:active{transform:scale(.92);border-color:var(--ac)}
+/* ── EMOJI PICKER POPUP ──────────────────────────────────────────────────── */
+/* Floating panel with grouped emoji grid — appears above/below the trigger */
+.emoji-picker-backdrop{position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.35)}
+.emoji-picker-backdrop.active{opacity:1}
+.emoji-picker-popup{position:fixed;z-index:9999;max-height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--card);border:1px solid var(--b2);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.5);padding:10px 10px 14px;opacity:0;transform:scale(.95);transition:opacity .15s,transform .15s}
+.emoji-picker-popup.active{opacity:1;transform:scale(1)}
+/* Section header labels (gold, uppercase) for each emoji group */
+.emoji-picker-group-label{font-size:.65rem;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:.08em;padding:10px 4px 4px;margin-top:2px}
+.emoji-picker-group-label:first-child{padding-top:4px;margin-top:0}
+/* 8-per-row grid of emoji cells */
+.emoji-picker-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+/* Each emoji cell — 44px tap target, subtle background */
+.emoji-picker-cell{width:100%;aspect-ratio:1;border-radius:10px;border:1.5px solid transparent;background:var(--card2);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;-webkit-tap-highlight-color:transparent;padding:0;min-height:38px}
+.emoji-picker-cell:active{transform:scale(.88)}
+/* Currently selected emoji highlighted with gold border */
+.emoji-picker-selected{border-color:var(--ac);background:rgba(212,168,83,.15);box-shadow:0 0 0 1px var(--ac)}
 /* Custom categories divider in Shopping Prep grid */
 .prep-custom-divider{grid-column:1/-1;font-size:.7rem;font-weight:600;color:var(--mt);text-transform:uppercase;letter-spacing:.08em;padding:8px 0 2px;border-top:1px solid var(--b1);margin-top:4px}
 /* Category badge on Shopping Prep item rows — smaller variant */

@@ -73,11 +73,11 @@ import { scheduleMealReminders } from './ui/reminders.js';
 // Settings: config UI, push notifications, household management, theme/dark mode
 // Household member management: remove, transfer ownership, leave/delete household
 // checkMembershipOnInteraction: verifies user still belongs to household (kick detection)
-import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, removeMyCommRecipes, removeHouseholdCommRecipes, deleteAccount, scanRecipesForIssues, closeScanResults, fixAllFlaggedRecipes, openUtilities, closeUtilities, clearScanCacheUI, editCustomCat, pickSettingsCatEmoji, pickEditCatEmoji, saveEditCustomCat, addCustomCatFromSettings, renderCustomCategories } from './ui/settings.js';
+import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, removeMyCommRecipes, removeHouseholdCommRecipes, deleteAccount, scanRecipesForIssues, closeScanResults, fixAllFlaggedRecipes, openUtilities, closeUtilities, clearScanCacheUI, editCustomCat, pickSettingsCatEmoji, pickEditCatEmoji, saveEditCustomCat, addCustomCatFromSettings, renderCustomCategories, openSettingsAddEmojiPicker, openSettingsEditEmojiPicker } from './ui/settings.js';
 
 // Shopping Prep: pre-shop audit flow — walk through categories, verify quantities, build shopping list
 import { openShoppingPrep, closeShoppingPrep, openPrepCategory, backToGrid, prepToggleVerify, prepAddToShop, prepAddAllLow, prepQtyStep, prepAddNewItem, prepRecategorize, prepCatLongPress } from './ui/shoppingprep.js';
-import { selectCategory, closeCategoryPicker, showCreateCustomCategory, pickCustomEmoji, confirmCreateCustomCategory, deleteCustomCategory } from './ui/categorypicker.js';
+import { selectCategory, closeCategoryPicker, showCreateCustomCategory, pickCustomEmoji, confirmCreateCustomCategory, deleteCustomCategory, openCatCreateEmojiPicker, selectEmojiFromPicker, closeEmojiPicker } from './ui/categorypicker.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
@@ -240,7 +240,10 @@ window.prepCatLongPress = prepCatLongPress;   // Long-press handler for custom c
 window.selectCategory = selectCategory;                       // Select a category in the picker sheet
 window.closeCategoryPicker = closeCategoryPicker;             // Close the category picker sheet
 window.showCreateCustomCategory = showCreateCustomCategory;   // Show inline create form in picker
-window.pickCustomEmoji = pickCustomEmoji;                     // Pick an emoji for custom category
+window.pickCustomEmoji = pickCustomEmoji;                     // Pick an emoji for custom category (legacy)
+window.openCatCreateEmojiPicker = openCatCreateEmojiPicker;   // Open emoji picker popup from category create form
+window.selectEmojiFromPicker = selectEmojiFromPicker;         // Select an emoji from the picker popup
+window.closeEmojiPicker = closeEmojiPicker;                   // Close the emoji picker popup
 window.confirmCreateCustomCategory = confirmCreateCustomCategory; // Save a new custom category
 window.deleteCustomCategory = deleteCustomCategory;           // Delete a custom category from settings
 window.openShopAddCatPicker = openShopAddCatPicker;           // Open category picker from Shopping add sheet
@@ -487,8 +490,10 @@ window.openUtilities = openUtilities;               // Open the dedicated Utilit
 window.closeUtilities = closeUtilities;             // Close the Utilities page and return to Settings
 window.clearScanCacheUI = clearScanCacheUI;         // Clear cached barcode scan results (Settings > Utilities > Data)
 window.editCustomCat = editCustomCat;               // Edit a custom Shopping Prep category in Settings
-window.pickSettingsCatEmoji = pickSettingsCatEmoji;  // Pick emoji in Settings custom category add form
-window.pickEditCatEmoji = pickEditCatEmoji;          // Pick emoji in Settings custom category edit form
+window.pickSettingsCatEmoji = pickSettingsCatEmoji;  // Pick emoji in Settings custom category add form (legacy)
+window.pickEditCatEmoji = pickEditCatEmoji;          // Pick emoji in Settings custom category edit form (legacy)
+window.openSettingsAddEmojiPicker = openSettingsAddEmojiPicker;   // Open emoji picker popup from Settings add form
+window.openSettingsEditEmojiPicker = openSettingsEditEmojiPicker; // Open emoji picker popup from Settings edit form
 window.saveEditCustomCat = saveEditCustomCat;        // Save edits to a custom category in Settings
 window.addCustomCatFromSettings = addCustomCatFromSettings; // Create a new custom category from Settings
 window.renderCustomCategories = renderCustomCategories;     // Re-render custom categories list in Settings (used after delete)

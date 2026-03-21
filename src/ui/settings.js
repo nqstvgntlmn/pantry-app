@@ -20,7 +20,7 @@ import { initHome } from './home.js';
 // getCurrentUser: returns the currently signed-in Firebase Auth user (or null)
 import { getCurrentUser } from '../auth.js';
 // Custom category management for Shopping Prep
-import { getCustomCategories, deleteCustomCategory, renameCustomCategory, CUSTOM_EMOJI_OPTIONS } from './categorypicker.js';
+import { getCustomCategories, deleteCustomCategory, renameCustomCategory, CUSTOM_EMOJI_OPTIONS, DEFAULT_CUSTOM_EMOJI, openEmojiPicker } from './categorypicker.js';
 
 // ── SETTINGS ─────────────────────────────────────────────────────────────────
 
@@ -102,14 +102,10 @@ export function renderCustomCategories() {
     </div>`;
   }
 
-  // Inline add form
+  // Inline add form — emoji trigger opens the full emoji picker popup
   html += `<div style="margin-top:10px">
-    <div class="cat-create-emoji-row" id="settingsCatEmojiRow">
-      ${CUSTOM_EMOJI_OPTIONS.map((e, i) =>
-        `<button class="cat-emoji-btn${i === 0 ? " cat-emoji-selected" : ""}" onclick="pickSettingsCatEmoji(this,'${e}')">${e}</button>`
-      ).join("")}
-    </div>
-    <div style="display:flex;gap:8px;margin-top:8px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="emoji-trigger-btn" id="settingsCatEmojiBtn" onclick="openSettingsAddEmojiPicker(this)">${DEFAULT_CUSTOM_EMOJI}</button>
       <input class="fi" id="settingsCatName" placeholder="New category name..." style="flex:1;font-size:.85rem"/>
       <button class="btn bp bsm" onclick="addCustomCatFromSettings()">+ Add</button>
     </div>
@@ -130,14 +126,11 @@ export function editCustomCat(key) {
   const row = g(`custom-cat-row-${key}`);
   if (!row) return;
 
+  // Replace the row with an edit form — emoji trigger opens the picker popup
   row.innerHTML = `
     <div style="width:100%">
-      <div class="cat-create-emoji-row" id="editCatEmojiRow-${key}">
-        ${CUSTOM_EMOJI_OPTIONS.map(e =>
-          `<button class="cat-emoji-btn${e === cat.emoji ? " cat-emoji-selected" : ""}" onclick="pickEditCatEmoji(this,'${key}','${e}')">${e}</button>`
-        ).join("")}
-      </div>
-      <div style="display:flex;gap:8px;margin-top:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="emoji-trigger-btn" id="editCatEmojiBtn-${key}" onclick="openSettingsEditEmojiPicker(this,'${key}')">${cat.emoji}</button>
         <input class="fi" id="editCatName-${key}" value="${cat.name}" style="flex:1;font-size:.85rem"/>
         <button class="btn bp bsm" onclick="saveEditCustomCat('${key}')">Save</button>
         <button class="btn bs bsm" onclick="renderCustomCategories()">Cancel</button>
@@ -146,25 +139,48 @@ export function editCustomCat(key) {
 }
 
 // Track selected emoji for settings add and edit forms
-let _settingsCatEmoji = CUSTOM_EMOJI_OPTIONS[0];
+let _settingsCatEmoji = DEFAULT_CUSTOM_EMOJI;
 let _editCatEmojis = {}; // key → emoji for each editing category
 
 /**
- * pickSettingsCatEmoji(el, emoji) — Selects an emoji in the settings add form.
+ * openSettingsAddEmojiPicker(triggerEl) — Opens the emoji picker popup for the
+ * Settings add-category form. Updates the trigger button on selection.
  */
-export function pickSettingsCatEmoji(el, emoji) {
-  _settingsCatEmoji = emoji;
-  document.querySelectorAll("#settingsCatEmojiRow .cat-emoji-btn").forEach(b => b.classList.remove("cat-emoji-selected"));
-  if (el) el.classList.add("cat-emoji-selected");
+export function openSettingsAddEmojiPicker(triggerEl) {
+  openEmojiPicker(triggerEl, _settingsCatEmoji, (emoji) => {
+    _settingsCatEmoji = emoji;
+    const btn = document.getElementById("settingsCatEmojiBtn");
+    if (btn) btn.textContent = emoji;
+  });
 }
 
 /**
- * pickEditCatEmoji(el, key, emoji) — Selects an emoji in the edit form for a category.
+ * openSettingsEditEmojiPicker(triggerEl, key) — Opens the emoji picker popup for
+ * the Settings edit-category form. Updates the trigger button on selection.
+ */
+export function openSettingsEditEmojiPicker(triggerEl, key) {
+  const current = _editCatEmojis[key] || getCustomCategories().find(c => c.key === key)?.emoji || DEFAULT_CUSTOM_EMOJI;
+  openEmojiPicker(triggerEl, current, (emoji) => {
+    _editCatEmojis[key] = emoji;
+    const btn = document.getElementById(`editCatEmojiBtn-${key}`);
+    if (btn) btn.textContent = emoji;
+  });
+}
+
+/**
+ * pickSettingsCatEmoji(el, emoji) — Legacy: selects emoji in settings add form.
+ * Kept for backwards compatibility.
+ */
+export function pickSettingsCatEmoji(el, emoji) {
+  _settingsCatEmoji = emoji;
+}
+
+/**
+ * pickEditCatEmoji(el, key, emoji) — Legacy: selects emoji in settings edit form.
+ * Kept for backwards compatibility.
  */
 export function pickEditCatEmoji(el, key, emoji) {
   _editCatEmojis[key] = emoji;
-  document.querySelectorAll(`#editCatEmojiRow-${key} .cat-emoji-btn`).forEach(b => b.classList.remove("cat-emoji-selected"));
-  if (el) el.classList.add("cat-emoji-selected");
 }
 
 /**
@@ -199,7 +215,7 @@ export async function addCustomCatFromSettings() {
     await dbSet(`households/${state.hid}/settings/config`, state.cfg);
     showNotif(`${_settingsCatEmoji} ${name} category created!`);
     if (inp) inp.value = "";
-    _settingsCatEmoji = CUSTOM_EMOJI_OPTIONS[0];
+    _settingsCatEmoji = DEFAULT_CUSTOM_EMOJI;
     renderCustomCategories();
   } catch (e) {
     console.error("Failed to save custom category:", e);

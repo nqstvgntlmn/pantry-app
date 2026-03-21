@@ -149,8 +149,27 @@ export const PREP_CATEGORIES = [
 ];
 
 // ── CURATED EMOJI SET FOR CUSTOM CATEGORIES ─────────────────────────────────
-// Small set of emojis users can pick from when creating custom categories.
-export const CUSTOM_EMOJI_OPTIONS = ["📁", "🫙", "🌍", "🕌", "🍱", "🥘", "🧃", "🌿", "💊", "🐾"];
+// Organized emoji groups for the emoji picker popup. Each group has a label
+// and a list of relevant food/household emojis displayed in a scrollable grid.
+export const EMOJI_GROUPS = [
+  { label: "Produce",              emojis: ["🥦","🥕","🧅","🧄","🥔","🍅","🥑","🌽","🥒","🫑","🥬","🥗","🍎","🍊","🍋","🍇","🍓","🫐","🍌","🍑","🥭","🍍"] },
+  { label: "Dairy & Eggs",         emojis: ["🥛","🧀","🥚","🧈","🍦","🫙"] },
+  { label: "Meat & Seafood",       emojis: ["🥩","🍗","🥓","🌭","🍖","🐟","🦐","🦞","🦀","🦑"] },
+  { label: "Bakery & Grains",      emojis: ["🍞","🥐","🥖","🫓","🥨","🧁","🎂","🍰","🌾","🍝","🍜","🍚","🍛"] },
+  { label: "Beverages",            emojis: ["🥤","🧃","☕","🍵","🧋","🍺","🍷","🥂","💧","🫖"] },
+  { label: "Condiments & Sauces",  emojis: ["🫙","🧂","🫒","🌶️","🍯","🥫"] },
+  { label: "Snacks",               emojis: ["🍿","🍪","🍩","🍫","🍬","🍭","🥜","🌰","🥨","🍡"] },
+  { label: "Frozen",               emojis: ["🧊","🍦","🧇","🥞"] },
+  { label: "Personal Care",        emojis: ["🧴","🧼","🪥","💊","💉","🩹","🧻","🪒"] },
+  { label: "Cleaning & Household", emojis: ["🧹","🧺","🧽","🪣","🗑️","🧯","🔧","🏠"] },
+  { label: "Cultural & Custom",    emojis: ["🌍","🕌","✡️","🍱","🥘","🫕","🌿","🎋","🏮","📁"] }
+];
+
+// Flat list of all emojis (for backwards-compat and simple lookups)
+export const CUSTOM_EMOJI_OPTIONS = EMOJI_GROUPS.flatMap(grp => grp.emojis);
+
+// Default emoji for new custom categories
+export const DEFAULT_CUSTOM_EMOJI = "📁";
 
 // ── INTERNAL STATE ──────────────────────────────────────────────────────────
 // Tracks the active picker session so the selection callback knows where to apply.
@@ -342,15 +361,11 @@ function _renderPickerContent() {
     <button class="cat-picker-create" onclick="showCreateCustomCategory()">＋ Create custom category</button>
   </div>`;
 
-  // Inline create form (hidden by default)
+  // Inline create form (hidden by default) — emoji trigger opens the full picker popup
   html += `<div id="catPickerCreateForm" style="display:none">
     <div class="cat-create-form">
-      <div class="cat-create-emoji-row">
-        ${CUSTOM_EMOJI_OPTIONS.map((e, i) =>
-          `<button class="cat-emoji-btn${i === 0 ? " cat-emoji-selected" : ""}" onclick="pickCustomEmoji(this,'${e}')">${e}</button>`
-        ).join("")}
-      </div>
-      <div style="display:flex;gap:8px;margin-top:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="emoji-trigger-btn" id="catCreateEmojiBtn" onclick="openCatCreateEmojiPicker(this)">${DEFAULT_CUSTOM_EMOJI}</button>
         <input class="fi cat-create-input" id="catCreateName" placeholder="Category name..." style="flex:1"/>
         <button class="btn bp bsm" onclick="confirmCreateCustomCategory()">Add</button>
       </div>
@@ -369,10 +384,121 @@ export function selectCategory(catKey) {
   closeCategoryPicker();
 }
 
+// ── EMOJI PICKER POPUP ──────────────────────────────────────────────────────
+// Floating popup grid of food/household emojis organized by labeled groups.
+// Replaces the old inline emoji button row with a richer, scrollable picker.
+
+// Tracks the callback and the currently selected emoji for the open picker
+let _emojiPickerCallback = null;
+let _emojiPickerSelected = null;
+
+/**
+ * openEmojiPicker(triggerEl, currentEmoji, callback) — Shows the emoji picker
+ * popup positioned above/near the trigger element.
+ *
+ * @param {HTMLElement} triggerEl — the emoji button that was tapped (for positioning)
+ * @param {string} currentEmoji — currently selected emoji (highlighted with gold border)
+ * @param {function} callback — called with the selected emoji string when user picks one
+ */
+export function openEmojiPicker(triggerEl, currentEmoji, callback) {
+  // Remove any existing picker before setting new state (closeEmojiPicker clears state)
+  closeEmojiPicker();
+
+  _emojiPickerCallback = callback;
+  _emojiPickerSelected = currentEmoji || DEFAULT_CUSTOM_EMOJI;
+
+  // Build the popup HTML with grouped emoji sections
+  const popup = document.createElement("div");
+  popup.id = "emojiPickerPopup";
+  popup.className = "emoji-picker-popup";
+
+  let gridHtml = "";
+  for (const group of EMOJI_GROUPS) {
+    // Section header label for each emoji group
+    gridHtml += `<div class="emoji-picker-group-label">${group.label}</div>`;
+    gridHtml += `<div class="emoji-picker-grid">`;
+    for (const em of group.emojis) {
+      const selected = em === _emojiPickerSelected ? " emoji-picker-selected" : "";
+      // Each emoji cell: 44px tap target for mobile usability
+      gridHtml += `<button class="emoji-picker-cell${selected}" onclick="selectEmojiFromPicker('${em}')">${em}</button>`;
+    }
+    gridHtml += `</div>`;
+  }
+
+  popup.innerHTML = gridHtml;
+
+  // Create backdrop to handle tap-outside-to-close
+  const backdrop = document.createElement("div");
+  backdrop.id = "emojiPickerBackdrop";
+  backdrop.className = "emoji-picker-backdrop";
+  backdrop.onclick = () => closeEmojiPicker();
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(popup);
+
+  // Position the popup near the trigger element (centered above it)
+  _positionEmojiPicker(popup, triggerEl);
+
+  // Animate in after a frame so the transition plays
+  requestAnimationFrame(() => {
+    backdrop.classList.add("active");
+    popup.classList.add("active");
+  });
+}
+
+/**
+ * _positionEmojiPicker(popup, triggerEl) — Centers the popup horizontally on
+ * screen and positions it above the trigger button (or below if not enough room).
+ */
+function _positionEmojiPicker(popup, triggerEl) {
+  if (!triggerEl) return;
+
+  const rect = triggerEl.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const popupWidth = Math.min(vw - 24, 360); // max 360px, 12px margin each side
+
+  // Center horizontally
+  popup.style.width = popupWidth + "px";
+  popup.style.left = Math.max(12, (vw - popupWidth) / 2) + "px";
+
+  // Position above trigger by default; if too close to top, show below
+  const popupMaxHeight = 340;
+  if (rect.top > popupMaxHeight + 16) {
+    // Enough room above — anchor to bottom of popup above the trigger
+    popup.style.bottom = (window.innerHeight - rect.top + 8) + "px";
+    popup.style.top = "auto";
+  } else {
+    // Not enough room above — show below trigger
+    popup.style.top = (rect.bottom + 8) + "px";
+    popup.style.bottom = "auto";
+  }
+}
+
+/**
+ * selectEmojiFromPicker(emoji) — Called when user taps an emoji in the picker.
+ * Invokes the stored callback with the chosen emoji and closes the popup.
+ */
+export function selectEmojiFromPicker(emoji) {
+  if (_emojiPickerCallback) _emojiPickerCallback(emoji);
+  closeEmojiPicker();
+}
+
+/**
+ * closeEmojiPicker() — Removes the emoji picker popup and backdrop from the DOM.
+ */
+export function closeEmojiPicker() {
+  const popup = document.getElementById("emojiPickerPopup");
+  const backdrop = document.getElementById("emojiPickerBackdrop");
+  if (popup) popup.remove();
+  if (backdrop) backdrop.remove();
+  _emojiPickerCallback = null;
+  _emojiPickerSelected = null;
+}
+
 // ── CREATE CUSTOM CATEGORY (inline in picker) ──────────────────────────────
 
-// Tracks which emoji the user picked in the create form (default: first option)
-let _createEmoji = CUSTOM_EMOJI_OPTIONS[0];
+// Tracks which emoji the user picked in the create form (default: 📁)
+let _createEmoji = DEFAULT_CUSTOM_EMOJI;
 
 /**
  * showCreateCustomCategory() — Reveals the inline create form inside the picker.
@@ -384,15 +510,29 @@ export function showCreateCustomCategory() {
   if (form) form.style.display = "block";
   // Focus the name input
   setTimeout(() => { const inp = g("catCreateName"); if (inp) inp.focus(); }, 100);
-  _createEmoji = CUSTOM_EMOJI_OPTIONS[0];
+  _createEmoji = DEFAULT_CUSTOM_EMOJI;
 }
 
 /**
- * pickCustomEmoji(el, emoji) — Selects an emoji in the custom category create form.
+ * openCatCreateEmojiPicker(triggerEl) — Opens the emoji picker popup for the
+ * inline create form in the category picker sheet.
+ */
+export function openCatCreateEmojiPicker(triggerEl) {
+  openEmojiPicker(triggerEl, _createEmoji, (emoji) => {
+    _createEmoji = emoji;
+    // Update the trigger button to show the selected emoji
+    const btn = g("catCreateEmojiBtn");
+    if (btn) btn.textContent = emoji;
+  });
+}
+
+/**
+ * pickCustomEmoji(el, emoji) — Legacy: selects an emoji in the custom category create form.
+ * Kept for backwards compatibility; new code uses openCatCreateEmojiPicker().
  */
 export function pickCustomEmoji(el, emoji) {
   _createEmoji = emoji;
-  // Update visual selection
+  // Update visual selection on old-style inline buttons
   document.querySelectorAll(".cat-emoji-btn").forEach(b => b.classList.remove("cat-emoji-selected"));
   if (el) el.classList.add("cat-emoji-selected");
 }
