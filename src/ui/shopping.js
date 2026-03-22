@@ -3171,8 +3171,90 @@ function getFilteredCoupons() {
   return list;
 }
 
+// ── STOP WORDS ──────────────────────────────────────────────────────────────
+// Common words excluded from fuzzy matching to avoid false positives.
+// e.g. "a bag of chips" → only "bag", "chips" matter for coupon matching.
+const _COUPON_STOP_WORDS = new Set([
+  "a", "an", "the", "of", "and", "or", "for", "to", "in", "on", "with",
+  "some", "any", "more", "get", "buy", "need", "bag", "box", "can", "pack",
+  "ct", "oz", "lb", "lbs", "kg", "ml", "gal", "qt", "pt", "bunch", "head",
+  "piece", "pieces", "slice", "slices", "large", "small", "medium", "fresh",
+  "organic", "whole", "half", "extra", "regular", "light", "low", "free",
+]);
+
+/**
+ * _tokenize(text) — Split text into lowercase tokens, removing stop words.
+ * Used for fuzzy matching shopping list items against coupon fields.
+ * Returns an array of meaningful words (2+ chars, not stop words).
+ */
+function _tokenize(text) {
+  if (!text) return [];
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")   // strip punctuation
+    .split(/\s+/)                     // split on whitespace
+    .filter(w => w.length >= 2 && !_COUPON_STOP_WORDS.has(w));
+}
+
+/**
+ * _couponMatchesItem(coupon, itemTokens) — Check if a coupon fuzzy-matches
+ * a shopping list item. Matches coupon name/brand/description against the
+ * item's tokenized name. Returns true if ANY item token appears as a
+ * substring in any coupon field — e.g. "yogurt" matches "Greek Yogurt Cup".
+ */
+function _couponMatchesItem(coupon, itemTokens) {
+  // Build a single searchable string from all coupon fields
+  const haystack = [coupon.name, coupon.brand, coupon.description]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  // A match requires at least one item token to appear in the coupon text
+  return itemTokens.some(token => haystack.includes(token));
+}
+
+/**
+ * _splitCouponsByList(filtered) — Partition filtered coupons into two groups:
+ * 1. "onList" — coupons that fuzzy-match any unchecked shopping list item
+ * 2. "rest"   — all remaining coupons
+ * Uses state.shop (the live shopping list from Firestore) for matching.
+ */
+function _splitCouponsByList(filtered) {
+  // Get unchecked shopping list items (checked items are already purchased)
+  const activeItems = (state.shop || []).filter(item => !item.checked);
+
+  // If no active shopping list items, everything goes to "rest"
+  if (!activeItems.length) return { onList: [], rest: filtered };
+
+  // Pre-tokenize all shopping list item names for efficient matching
+  const itemTokenSets = activeItems
+    .map(item => _tokenize(item.name))
+    .filter(tokens => tokens.length > 0);
+
+  // If no meaningful tokens after filtering, skip matching
+  if (!itemTokenSets.length) return { onList: [], rest: filtered };
+
+  const onList = [];
+  const rest = [];
+
+  // Classify each coupon as matching or not matching the shopping list
+  for (const coupon of filtered) {
+    const matches = itemTokenSets.some(tokens => _couponMatchesItem(coupon, tokens));
+    if (matches) {
+      onList.push(coupon);
+    } else {
+      rest.push(coupon);
+    }
+  }
+
+  return { onList, rest };
+}
+
 /**
  * renderCouponCards() — Render the visible coupon cards into #coupon-list.
+ * Splits coupons into two subsections:
+ *   1. "On My List" — coupons matching current shopping list items
+ *   2. "All Coupons" — remaining browsable/searchable coupons
  * Handles pagination (COUPONS_PER_PAGE at a time) and empty states.
  * Uses DOM creation (not innerHTML) for card content to prevent XSS.
  */
@@ -3183,29 +3265,65 @@ function renderCouponCards() {
 
   const filtered = getFilteredCoupons();
 
-  // Empty state
+  // Empty state — no coupons match current filters
   if (!filtered.length) {
     listEl.innerHTML = '<div class="es"><div class="ei">🎟</div><p>No coupons found.<br>Try a different search or category.</p></div>';
     if (moreEl) moreEl.style.display = "none";
     return;
   }
 
-  // Paginate — show up to (_couponPage + 1) * COUPONS_PER_PAGE items
-  const limit = (_couponPage + 1) * COUPONS_PER_PAGE;
-  const visible = filtered.slice(0, limit);
-  const hasMore = filtered.length > limit;
+  // Split coupons into "on my list" and "all remaining"
+  const { onList, rest } = _splitCouponsByList(filtered);
 
   // Clear and rebuild the list
   listEl.innerHTML = "";
 
-  visible.forEach(coupon => {
-    const card = buildCouponCard(coupon);
-    listEl.appendChild(card);
-  });
+  // ── "On My List" subsection ───────────────────────────────────────────
+  const onListHeader = document.createElement("div");
+  onListHeader.className = "coupon-section-header";
+  onListHeader.innerHTML = '<span class="coupon-section-icon">🛒</span> On My List';
+  listEl.appendChild(onListHeader);
 
-  // Show/hide "Show more" button
-  if (moreEl) {
-    moreEl.style.display = hasMore ? "block" : "none";
+  if (onList.length) {
+    // Render all matching coupons (no pagination for this section — usually small)
+    onList.forEach(coupon => {
+      listEl.appendChild(buildCouponCard(coupon));
+    });
+  } else {
+    // Friendly empty state when no coupons match the shopping list
+    const emptyMsg = document.createElement("div");
+    emptyMsg.className = "coupon-list-empty";
+    emptyMsg.textContent = "No coupons found for your current list";
+    listEl.appendChild(emptyMsg);
+  }
+
+  // ── "All Coupons" subsection ──────────────────────────────────────────
+  const allHeader = document.createElement("div");
+  allHeader.className = "coupon-section-header";
+  allHeader.innerHTML = '<span class="coupon-section-icon">🎟</span> All Coupons';
+  listEl.appendChild(allHeader);
+
+  if (rest.length) {
+    // Paginate the "All Coupons" section — show COUPONS_PER_PAGE at a time
+    const limit = (_couponPage + 1) * COUPONS_PER_PAGE;
+    const visible = rest.slice(0, limit);
+    const hasMore = rest.length > limit;
+
+    visible.forEach(coupon => {
+      listEl.appendChild(buildCouponCard(coupon));
+    });
+
+    // Show/hide "Show more" button based on remaining coupons
+    if (moreEl) {
+      moreEl.style.display = hasMore ? "block" : "none";
+    }
+  } else {
+    // All coupons matched the list — nothing left for "All Coupons"
+    const emptyMsg = document.createElement("div");
+    emptyMsg.className = "coupon-list-empty";
+    emptyMsg.textContent = "All matching coupons are shown above";
+    listEl.appendChild(emptyMsg);
+    if (moreEl) moreEl.style.display = "none";
   }
 }
 

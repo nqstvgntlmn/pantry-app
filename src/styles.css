@@ -599,6 +599,12 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* Category filter chips row for coupons */
 .coupon-chip{font-size:.7rem;padding:5px 12px;border-radius:20px;background:var(--card);border:1px solid var(--b2);color:var(--tx2);white-space:nowrap;cursor:pointer;transition:all .15s;font-weight:500}
 .coupon-chip.active{background:var(--ac);color:var(--bg);border-color:var(--ac)}
+/* Section headers inside the coupon list ("On My List" / "All Coupons") */
+.coupon-section-header{font-size:.78rem;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.06em;padding:14px 0 8px;display:flex;align-items:center;gap:6px}
+.coupon-section-header:first-child{padding-top:0}
+.coupon-section-icon{font-size:1rem}
+/* Friendly empty message shown when no coupons match a subsection */
+.coupon-list-empty{font-size:.78rem;color:var(--mt);text-align:center;padding:16px 12px;background:var(--card);border:1px dashed var(--b2);border-radius:12px;margin-bottom:10px}
 
 /* ── BOTTOM SHEET ── */
 /* Reusable bottom sheet pattern: frosted glass backdrop + smooth sliding panel */
