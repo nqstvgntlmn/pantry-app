@@ -1367,3 +1367,50 @@ Added `.vscode/settings.json` and `.vscode/tasks.json` to standardize the VS Cod
 
 ### Note
 The first time you open the workspace after adding these files, VS Code may show a prompt asking "This workspace has tasks that run automatically. Allow?" — click **Allow** to enable the Simple Browser auto-open behavior.
+
+---
+
+## Session — Supply Item Emoji Fixes (March 2026)
+
+### Overview
+Three interrelated emoji bugs on the Supplies item detail sheet: wrong emojis showing (e.g. 🗑️ for Capers), emojis not updating after mapping fixes, and tapping the emoji not opening the picker. All three traced back to a CSS issue (emoji placeholder styled inside a comment block) and stale `customEmoji` values stored in Firestore overriding the correct auto-assignment.
+
+### Changes
+
+#### 1. CSS Fix — Emoji Placeholder Restored
+- **File:** `src/styles.css`
+- **What:** The `.item-detail-img-ph` CSS rule was trapped inside the `/* [IMAGES DISABLED] */` comment block (lines 762-771) that commented out product image styles. Without this rule, the 72×72 emoji placeholder in the item detail header had no sizing, background, border, or tap highlight — making it visually broken and unreliable as a tap target.
+- **Fix:** Moved `.item-detail-img-ph` outside and below the comment block with its own explanatory comment. Added `cursor:pointer` and `-webkit-tap-highlight-color:transparent` for mobile tap UX.
+
+#### 2. Emoji Mapping — Condiments → 🧴
+- **File:** `src/helpers.js` (`_EMOJI_MAP`)
+- **What:** The keyword "condiment" was grouped with sauces/ketchup/mustard mapping to 🫙. Bora specified Condiments should map to 🧴 (bottle emoji).
+- **Fix:** Extracted "condiment" into its own entry `{ keywords: ["condiment"], emoji: "🧴" }` placed before the sauces entry, so items categorized as "Condiments" get 🧴 while sauces/ketchup/etc. still get 🫙.
+
+#### 3. One-Time Emoji Migration (v1)
+- **File:** `src/main.js` (`_appStart`)
+- **What:** Existing inventory items had stale `customEmoji` values stored in Firestore (e.g. 🗑️ on Capers) that overrode the correct auto-assignment from `_EMOJI_MAP`. Since `getItemEmoji()` checks `item.customEmoji` first (user override) before keyword matching, these bad stored values were permanent.
+- **Fix:** Added a one-time migration gated by `localStorage["ks-emoji-migration-v1"]`. On first run, it iterates all inventory items with a `customEmoji` field, deletes that field, and saves each item back to Firestore. This lets the improved auto-assignment mapping take over. Users can re-pick custom emojis by tapping the emoji in the detail sheet.
+- **Migration runs after:** Initial Firestore data load in `_appStart`, before `renderAll()`.
+
+#### 4. Inline Style Cleanup
+- **File:** `src/ui/inventory.js` (detail sheet header)
+- **What:** The emoji placeholder `<div>` had redundant inline styles (`display:flex;align-items:center;justify-content:center;cursor:pointer`) that duplicated what the CSS class now provides.
+- **Fix:** Removed redundant inline styles. The `.item-detail-img-ph` CSS class handles all visual properties.
+
+### Emoji Auto-Assignment Source of Truth
+The canonical mapping (per Bora) is:
+- Capers → 🫙 (jarred items keyword "caper")
+- Black Olives → 🫒 (keyword "olive", "black olive")
+- Chocolate → 🍫 (keyword "chocolate", "cocoa")
+- Rice Vinegar → 🍶 (keyword "rice vinegar", "vinegar")
+- Mac & Cheese → 🧀 (keyword "mac & cheese" variants)
+- Energy Drink → 🥤 (keyword "energy drink", brand names)
+- Condiments → 🧴 (keyword "condiment")
+- Default fallback: 🛒 (shopping cart) — NEVER use 🗑️ or 🍿 as defaults
+
+### Files Modified
+- `src/styles.css` — Moved `.item-detail-img-ph` outside image comment block
+- `src/helpers.js` — Separated "condiment" → 🧴 from sauces → 🫙
+- `src/main.js` — Added one-time emoji migration (v1) in `_appStart`
+- `src/ui/inventory.js` — Cleaned up redundant inline styles on emoji placeholder

@@ -343,7 +343,8 @@ const _EMOJI_MAP = [
   { keywords: ["frozen"], emoji: "🧊" },
 
   // ── Sauces & condiments ─────────────────────────────────────────────────
-  { keywords: ["sauce", "ketchup", "mustard", "mayo", "mayonnaise", "salsa", "dressing", "condiment", "jam", "jelly", "honey", "syrup", "marinade", "glaze", "chutney", "hummus", "tahini", "pesto"], emoji: "🫙" },
+  { keywords: ["condiment"], emoji: "🧴" },
+  { keywords: ["sauce", "ketchup", "mustard", "mayo", "mayonnaise", "salsa", "dressing", "jam", "jelly", "honey", "syrup", "marinade", "glaze", "chutney", "hummus", "tahini", "pesto"], emoji: "🫙" },
   { keywords: ["vinegar", "rice vinegar", "balsamic", "apple cider vinegar", "white vinegar", "red wine vinegar"], emoji: "🍶" },
   { keywords: ["oil"], emoji: "🫒" },
 

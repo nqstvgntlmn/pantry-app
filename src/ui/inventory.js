@@ -404,7 +404,9 @@ export async function openInvItemDetail(id) {
   // No-image display: smart emoji placeholder based on product name/type.
   // Tapping the emoji opens the emoji picker so the user can override it.
   const ic = getItemEmoji(item);
-  const img = `<div class="item-detail-img-ph" style="display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="changeInvEmoji('${item.id}', this)" title="Tap to change emoji">
+  // Tappable 72×72 emoji button — opens emoji picker on tap via changeInvEmoji().
+  // CSS class provides sizing, background, border, and cursor; inner div scales emoji.
+  const img = `<div class="item-detail-img-ph" onclick="changeInvEmoji('${item.id}', this)" title="Tap to change emoji">
     <div style="font-size:1.6rem">${ic}</div>
   </div>`;
   const changePhotoLink = "";

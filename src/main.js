@@ -1194,6 +1194,23 @@ window._appStart = async function(code) {
     // to prevent the blank-screen flash on first boot.
     state.homeDataReady = true;
 
+    // ── One-time emoji migration (v1) ──────────────────────────────────────
+    // Clear stale `customEmoji` fields from inventory items so the improved
+    // auto-assignment mapping takes over. Previously, some items had wrong
+    // emojis stored (e.g. 🗑️ for Capers). This runs once per device, gated
+    // by a localStorage flag, and batch-saves corrected items to Firestore.
+    if (!localStorage.getItem("ks-emoji-migration-v1")) {
+      const itemsToFix = state.inv.filter(i => i.customEmoji);
+      if (itemsToFix.length) {
+        console.log(`[emoji-migration-v1] Clearing customEmoji from ${itemsToFix.length} items`);
+        for (const item of itemsToFix) {
+          delete item.customEmoji;
+          svi(item); // persist each cleared item to Firestore (fire-and-forget)
+        }
+      }
+      localStorage.setItem("ks-emoji-migration-v1", "1");
+    }
+
     // renderAll includes renderHome which calls renderSum, so no separate renderSum needed
     renderAll(); renderRecs(); renderShop();
   } catch (e) {
