@@ -121,20 +121,36 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 
 /* ── APP ── */
 #APP{position:fixed;inset:0;display:none;flex-direction:column}
-.screen{position:absolute;inset:0;bottom:var(--nh);overflow-y:auto;display:none;flex-direction:column}
-.screen.active{display:flex}
+/* Screens use transform-based positioning for smooth slide transitions.
+   All screens are always display:flex but off-screen right by default.
+   Only the .active screen is at translateX(0) and scrollable. */
+.screen{position:absolute;inset:0;bottom:0;display:flex;flex-direction:column;
+  transform:translateX(100%);visibility:hidden;pointer-events:none;overflow-y:hidden;
+  transition:transform 300ms cubic-bezier(0.4,0,0.2,1),visibility 0s 300ms;
+  will-change:transform}
+.screen.active{transform:translateX(0);visibility:visible;pointer-events:auto;overflow-y:auto;
+  transition:transform 300ms cubic-bezier(0.4,0,0.2,1),visibility 0s 0s}
+/* Screen exiting to the left (when navigating to a tab further right) */
+.screen.slide-left{transform:translateX(-33%);visibility:hidden;pointer-events:none;overflow-y:hidden}
+/* Skip transition when snapping screens during rapid tab switching */
+.screen.no-transition{transition:none !important}
 
 /* ── NAV ── */
-/* Bottom nav: gradient fade from transparent to solid, with frosted glass blur */
-#NAV{position:absolute;bottom:0;left:0;right:0;height:var(--nh);background:linear-gradient(to bottom,rgba(13,11,8,.85),#0D0B08);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--card-border);display:flex;align-items:stretch;padding-bottom:var(--safe)}
-.ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--mt);padding-bottom:2px;position:relative}
-.ni .ico{font-size:1.7rem;transition:transform .2s,filter .2s;line-height:1}
-.ni .lbl{font-size:.58rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;transition:color .2s;opacity:.7}
+/* Floating pill-shaped bottom nav — iOS 16+ style, hovers above content with frosted glass */
+#NAV{position:fixed;bottom:calc(var(--safe) + 12px);left:16px;right:16px;height:56px;
+  border-radius:28px;background:rgba(20,17,14,0.72);
+  backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8);
+  border:1px solid rgba(255,255,255,0.08);
+  box-shadow:0 8px 32px rgba(0,0,0,0.45),0 2px 8px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.05);
+  display:flex;align-items:stretch;padding:0 4px;z-index:150}
+.ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:var(--mt);position:relative;border-radius:24px}
+.ni .ico{font-size:1.5rem;transition:transform .2s,filter .2s;line-height:1}
+.ni .lbl{font-size:.54rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;transition:color .2s,opacity .2s;opacity:.6}
 .ni.active{color:var(--ac)}
 .ni.active .lbl{opacity:1}
-.ni.active .ico{transform:translateY(-3px);filter:drop-shadow(0 2px 8px rgba(212,168,83,.5))}
-/* Active tab indicator — gradient gold line with subtle glow */
-.ni::after{content:"";position:absolute;top:0;left:25%;right:25%;height:2px;background:linear-gradient(90deg,transparent,var(--ac),transparent);border-radius:0 0 2px 2px;opacity:0;transition:opacity .2s}
+.ni.active .ico{transform:translateY(-2px);filter:drop-shadow(0 2px 8px rgba(212,168,83,.5))}
+/* Active tab indicator — small gold dot below label */
+.ni::after{content:"";position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--ac);opacity:0;transition:opacity .2s}
 .ni.active::after{opacity:1}
 
 /* ── BUTTONS ── */
@@ -170,7 +186,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .grt span{color:var(--ac)}.hdt{font-size:.8rem;color:var(--mt);margin-top:3px}
 .srow{display:flex;align-items:center;gap:6px;margin-top:12px}.slb{font-size:.72rem;color:var(--mt)}
 .arow{display:flex;gap:8px;margin-top:12px}
-.hbody{padding:0 16px 16px;flex:1;overflow-y:auto}
+/* Extra bottom padding so content scrolls above the floating pill nav */
+.hbody{padding:0 16px 16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1;overflow-y:auto}
 .setbtn{width:38px;height:38px;border-radius:12px;background:var(--card);border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:pointer;flex-shrink:0;transition:border-color .2s}
 .setbtn:active{border-color:var(--ac)}
 /* Home section header — gold accent with gold left border */
@@ -242,7 +259,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .itabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;margin-top:14px;padding:0 6px;overflow-x:auto}
 .itab{flex:1;min-width:52px;padding:11px 4px;text-align:center;font-size:.72rem;font-weight:600;color:var(--mt);cursor:pointer;border-bottom:2.5px solid transparent;transition:all .18s;white-space:nowrap;letter-spacing:.03em}
 .itab.active{color:var(--ac);border-bottom-color:var(--ac)}
-.ibody{padding:16px;flex:1}
+.ibody{padding:16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1}
 .lgrp{margin-bottom:20px}
 /* Location group header — gold accent, uppercase tracking */
 .lgt{font-size:.66rem;text-transform:uppercase;letter-spacing:.18em;color:rgba(212,168,83,.7);margin-bottom:9px;display:flex;align-items:center;gap:10px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
@@ -266,7 +283,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .rtabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;padding:0 6px;margin-top:14px}
 .rtab{flex:1;padding:11px 4px;text-align:center;font-size:.72rem;font-weight:600;color:var(--mt);cursor:pointer;border-bottom:2.5px solid transparent;transition:all .18s;letter-spacing:.03em}
 .rtab.active{color:var(--ac);border-bottom-color:var(--ac)}
-.rbody{padding:14px 16px;flex:1}
+.rbody{padding:14px 16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1}
 /* Recipe card — gradient background, warm border, hover elevation */
 /* No transform animation on tap — only border highlight. Prevents jitter on recipe cards. */
 .rcd{background:var(--card-grad);border:1px solid var(--card-border);border-top-color:var(--card-border-top);border-radius:16px;padding:18px;margin-bottom:10px;cursor:pointer;transition:box-shadow .2s ease,border-color .2s;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04)}
@@ -282,7 +299,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .sbdg{font-size:.68rem;padding:2px 9px;border-radius:20px;background:var(--sf);color:var(--mt);border:1px solid var(--b1)}
 
 /* ── SHOPPING ── */
-.shbody{padding:16px;flex:1}
+.shbody{padding:16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1}
 /* Shopping item card — gradient background with warm ambient top-light border */
 /* No transform animation on tap — only border highlight. Prevents jitter on shopping rows. */
 .shit{background:var(--card-grad);border:1px solid var(--card-border);border-top-color:var(--card-border-top);border-radius:14px;padding:17px 19px;display:flex;align-items:center;gap:12px;margin-bottom:7px;cursor:pointer;transition:border-color .15s,opacity .15s;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04)}
@@ -380,7 +397,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .cb.asst ul,.cb.asst ol{padding-left:20px;margin:6px 0}.cb.asst li{margin-bottom:5px}
 .cb.asst strong{color:var(--ac)}.cb.thinking{opacity:.55;font-style:italic}
 .csvbtn{margin-top:10px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:var(--acd);border:1px solid var(--ac);color:var(--ac);font-size:.74rem;font-weight:700;cursor:pointer;font-family:"DM Sans",sans-serif}
-.chia{padding:12px 16px;border-top:1px solid var(--b1);background:var(--sf);display:flex;gap:10px;align-items:flex-end;flex-shrink:0;padding-bottom:calc(12px + var(--safe))}
+/* Chat input area: extra bottom padding for floating pill nav */
+.chia{padding:12px 16px;border-top:1px solid var(--b1);background:var(--sf);display:flex;gap:10px;align-items:flex-end;flex-shrink:0;padding-bottom:calc(56px + var(--safe) + 32px)}
 .chta{flex:1;background:var(--card);border:1.5px solid var(--b2);border-radius:14px;padding:12px 16px;color:var(--tx);font-size:.9rem;font-family:"DM Sans",sans-serif;resize:none;min-height:44px;max-height:120px;line-height:1.5}
 .chta:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.1)}
 .chsb{width:44px;height:44px;border-radius:13px;background:var(--ac);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;transition:all .15s}
@@ -951,10 +969,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .ni.active .ico{transform:translateY(-3px);filter:drop-shadow(0 2px 8px rgba(212,168,83,.5))}
 
 /* ── SCREEN ENTRANCE ANIMATION ──
-   Smooth fade+slide when a screen becomes active.
-   Items appear to rise gently into view. */
-@keyframes screenEnter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-.screen.active{animation:screenEnter .3s cubic-bezier(.4,0,.2,1) both}
+   Replaced by transform-based slide transitions in the .screen rules above.
+   The old keyframe animation is no longer used; screens slide left/right. */
 
 /* ── STAGGERED LIST ENTRANCE ──
    Items slide in from slightly below and fade in.
@@ -1301,9 +1317,7 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .card-enter{animation:cardFadeUp .35s cubic-bezier(.4,0,.2,1) both}
 
 /* ── TAB TRANSITION ───────────────────────────────────────────────────────────
-   Smooth fade when switching tabs — screen content cross-fades. */
-.screen.active{animation:screenFadeIn .25s ease both}
-@keyframes screenFadeIn{from{opacity:0}to{opacity:1}}
+   Replaced by transform-based slide transitions. Old fade removed. */
 
 /* ── BUTTON PRESS MICRO-INTERACTION ───────────────────────────────────────────
    Enhanced tactile press for primary buttons — gold shadow pulse on press. */
@@ -1354,7 +1368,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* ── FLOATING ACTION BUTTON ───────────────────────────────────────────────────
    Context-aware FAB that shows different actions per tab.
    Positioned above bottom nav, translucent gold with shadow. */
-.fab{position:fixed;right:20px;bottom:calc(var(--nh) + var(--safe) + 16px);width:56px;height:56px;
+/* FAB floats above the floating pill nav: 56px pill + 12px pill bottom + safe area + 12px gap */
+.fab{position:fixed;right:20px;bottom:calc(var(--safe) + 56px + 12px + 16px);width:56px;height:56px;
   border-radius:50%;background:var(--ac);color:#0D0B08;border:none;
   font-size:1.5rem;font-weight:700;cursor:pointer;z-index:140;
   display:flex;align-items:center;justify-content:center;
@@ -1401,8 +1416,7 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .shit.chk .shck{box-shadow:0 0 10px rgba(90,173,111,.3)}
 
 /* ── BOTTOM NAV REFINED ───────────────────────────────────────────────────────
-   Slightly thicker active indicator, smoother label transitions. */
-.ni::after{height:2.5px;left:20%;right:20%}
+   Pill-shaped floating nav: refined active indicator dot and label transitions. */
 .ni .lbl{transition:color .2s,opacity .2s}
 .ni.active .lbl{font-weight:700}
 
@@ -1519,3 +1533,114 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* Recipe tab labels: bolder, more confident */
 #screen-recipes .rtab{font-size:.76rem;font-weight:700;letter-spacing:.04em}
 #screen-recipes .rtab.active{font-weight:800}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   QUICK-ACCESS CHIPS — Horizontally scrollable action shortcuts on Home tab.
+   Each chip triggers an existing app function (scan, chat, build list, etc.).
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.chip-row{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 14px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0}
+.chip-row::-webkit-scrollbar{display:none}
+.quick-chip{white-space:nowrap;padding:9px 16px;border-radius:20px;background:var(--card);
+  border:1px solid var(--b1);font-size:.82rem;color:var(--tx2);cursor:pointer;
+  font-family:"DM Sans",sans-serif;font-weight:500;flex-shrink:0;transition:all .15s}
+.quick-chip:active{border-color:var(--ac);color:var(--ac);background:var(--acd);transform:scale(.96)}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SMART NOTIFICATION STRIP — Contextual alert pills on Home tab.
+   Shows expiring items, low stock, coupon matches, etc.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.notif-strip{display:flex;gap:8px;overflow-x:auto;padding:0 16px 14px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0}
+.notif-strip::-webkit-scrollbar{display:none}
+.notif-strip:empty{display:none}
+.notif-pill{white-space:nowrap;padding:10px 16px;border-radius:16px;background:var(--card);
+  border:1px solid var(--b1);font-size:.82rem;color:var(--tx2);cursor:pointer;
+  font-weight:500;flex-shrink:0;transition:all .15s;display:flex;align-items:center;gap:6px}
+.notif-pill:active{transform:scale(.96);border-color:var(--ac)}
+/* Color-coded urgency variants */
+.notif-pill.notif-warn{border-color:var(--am);color:var(--am)}
+.notif-pill.notif-danger{border-color:var(--rd);color:var(--rd)}
+.notif-pill.notif-deal{border-color:var(--ac);color:var(--ac)}
+.notif-pill.notif-info{border-color:var(--b2);color:var(--tx2)}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TONIGHT'S DINNER HERO — Enlarged hero card for the Home dashboard.
+   Prominent Fraunces display font, warm gradient when meal is planned.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.tonight-card.tonight-hero{min-height:120px;padding:22px 24px;
+  background:linear-gradient(135deg,rgba(212,168,83,0.08) 0%,var(--card) 50%,rgba(28,24,20,1) 100%);
+  border-color:rgba(212,168,83,0.2)}
+.tonight-hero .tc-val{font-family:"Fraunces",serif;font-size:1.4rem;font-weight:300;letter-spacing:-.02em}
+.tonight-hero .tc-icon{font-size:2.6rem}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   INVENTORY SHELF VIEW — Visual shelf layout grouped by category.
+   Items sit on illustrated shelves as horizontally scrollable card rows.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.shelf-row{margin-bottom:22px}
+.shelf-label{font-size:.82rem;font-weight:700;color:var(--tx2);padding:0 16px;margin-bottom:10px;
+  display:flex;align-items:center;gap:8px;letter-spacing:.02em}
+.shelf-label-emoji{font-size:1.1rem}
+.shelf-label-count{font-size:.68rem;color:var(--mt);background:var(--card);padding:2px 8px;border-radius:10px;margin-left:auto}
+/* Horizontally scrollable items on each shelf */
+.shelf-items{display:flex;overflow-x:auto;gap:10px;padding:0 16px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.shelf-items::-webkit-scrollbar{display:none}
+/* Individual shelf item card — compact, centered, tappable */
+.shelf-item{min-width:92px;max-width:110px;padding:14px 10px 12px;background:var(--card-grad);
+  border:1px solid var(--card-border);border-top-color:var(--card-border-top);border-radius:14px;
+  text-align:center;flex-shrink:0;cursor:pointer;transition:transform .15s,border-color .15s;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.04)}
+.shelf-item:active{border-color:var(--ac);transform:scale(.96)}
+/* Low stock shelf items shrink slightly with amber warning border */
+.shelf-item.shelf-item-low{transform:scale(0.88);border-color:var(--am);
+  box-shadow:0 0 10px rgba(200,150,10,0.12),inset 0 1px 0 rgba(255,255,255,0.04)}
+.shelf-item.shelf-item-low:active{transform:scale(0.84)}
+.shelf-emoji{font-size:1.6rem;margin-bottom:6px;line-height:1.2}
+.shelf-name{font-size:.76rem;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.shelf-qty{font-size:.7rem;color:var(--tx2);margin-top:4px;font-weight:500}
+/* Visual shelf edge — subtle wood-like line below each row */
+.shelf-line{height:3px;background:linear-gradient(90deg,var(--b1),var(--b2),var(--b1));
+  border-radius:2px;margin:10px 16px 0}
+/* View mode toggle button active state */
+.inv-view-active{background:var(--ac) !important;color:var(--bg) !important;border-color:var(--ac) !important}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   EXPIRY TIMELINE — Horizontal scrollable timeline strip on Supplies tab.
+   Color-coded by urgency: green (ok), amber (expiring), red (expired).
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.expiry-timeline{display:flex;overflow-x:auto;gap:10px;padding:10px 16px;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;border-bottom:1px solid var(--b1);margin-bottom:4px;flex-shrink:0}
+.expiry-timeline::-webkit-scrollbar{display:none}
+.expiry-timeline:empty{display:none}
+.exp-tl-item{min-width:82px;padding:10px 12px;border-radius:12px;background:var(--card);
+  border:1px solid var(--b1);text-align:center;flex-shrink:0;cursor:pointer;transition:all .15s}
+.exp-tl-item:active{transform:scale(.95);border-color:var(--ac)}
+/* Color-coded dot indicator at top of each timeline card */
+.exp-tl-dot{width:8px;height:8px;border-radius:50%;margin:0 auto 6px}
+.exp-tl-red{border-color:rgba(217,107,107,.3)}
+.exp-tl-red .exp-tl-dot{background:var(--rd)}
+.exp-tl-amber{border-color:rgba(200,150,10,.3)}
+.exp-tl-amber .exp-tl-dot{background:var(--am)}
+.exp-tl-green{border-color:rgba(90,173,111,.2)}
+.exp-tl-green .exp-tl-dot{background:var(--gn)}
+.exp-tl-name{font-size:.74rem;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px;margin:0 auto}
+.exp-tl-date{font-size:.66rem;color:var(--tx2);margin-top:4px}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   AISLE DIVIDERS — Rich visual section headers for shopping aisle grouping.
+   Shows emoji icon, aisle name, and item count per section.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.aisle-divider{display:flex;align-items:center;gap:8px;padding:14px 0 8px;border-top:1px solid var(--b1);margin-top:10px}
+.aisle-divider:first-child{border-top:none;margin-top:0}
+.aisle-icon{font-size:1.2rem;flex-shrink:0}
+.aisle-name{font-size:.82rem;font-weight:700;color:var(--tx);flex:1;letter-spacing:.02em}
+.aisle-count{font-size:.7rem;color:var(--mt);background:var(--card);padding:2px 9px;border-radius:10px;font-weight:500}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   DEAL BADGE — Gold badge on shopping items with matching active coupons/deals.
+   Tapping navigates to the Deals tab to see the matching coupon.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.deal-badge{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:10px;
+  background:rgba(212,168,83,0.12);border:1px solid rgba(212,168,83,0.4);color:var(--ac);
+  font-size:.66rem;font-weight:700;white-space:nowrap;cursor:pointer;margin-left:6px;flex-shrink:0;
+  transition:all .15s;letter-spacing:.02em}
+.deal-badge:active{background:rgba(212,168,83,0.25);transform:scale(.95)}

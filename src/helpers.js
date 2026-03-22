@@ -555,12 +555,41 @@ export function guessLocation(name) {
  * For example, "jalap" matches "jalapeno" without needing the full word.
  */
 export const AISLES = {
-  "Produce": ["apple", "banana", "carrot", "celery", "onion", "garlic", "tomato", "lettuce", "cucumber", "pepper", "broccoli", "spinach", "mushroom", "lemon", "lime", "herb", "cabbage", "squash", "jalap", "avocado", "potato", "ginger"],
-  "Meat & Fish": ["chicken", "beef", "lamb", "turkey", "salmon", "cod", "tuna", "fish", "steak", "shrimp", "pork", "bacon", "sausage", "ground"],
-  "Dairy & Eggs": ["egg", "butter", "cheese", "milk", "cream", "yogurt", "ghee", "kefir"],
-  "Frozen": ["frozen", "ice cream", "pizza", "nugget", "waffle", "edamame", "okra", "lima", "broccoli floret"],
-  "Pantry": ["rice", "pasta", "flour", "oil", "vinegar", "sauce", "spice", "salt", "pepper", "sugar", "honey", "oat", "bread", "can", "bean", "lentil", "chickpea", "stock", "broth"],
-  "Snacks & Drinks": ["chip", "cracker", "cookie", "juice", "soda", "water", "tea", "coffee", "snack", "nut", "seed"]
+  "Produce": ["apple", "banana", "carrot", "celery", "onion", "garlic", "tomato", "lettuce", "cucumber", "pepper", "broccoli", "spinach", "mushroom", "lemon", "lime", "herb", "cabbage", "squash", "jalap", "avocado", "potato", "ginger", "kale", "zucchini", "corn", "berry", "grape", "orange", "melon", "pear", "mango", "peach"],
+  "Meat & Fish": ["chicken", "beef", "lamb", "turkey", "salmon", "cod", "tuna", "fish", "steak", "shrimp", "pork", "sausage", "ground", "tilapia", "crab", "lobster", "scallop"],
+  "Bakery": ["bread", "bagel", "muffin", "croissant", "tortilla", "pita", "naan", "roll", "bun", "baguette", "flatbread", "english muffin", "biscuit"],
+  "Deli": ["deli", "ham", "salami", "prosciutto", "roast beef", "sliced turkey", "cold cut", "hummus", "prepared"],
+  "Dairy & Eggs": ["egg", "butter", "cheese", "milk", "cream", "yogurt", "ghee", "kefir", "sour cream", "cottage cheese", "half and half", "whipping cream"],
+  "Frozen": ["frozen", "ice cream", "pizza", "nugget", "waffle", "edamame", "okra", "lima", "broccoli floret", "pot pie", "burrito"],
+  "Canned Goods": ["canned", "can of", "diced tomato", "tomato paste", "tomato sauce", "bean", "lentil", "chickpea", "stock", "broth", "soup", "tuna can", "sardine"],
+  "Condiments & Sauces": ["ketchup", "mustard", "mayo", "mayonnaise", "hot sauce", "soy sauce", "worcestershire", "bbq sauce", "salsa", "ranch", "dressing", "vinegar", "relish", "sriracha", "teriyaki", "pesto"],
+  "Baking": ["flour", "sugar", "baking soda", "baking powder", "vanilla", "yeast", "cocoa", "chocolate chip", "corn starch", "powdered sugar", "brown sugar", "molasses", "food coloring"],
+  "Pantry": ["rice", "pasta", "oil", "spice", "salt", "honey", "oat", "cereal", "granola", "peanut butter", "jam", "jelly", "syrup", "olive oil"],
+  "Snacks & Drinks": ["chip", "cracker", "cookie", "juice", "soda", "water", "tea", "coffee", "snack", "nut", "seed", "popcorn", "pretzel", "energy drink", "sparkling"],
+  "Paper & Cleaning": ["paper towel", "toilet paper", "napkin", "dish soap", "detergent", "sponge", "trash bag", "foil", "plastic wrap", "wipe", "bleach", "cleaner"],
+  "Baby": ["diaper", "formula", "baby food", "baby wipe", "pacifier", "bottle nipple"],
+  "Pet": ["dog food", "cat food", "pet treat", "litter", "pet food"],
+  "Health & Beauty": ["shampoo", "conditioner", "body wash", "lotion", "toothpaste", "toothbrush", "deodorant", "razor", "vitamin", "medicine", "band-aid", "sunscreen"]
+};
+
+// AISLE_ICONS — emoji icon for each aisle category, used in rich aisle dividers
+export const AISLE_ICONS = {
+  "Produce": "🥬",
+  "Meat & Fish": "🥩",
+  "Bakery": "🍞",
+  "Deli": "🥪",
+  "Dairy & Eggs": "🥛",
+  "Frozen": "🧊",
+  "Canned Goods": "🥫",
+  "Condiments & Sauces": "🫙",
+  "Baking": "🧁",
+  "Pantry": "🫘",
+  "Snacks & Drinks": "🥤",
+  "Paper & Cleaning": "🧻",
+  "Baby": "👶",
+  "Pet": "🐾",
+  "Health & Beauty": "💊",
+  "Other": "📦"
 };
 
 /**
@@ -953,19 +982,19 @@ export function guessAisle(name) {
 // This ordering represents the general walk-through path for each store chain.
 // "Other" is always last. Categories not listed use alphabetical fallback position.
 const _STORE_AISLE_ORDER = {
-  "ShopRite":      ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
-  "Whole Foods":   ["Produce", "Dairy & Eggs", "Meat & Fish", "Pantry", "Frozen", "Snacks & Drinks", "Other"],
-  "Trader Joe's":  ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
-  "Walmart":       ["Produce", "Dairy & Eggs", "Meat & Fish", "Pantry", "Frozen", "Snacks & Drinks", "Other"],
-  "Target":        ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
-  "Costco":        ["Produce", "Dairy & Eggs", "Meat & Fish", "Pantry", "Frozen", "Snacks & Drinks", "Other"],
-  "Kroger":        ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
-  "Safeway":       ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
-  "Publix":        ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
-  "Aldi":          ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
-  "Stop & Shop":   ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
-  "Wegmans":       ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
-  "Amazon Fresh":  ["Produce", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Snacks & Drinks", "Other"],
+  "ShopRite":      ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Frozen", "Canned Goods", "Condiments & Sauces", "Baking", "Pantry", "Snacks & Drinks", "Paper & Cleaning", "Baby", "Pet", "Health & Beauty", "Other"],
+  "Whole Foods":   ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Pantry", "Canned Goods", "Condiments & Sauces", "Baking", "Frozen", "Snacks & Drinks", "Health & Beauty", "Paper & Cleaning", "Other"],
+  "Trader Joe's":  ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Canned Goods", "Condiments & Sauces", "Baking", "Snacks & Drinks", "Other"],
+  "Walmart":       ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Pantry", "Canned Goods", "Condiments & Sauces", "Baking", "Frozen", "Snacks & Drinks", "Paper & Cleaning", "Baby", "Pet", "Health & Beauty", "Other"],
+  "Target":        ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Frozen", "Pantry", "Canned Goods", "Condiments & Sauces", "Baking", "Snacks & Drinks", "Paper & Cleaning", "Baby", "Pet", "Health & Beauty", "Other"],
+  "Costco":        ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Pantry", "Canned Goods", "Baking", "Frozen", "Snacks & Drinks", "Paper & Cleaning", "Health & Beauty", "Other"],
+  "Kroger":        ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Frozen", "Canned Goods", "Condiments & Sauces", "Baking", "Pantry", "Snacks & Drinks", "Paper & Cleaning", "Baby", "Pet", "Health & Beauty", "Other"],
+  "Safeway":       ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Frozen", "Canned Goods", "Condiments & Sauces", "Baking", "Pantry", "Snacks & Drinks", "Paper & Cleaning", "Health & Beauty", "Other"],
+  "Publix":        ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Frozen", "Canned Goods", "Condiments & Sauces", "Baking", "Pantry", "Snacks & Drinks", "Paper & Cleaning", "Baby", "Pet", "Health & Beauty", "Other"],
+  "Aldi":          ["Produce", "Bakery", "Dairy & Eggs", "Meat & Fish", "Frozen", "Canned Goods", "Pantry", "Baking", "Snacks & Drinks", "Paper & Cleaning", "Health & Beauty", "Other"],
+  "Stop & Shop":   ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Frozen", "Canned Goods", "Condiments & Sauces", "Baking", "Pantry", "Snacks & Drinks", "Paper & Cleaning", "Baby", "Pet", "Health & Beauty", "Other"],
+  "Wegmans":       ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Frozen", "Canned Goods", "Condiments & Sauces", "Baking", "Pantry", "Snacks & Drinks", "Paper & Cleaning", "Health & Beauty", "Other"],
+  "Amazon Fresh":  ["Produce", "Bakery", "Deli", "Dairy & Eggs", "Meat & Fish", "Frozen", "Canned Goods", "Condiments & Sauces", "Baking", "Pantry", "Snacks & Drinks", "Paper & Cleaning", "Baby", "Health & Beauty", "Other"],
 };
 
 /**

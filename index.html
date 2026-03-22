@@ -116,9 +116,13 @@
       </div>
     </div>
     <div class="hbody">
+      <!-- Quick-access chips — horizontally scrollable action shortcuts -->
+      <div id="quick-chips" class="chip-row"></div>
+      <!-- Smart notifications strip — contextual alerts (expiring, low stock, deals) -->
+      <div id="notif-strip" class="notif-strip"></div>
       <div class="hsec-lbl">📅 Today</div>
       <!-- Tonight's Dinner card — full-width, shows meal name or action buttons -->
-      <div class="today-card tonight-card" id="tonight-main" style="margin-bottom:16px">
+      <div class="today-card tonight-card tonight-hero" id="tonight-main" style="margin-bottom:16px">
         <div class="tc-icon">🍽</div>
         <div class="tc-content">
           <div class="tc-ttl">Tonight's Dinner</div>
@@ -157,6 +161,8 @@
         <div><div class="sttl">Supplies</div><div class="ssub" id="isub">Loading…</div></div>
         <div style="display:flex;gap:6px">
           <button class="btn bsm bs refresh-btn" onclick="manualRefresh('inv')" title="Refresh">↻</button>
+          <!-- Shelf/list view toggle — switches between flat list and visual shelf layout -->
+          <button class="btn bsm bs" id="inv-view-toggle" onclick="toggleInvViewMode()" title="Toggle view">🗄</button>
           <button class="btn bsm bs selbtn" id="inv-selbtn" onclick="togInvSelect()">Select</button>
         </div>
       </div>
@@ -176,6 +182,8 @@
         <div class="itab" id="itab-household" onclick="setIT('household')">🏠 Household</div>
       </div>
     </div>
+    <!-- Expiry timeline — horizontal scrollable strip showing what expires when -->
+    <div id="expiryTimeline" class="expiry-timeline"></div>
     <div class="ibody" id="ibody" style="flex:1;overflow-y:auto"></div>
   </div>
 

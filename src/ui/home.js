@@ -13,7 +13,7 @@
 import { state, J, Js } from '../state.js';
 import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase, formatQtyWithUnit, combineQty, applyTitleCaseWhileTyping, gcat, FRAC_OPTIONS } from '../helpers.js';
 import { saveMp, dbList, svi } from '../db.js';
-import { consolidateShopItem, _getProductPreference } from './shopping.js'; // Consolidation-aware add to shopping list + product preferences
+import { consolidateShopItem, _getProductPreference, getShoppingListCouponMatchCount } from './shopping.js'; // Consolidation-aware add to shopping list + product preferences + coupon count for notif strip
 import { UNITS } from './inventory.js'; // Shared unit list for the qty toolbar
 import { autoCategorizeByName, getCategoryDisplay, renderCategoryBadge, openCategoryPicker } from './categorypicker.js';
 
@@ -124,14 +124,16 @@ export function renderHome() {
   if (grtEl && !grtEl.innerHTML) grtEl.innerHTML = `${gr}, <span>${u}</span>`;
 
   // Refresh every home-screen section
-  renderWeek();     // 7-day meal plan grid
-  renderSum();      // numeric stat cards (inventory count, expiring, shopping, recipes)
-  renderExp();      // expiring-soon item list
-  renderLowStock(); // "Running Low" item list
-  renderTonight();  // "Tonight's Dinner" card
-  renderLastCooked(); // "Last cooked" line below Tonight's Dinner
-  renderActivityFeed(); // Recent household activity
-  updExport();      // plain-text inventory export panel
+  renderWeek();          // 7-day meal plan grid
+  renderSum();           // numeric stat cards (inventory count, expiring, shopping, recipes)
+  renderQuickChips();    // quick-access action chips (scan, ask Claude, build list, etc.)
+  renderNotifications(); // smart notification strip (expiring, low stock, deals, shopping)
+  renderExp();           // expiring-soon item list
+  renderLowStock();      // "Running Low" item list
+  renderTonight();       // "Tonight's Dinner" card
+  renderLastCooked();    // "Last cooked" line below Tonight's Dinner
+  renderActivityFeed();  // Recent household activity
+  updExport();           // plain-text inventory export panel
   // Apply collapsed/expanded state to collapsible sections
   _applyAllHomeSectionStates();
 }
@@ -469,6 +471,125 @@ export function renderSum() {
   }
 
   sgrd.innerHTML = html;
+
+  // Animate stat counters from 0 → target on tab navigation.
+  // Uses _shouldAnimateCounters flag set by showScreen() in main.js.
+  if (window._shouldAnimateCounters) {
+    window._shouldAnimateCounters = false;
+    sgrd.querySelectorAll(".scv").forEach(el => {
+      const target = parseInt(el.textContent, 10);
+      if (isNaN(target) || target === 0) return;
+      _animateCounter(el, target, 600);
+    });
+  }
+}
+
+/**
+ * _animateCounter(el, target, duration) — Animates a DOM element's text
+ * content from 0 to the target number over the given duration (ms).
+ * Uses requestAnimationFrame with timestamp-based easing for smooth motion.
+ */
+function _animateCounter(el, target, duration) {
+  const start = performance.now();
+  el.textContent = "0";
+  function tick(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+    // Ease-out cubic for a satisfying deceleration
+    const eased = 1 - Math.pow(1 - progress, 3);
+    el.textContent = Math.round(eased * target);
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+// ─── QUICK-ACCESS CHIPS ──────────────────────────────────────────────────────
+// Horizontal scrollable row of shortcut chips on the home screen.
+// Each chip triggers an existing app action (scan, AI, build list, expiring).
+
+/**
+ * renderQuickChips() — Populates the #quick-chips container with action
+ * shortcut chips. Each chip calls an existing window function.
+ */
+function renderQuickChips() {
+  const el = g("quick-chips");
+  if (!el) return;
+
+  // Only render once — chips are static and don't change with data
+  if (el.dataset.rendered) return;
+  el.dataset.rendered = "1";
+
+  el.innerHTML = `
+    <button class="quick-chip" onclick="openScanForInventory()">📷 Scan barcode</button>
+    <button class="quick-chip" onclick="openUniversalAdd()">＋ Quick add</button>
+    <button class="quick-chip" onclick="showScreen('shopping')">🛒 Shopping list</button>
+    <button class="quick-chip" onclick="showScreen('inventory')">📦 What's expiring</button>
+  `;
+}
+
+// ─── SMART NOTIFICATION STRIP ────────────────────────────────────────────────
+// Horizontal scrollable strip of contextual alerts on the home screen.
+// Shows expiring items, low stock count, shopping list size, and coupon matches.
+
+/**
+ * renderNotifications() — Builds contextual alert pills from live state data.
+ * Alerts are color-coded by urgency: danger (expired), warn (expiring/low),
+ * deal (coupons), info (shopping). Tapping navigates to the relevant screen.
+ */
+function renderNotifications() {
+  const el = g("notif-strip");
+  if (!el) return;
+
+  const pills = [];
+
+  // 1. Expired items — highest urgency (red)
+  const expired = state.inv.filter(i => {
+    const s = xSt(i.expiry);
+    return s && s.c === "expired";
+  });
+  if (expired.length) {
+    pills.push(`<button class="notif-pill notif-danger" onclick="showScreen('inventory')">🚨 ${expired.length} expired item${expired.length > 1 ? "s" : ""}</button>`);
+  }
+
+  // 2. Expiring soon items — warning urgency (amber)
+  const expiring = state.inv.filter(i => {
+    const s = xSt(i.expiry);
+    return s && s.c === "expiring";
+  });
+  if (expiring.length) {
+    pills.push(`<button class="notif-pill notif-warn" onclick="showScreen('inventory')">⏱ ${expiring.length} expiring soon</button>`);
+  }
+
+  // 3. Low stock items — warning urgency (amber)
+  const low = state.inv.filter(i => {
+    if (i.doNotRestock) return false;
+    const thresh = i.restockThreshold != null ? i.restockThreshold : _defaultThreshold(i.unit);
+    return i.qty <= thresh;
+  });
+  if (low.length) {
+    pills.push(`<button class="notif-pill notif-warn" onclick="showScreen('inventory')">📉 ${low.length} running low</button>`);
+  }
+
+  // 4. Shopping list unchecked count — info (blue)
+  const toBuy = state.shop.filter(i => !i.checked).length;
+  if (toBuy > 0) {
+    pills.push(`<button class="notif-pill notif-info" onclick="showScreen('shopping')">🛒 ${toBuy} to buy</button>`);
+  }
+
+  // 5. Coupon matches — deal (gold), naturally 0 for non-whitelisted users
+  const couponMatches = getShoppingListCouponMatchCount();
+  if (couponMatches > 0) {
+    pills.push(`<button class="notif-pill notif-deal" onclick="showScreen('shopping');setTimeout(()=>setSHT('coupons'),100)">💰 ${couponMatches} coupon match${couponMatches > 1 ? "es" : ""}</button>`);
+  }
+
+  // Render pills or hide strip if nothing to show
+  if (pills.length) {
+    el.style.display = "flex";
+    el.innerHTML = pills.join("");
+  } else {
+    el.style.display = "none";
+    el.innerHTML = "";
+  }
 }
 
 // renderExp() — renders the "Expiring Soon" item list on the home screen.

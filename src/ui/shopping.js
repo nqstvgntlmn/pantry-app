@@ -9,7 +9,7 @@ import { state } from '../state.js';                // Global app state (shoppin
 import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
 import { getCurrentUser } from '../auth.js'; // getCurrentUser = get Firebase auth user object (email for deals gate)
 import { defaultThreshold } from '../helpers.js';  // Smart restock threshold by unit — used for "already have" inventory check
-import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, pluralizeUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS } from '../helpers.js';
+import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, pluralizeUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS, AISLE_ICONS } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
 // guessLocation = heuristic storage location (fridge/freezer/pantry),
 // gcat = guess category for inventory, showNotif = toast notification,
@@ -482,12 +482,47 @@ function _shouldShowBrand(item) {
   return false;
 }
 
+// ── DEAL BADGE MATCHING ─────────────────────────────────────────────────────
+// Pre-computed Set of item IDs that have matching deals/coupons.
+// Populated at the start of renderShop() and read by sH() to add gold badges.
+// Naturally empty for non-whitelisted users since _allCoupons/_allDeals are empty.
+let _dealMatchIds = new Set();
+
+/**
+ * _computeDealMatchIds() — Pre-computes which shopping list items have matching
+ * deals or coupons. Stores matching item IDs in _dealMatchIds for O(1) lookup.
+ * Called once per renderShop() to avoid recomputing per-item.
+ */
+function _computeDealMatchIds() {
+  _dealMatchIds = new Set();
+
+  // Skip if no deals/coupons loaded (non-whitelisted users or not yet fetched)
+  if (!_allCoupons.length && !_allDeals.length) return;
+
+  const unchecked = (state.shop || []).filter(i => !i.checked);
+  if (!unchecked.length) return;
+
+  for (const item of unchecked) {
+    const tokens = _tokenize(item.name);
+    if (!tokens.length) continue;
+
+    // Check against coupons
+    const hasCoupon = _allCoupons.some(c => _couponMatchesItem(c, tokens));
+    if (hasCoupon) { _dealMatchIds.add(item.id); continue; }
+
+    // Check against deals
+    const hasDeal = _allDeals.some(d => _dealMatchesItem(d, tokens));
+    if (hasDeal) _dealMatchIds.add(item.id);
+  }
+}
+
 /**
  * sH(item) — Builds a single shopping list row's HTML.
  *
  * Layout matches Supplies rows: item name on the left, quantity and unit
  * stacked vertically on the right (quantity on top, unit below).
  * Tapping the row opens the detail sheet for editing — no inline pencil icon.
+ * Shows a gold "Deal" badge if the item matches an active coupon/deal.
  */
 export function sH(item) {
   // Default to qty 1 if the field is missing (backwards compat with old items)
@@ -525,6 +560,7 @@ export function sH(item) {
           <!-- Brand and subtitle intentionally hidden on list rows (Fix #8, #9). Visible in detail sheet only. -->
         </div>
         ${item.price ? `<div class="price-tag">~$${item.price}</div>` : ""}  <!-- Estimated price if available -->
+        ${_dealMatchIds.has(item.id) ? `<div class="deal-badge" onclick="event.stopPropagation();setSHT('deals')">💰 Deal</div>` : ""}
         <!-- Quantity and unit stacked on the right — matches Supplies row layout -->
         <div style="text-align:right;flex-shrink:0">
           <div class="iqt">${qtyDisplay}</div>
@@ -559,6 +595,9 @@ export function sH(item) {
  * Also handles multi-select mode styling when the user is bulk-selecting items.
  */
 export function renderShop() {
+  // Pre-compute which items have matching deals/coupons for badge display in sH()
+  _computeDealMatchIds();
+
   // Sort by the display name (scanTitle if available, otherwise raw name) — matches what the user sees on each row
   const az = (a, b) => (a.scanTitle || a.name).localeCompare(b.scanTitle || b.name, undefined, { sensitivity: 'base' });
   const c = g("shlist");                               // The main list container element
@@ -605,8 +644,16 @@ export function renderShop() {
       sortedEntries = Object.entries(grps).sort();
     }
 
-    // Render each category group with a section header, followed by enhanced Done section at the bottom
-    c.innerHTML = sortedEntries.map(([aisle, its]) => `<div class="shsec">${aisle}</div>${its.map(sH).join("")}`).join("") + doneHtml;
+    // Render each category group with a rich aisle divider (icon + name + count),
+    // followed by enhanced Done section at the bottom
+    c.innerHTML = sortedEntries.map(([aisle, its]) => {
+      const icon = AISLE_ICONS[aisle] || "📦";
+      return `<div class="aisle-divider">
+        <span class="aisle-icon">${icon}</span>
+        <span class="aisle-name">${aisle}</span>
+        <span class="aisle-count">${its.length}</span>
+      </div>${its.map(sH).join("")}`;
+    }).join("") + doneHtml;
   } else {
     // Flat mode: "To buy" section, then enhanced Done section with collapsible toggle
     c.innerHTML = (un.length ? `<div class="shsec">To buy (${un.length})</div>${un.map(sH).join("")}` : "") + doneHtml;
@@ -3703,6 +3750,18 @@ function _splitCouponsByList(filtered) {
   }
 
   return { onList, rest };
+}
+
+/**
+ * getShoppingListCouponMatchCount() — Returns the number of coupons that
+ * fuzzy-match items on the active shopping list. Used by the home screen
+ * notification strip to show a "deals available" alert.
+ * Naturally returns 0 for non-whitelisted users since _allCoupons is empty.
+ */
+export function getShoppingListCouponMatchCount() {
+  if (!_allCoupons.length) return 0;
+  const { onList } = _splitCouponsByList(_allCoupons);
+  return onList.length;
 }
 
 /**

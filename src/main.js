@@ -44,7 +44,7 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, editInvDetailCombined, saveInvDetailCombined, initInvQtyToolbar, invQtyStep, invFracChange, resetInvStagger, openInvAddCatPicker, changeInvCategory } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, editInvDetailCombined, saveInvDetailCombined, initInvQtyToolbar, invQtyStep, invFracChange, resetInvStagger, openInvAddCatPicker, changeInvCategory, toggleInvViewMode } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
@@ -97,12 +97,18 @@ renderCallbacks.renderShop = renderShop;
 setRenderInv(renderInv);
 
 // ── SCREEN NAVIGATION ────────────────────────────────────────────────────────
-// The app is a single-page app with 5 main screens (home, inventory, recipes,
-// shopping, insights). Only one screen is visible at a time. Navigation is
-// driven by bottom nav bar taps which call showScreen().
+// The app is a single-page app with 6 main screens (home, inventory, recipes,
+// shopping, insights, chat). Only one screen is visible at a time. Navigation
+// is driven by bottom nav bar taps which call showScreen().
+// Screens slide in/out directionally like a native iOS app using CSS transforms.
 
 // Ordered tab names for swipe navigation — matches bottom nav layout left-to-right
 const TAB_ORDER = ["home", "inventory", "recipes", "shopping", "insights", "chat"];
+
+// _transitioning guard: prevents overlapping slide animations from colliding.
+// Set to true during a transition, cleared after 300ms (matches CSS duration).
+let _transitioning = false;
+let _transitionTimer = null;
 
 // _currentTab() — returns the currently active tab name by checking which screen is visible.
 function _currentTab() {
@@ -112,27 +118,99 @@ function _currentTab() {
   return "home";
 }
 
-// showScreen(n) — switch to the named screen (e.g. "home", "inventory").
-// Handles deactivating current screen, activating new one, updating FAB, and re-rendering content.
+// _snapAllScreens() — immediately snap all screens to their resting positions
+// (no transition). Used to cancel in-progress transitions during rapid switching.
+function _snapAllScreens() {
+  document.querySelectorAll(".screen").forEach(s => {
+    s.classList.add("no-transition");
+    s.classList.remove("active", "slide-left");
+  });
+  // Force reflow so the no-transition takes effect before re-enabling
+  void document.body.offsetHeight;
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("no-transition"));
+}
+
+// showScreen(n) — switch to the named screen with a directional slide transition.
+// Determines slide direction from TAB_ORDER index: navigating right = outgoing slides left,
+// navigating left = incoming slides in from the left.
 window.showScreen = function(n) {
+  const cur = _currentTab();
+  // Avoid re-entering the same tab
+  if (cur === n) return;
+
+  // If mid-transition, snap all screens to resting positions first
+  if (_transitioning) {
+    clearTimeout(_transitionTimer);
+    _snapAllScreens();
+    _transitioning = false;
+  }
+
   // Close any open overlays (modals) before switching screens
   document.querySelectorAll(".ov.active").forEach(o => o.classList.remove("active"));
-  // Deactivate all screens, then activate the target one
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  // Deactivate all nav items (.ni), then highlight the target nav button
+
+  // Determine slide direction from tab order indices
+  const curIdx = TAB_ORDER.indexOf(cur);
+  const nextIdx = TAB_ORDER.indexOf(n);
+  const goingRight = nextIdx > curIdx; // true = new tab is to the right
+
+  const outgoing = g("screen-" + cur);
+  const incoming = g("screen-" + n);
+
+  // Deactivate all nav items, then highlight the target
   document.querySelectorAll(".ni").forEach(v => v.classList.remove("active"));
-  g("screen-" + n)?.classList.add("active");
   g("nav-" + n)?.classList.add("active");
+
+  // Mark transition in progress
+  _transitioning = true;
+
+  if (goingRight) {
+    // Outgoing slides to the left, incoming slides in from the right (default position)
+    if (outgoing) {
+      outgoing.classList.remove("active");
+      outgoing.classList.add("slide-left");
+    }
+    if (incoming) {
+      // Incoming is already at translateX(100%) by default — just add .active
+      incoming.classList.remove("slide-left");
+      incoming.classList.add("active");
+    }
+  } else {
+    // Outgoing slides to the right (remove active, returns to translateX(100%))
+    // Incoming starts from the left and slides to center
+    if (incoming) {
+      // Temporarily disable transition, position incoming off-screen left
+      incoming.classList.add("no-transition", "slide-left");
+      incoming.classList.remove("active");
+      void incoming.offsetHeight; // force reflow
+      incoming.classList.remove("no-transition");
+      // Now animate it to center by adding active and removing slide-left
+      incoming.classList.remove("slide-left");
+      incoming.classList.add("active");
+    }
+    if (outgoing) {
+      outgoing.classList.remove("active", "slide-left");
+    }
+  }
+
+  // Clear slide-left from non-active screens after transition completes
+  _transitionTimer = setTimeout(() => {
+    _transitioning = false;
+    document.querySelectorAll(".screen:not(.active)").forEach(s => s.classList.remove("slide-left"));
+  }, 320);
+
   // Reset stagger entrance flags so animations play fresh on tab switch
   resetInvStagger();
   resetShopStagger();
   resetRecipeStagger();
+
   // Re-render the target screen's content so data is fresh on each visit
-  if (n === "home") renderHome();
+  // Set flag so stat counters animate from 0 on tab navigation (not background re-renders)
+  if (n === "home") { window._shouldAnimateCounters = true; renderHome(); }
   if (n === "inventory") renderInv();
   if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
   if (n === "shopping") renderShop();
   if (n === "insights") renderInsights();
+
   // Update context-aware FAB icon/action for the new tab
   _updateFAB(n);
 };
@@ -339,6 +417,7 @@ window.openShopAddCatPicker = openShopAddCatPicker;           // Open category p
 window.changeShopCategory = changeShopCategory;               // Change category on a shopping item detail
 window.openInvAddCatPicker = openInvAddCatPicker;             // Open category picker from Supplies add sheet
 window.changeInvCategory = changeInvCategory;                 // Change category on an inventory item detail
+window.toggleInvViewMode = toggleInvViewMode;                 // Toggle between list and shelf view in inventory
 window.openUniAddCatPicker = openUniAddCatPicker;             // Open category picker from universal add sheet
 window.openScanCatPicker = openScanCatPicker;                 // Open category picker from scan result screen
 

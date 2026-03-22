@@ -165,6 +165,110 @@ export function iH(item) {
   </div>`;
 }
 
+// ── SHELF VIEW ──────────────────────────────────────────────────────────────
+// Visual grid layout grouped by category. Items displayed as compact cards
+// on "shelves" (horizontal scrollable rows). Toggle between list/shelf views.
+
+// View mode persisted in localStorage: "list" (default) or "shelf"
+let _invViewMode = localStorage.getItem("ks-inv-view") || "list";
+
+/**
+ * toggleInvViewMode() — Switches between "list" and "shelf" view modes.
+ * Persists the choice in localStorage and re-renders the inventory.
+ */
+export function toggleInvViewMode() {
+  _invViewMode = _invViewMode === "list" ? "shelf" : "list";
+  localStorage.setItem("ks-inv-view", _invViewMode);
+  // Update toggle button visual state
+  const btn = g("inv-view-toggle");
+  if (btn) btn.classList.toggle("inv-view-active", _invViewMode === "shelf");
+  renderInv();
+}
+
+/**
+ * _renderInvShelf(items) — Renders items in a shelf/grid layout grouped by
+ * category. Each category becomes a horizontal scrollable row of item cards.
+ * Low-stock items are visually smaller with an amber border.
+ */
+function _renderInvShelf(items) {
+  // Group items by their guessed category
+  const groups = {};
+  for (const item of items) {
+    const cat = gcat(item) || "Other";
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(item);
+  }
+
+  // Sort category names alphabetically for consistent ordering
+  const sortedCats = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+  let html = "";
+  for (const cat of sortedCats) {
+    const catItems = groups[cat];
+    const emoji = CATS[cat] || "📦";
+
+    html += `<div class="shelf-row">
+      <div class="shelf-label">${emoji} ${cat}</div>
+      <div class="shelf-items">
+        ${catItems.map(item => {
+          const ic = getItemEmoji(item);
+          const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(item.unit);
+          const isLow = !item.doNotRestock && typeof item.qty === "number" && item.qty <= thresh && item.qty > 0;
+          return `<div class="shelf-item${isLow ? " shelf-item-low" : ""}" onclick="openInvItemDetail('${item.id}')">
+            <div class="shelf-emoji">${ic}</div>
+            <div class="shelf-name">${toTitleCase(item.scanTitle || item.name)}</div>
+            <div class="shelf-qty">${formatQty(item.qty)} ${pluralizeUnit(item.unit || "Unit", item.qty)}</div>
+          </div>`;
+        }).join("")}
+      </div>
+      <div class="shelf-line"></div>
+    </div>`;
+  }
+
+  return html;
+}
+
+// ── EXPIRY TIMELINE ──────────────────────────────────────────────────────────
+// Horizontal scrollable timeline strip showing items with expiry dates,
+// color-coded by urgency: red (expired), amber (expiring soon), green (OK).
+
+/**
+ * _renderExpiryTimeline() — Populates the #expiryTimeline container with
+ * a horizontal strip of items that have expiry dates, sorted soonest first.
+ * Hidden when no items have expiry dates set.
+ */
+function _renderExpiryTimeline() {
+  const el = g("expiryTimeline");
+  if (!el) return;
+
+  // Filter to items with an expiry date, sort soonest first
+  const withExpiry = state.inv
+    .filter(i => i.expiry)
+    .sort((a, b) => new Date(a.expiry) - new Date(b.expiry));
+
+  // Hide when no items have expiry dates
+  if (!withExpiry.length) {
+    el.style.display = "none";
+    el.innerHTML = "";
+    return;
+  }
+
+  el.style.display = "flex";
+
+  // Build timeline items with color-coded dots via xSt()
+  el.innerHTML = withExpiry.map(item => {
+    const s = xSt(item.expiry);
+    // Map xSt class to timeline dot color class
+    const dotClass = s ? (s.c === "expired" ? "exp-tl-red" : s.c === "expiring" ? "exp-tl-amber" : "exp-tl-green") : "exp-tl-green";
+    const label = s ? s.l : "";
+    return `<div class="exp-tl-item" onclick="openInvItemDetail('${item.id}')">
+      <div class="exp-tl-dot ${dotClass}"></div>
+      <div class="exp-tl-name">${toTitleCase(item.scanTitle || item.name)}</div>
+      <div class="exp-tl-date">${label}</div>
+    </div>`;
+  }).join("");
+}
+
 // Full re-render of the inventory list (#ibody).
 // The active tab (state.it) controls which sub-tab is shown:
 //   "all" – all items from all locations, sorted alphabetically
@@ -199,16 +303,27 @@ export function renderInv() {
     return;
   }
 
-  // Render flat list for the selected location sub-tab
-  c.innerHTML = `<div class="ilst">${f.map(iH).join("")}</div>`;
-  // Apply multi-select state if active
-  if (state.selectMode === "inv") {
-    document.querySelectorAll("#ibody .swipe-wrap").forEach(w => { w.classList.add("selecting"); if (state.selectedIds.has(w.dataset.id)) w.classList.add("selected"); });
+  // Render shelf view or flat list based on current view mode
+  if (_invViewMode === "shelf") {
+    c.innerHTML = _renderInvShelf(f);
+  } else {
+    // Render flat list for the selected location sub-tab
+    c.innerHTML = `<div class="ilst">${f.map(iH).join("")}</div>`;
+    // Apply multi-select state if active
+    if (state.selectMode === "inv") {
+      document.querySelectorAll("#ibody .swipe-wrap").forEach(w => { w.classList.add("selecting"); if (state.selectedIds.has(w.dataset.id)) w.classList.add("selected"); });
+    }
+    // Apply staggered entrance animation only on first render per tab activation.
+    // Subsequent re-renders (e.g. after checkoff, edit) skip animation to prevent flicker.
+    _applyInvStagger(c);
   }
 
-  // Apply staggered entrance animation only on first render per tab activation.
-  // Subsequent re-renders (e.g. after checkoff, edit) skip animation to prevent flicker.
-  _applyInvStagger(c);
+  // Update expiry timeline strip (shown above the main item list)
+  _renderExpiryTimeline();
+
+  // Sync view toggle button state
+  const vBtn = g("inv-view-toggle");
+  if (vBtn) vBtn.classList.toggle("inv-view-active", _invViewMode === "shelf");
 }
 
 // [ADJUST OVERLAY DISABLED] — All fields merged into detail sheet. Uncomment to restore.

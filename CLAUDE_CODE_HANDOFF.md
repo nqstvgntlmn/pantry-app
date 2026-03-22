@@ -535,6 +535,7 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
 - **Session 6:** Deals tab investigation (Flipp API planned), ongoing bug fixes
 - **Session 7:** ShopRite digital coupons via Azure proxy, email gate for beta users, Firestore cache (4hr TTL), On My List coupon matching, JWT expiry warning banner + daily cron job via Resend, dual PPC clipping (Bora + Bushra)
 - **Session 8:** Full UI modernization pass — see detailed changes below
+- **Session 9:** Major UX enhancements — sliding tab transitions, floating pill nav, home dashboard (quick chips, notifications, animated counters), shelf view + expiry timeline for Supplies, expanded aisle grouping (16 categories) + deal badges for Shopping
 
 ---
 
@@ -642,6 +643,97 @@ A comprehensive visual polish pass across all tabs. The dark gold identity is fu
 #### 21. Deal Card Enhancements
 - **File:** `src/styles.css`
 - **What:** "On My List" deal matches get green glassmorphism glow. All deal cards use glassmorphism background.
+
+---
+
+## Session 9 — Major UX Enhancements: Navigation, Dashboard, Shelf View, Aisle Grouping (March 2026)
+
+### Overview
+Transforms the app from a utility-first tool into an iOS-native-feeling experience with sliding tab transitions, a floating pill nav bar, a smart home dashboard, visual shelf layouts for inventory, and intelligent deal highlighting in shopping.
+
+### Phase 1: Navigation — Sliding Tab Transitions + Floating Nav
+
+#### Screen Transition System
+- **Files:** `src/styles.css`, `src/main.js`
+- **What:** Replaced `display:none/flex` screen toggling with CSS `transform:translateX()` positioning. All screens are always rendered but positioned off-screen. Transitioning uses `transform 300ms cubic-bezier(0.4, 0, 0.2, 1)`.
+- **Direction detection:** `showScreen()` compares `TAB_ORDER` indices — higher index = slide left (incoming from right), lower = slide right (incoming from left). Outgoing screen gets `.slide-left` class (`translateX(-33%)` for parallax effect) or loses `.active`.
+- **Mid-transition safety:** `_transitioning` flag + `_snapAllScreens()` force-resets all screens to resting positions if user taps another tab mid-animation.
+- **CSS classes:** `.screen` (default off-screen right), `.screen.active` (visible center), `.screen.slide-left` (off-screen left), `.screen.no-transition` (used to skip transition during position reset)
+- **Old animations removed:** `@keyframes screenEnter` and `@keyframes screenFadeIn` replaced with transform-based transitions.
+
+#### Floating Bottom Nav Pill
+- **File:** `src/styles.css`
+- **What:** `#NAV` changed from full-width bottom bar to a floating pill: `border-radius:28px`, positioned `bottom:calc(var(--safe) + 12px)` with `left:16px; right:16px`. Semi-transparent dark glass (`rgba(20,17,14,0.72)` + `backdrop-filter:blur(24px)`).
+- **Active indicator:** Small gold dot below label (`.ni::after`) instead of top gradient line.
+- **FAB repositioned:** Now sits above the floating pill (`bottom:calc(var(--safe) + 56px + 12px + 16px)`).
+- **Content padding:** All screen bodies (`.hbody`, `.ibody`, etc.) have `padding-bottom:calc(56px + var(--safe) + 40px)` so content scrolls under the nav.
+
+### Phase 2: Home — Live Dashboard
+
+#### Quick-Access Chips
+- **Files:** `src/ui/home.js` (`renderQuickChips()`), `index.html`
+- **What:** Horizontal scrollable row of shortcut buttons below the greeting. Chips: "📷 Scan barcode", "＋ Quick add", "🛒 Shopping list", "📦 What's expiring". Each calls an existing window function.
+- **Container:** `<div id="quick-chips" class="chip-row">` in `.hbody`
+- **Renders once:** Uses `el.dataset.rendered` flag since chips are static.
+
+#### Smart Notifications Strip
+- **Files:** `src/ui/home.js` (`renderNotifications()`), `index.html`
+- **What:** Horizontal scrollable strip of contextual alert pills. Sources: expired items (red), expiring soon (amber), low stock (amber), shopping list count (blue), coupon matches (gold).
+- **Container:** `<div id="notif-strip" class="notif-strip">` in `.hbody`
+- **Coupon count:** Imports `getShoppingListCouponMatchCount()` from `shopping.js` — naturally returns 0 for non-whitelisted users.
+- **CSS classes:** `.notif-pill`, `.notif-danger`, `.notif-warn`, `.notif-deal`, `.notif-info`
+
+#### Animated Stat Counters
+- **File:** `src/ui/home.js` (`renderSum()`, `_animateCounter()`)
+- **What:** On tab navigation to Home, stat counters animate from 0 to target over 600ms with ease-out cubic easing.
+- **Flag:** `window._shouldAnimateCounters` set by `showScreen("home")` in `main.js`, consumed once by `renderSum()`. Background re-renders don't trigger animation.
+
+### Phase 3: Supplies — Shelf View + Expiry Timeline
+
+#### Shelf View
+- **File:** `src/ui/inventory.js` (`_renderInvShelf()`, `toggleInvViewMode()`)
+- **What:** New visual grid layout grouped by category (via `gcat()`). Each category = horizontal scrollable shelf row of item cards. Cards show emoji + name + qty. Low-stock items get `.shelf-item-low` class (amber border, slight scale down).
+- **Toggle:** `_invViewMode` persisted in localStorage `ks-inv-view`. Toggle button `#inv-view-toggle` (🗄) in inventory header.
+- **CSS classes:** `.shelf-row`, `.shelf-label`, `.shelf-items`, `.shelf-item`, `.shelf-item-low`, `.shelf-emoji`, `.shelf-name`, `.shelf-qty`, `.shelf-line`
+
+#### Expiry Timeline
+- **File:** `src/ui/inventory.js` (`_renderExpiryTimeline()`)
+- **What:** Horizontal scrollable strip between inventory tabs and item list. Shows items with expiry dates sorted soonest-first. Color-coded dots: red (expired), amber (expiring), green (OK) via `xSt()`.
+- **Container:** `<div id="expiryTimeline" class="expiry-timeline">` in `index.html`
+- **Hidden when:** No items have expiry dates.
+- **CSS classes:** `.expiry-timeline`, `.exp-tl-item`, `.exp-tl-dot`, `.exp-tl-red`, `.exp-tl-amber`, `.exp-tl-green`
+
+### Phase 4: Shopping — Enhanced Aisle Grouping + Deal Highlighting
+
+#### Expanded Aisle Categories
+- **File:** `src/helpers.js` (`AISLES`, `AISLE_ICONS`)
+- **What:** Expanded from 6 categories to 16: Produce, Meat & Fish, Bakery, Deli, Dairy & Eggs, Frozen, Canned Goods, Condiments & Sauces, Baking, Pantry, Snacks & Drinks, Paper & Cleaning, Baby, Pet, Health & Beauty, Other.
+- **Moved items:** Bread → Bakery, flour/sugar → Baking, beans/lentils/stock → Canned Goods, bacon → Meat & Fish (removed from Pantry).
+- **New export:** `AISLE_ICONS` — emoji per category for rich dividers.
+- **Store aisle orders updated:** All 13 stores in `_STORE_AISLE_ORDER` now include the new categories in store-specific walk-through order.
+
+#### Rich Aisle Dividers
+- **File:** `src/ui/shopping.js` (`renderShop()`)
+- **What:** Plain `<div class="shsec">` section headers replaced with rich `.aisle-divider` components showing icon + name + item count badge.
+- **CSS classes:** `.aisle-divider`, `.aisle-icon`, `.aisle-name`, `.aisle-count`
+
+#### Deal Highlighting Badges
+- **File:** `src/ui/shopping.js` (`_computeDealMatchIds()`, `sH()`)
+- **What:** Shopping list items with matching coupons or deals show a gold "💰 Deal" badge. Pre-computed at start of `renderShop()` into `_dealMatchIds` Set for O(1) per-item lookup.
+- **Performance:** Single pass through all coupons + deals per render, not per-item.
+- **Email gate:** Naturally respected — `_allCoupons` and `_allDeals` are empty for non-whitelisted users so badge never appears.
+- **Interaction:** Tapping badge jumps to Deals tab (`setSHT('deals')`).
+- **CSS class:** `.deal-badge`
+
+#### Coupon Match Count Export
+- **File:** `src/ui/shopping.js` (`getShoppingListCouponMatchCount()`)
+- **What:** New export that returns the count of coupons matching active shopping list items. Used by home screen notification strip.
+
+### Architecture Notes
+- **Window registrations added in `main.js`:** `toggleInvViewMode`
+- **Import additions:** `AISLE_ICONS` in shopping.js, `getShoppingListCouponMatchCount` in home.js
+- **No API changes.** All enhancements are client-side UI/UX.
+- **No changes to `api/sync-reminders.js` or `api/completed-items.js`.**
 
 ---
 
