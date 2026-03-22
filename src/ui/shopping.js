@@ -2779,7 +2779,37 @@ let _allDeals = [];              // Full deal list from API (unfiltered)
 let _dealStores = [];            // Store metadata from API (name, count, validTo)
 let _dealPage = 0;               // Current page for "show more" pagination
 let _activeStoreCat = "all";     // Active store filter chip
-const DEALS_PER_PAGE = 20;      // How many deals to show per page load
+const DEALS_PER_PAGE = 10;      // How many deals to show per page load (keeps scroll manageable)
+
+// Collapse state for the two main Deals tab sections
+let _couponsCollapsed = false;   // Whether ShopRite Digital Coupons section is collapsed
+let _dealsCollapsed = false;     // Whether Weekly Circular Deals section is collapsed
+
+/**
+ * toggleCouponsSection() — Collapse/expand the ShopRite Digital Coupons section.
+ * Hides all content below the header (search, chips, cards, pagination).
+ * Toggles the chevron indicator between ▼ (open) and ▶ (closed).
+ */
+export function toggleCouponsSection() {
+  _couponsCollapsed = !_couponsCollapsed;
+  const body = g("coupons-section-body");
+  const chevron = g("coupons-chevron");
+  if (body) body.style.display = _couponsCollapsed ? "none" : "";
+  if (chevron) chevron.textContent = _couponsCollapsed ? "▶" : "▼";
+}
+
+/**
+ * toggleDealsSection() — Collapse/expand the Weekly Circular Deals section.
+ * Hides all content below the header (search, chips, cards, pagination).
+ * Toggles the chevron indicator between ▼ (open) and ▶ (closed).
+ */
+export function toggleDealsSection() {
+  _dealsCollapsed = !_dealsCollapsed;
+  const body = g("deals-section-body");
+  const chevron = g("deals-chevron");
+  if (body) body.style.display = _dealsCollapsed ? "none" : "";
+  if (chevron) chevron.textContent = _dealsCollapsed ? "▶" : "▼";
+}
 
 /**
  * renderDealsZipBanner() — Shows the user's configured zipcode in the Deals tab,
@@ -2894,25 +2924,38 @@ export async function refreshFlippDeals() {
   if (btn) { btn.textContent = "↻ Refresh"; btn.disabled = false; }
 }
 
+// Fixed set of store filter chips — matches the stores served by the Flipp API.
+// Displayed in the Weekly Circular Deals section regardless of which stores
+// returned data. Count shows 0 if a store has no deals this week.
+const DEAL_STORE_CHIPS = ["Walmart", "ALDI", "Stop & Shop", "Wegmans"];
+
 /**
  * renderDealStoreChips() — Build horizontally scrollable store filter chips
- * from the loaded weekly deals. Tapping a chip filters deals to one store.
+ * for the Weekly Circular Deals section. Uses a fixed set of store names
+ * (same pattern as the ShopRite category chips) with live counts from loaded data.
  */
 function renderDealStoreChips() {
   const container = g("deals-store-chips");
   if (!container) return;
 
-  // If no stores loaded yet, hide the chips container
-  if (!_dealStores.length) { container.innerHTML = ""; return; }
-
-  // Build chips: "All" chip + one chip per store with deal count
-  let html = `<button class="coupon-chip${_activeStoreCat === "all" ? " active" : ""}" onclick="filterDealStore('all')">All (${_allDeals.length})</button>`;
-  _dealStores.forEach(s => {
-    const active = _activeStoreCat === s.name ? " active" : "";
-    // Escape store names with apostrophes (e.g. "Wegman's")
-    const safeName = s.name.replace(/'/g, "\\'");
-    html += `<button class="coupon-chip${active}" onclick="filterDealStore('${safeName}')">${s.name} (${s.count})</button>`;
+  // Build a count map from loaded deals for quick lookup
+  const countMap = {};
+  _allDeals.forEach(d => {
+    const store = d.store || "";
+    countMap[store] = (countMap[store] || 0) + 1;
   });
+
+  // "All" chip shows total deal count across all stores
+  let html = `<button class="coupon-chip${_activeStoreCat === "all" ? " active" : ""}" onclick="filterDealStore('all')">All (${_allDeals.length})</button>`;
+
+  // One chip per fixed store — always shown even if count is 0
+  DEAL_STORE_CHIPS.forEach(store => {
+    const count = countMap[store] || 0;
+    const active = _activeStoreCat === store ? " active" : "";
+    const safeName = store.replace(/'/g, "\\'");
+    html += `<button class="coupon-chip${active}" onclick="filterDealStore('${safeName}')">${store} (${count})</button>`;
+  });
+
   container.innerHTML = html;
 }
 
@@ -3311,7 +3354,7 @@ let _allCoupons = [];           // Full coupon list from API (unfiltered)
 let _clippedIds = new Set();    // Set of coupon IDs already clipped to PPC
 let _couponPage = 0;            // Current page for "show more" pagination
 let _activeCouponCat = "all";   // Active category filter chip
-const COUPONS_PER_PAGE = 20;    // How many coupons to show per page load
+const COUPONS_PER_PAGE = 10;    // How many coupons to show per page load (keeps scroll manageable)
 
 /**
  * loadCoupons() — Fetch digital coupons from ShopRite API (or Firestore cache).
