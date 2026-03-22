@@ -110,12 +110,13 @@ const TAB_ORDER = ["home", "inventory", "recipes", "shopping", "insights", "chat
 let _transitioning = false;
 let _transitionTimer = null;
 
-// _currentTab() — returns the currently active tab name by checking which screen is visible.
+// _currentTab() — returns the currently active tab name by checking which screen
+// has the .active class, or null if no screen is active yet (initial boot).
 function _currentTab() {
   for (const t of TAB_ORDER) {
     if (g("screen-" + t)?.classList.contains("active")) return t;
   }
-  return "home";
+  return null;
 }
 
 // _snapAllScreens() — immediately snap all screens to their resting positions
@@ -133,10 +134,37 @@ function _snapAllScreens() {
 // showScreen(n) — switch to the named screen with a directional slide transition.
 // Determines slide direction from TAB_ORDER index: navigating right = outgoing slides left,
 // navigating left = incoming slides in from the left.
+// On first call (no screen active yet), skip the transition and snap the target visible.
 window.showScreen = function(n) {
   const cur = _currentTab();
-  // Avoid re-entering the same tab
+
+  // Avoid re-entering the same tab (only when a tab is actually active)
   if (cur === n) return;
+
+  // ── First-load fast path ──
+  // On initial boot, no screen has .active yet (_currentTab() returns null).
+  // Snap the target screen visible instantly — no slide transition needed.
+  // This fixes the blank Home tab bug where the early-exit guard above would
+  // skip activation because _currentTab() used to fall back to "home".
+  if (cur === null) {
+    console.log("[showScreen] First load — snapping", n, "visible (no transition)");
+    const target = g("screen-" + n);
+    if (target) {
+      target.classList.add("no-transition", "active");
+      void target.offsetHeight; // force reflow so no-transition takes effect
+      target.classList.remove("no-transition");
+    }
+    // Highlight the correct nav item
+    document.querySelectorAll(".ni").forEach(v => v.classList.remove("active"));
+    g("nav-" + n)?.classList.add("active");
+    // Trigger initial render for the target screen (e.g. renderHome for skeleton/loading state)
+    if (n === "home") { window._shouldAnimateCounters = true; renderHome(); }
+    if (n === "inventory") renderInv();
+    if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
+    if (n === "shopping") renderShop();
+    if (n === "insights") renderInsights();
+    return;
+  }
 
   // If mid-transition, snap all screens to resting positions first
   if (_transitioning) {
@@ -942,11 +970,14 @@ window._appStart = async function(code) {
   }
 
   // Hide the login screen ("LS") and show the main app container ("APP")
+  console.log("[_appStart] Hiding login screen, showing app container");
   g("LS").style.display = "none";
   g("APP").style.display = "flex";
 
   // Navigate to the home screen as the default landing page
+  console.log("[_appStart] Calling showScreen('home'), current active screen:", _currentTab());
   window.showScreen("home");
+  console.log("[_appStart] After showScreen('home'), active screen:", _currentTab());
 
   // Show the "syncing" indicator in the UI (e.g. a spinner or status dot)
   ss("syncing");

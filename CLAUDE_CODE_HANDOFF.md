@@ -828,3 +828,25 @@ to every function and every major code block — this is non-negotiable.
 - `src/ui/home.js` — `renderHome()` guards on `state.homeDataReady`, shows/hides skeleton
 - `src/main.js` — sets `state.homeDataReady = true` after data loads in `_appStart()`
 - `src/styles.css` — `.home-skeleton` and `.home-skeleton.hidden` transition styles
+
+### Home Tab Blank Screen — Tab Transition System Bug (Second Fix)
+
+**Problem:** Despite the loading skeleton fix above, the Home tab still rendered blank on initial load. The skeleton and all home content were invisible because the `#screen-home` element never received the `.active` CSS class, leaving it at `transform:translateX(100%); visibility:hidden`.
+
+**Root cause:** The slide transition system introduced with the floating nav had a race condition in `showScreen()`:
+1. At app boot, `_appStart()` calls `showScreen("home")` (line ~969)
+2. At that point, NO `.screen` element has the `.active` class yet
+3. `_currentTab()` found no active screen and returned the fallback `"home"`
+4. The guard `if (cur === n) return` saw `cur === "home"` and `n === "home"` → **early exit**
+5. The home screen never got `.active` → CSS kept it off-screen and hidden
+6. Switching to another tab and back worked because then `_currentTab()` returned the other tab, so the guard didn't trigger
+
+**Fix (in `src/main.js`):**
+1. Changed `_currentTab()` to return `null` (not `"home"`) when no screen has `.active` — this correctly represents the "no tab is active yet" state
+2. Added a **first-load fast path** in `showScreen()`: when `cur === null`, skip the slide transition entirely and snap the target screen visible instantly using `no-transition` + `active` classes. Also triggers the initial render for the target screen (e.g. `renderHome()`)
+3. The existing guard `if (cur === n) return` still works for subsequent calls since `_currentTab()` now returns the actual active tab name (never null after first activation)
+4. The swipe-to-switch handler (`_initTabSwipe`) already handled null safely via `TAB_ORDER.indexOf(null) === -1 → return`
+5. Added `console.log` debug statements in `_appStart()` to trace the initialization sequence
+
+**Files changed:**
+- `src/main.js` — `_currentTab()` returns null instead of "home" fallback; `showScreen()` has first-load fast path; debug logging in `_appStart()`
