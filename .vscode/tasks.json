@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Opens the Simple Browser panel to the local dev server on workspace load.
+      // Uses VS Code's URI handler to launch Simple Browser automatically
+      // so you always have a live preview when opening this project.
+      "label": "Open Simple Browser to Dev Server",
+      "type": "process",
+      "command": "code",
+      "args": [
+        "--open-url",
+        "vscode://simpleBrowser.api/open?url=http%3A%2F%2Flocalhost%3A5173"
+      ],
+      "presentation": {
+        "reveal": "silent",
+        "close": true
+      },
+      "runOptions": {
+        // Automatically run this task when the workspace folder is opened
+        "runOn": "folderOpen"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

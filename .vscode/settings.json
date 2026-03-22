@@ -1,0 +1,25 @@
+{
+  // ─── File Saving ───
+  // Auto-save files whenever they change (no manual Cmd+S needed)
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1000,
+
+  // ─── Formatting ───
+  // Run Prettier on every save to keep code style consistent
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  // ─── Terminal ───
+  // Default integrated terminal to zsh
+  "terminal.integrated.defaultProfile.osx": "zsh",
+
+  // ─── Simple Browser ───
+  // Restore editors (including Simple Browser) when reopening the workspace
+  "workbench.editor.restoreViewState": true,
+  "workbench.startupEditor": "none",
+
+  // ─── Project-specific overrides ───
+  // Use 2-space indentation to match existing codebase style
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true
+}

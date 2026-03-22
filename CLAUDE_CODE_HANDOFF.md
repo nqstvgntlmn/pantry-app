@@ -1313,3 +1313,55 @@ Added a macOS Finder-clickable shell script (`start-dev.command`) so Bora can do
 ### Files Added
 - `start-dev.command` — Finder-clickable dev launcher (gitignored)
 - `.gitignore` — Excludes local-only convenience files
+
+---
+
+## Session 12 — macOS Launch Agent for Auto-Start Dev Server (March 2026)
+
+### Overview
+Added a macOS Launch Agent plist that automatically starts `npm run dev:full` (Vite + dev API server) whenever Bora logs into macOS. This replaces the need to manually double-click `start-dev.command` or open a terminal — the dev environment is always ready after login.
+
+### Changes Made
+
+#### 1. `~/Library/LaunchAgents/com.kitchen.devserver.plist` — Launch Agent
+- **What:** A standard macOS Launch Agent plist file that runs `npm run dev:full` from `~/pantry-app` on user login.
+- **Why:** Eliminates the manual step of starting the dev server entirely. The dev environment is always available after logging in.
+- **How:** Uses `launchd` (macOS's init system). `KeepAlive` restarts the process if it crashes. `ThrottleInterval` of 5 seconds prevents rapid restart loops. Logs stdout/stderr to `~/Library/Logs/kitchen-dev.log`. Sets `PATH` explicitly since Launch Agents don't inherit shell profile paths.
+- **Location:** `~/Library/LaunchAgents/com.kitchen.devserver.plist` (outside repo — user-level system config).
+
+### Management Commands
+- **Load (start immediately):** `launchctl load ~/Library/LaunchAgents/com.kitchen.devserver.plist`
+- **Unload (stop):** `launchctl unload ~/Library/LaunchAgents/com.kitchen.devserver.plist`
+- **Check status:** `launchctl list | grep kitchen`
+- **View logs:** `tail -f ~/Library/Logs/kitchen-dev.log`
+
+---
+
+## Session 13 — VS Code Workspace Settings (March 2026)
+
+### Overview
+Added `.vscode/settings.json` and `.vscode/tasks.json` to standardize the VS Code workspace layout for this project. These files configure auto-save, Prettier formatting on save, zsh as default terminal, and auto-open the Simple Browser to the local dev server (`http://localhost:5173`) on workspace load.
+
+### Changes Made
+
+#### 1. `.vscode/settings.json` — Workspace Preferences
+- **What:** VS Code settings file that configures editor behavior for this project.
+- **Why:** Ensures consistent development experience — files auto-save, code gets formatted by Prettier on save, and the terminal defaults to zsh.
+- **Settings included:**
+  - `files.autoSave: "afterDelay"` (1s delay) — auto-saves files on change
+  - `editor.formatOnSave: true` with Prettier as default formatter
+  - `terminal.integrated.defaultProfile.osx: "zsh"` — default terminal to zsh
+  - `workbench.editor.restoreViewState: true` — restores editor layout including Simple Browser
+  - `editor.tabSize: 2` — matches existing codebase indentation
+
+#### 2. `.vscode/tasks.json` — Auto-Open Simple Browser
+- **What:** A VS Code task configured to run on folder open that launches Simple Browser to `http://localhost:5173`.
+- **Why:** Automatically shows the dev server preview whenever the workspace is opened, so Bora always has a live view of the app alongside the code.
+- **How:** Uses `runOptions.runOn: "folderOpen"` to trigger on workspace open, then calls `code --open-url` with the Simple Browser URI handler. VS Code may prompt to allow automatic tasks on first load — select "Allow".
+
+### Files Added
+- `.vscode/settings.json` — Workspace editor preferences (auto-save, Prettier, zsh terminal)
+- `.vscode/tasks.json` — Auto-open Simple Browser to dev server on startup
+
+### Note
+The first time you open the workspace after adding these files, VS Code may show a prompt asking "This workspace has tasks that run automatically. Allow?" — click **Allow** to enable the Simple Browser auto-open behavior.
