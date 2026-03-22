@@ -82,6 +82,10 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .bf{width:100%}.bsm{padding:8px 15px;font-size:.8rem;border-radius:10px}
 .brow{display:flex;gap:8px;margin-top:16px}
 
+/* Page-size selector buttons — active state highlights the currently selected size */
+.page-size-btn{min-width:38px;padding:6px 10px !important;font-size:.75rem !important}
+.page-size-btn.active{background:var(--ac) !important;color:#fff !important;border-color:var(--ac) !important}
+
 /* ── UTILS ── */
 .sdot{width:7px;height:7px;border-radius:50%;background:var(--mt);display:inline-block;transition:background .3s;flex-shrink:0}
 .sdot.synced{background:var(--gn)}.sdot.syncing{background:var(--ac);animation:pulse 1s infinite}.sdot.error{background:var(--rd)}

@@ -2777,9 +2777,9 @@ function _setCacheNote(listEl, fromCache, noteId) {
 let _dealsLoaded = false;        // Whether weekly deals have been fetched this session
 let _allDeals = [];              // Full deal list from API (unfiltered)
 let _dealStores = [];            // Store metadata from API (name, count, validTo)
-let _dealPage = 0;               // Current page for "show more" pagination
+let _dealPage = 0;               // Current page for "show more" pagination (unused with page-size selector, kept for compat)
 let _activeStoreCat = "all";     // Active store filter chip
-const DEALS_PER_PAGE = 10;      // How many deals to show per page load (keeps scroll manageable)
+let _dealsPageSize = 10;         // User-selected page size (10, 25, 50, or Infinity for "All")
 
 // Collapse state for the two main Deals tab sections
 let _couponsCollapsed = false;   // Whether ShopRite Digital Coupons section is collapsed
@@ -2809,6 +2809,22 @@ export function toggleDealsSection() {
   const chevron = g("deals-chevron");
   if (body) body.style.display = _dealsCollapsed ? "none" : "";
   if (chevron) chevron.textContent = _dealsCollapsed ? "▶" : "▼";
+}
+
+/**
+ * _highlightActivePageSize(section, currentSize) — Highlights the active page-size
+ * button in a pagination selector. Adds "active" class to the matching button and
+ * removes it from all others. Works for both "coupons" and "deals" sections.
+ * @param {string} section - "coupons" or "deals"
+ * @param {number} currentSize - Current page size (10, 25, 50, or Infinity)
+ */
+function _highlightActivePageSize(section, currentSize) {
+  // Convert Infinity to "all" to match the data-size attribute in HTML
+  const sizeStr = currentSize === Infinity ? "all" : String(currentSize);
+  const buttons = document.querySelectorAll(`.page-size-btn[data-section="${section}"]`);
+  buttons.forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.size === sizeStr);
+  });
 }
 
 /**
@@ -3120,8 +3136,8 @@ function renderDealCards() {
   listEl.appendChild(allHeader);
 
   if (rest.length) {
-    // Paginate the "All Deals" section — show DEALS_PER_PAGE at a time
-    const limit = (_dealPage + 1) * DEALS_PER_PAGE;
+    // Paginate the "All Deals" section — show up to _dealsPageSize items
+    const limit = _dealsPageSize;
     const visible = rest.slice(0, limit);
     const hasMore = rest.length > limit;
 
@@ -3129,9 +3145,10 @@ function renderDealCards() {
       listEl.appendChild(buildDealCard(deal));
     });
 
-    // Show/hide "Show more" button based on remaining deals
+    // Show page-size selector when there are more items than the smallest option (10)
     if (moreEl) {
-      moreEl.style.display = hasMore ? "block" : "none";
+      moreEl.style.display = rest.length > 10 ? "block" : "none";
+      _highlightActivePageSize("deals", _dealsPageSize);
     }
   } else {
     // All deals matched the list — nothing left for "All Deals"
@@ -3332,11 +3349,21 @@ export async function dealsFromList() {
 }
 
 /**
- * loadMoreDeals() — Show the next page of deal cards.
- * Called when user taps "Show more deals" button.
+ * setDealsPageSize(size) — Update how many deal cards are shown at once.
+ * Called when user taps a page-size option (10, 25, 50, or Infinity for "All").
+ * Re-renders the deal list immediately with the new limit.
+ */
+export function setDealsPageSize(size) {
+  _dealsPageSize = size;
+  renderDealCards();
+}
+
+/**
+ * loadMoreDeals() — Legacy "show more" handler, kept for backward compatibility.
+ * Now simply bumps the page size to show 10 more items.
  */
 export function loadMoreDeals() {
-  _dealPage++;
+  _dealsPageSize += 10;
   renderDealCards();
 }
 
@@ -3352,9 +3379,9 @@ export function loadMoreDeals() {
 let _couponsLoaded = false;     // Whether coupons have been fetched this session
 let _allCoupons = [];           // Full coupon list from API (unfiltered)
 let _clippedIds = new Set();    // Set of coupon IDs already clipped to PPC
-let _couponPage = 0;            // Current page for "show more" pagination
+let _couponPage = 0;            // Current page for "show more" pagination (unused with page-size selector, kept for compat)
 let _activeCouponCat = "all";   // Active category filter chip
-const COUPONS_PER_PAGE = 10;    // How many coupons to show per page load (keeps scroll manageable)
+let _couponsPageSize = 10;      // User-selected page size (10, 25, 50, or Infinity for "All")
 
 /**
  * loadCoupons() — Fetch digital coupons from ShopRite API (or Firestore cache).
@@ -3705,8 +3732,8 @@ function renderCouponCards() {
   // Clear and rebuild the list
   listEl.innerHTML = "";
 
-  // Paginate the filtered results — show COUPONS_PER_PAGE at a time
-  const limit = (_couponPage + 1) * COUPONS_PER_PAGE;
+  // Paginate the filtered results — show up to _couponsPageSize items
+  const limit = _couponsPageSize;
   const visible = filtered.slice(0, limit);
   const hasMore = filtered.length > limit;
 
@@ -3714,9 +3741,10 @@ function renderCouponCards() {
     listEl.appendChild(buildCouponCard(coupon));
   });
 
-  // Show/hide "Show more" button based on remaining coupons
+  // Show page-size selector when there are more items than the smallest option (10)
   if (moreEl) {
-    moreEl.style.display = hasMore ? "block" : "none";
+    moreEl.style.display = filtered.length > 10 ? "block" : "none";
+    _highlightActivePageSize("coupons", _couponsPageSize);
   }
 }
 
@@ -3875,10 +3903,20 @@ export async function clipCoupon(couponId) {
 }
 
 /**
- * loadMoreCoupons() — Show the next page of coupon cards.
- * Called when user taps "Show more coupons" button.
+ * setCouponsPageSize(size) — Update how many coupon cards are shown at once.
+ * Called when user taps a page-size option (10, 25, 50, or Infinity for "All").
+ * Re-renders the coupon list immediately with the new limit.
+ */
+export function setCouponsPageSize(size) {
+  _couponsPageSize = size;
+  renderCouponCards();
+}
+
+/**
+ * loadMoreCoupons() — Legacy "show more" handler, kept for backward compatibility.
+ * Now simply bumps the page size to show 10 more items.
  */
 export function loadMoreCoupons() {
-  _couponPage++;
+  _couponsPageSize += 10;
   renderCouponCards();
 }

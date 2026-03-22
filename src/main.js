@@ -48,7 +48,7 @@ import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit,
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, loadFlippDeals, refreshFlippDeals, filterDealStore, filterDealsLocal, loadMoreDeals, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, editShopDetailCombined, saveShopDetailCombined, initShopQtyToolbar, shopQtyStep, shopFracChange, toggleShopDone, resetShopStagger, openShopAddCatPicker, changeShopCategory, loadCoupons, refreshCoupons, searchCoupons, filterCouponCat, filterCouponsLocal, clipCoupon, loadMoreCoupons, toggleCouponsSection, toggleDealsSection } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, loadFlippDeals, refreshFlippDeals, filterDealStore, filterDealsLocal, loadMoreDeals, setDealsPageSize, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, editShopDetailCombined, saveShopDetailCombined, initShopQtyToolbar, shopQtyStep, shopFracChange, toggleShopDone, resetShopStagger, openShopAddCatPicker, changeShopCategory, loadCoupons, refreshCoupons, searchCoupons, filterCouponCat, filterCouponsLocal, clipCoupon, loadMoreCoupons, setCouponsPageSize, toggleCouponsSection, toggleDealsSection } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -312,6 +312,7 @@ window.refreshFlippDeals = refreshFlippDeals; // Force-refresh weekly deals (byp
 window.filterDealStore = filterDealStore;     // Filter deals by store chip (Walmart, ALDI, etc.)
 window.filterDealsLocal = filterDealsLocal;   // Live filter as user types in deals search
 window.loadMoreDeals = loadMoreDeals;         // Show next page of deal cards
+window.setDealsPageSize = setDealsPageSize;   // Set deals page size (10, 25, 50, All)
 // ── ShopRite digital coupon handlers ──
 window.loadCoupons = loadCoupons;             // Fetch and display ShopRite digital coupons
 window.refreshCoupons = refreshCoupons;       // Force-refresh coupons (bypass cache)
@@ -320,6 +321,7 @@ window.filterCouponCat = filterCouponCat;     // Filter coupons by category chip
 window.filterCouponsLocal = filterCouponsLocal; // Live filter as user types in coupon search
 window.clipCoupon = clipCoupon;               // Clip a coupon to the household's Price Plus Card
 window.loadMoreCoupons = loadMoreCoupons;     // Show next page of coupon cards
+window.setCouponsPageSize = setCouponsPageSize; // Set coupons page size (10, 25, 50, All)
 window.toggleCouponsSection = toggleCouponsSection; // Collapse/expand ShopRite coupons section
 window.toggleDealsSection = toggleDealsSection;     // Collapse/expand Weekly Circular Deals section
 // clrChk — delete all checked (purchased) items from the shopping list.

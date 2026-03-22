@@ -258,9 +258,13 @@
             <div id="coupon-status" style="font-size:.8rem;color:var(--mt);padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
             <!-- Coupon cards grid -->
             <div id="coupon-list"></div>
-            <!-- Load more / pagination (10 per page) -->
+            <!-- Pagination size selector — lets user choose how many coupons to display -->
             <div id="coupon-more" style="display:none;text-align:center;margin-top:10px">
-              <button class="btn bs bsm" onclick="loadMoreCoupons()">Show more coupons</button>
+              <span style="font-size:.75rem;color:var(--mt);margin-right:4px">Show:</span>
+              <button class="btn bs bsm page-size-btn" data-section="coupons" data-size="10" onclick="setCouponsPageSize(10)">10</button>
+              <button class="btn bs bsm page-size-btn" data-section="coupons" data-size="25" onclick="setCouponsPageSize(25)">25</button>
+              <button class="btn bs bsm page-size-btn" data-section="coupons" data-size="50" onclick="setCouponsPageSize(50)">50</button>
+              <button class="btn bs bsm page-size-btn" data-section="coupons" data-size="all" onclick="setCouponsPageSize(Infinity)">All</button>
             </div>
           </div>
         </div>
@@ -289,9 +293,13 @@
             <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:10px;padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
             <!-- Deal cards list (with On My List + All Deals subsections) -->
             <div id="dealslist"></div>
-            <!-- Load more pagination button (10 per page) -->
+            <!-- Pagination size selector — lets user choose how many deals to display -->
             <div id="deals-more" style="display:none;text-align:center;margin-top:10px">
-              <button class="btn bs bsm" onclick="loadMoreDeals()">Show more deals</button>
+              <span style="font-size:.75rem;color:var(--mt);margin-right:4px">Show:</span>
+              <button class="btn bs bsm page-size-btn" data-section="deals" data-size="10" onclick="setDealsPageSize(10)">10</button>
+              <button class="btn bs bsm page-size-btn" data-section="deals" data-size="25" onclick="setDealsPageSize(25)">25</button>
+              <button class="btn bs bsm page-size-btn" data-section="deals" data-size="50" onclick="setDealsPageSize(50)">50</button>
+              <button class="btn bs bsm page-size-btn" data-section="deals" data-size="all" onclick="setDealsPageSize(Infinity)">All</button>
             </div>
           </div>
         </div>
