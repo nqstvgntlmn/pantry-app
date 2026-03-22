@@ -26,20 +26,14 @@
 1. **NEVER modify `api/sync-reminders.js` or `api/completed-items.js`** under any circumstances, unless a change being made directly impacts these files and Bora has explicitly approved it.
 2. **ALWAYS add clear, utilitarian comments** to every function and every major code block — this is non-negotiable.
 3. **Always double-check with Bora** before making changes that affect both Shopping and Supplies tabs.
-4. **Bora pushes to GitHub via Claude Code.** Always end prompts with push commands.
+4. **Bora pushes to GitHub himself.** Deliver files and make commits, but NEVER include push commands (git push) at the end of responses. Push commands are provided to Bora externally in chat.
 5. **Never break existing features** when adding new ones.
 6. **Mobile-first (iPhone).** 44px tap targets, safe area insets, smooth animations.
 7. **Design quality matters.** DM Sans font, CSS custom properties, card-based UI, `border-radius: 14px`.
 8. **Firestore is the source of truth.** localStorage is only for device-specific settings.
 9. **When in doubt, ask before building.** One clarifying question is better than building the wrong thing.
 10. **Any user correction or manual selection** (title, subtitle, category, unit, location, or any future field) must be saved permanently to `customProducts/{barcode}` or `productPreferences/{normalizedName}` in Firestore. User corrections always take priority over auto-mapping.
-11. **After every response involving a code change**, always end with push commands in this format:
-```
-cd ~/pantry-app
-git add .
-git commit -m "[relevant message]"
-git push origin main
-```
+11. **NEVER include push commands at the end of responses.** Push commands are always provided to Bora externally in chat — Claude Code must not output them. Only deliver code changes and commits.
 12. **Every terminal prompt given to Bora must be in a copyable code block, on separate lines** — no `&&` chaining. Each command goes on its own line so Bora can copy and run them one at a time.
 13. **Every Claude Code prompt must end with the standing protection footer:**
 ```
