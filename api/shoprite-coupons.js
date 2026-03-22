@@ -1,22 +1,50 @@
 // ── SHOPRITE DIGITAL COUPONS API ─────────────────────────────────────────────
 // Serverless function that fetches ShopRite digital coupons and clips them
-// to the household's Price Plus Card (PPC). Uses the Wakefern/ShopRite
-// storefront gateway API to browse and clip digital coupons.
+// to the household's Price Plus Card (PPC).
 //
-// Actions:
+// ── BACKEND: Wakefern Azure "Digital Coupon Center" Proxy ────────────────────
+// Uses shop-rite-web-prod.azurewebsites.net — an Azure App Service that hosts
+// ShopRite's "Digital Coupon Center" Angular SPA and proxies coupon API calls.
+// This endpoint is NOT behind Cloudflare (unlike storefrontgateway.shoprite.com
+// and sts.shoprite.com which block server-to-server requests).
+//
+// ── AUTH FLOW ────────────────────────────────────────────────────────────────
+// 1. POST /getToken/auth/login with:
+//      - Authorization: Bearer <SERVICE_JWT>  (hardcoded in their Angular app)
+//      - x-user-key: base64("<ppc>-Coupon+User-<timestamp_ms>")
+//      - Body: { "ppc": "<PPC_NUMBER>" }  (or {} for anonymous browsing)
+//    Returns: { "access_token": "<jwt>" }  (HTTP 201, valid ~24 hours)
+//
+// 2. Use the access_token as Bearer token for all /proxy/* coupon endpoints:
+//      - GET  /proxy/shoprite/coupons/available?storeId=592   (list coupons)
+//      - GET  /proxy/shoprite/coupons/clipped?storeId=592     (clipped list)
+//      - POST /proxy/shoprite/coupons/clip?storeId=592        (clip coupons)
+//        Body: [{"couponId":"<id>"}]
+//
+// ── SERVICE JWT DETAILS ──────────────────────────────────────────────────────
+// The service JWT is a pre-shared credential embedded in ShopRite's Angular
+// coupon center app. It authenticates our server as a valid coupon client.
+// Payload: { fullName: "couponWebUsers_SR", iss: "Digital Coupons v3" }
+// Expires: 2026-04-23 (exp: 1776863263). Must be replaced before then.
+//
+// ── COUPON RESPONSE SHAPE ────────────────────────────────────────────────────
+// { size, page, itemCount, pages, coupons: [{ id, brand, category,
+//   categoryName, description, shortDescription, displayValue, valueText,
+//   value (cents), imageUrl, expirationDate, clipEndDate, status,
+//   isAvailableForClip, minPurchase, badges, displayBadge, ... }] }
+//
+// ── ACTIONS ──────────────────────────────────────────────────────────────────
 //   "list"    — Fetch available digital coupons (cached in Firestore, 4hr TTL)
 //   "clip"    — Clip a specific coupon to the household PPC
 //   "clipped" — Return IDs of already-clipped coupons for the PPC
 //
 // Env vars (set in Vercel):
-//   SHOPRITE_EMAIL        — ShopRite account email (for OAuth2 login)
-//   SHOPRITE_PASSWORD     — ShopRite account password (for OAuth2 login)
 //   SHOPRITE_PPC          — Price Plus Card number for coupon clipping
 //   FIREBASE_PROJECT_ID   — Firebase project ID (family-pantry-c65d6)
 //   FIREBASE_CLIENT_EMAIL — Firebase Admin SDK client email
 //   FIREBASE_PRIVATE_KEY  — Firebase Admin SDK private key
 //
-// Request body: { action: "list"|"clip"|"clipped", householdId, couponId?, query? }
+// Request body: { action: "list"|"clip"|"clipped", householdId, couponId?, query?, storeId? }
 // Response:     { coupons: [...], clippedIds: [...] } or { ok: true }
 
 import { initializeApp, getApps, cert } from "firebase-admin/app";
@@ -36,41 +64,51 @@ if (!getApps().length) {
 }
 const adminDb = getFirestore();
 
-// ── ShopRite API Configuration ──────────────────────────────────────────────
-// Wakefern storefront gateway — powers shoprite.com digital coupons.
-// Auth goes through sts.shoprite.com (OAuth2/OIDC Security Token Service).
-// If ShopRite changes their API, update these URLs.
-const SR_GATEWAY = "https://storefrontgateway.shoprite.com/api";
-const SR_STS_BASE = "https://sts.shoprite.com";
+// ── Azure Coupon Center Proxy Configuration ─────────────────────────────────
+// This is the Wakefern Azure App Service that hosts ShopRite's coupon center.
+// It proxies requests to the underlying coupon API without Cloudflare blocking.
+const AZURE_BASE = "https://shop-rite-web-prod.azurewebsites.net";
 
-// Default ShopRite store ID — Edison, NJ (ShopRite of Edison on Rt 1).
-// Can be overridden in request body if user selects a different store.
-const DEFAULT_STORE_ID = "0498";
+// Service JWT — hardcoded in ShopRite's Angular coupon center app.
+// This authenticates our server as a valid coupon client to the /getToken endpoint.
+// Decoded payload: { fullName: "couponWebUsers_SR", iss: "Digital Coupons v3", exp: 1776863263 }
+// IMPORTANT: This JWT expires on 2026-04-23. Must be updated before then.
+const SERVICE_JWT = "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzY4NjMyNjMsImZ1bGxOYW1lIjoiY291cG9uV2ViVXNlcnNfU1IiLCJpYXQiOjE2MTkxODMyNjMsImlzcyI6IkRpZ2l0YWwgQ291cG9ucyB2MyJ9.TOwM17VHblG-YITQhI7rNHcBKl2Vwf3l1AMwDS3m7Qmiq7AUfK4Cz_ft14AIvok2QFbpJ52A16exN51XrSKyDA";
+
+// Default store ID — ShopRite store 592. Can be overridden per request.
+const DEFAULT_STORE_ID = "592";
 
 // Cache TTL — 4 hours in milliseconds. ShopRite coupons refresh daily,
 // so 4 hours keeps data fresh without hammering the API.
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 
-// Price Plus Card number — stored as Vercel env var, never sent to client
+// Price Plus Card number — stored as Vercel env var, never sent to client.
+// Needed for clipping coupons and getting a PPC-linked access token.
 const PPC = process.env.SHOPRITE_PPC || "";
 
-// ShopRite account credentials — required for OAuth2 login.
-// The PPC is linked to the account, but auth uses email/password.
-const SR_EMAIL = process.env.SHOPRITE_EMAIL || "";
-const SR_PASSWORD = process.env.SHOPRITE_PASSWORD || "";
-
 // ── Session management ──────────────────────────────────────────────────────
-// ShopRite requires an auth token to list and clip coupons.
-// We cache the session token in a module-level variable so it persists
+// The Azure proxy returns access tokens valid for ~24 hours.
+// We cache the token in a module-level variable so it persists
 // across warm invocations of the serverless function.
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
 /**
- * getAuthToken() — Authenticate with ShopRite via their OAuth2 STS endpoint.
- * ShopRite uses email/password auth (not PPC number) for API access.
- * Returns a bearer token for subsequent API calls.
- * Caches the token and reuses it until expiry to minimize auth calls.
+ * buildXUserKey(ppc) — Construct the x-user-key header value.
+ * The Azure coupon center expects this header on the /getToken/auth/login call.
+ * Format: base64("<ppc>-Coupon+User-<timestamp_ms>")
+ * When no PPC is provided, the ppc portion is empty (anonymous browsing).
+ */
+function buildXUserKey(ppc) {
+  const raw = `${ppc || ""}-Coupon+User-${Date.now()}`;
+  return Buffer.from(raw).toString("base64");
+}
+
+/**
+ * getAuthToken() — Authenticate with the Azure coupon center proxy.
+ * POSTs to /getToken/auth/login with the service JWT and x-user-key header.
+ * When PPC is provided, the returned token is linked to that card (needed for clipping).
+ * Caches the token and reuses it until near expiry to minimize auth calls.
  */
 async function getAuthToken() {
   // Reuse cached token if still valid (with 5-minute buffer)
@@ -79,158 +117,80 @@ async function getAuthToken() {
     return cachedToken;
   }
 
-  // Validate that email/password credentials are configured
-  if (!SR_EMAIL || !SR_PASSWORD) {
-    console.error("[ShopRite Auth] Missing credentials — SHOPRITE_EMAIL:", SR_EMAIL ? "set" : "NOT SET", "| SHOPRITE_PASSWORD:", SR_PASSWORD ? "set" : "NOT SET");
-    throw new Error("SHOPRITE_EMAIL and SHOPRITE_PASSWORD must be set in Vercel env vars");
-  }
+  const loginUrl = `${AZURE_BASE}/getToken/auth/login`;
+  console.log("[ShopRite Auth] POST", loginUrl, "| PPC:", PPC ? "set" : "anonymous");
 
-  console.log("[ShopRite Auth] Attempting login with email:", SR_EMAIL);
-
-  // Step 1: Try the storefront gateway's auth/login endpoint with email/password.
-  // This mirrors how the ShopRite website authenticates users.
-  const loginUrl = `${SR_GATEWAY}/v2/auth/login`;
-  console.log("[ShopRite Auth] POST", loginUrl);
-
-  const loginBody = {
-    email: SR_EMAIL,
-    password: SR_PASSWORD,
-    banner: "ShopRite",
-    ppcNumber: PPC || undefined,
-  };
+  // Build the request body — include PPC if available for card-linked token
+  const body = PPC ? { ppc: PPC } : {};
 
   const res = await fetch(loginUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Accept": "application/json",
-      // Mimic a browser user-agent to avoid Cloudflare bot blocking
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-      "Origin": "https://www.shoprite.com",
-      "Referer": "https://www.shoprite.com/",
+      // Service JWT — authenticates us as a valid coupon center client
+      "Authorization": `Bearer ${SERVICE_JWT}`,
+      // x-user-key — required by the Azure proxy, encodes PPC + timestamp
+      "x-user-key": buildXUserKey(PPC),
     },
-    body: JSON.stringify(loginBody),
+    body: JSON.stringify(body),
   });
 
-  // Read the raw response text for debug logging
+  // Read raw text for debug logging before parsing
   const rawText = await res.text();
   console.log("[ShopRite Auth] Response status:", res.status, res.statusText);
-  console.log("[ShopRite Auth] Response headers content-type:", res.headers.get("content-type"));
-  console.log("[ShopRite Auth] Response body (first 500 chars):", rawText.substring(0, 500));
-
-  // Detect Cloudflare challenge pages — they return HTML instead of JSON
-  if (rawText.includes("cf-browser-verification") || rawText.includes("challenge-platform") || rawText.includes("Just a moment")) {
-    throw new Error("Blocked by Cloudflare bot protection — ShopRite API requires browser-like access. Server-to-server calls are being challenged.");
-  }
+  console.log("[ShopRite Auth] Response body (first 300 chars):", rawText.substring(0, 300));
 
   if (!res.ok) {
-    // If /v2/auth/login fails, try the STS (Security Token Service) endpoint
-    // as an alternative OAuth2 flow
-    console.log("[ShopRite Auth] Gateway login failed (HTTP", res.status + "), trying STS endpoint...");
-    return await trySTSAuth();
+    throw new Error(`Azure coupon center auth failed (HTTP ${res.status}): ${rawText.substring(0, 300)}`);
   }
 
-  // Parse the JSON response
+  // Parse the JSON response — expects { access_token: "<jwt>" }
   let data;
   try {
     data = JSON.parse(rawText);
   } catch (e) {
-    throw new Error(`ShopRite auth returned non-JSON (HTTP ${res.status}): ${rawText.substring(0, 300)}`);
+    throw new Error(`Azure coupon center returned non-JSON (HTTP ${res.status}): ${rawText.substring(0, 300)}`);
   }
 
-  // Extract token — ShopRite may use various field names
-  const token = data.accessToken || data.token || data.access_token || data.jwt;
+  // Extract the access token from the response
+  const token = data.access_token || data.accessToken || data.token;
   if (!token) {
     console.error("[ShopRite Auth] No token in response. Keys:", Object.keys(data).join(", "));
-    throw new Error("ShopRite auth response missing token — response keys: " + Object.keys(data).join(", "));
+    throw new Error("Azure coupon center response missing token — keys: " + Object.keys(data).join(", "));
   }
 
-  // Cache the token with a 1-hour default expiry if not specified
+  // Cache the token — Azure proxy tokens are valid ~24 hours,
+  // but we default to 12 hours to be safe if exp isn't parseable
   cachedToken = token;
-  tokenExpiresAt = Date.now() + (data.expiresIn ? data.expiresIn * 1000 : 3600000);
+  try {
+    // Decode the JWT payload to read the expiration timestamp
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
+    tokenExpiresAt = payload.exp ? payload.exp * 1000 : Date.now() + 12 * 60 * 60 * 1000;
+  } catch {
+    // If JWT decode fails, default to 12-hour cache
+    tokenExpiresAt = Date.now() + 12 * 60 * 60 * 1000;
+  }
   console.log("[ShopRite Auth] Login successful, token cached for", Math.round((tokenExpiresAt - Date.now()) / 60000), "min");
 
   return token;
 }
 
 /**
- * trySTSAuth() — Fallback authentication via ShopRite's STS (Security Token Service).
- * Uses the OAuth2 Resource Owner Password Credentials (ROPC) grant type.
- * This is the same OAuth2 flow the ShopRite mobile app uses.
- */
-async function trySTSAuth() {
-  // ROPC grant — sends email/password directly for a token
-  const stsUrl = `${SR_STS_BASE}/connect/token`;
-  console.log("[ShopRite Auth] POST", stsUrl, "(ROPC grant)");
-
-  const params = new URLSearchParams({
-    grant_type: "password",
-    username: SR_EMAIL,
-    password: SR_PASSWORD,
-    client_id: "mwg.ecm.storefrontmobile.app",
-    scope: "mwg.ecm.storefrontmobile:all offline_access",
-  });
-
-  const res = await fetch(stsUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-    },
-    body: params.toString(),
-  });
-
-  const rawText = await res.text();
-  console.log("[ShopRite Auth STS] Response status:", res.status, res.statusText);
-  console.log("[ShopRite Auth STS] Response body (first 500 chars):", rawText.substring(0, 500));
-
-  // Detect Cloudflare challenge
-  if (rawText.includes("cf-browser-verification") || rawText.includes("challenge-platform") || rawText.includes("Just a moment")) {
-    throw new Error("Blocked by Cloudflare bot protection on STS endpoint — server-to-server calls are being challenged.");
-  }
-
-  if (!res.ok) {
-    throw new Error(`ShopRite STS auth failed (HTTP ${res.status}): ${rawText.substring(0, 300)}`);
-  }
-
-  let data;
-  try {
-    data = JSON.parse(rawText);
-  } catch (e) {
-    throw new Error(`ShopRite STS returned non-JSON (HTTP ${res.status}): ${rawText.substring(0, 300)}`);
-  }
-
-  const token = data.access_token || data.accessToken || data.token;
-  if (!token) {
-    console.error("[ShopRite Auth STS] No token in response. Keys:", Object.keys(data).join(", "));
-    throw new Error("STS response missing token — keys: " + Object.keys(data).join(", "));
-  }
-
-  // Cache the token
-  cachedToken = token;
-  tokenExpiresAt = Date.now() + (data.expires_in ? data.expires_in * 1000 : 3600000);
-  console.log("[ShopRite Auth STS] Login successful, token cached for", Math.round((tokenExpiresAt - Date.now()) / 60000), "min");
-
-  return token;
-}
-
-/**
  * fetchCouponsFromAPI(token, storeId) — Fetch all available digital coupons
- * from ShopRite's coupons endpoint for the given store.
- * Returns an array of normalized coupon objects.
+ * from the Azure coupon center proxy for the given store.
+ * Returns an array of normalized coupon objects for the frontend.
  */
 async function fetchCouponsFromAPI(token, storeId) {
-  // Try the v2 coupons endpoint with store context
-  const url = `${SR_GATEWAY}/v2/stores/${storeId}/coupons?limit=200`;
+  const url = `${AZURE_BASE}/proxy/shoprite/coupons/available?storeId=${storeId}`;
   console.log("[ShopRite Coupons] GET", url);
 
   const res = await fetch(url, {
     headers: {
       "Authorization": `Bearer ${token}`,
       "Accept": "application/json",
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-      "Origin": "https://www.shoprite.com",
-      "Referer": "https://www.shoprite.com/",
+      // Optional API version header — matches what the Angular app sends
+      "x-api-version": "v4",
     },
   });
 
@@ -239,75 +199,96 @@ async function fetchCouponsFromAPI(token, storeId) {
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
     console.error("[ShopRite Coupons] Fetch failed. Body (first 500 chars):", errText.substring(0, 500));
-    throw new Error(`ShopRite coupons fetch failed (HTTP ${res.status}): ${errText.substring(0, 200)}`);
+    throw new Error(`Coupon fetch failed (HTTP ${res.status}): ${errText.substring(0, 200)}`);
   }
 
   const data = await res.json();
-  const raw = data.coupons || data.offers || data.items || data.data || [];
+  // The Azure proxy returns { coupons: [...], itemCount, size, page, pages }
+  const raw = data.coupons || [];
+  console.log("[ShopRite Coupons] Received", raw.length, "coupons (itemCount:", data.itemCount, ")");
 
-  // Normalize each coupon into a consistent shape for the frontend
+  // Normalize each coupon into a consistent shape for the frontend.
+  // The Azure proxy returns rich coupon objects — we pick the fields we need.
   return raw.map(c => ({
-    id: String(c.id || c.couponId || c.offerId || ""),
-    brand: c.brand || c.brandName || "",
-    name: c.name || c.title || c.productName || "",
-    description: c.description || c.shortDescription || c.details || "",
-    value: c.value || c.offerValue || c.savings || c.displayValue || "",
-    image: c.imageUrl || c.image || c.thumbnailUrl || null,
-    category: c.category || c.categoryName || "Other",
-    expiryDate: c.expirationDate || c.endDate || c.expiryDate || null,
-    requirementDescription: c.requirementDescription || c.requirements || "",
-    clipped: !!c.clipped || !!c.isClipped || !!c.activated,
+    id: String(c.id || ""),
+    brand: c.brand || "",
+    name: c.shortDescription || c.description || "",
+    description: c.description || "",
+    shortDescription: c.shortDescription || "",
+    value: c.displayValue || c.valueText || "",
+    valueCents: c.value || 0,
+    image: c.imageUrl || null,
+    category: c.category || "other",
+    categoryName: c.categoryName || "Other",
+    expiryDate: c.expirationDate || c.clipEndDate || null,
+    clipEndDate: c.clipEndDate || null,
+    status: c.status || "available",
+    isAvailableForClip: c.isAvailableForClip !== false,
+    minPurchase: c.minPurchase || null,
+    badges: c.displayBadge || c.badges || [],
+    clipped: false, // Will be enriched by caller with clipped IDs
   }));
 }
 
 /**
- * clipCouponToCard(token, couponId) — Clip a single coupon to the PPC.
- * After clipping, the coupon is automatically applied at checkout when
- * the cashier scans the Price Plus Card.
+ * clipCouponToCard(token, couponId, storeId) — Clip a coupon to the PPC.
+ * POSTs to /proxy/shoprite/coupons/clip with an array of coupon IDs.
+ * After clipping, the coupon auto-applies at checkout when PPC is scanned.
+ * Requires a PPC-linked token (getAuthToken with PPC set).
  */
-async function clipCouponToCard(token, couponId) {
-  const url = `${SR_GATEWAY}/v2/coupons/${couponId}/clip`;
-  console.log("[ShopRite Clip] PUT", url);
+async function clipCouponToCard(token, couponId, storeId) {
+  const url = `${AZURE_BASE}/proxy/shoprite/coupons/clip?storeId=${storeId}`;
+  console.log("[ShopRite Clip] POST", url, "| couponId:", couponId);
 
+  // The clip endpoint expects an array of { couponId } objects
   const res = await fetch(url, {
-    method: "PUT",
+    method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
       "Accept": "application/json",
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-      "Origin": "https://www.shoprite.com",
-      "Referer": "https://www.shoprite.com/",
+      "x-api-version": "v4",
     },
-    body: JSON.stringify({ couponId }),
+    body: JSON.stringify([{ couponId: String(couponId) }]),
   });
 
-  console.log("[ShopRite Clip] Response status:", res.status, res.statusText);
+  const rawText = await res.text();
+  console.log("[ShopRite Clip] Response status:", res.status, "| Body:", rawText.substring(0, 300));
 
   if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    console.error("[ShopRite Clip] Failed. Body:", errText.substring(0, 500));
-    throw new Error(`Clip failed (HTTP ${res.status}): ${errText.substring(0, 200)}`);
+    throw new Error(`Clip failed (HTTP ${res.status}): ${rawText.substring(0, 200)}`);
+  }
+
+  // Parse the response — the API returns an array of results per coupon
+  let results;
+  try {
+    results = JSON.parse(rawText);
+  } catch {
+    // If parsing fails but HTTP was OK, assume success
+    return true;
+  }
+
+  // Check if the clip was successful (array of { result, couponId, message })
+  if (Array.isArray(results) && results.length > 0 && results[0].result === false) {
+    throw new Error(`Clip rejected: ${results[0].message || results[0].shortMessage || "unknown error"}`);
   }
 
   return true;
 }
 
 /**
- * fetchClippedIds(token) — Get the list of coupon IDs already clipped to the PPC.
- * Used to show "✓ Clipped" state in the UI without re-fetching all coupons.
+ * fetchClippedIds(token, storeId) — Get coupon IDs already clipped to the PPC.
+ * Used to show clipped state in the UI. Requires a PPC-linked token.
  */
-async function fetchClippedIds(token) {
-  const url = `${SR_GATEWAY}/v2/coupons/clipped`;
+async function fetchClippedIds(token, storeId) {
+  const url = `${AZURE_BASE}/proxy/shoprite/coupons/clipped?storeId=${storeId}`;
   console.log("[ShopRite Clipped] GET", url);
 
   const res = await fetch(url, {
     headers: {
       "Authorization": `Bearer ${token}`,
       "Accept": "application/json",
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-      "Origin": "https://www.shoprite.com",
-      "Referer": "https://www.shoprite.com/",
+      "x-api-version": "v4",
     },
   });
 
@@ -320,15 +301,17 @@ async function fetchClippedIds(token) {
   }
 
   const data = await res.json();
-  const items = data.coupons || data.offers || data.items || data.data || [];
+  // Same shape as available — { coupons: [...] } but only clipped ones
+  const items = data.coupons || [];
+  console.log("[ShopRite Clipped] Found", items.length, "clipped coupons");
 
   // Return just the IDs — the frontend uses these to mark coupons as clipped
-  return items.map(c => String(c.id || c.couponId || c.offerId || ""));
+  return items.map(c => String(c.id || ""));
 }
 
 // ── Firestore Cache Helpers ─────────────────────────────────────────────────
 // Coupons are cached in Firestore at households/{hid}/cache/shopriteCoupons
-// to avoid hammering ShopRite's API on every page load. The cache has a 4hr TTL.
+// to avoid hammering the Azure proxy on every page load. The cache has a 4hr TTL.
 
 /**
  * getCachedCoupons(householdId) — Read cached coupon data from Firestore.
@@ -428,20 +411,18 @@ export default async function handler(req, res) {
   if (!action) return res.status(400).json({ error: "action is required (list, clip, clipped)" });
   if (!householdId) return res.status(400).json({ error: "householdId is required" });
 
-  // Verify credentials are configured — email/password are required for auth,
-  // PPC is needed to clip coupons to a specific card
-  if (!SR_EMAIL || !SR_PASSWORD) {
-    console.error("[ShopRite] Missing credentials. SHOPRITE_EMAIL:", SR_EMAIL ? "set" : "NOT SET", "| SHOPRITE_PASSWORD:", SR_PASSWORD ? "set" : "NOT SET", "| SHOPRITE_PPC:", PPC ? "set" : "NOT SET");
-    return res.status(500).json({ error: "SHOPRITE_EMAIL and SHOPRITE_PASSWORD must be configured in Vercel env vars" });
-  }
+  // PPC is optional for listing coupons but required for clipping
   if (!PPC) {
     console.warn("[ShopRite] SHOPRITE_PPC not set — coupons can be listed but not clipped to a card");
   }
 
+  // Resolve store ID — default to 592 if not provided
+  const store = storeId || DEFAULT_STORE_ID;
+
   try {
     // ── LIST: Fetch available digital coupons ──
     if (action === "list") {
-      // Check Firestore cache first — avoids hitting ShopRite API on every load
+      // Check Firestore cache first — avoids hitting the Azure proxy on every load
       const cached = await getCachedCoupons(householdId);
       if (cached && !query) {
         // Serve from cache if valid and no specific search query
@@ -452,11 +433,20 @@ export default async function handler(req, res) {
         });
       }
 
-      // Cache miss or expired — fetch fresh data from ShopRite
+      // Cache miss or expired — fetch fresh data from ShopRite via Azure proxy
       const token = await getAuthToken();
-      const store = storeId || DEFAULT_STORE_ID;
       const coupons = await fetchCouponsFromAPI(token, store);
-      const clippedIds = await fetchClippedIds(token);
+
+      // Fetch clipped IDs only if PPC is configured (otherwise no card to check)
+      let clippedIds = [];
+      if (PPC) {
+        try {
+          clippedIds = await fetchClippedIds(token, store);
+        } catch (clipErr) {
+          // Non-fatal — we can still show coupons without clip state
+          console.warn("[ShopRite] Failed to fetch clipped IDs:", clipErr.message);
+        }
+      }
 
       // Mark already-clipped coupons in the coupon list for UI convenience
       const enriched = coupons.map(c => ({
@@ -472,7 +462,7 @@ export default async function handler(req, res) {
           (c.name || "").toLowerCase().includes(q) ||
           (c.brand || "").toLowerCase().includes(q) ||
           (c.description || "").toLowerCase().includes(q) ||
-          (c.category || "").toLowerCase().includes(q)
+          (c.categoryName || "").toLowerCase().includes(q)
         );
       }
 
@@ -491,9 +481,10 @@ export default async function handler(req, res) {
     // ── CLIP: Clip a coupon to the Price Plus Card ──
     if (action === "clip") {
       if (!couponId) return res.status(400).json({ error: "couponId is required" });
+      if (!PPC) return res.status(400).json({ error: "SHOPRITE_PPC not configured — cannot clip without a Price Plus Card" });
 
       const token = await getAuthToken();
-      await clipCouponToCard(token, couponId);
+      await clipCouponToCard(token, couponId, store);
 
       // Update the Firestore cache to reflect the newly clipped coupon
       await updateClippedInCache(householdId, couponId);
@@ -503,6 +494,8 @@ export default async function handler(req, res) {
 
     // ── CLIPPED: Get list of already-clipped coupon IDs ──
     if (action === "clipped") {
+      if (!PPC) return res.status(400).json({ error: "SHOPRITE_PPC not configured — cannot check clipped without a Price Plus Card" });
+
       // Check cache first for clipped IDs
       const cached = await getCachedCoupons(householdId);
       if (cached) {
@@ -511,7 +504,7 @@ export default async function handler(req, res) {
 
       // No cache — fetch from API
       const token = await getAuthToken();
-      const clippedIds = await fetchClippedIds(token);
+      const clippedIds = await fetchClippedIds(token, store);
 
       return res.json({ clippedIds, fromCache: false });
     }
