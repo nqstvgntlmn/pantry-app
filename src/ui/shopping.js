@@ -251,6 +251,22 @@ function _setMicUI(active) {
  * and a live transcript is shown in the input field as the user speaks.
  * Recognition auto-stops when the user pauses speaking (silence detection).
  */
+/**
+ * stopVoice() — Forcibly stops any active speech recognition session.
+ * Called on tab switch or app backgrounding to prevent orphaned listeners
+ * that accumulate and crash Safari. Safe to call when not listening (no-ops).
+ */
+export function stopVoice() {
+  if (_recognition) {
+    try { _recognition.abort(); } catch { /* ignore */ }
+    _recognition = null;
+  }
+  _listening = false;
+  _finalTranscript = "";
+  _manualStop = false;
+  _setMicUI(false);
+}
+
 export function toggleVoice() {
   // If already listening, stop and COMMIT the speech — the onend handler will
   // finalize and trigger the enrichment search (same as auto-stop on silence).

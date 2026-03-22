@@ -916,6 +916,20 @@ export function resumePoll() {
   }
 }
 
+/**
+ * stopPoll — called on sign-out to permanently halt the 30-second polling loop.
+ * Clears the interval, nulls the reference, and resets the active-write counter
+ * so no stale poll callbacks fire after the user has signed out.
+ */
+export function stopPoll() {
+  if (window._pollIntervalId) {
+    clearInterval(window._pollIntervalId);
+    window._pollIntervalId = null;
+  }
+  window._pollFn = null;
+  _activeWrites = 0;
+}
+
 // ── DATA OPERATIONS ──────────────────────────────────────────────────────────
 // These are the primary CRUD functions used by UI code to modify inventory,
 // recipes, and shopping list items. They follow an optimistic-update pattern:

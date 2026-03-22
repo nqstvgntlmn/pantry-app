@@ -166,6 +166,12 @@ export function startRealtimeSync(hid) {
  * Called on sign-out to prevent memory leaks and stale data.
  */
 export function stopRealtimeSync() {
+  // Clear any pending debounced render to prevent stale callbacks firing after cleanup
+  if (_renderAllTimer) {
+    clearTimeout(_renderAllTimer);
+    _renderAllTimer = null;
+  }
+  // Unsubscribe every active Firestore onSnapshot listener
   _unsubs.forEach(unsub => {
     try { unsub(); } catch { /* ignore cleanup errors */ }
   });

@@ -1162,3 +1162,90 @@ Removed "Shopping List" (duplicated "X to buy" notification pill) and "📦 Supp
 **What changed:** Confirmed and cleaned up all duplicate navigation from the Home tab. The "+ Add" button was already removed (replaced by FAB). The notification strip no longer duplicates quick-chip navigation. The stat card grid still provides distinct value (showing counts/data, not just navigation).
 
 **Why:** Previous prompt partially addressed duplication but left "running low" and "to buy" pills that overlapped with quick chips.
+
+---
+
+### Session 7 — Safari Crash Stability Audit (March 2026)
+
+> **Problem:** App was hard-crashing in Safari with "A problem repeatedly occurred" — affecting multiple tabs. Root cause: accumulated GPU compositing layers from backdrop-filter blur, orphaned timers/listeners, and missing error boundaries.
+
+#### 1. Memory Leak Fixes
+
+**realtime.js — Debounce timer leak on sign-out**
+- `stopRealtimeSync()` now clears `_renderAllTimer` before unsubscribing listeners. Previously, a pending 80ms debounce timer could fire after all listeners were cleaned up, calling `renderCallbacks.renderAll()` on stale/null state.
+
+**db.js — Polling interval not stopped on sign-out**
+- Added `stopPoll()` export that clears the 30-second `setInterval`, nulls `_pollFn`, and resets `_activeWrites`. The sign-out path was only calling `stopRealtimeSync()` but leaving the legacy polling loop alive, causing it to fire `window._pollFn()` on unmounted DOM.
+
+**main.js — Sign-out now calls `stopPoll()`**
+- Added `stopPoll()` call in the `onAuth` sign-out handler, right after `stopRealtimeSync()`.
+
+#### 2. Speech Recognition Cleanup
+
+**shopping.js + inventory.js — Added `stopVoice()` / `stopInvVoice()` exports**
+- Forcibly aborts any active `SpeechRecognition` instance and resets all mic state. Called on:
+  - Tab switch (in `showScreen()`) — prevents orphaned mic sessions when navigating away
+  - App backgrounding (`visibilitychange` → `document.hidden`) — prevents mic staying open in background
+
+**main.js — visibilitychange listener**
+- New global listener stops all speech recognition when the app goes to background. Orphaned SpeechRecognition instances are a known Safari crash vector (mic stays open, listeners accumulate).
+
+#### 3. Error Boundaries
+
+**Render callbacks wrapped in try/catch**
+- `renderCallbacks.renderAll/renderSum/renderRecs/renderShop` are now wrapped so a crash in one module's render doesn't propagate through the realtime listener chain.
+
+**Tab render calls wrapped in try/catch**
+- Both the first-load and standard `showScreen()` paths now catch render errors and display a friendly error state via `_showTabError()` instead of crashing the entire app.
+
+**`_showTabError(tabName)` helper**
+- Replaces the tab's body content with a centered error message and "Reload App" button. Keeps the nav functional so the user can still switch tabs.
+
+#### 4. CSS Performance — Backdrop Filter Reduction
+
+**Problem:** Safari mobile allocates a separate GPU compositing layer for every element with `backdrop-filter`. With nav + bottom sheets + modals + 100+ coupon/deal cards all using blur(16-28px), the GPU runs out of memory and crashes.
+
+**Changes:**
+- **Coupon cards + Deal cards:** Removed `backdrop-filter` entirely (replaced with opaque background). These render 50-100+ cards at once — each was a separate GPU layer.
+- **Nav pill (#NAV):** Blur reduced 28px → 14px, saturate 1.8 → 1.4, opacity increased to compensate.
+- **Bottom sheets (.bsheet):** Blur reduced 20px → 10px (original def), 24px → 12px (glassmorphism override).
+- **Modals (.minner):** Blur reduced 24px → 12px.
+- **Modal backdrop (.modal):** Blur reduced 8px → 4px.
+- **Sheet backdrop (.bsheet-backdrop):** Blur reduced 8px → 4px.
+- **Undo toast:** Blur reduced 8px → 4px.
+
+#### 5. CSS Animation Fixes — Layout Property Avoidance
+
+**`@keyframes scanLine`:** Was animating `top` property (forces layout recalc every frame). Changed to `transform: translateY(78px)` — stays on compositor, no layout thrash.
+
+**`@keyframes strikeAcross`:** Was animating `width: 0 → 100%` (layout property). Changed to `transform: scaleX(0) → scaleX(1)` with `transform-origin: left`.
+
+**`@keyframes mic-pulse`:** Was animating `box-shadow` (forces full repaint). Changed to `transform: scale() + opacity` — compositable properties only.
+
+**FAB (.fab):** Removed `box-shadow` from transition list. Box-shadow animation forces full repaint each frame.
+
+**Global `*` transition removed:** The `*{transition:background-color .25s,border-color .25s,color .15s}` rule was applying transitions to every single DOM element including text nodes. Replaced with targeted selectors for interactive elements only.
+
+**Comment row:** Removed `max-height` from transition (`.com-comment-row`). Only opacity animates now.
+
+**will-change added:** `.reticle-line`, `.notif` toast, `.mic-btn.mic-active`, `.shit.chk .shnm::after` — promotes these to compositor layers for smoother animation.
+
+**`@media (prefers-reduced-motion: reduce)`:** Kills all animations and transitions for users who prefer reduced motion. Also serves as a safety valve for low-powered devices.
+
+#### 6. Image Lazy Loading
+
+Added `loading="lazy"` to all dynamically-generated `<img>` tags across:
+- `home.js` — recipe match cover images
+- `recipes.js` — recipe card covers, read-only view covers, community recipe covers (both list and detail views)
+
+This prevents offscreen images from loading until the user scrolls to them, reducing initial memory footprint.
+
+#### Files Changed
+- `src/realtime.js` — `stopRealtimeSync()` now clears debounce timer
+- `src/db.js` — Added `stopPoll()` export
+- `src/main.js` — Error boundaries, voice cleanup, visibility handler, stopPoll import
+- `src/ui/shopping.js` — Added `stopVoice()` export
+- `src/ui/inventory.js` — Added `stopInvVoice()` export
+- `src/ui/home.js` — Lazy loading on recipe match images
+- `src/ui/recipes.js` — Lazy loading on all recipe cover images
+- `src/styles.css` — All CSS performance fixes (backdrop-filter reduction, animation fixes, reduced motion)

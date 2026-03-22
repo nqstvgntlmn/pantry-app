@@ -1117,7 +1117,7 @@ function _renderMatchPage(el) {
 
     // Cover photo or placeholder
     const coverImg = recipe.imageUrl
-      ? `<img src="${recipe.imageUrl}" style="width:100%;height:140px;object-fit:cover;border-radius:12px 12px 0 0" alt="" onerror="this.style.display='none'"/>`
+      ? `<img src="${recipe.imageUrl}" loading="lazy" style="width:100%;height:140px;object-fit:cover;border-radius:12px 12px 0 0" alt="" onerror="this.style.display='none'"/>`
       : `<div style="width:100%;height:80px;background:var(--sf);border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:center;font-size:2rem">🍽</div>`;
 
     // Missing ingredients list with "Add to Shopping List" buttons — shown for 🟡 and 🟠 tiers

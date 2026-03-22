@@ -1942,6 +1942,21 @@ function _setInvMicUI(active) {
 }
 
 /**
+ * stopInvVoice() — Forcibly stops any active inventory speech recognition session.
+ * Called on tab switch or app backgrounding to prevent orphaned listeners.
+ */
+export function stopInvVoice() {
+  if (_invRecognition) {
+    try { _invRecognition.abort(); } catch { /* ignore */ }
+    _invRecognition = null;
+  }
+  _invListening = false;
+  _invFinalTranscript = "";
+  _invManualStop = false;
+  _setInvMicUI(false);
+}
+
+/**
  * toggleInvVoice() — Starts or stops voice recognition for inventory.
  * When speech is committed, the recognized text is added as an inventory item
  * and product enrichment is triggered.

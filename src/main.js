@@ -18,7 +18,7 @@ import { state, CFG_DEFAULT, J, Js } from './state.js';
 // svi/dli = save/delete inventory item, svr/dlr = save/delete recipe,
 // svShopItem/dlShopItem = save/delete shopping item
 // joinHouseholdByCode: join via invite code, createHousehold/createUserProfile: first-time setup
-import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, pausePoll, resumePoll, checkUsernameAvailable, setUsername, loadUsername, checkMembershipValid } from './db.js';
+import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, pausePoll, resumePoll, stopPoll, checkUsernameAvailable, setUsername, loadUsername, checkMembershipValid } from './db.js';
 
 // DOM/UI helpers: g = getElementById shorthand, showNotif = toast notifications,
 // showOv/hideOv = overlay open/close, renderStars = star rating HTML, tk = tracking util
@@ -44,11 +44,11 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, editInvDetailCombined, saveInvDetailCombined, initInvQtyToolbar, invQtyStep, invFracChange, resetInvStagger, openInvAddCatPicker, changeInvCategory, toggleInvViewMode } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, stopInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, editInvDetailCombined, saveInvDetailCombined, initInvQtyToolbar, invQtyStep, invFracChange, resetInvStagger, openInvAddCatPicker, changeInvCategory, toggleInvViewMode } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, loadFlippDeals, refreshFlippDeals, filterDealStore, filterDealsLocal, loadMoreDeals, setDealsPageSize, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, editShopDetailCombined, saveShopDetailCombined, initShopQtyToolbar, shopQtyStep, shopFracChange, toggleShopDone, resetShopStagger, openShopAddCatPicker, changeShopCategory, loadCoupons, refreshCoupons, searchCoupons, filterCouponCat, filterCouponsLocal, clipCoupon, loadMoreCoupons, setCouponsPageSize, toggleCouponsSection, toggleDealsSection } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, loadFlippDeals, refreshFlippDeals, filterDealStore, filterDealsLocal, loadMoreDeals, setDealsPageSize, initVoice, toggleVoice, stopVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, editShopDetailCombined, saveShopDetailCombined, initShopQtyToolbar, shopQtyStep, shopFracChange, toggleShopDone, resetShopStagger, openShopAddCatPicker, changeShopCategory, loadCoupons, refreshCoupons, searchCoupons, filterCouponCat, filterCouponsLocal, clipCoupon, loadMoreCoupons, setCouponsPageSize, toggleCouponsSection, toggleDealsSection } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -87,10 +87,12 @@ import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from '
 // import UI modules directly (that would create circular imports). Instead,
 // db.js exposes a `renderCallbacks` object that we populate here.
 // When db.js finishes a write, it calls these functions to refresh the UI.
-renderCallbacks.renderAll = renderAll;
-renderCallbacks.renderSum = renderSum;
-renderCallbacks.renderRecs = renderRecs;
-renderCallbacks.renderShop = renderShop;
+// Each callback is wrapped in a try/catch so a render crash in one module
+// doesn't propagate through the realtime listener chain and crash the app.
+renderCallbacks.renderAll = () => { try { renderAll(); } catch (e) { console.error("[renderAll] crash:", e); } };
+renderCallbacks.renderSum = () => { try { renderSum(); } catch (e) { console.error("[renderSum] crash:", e); } };
+renderCallbacks.renderRecs = () => { try { renderRecs(); } catch (e) { console.error("[renderRecs] crash:", e); } };
+renderCallbacks.renderShop = () => { try { renderShop(); } catch (e) { console.error("[renderShop] crash:", e); } };
 
 // Same circular-dependency workaround: home.js needs renderInv but can't import
 // inventory.js directly, so we inject it via a setter function.
@@ -112,6 +114,18 @@ window.addEventListener("error", (e) => {
   ss("error");
 });
 
+// ── VISIBILITY CHANGE CLEANUP ──────────────────────────────────────────────
+// When the user switches to another app or locks their phone, stop any active
+// speech recognition sessions. Orphaned SpeechRecognition instances are a major
+// source of Safari "A problem repeatedly occurred" crashes because the microphone
+// stays open and the listeners accumulate in the background.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopVoice();
+    stopInvVoice();
+  }
+});
+
 // ── SCREEN NAVIGATION ────────────────────────────────────────────────────────
 // The app is a single-page app with 6 main screens (home, inventory, recipes,
 // shopping, insights, chat). Only one screen is visible at a time. Navigation
@@ -120,6 +134,22 @@ window.addEventListener("error", (e) => {
 
 // Ordered tab names for swipe navigation — matches bottom nav layout left-to-right
 const TAB_ORDER = ["home", "inventory", "recipes", "shopping", "insights", "chat"];
+
+// _showTabError(tabName) — displays a friendly error state inside a tab's screen
+// element when its render function throws. Prevents "A problem repeatedly occurred"
+// Safari crash by containing the failure to just one tab.
+function _showTabError(tabName) {
+  const screen = g("screen-" + tabName);
+  if (!screen) return;
+  // Find the scrollable body area inside the screen, or use the screen itself
+  const body = screen.querySelector(".hbody, .ibody, .rbody, .shbody") || screen;
+  body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 32px;text-align:center;gap:16px">
+    <div style="font-size:2.5rem;opacity:.5">⚠️</div>
+    <div style="font-size:.95rem;font-weight:600;color:var(--tx)">Something went wrong</div>
+    <div style="font-size:.82rem;color:var(--mt);max-width:260px;line-height:1.6">This tab hit an error. Try switching tabs or pull down to refresh.</div>
+    <button onclick="location.reload()" class="btn bp bsm" style="margin-top:8px">Reload App</button>
+  </div>`;
+}
 
 // _transitioning guard: prevents overlapping slide animations from colliding.
 // Set to true during a transition, cleared after 300ms (matches CSS duration).
@@ -173,12 +203,18 @@ window.showScreen = function(n) {
     // Highlight the correct nav item
     document.querySelectorAll(".ni").forEach(v => v.classList.remove("active"));
     g("nav-" + n)?.classList.add("active");
-    // Trigger initial render for the target screen (e.g. renderHome for skeleton/loading state)
-    if (n === "home") { window._shouldAnimateCounters = true; renderHome(); }
-    if (n === "inventory") renderInv();
-    if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
-    if (n === "shopping") renderShop();
-    if (n === "insights") renderInsights();
+    // Trigger initial render for the target screen — wrapped in try/catch so a
+    // crash in one tab's render doesn't take down the entire app (error boundary)
+    try {
+      if (n === "home") { window._shouldAnimateCounters = true; renderHome(); }
+      if (n === "inventory") renderInv();
+      if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
+      if (n === "shopping") renderShop();
+      if (n === "insights") renderInsights();
+    } catch (err) {
+      console.error(`[showScreen] Render error on first load of "${n}":`, err);
+      _showTabError(n);
+    }
     // Update FAB for the initial tab (shows contextual label on first load)
     _updateFAB(n);
     return;
@@ -193,6 +229,11 @@ window.showScreen = function(n) {
 
   // Close any open overlays (modals) before switching screens
   document.querySelectorAll(".ov.active").forEach(o => o.classList.remove("active"));
+
+  // Stop any active speech recognition from the outgoing tab to prevent orphaned
+  // listeners that accumulate and crash Safari on low-memory devices
+  stopVoice();
+  stopInvVoice();
 
   // Determine slide direction from tab order indices
   const curIdx = TAB_ORDER.indexOf(cur);
@@ -249,13 +290,19 @@ window.showScreen = function(n) {
   resetShopStagger();
   resetRecipeStagger();
 
-  // Re-render the target screen's content so data is fresh on each visit
-  // Set flag so stat counters animate from 0 on tab navigation (not background re-renders)
-  if (n === "home") { window._shouldAnimateCounters = true; renderHome(); }
-  if (n === "inventory") renderInv();
-  if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
-  if (n === "shopping") renderShop();
-  if (n === "insights") renderInsights();
+  // Re-render the target screen's content so data is fresh on each visit.
+  // Wrapped in try/catch error boundary — a crash in one tab's render must not
+  // freeze or crash the entire app. Shows a friendly error state instead.
+  try {
+    if (n === "home") { window._shouldAnimateCounters = true; renderHome(); }
+    if (n === "inventory") renderInv();
+    if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
+    if (n === "shopping") renderShop();
+    if (n === "insights") renderInsights();
+  } catch (err) {
+    console.error(`[showScreen] Render error on "${n}":`, err);
+    _showTabError(n);
+  }
 
   // Update context-aware FAB icon/action for the new tab
   _updateFAB(n);
@@ -1547,6 +1594,8 @@ onAuth(async (user) => {
     // ── User is signed out ──
     // Stop all real-time Firestore listeners to prevent memory leaks
     stopRealtimeSync();
+    // Stop the 30-second polling interval so it doesn't fire after sign-out
+    stopPoll();
     // Reset the boot flag so a fresh sign-in will re-initialize the app
     appBooted = false;
     // Hide the app and show the login/auth screen

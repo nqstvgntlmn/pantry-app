@@ -605,7 +605,7 @@ function rH(r) {
 
   // Cover image: full-bleed hero with gradient overlay — recipe name sits ON photo
   // Gradient goes from transparent at top → dark at bottom so text stays legible
-  const imgHtml = r.imageUrl ? `<div class="rcd-cover"><img src="${r.imageUrl}" alt="" onerror="this.parentElement.style.display='none'"/></div>` : "";
+  const imgHtml = r.imageUrl ? `<div class="rcd-cover"><img src="${r.imageUrl}" loading="lazy" alt="" onerror="this.parentElement.style.display='none'"/></div>` : "";
 
   // Time/servings metadata pills + difficulty/time badges — show if data available.
   // Difficulty badge uses color-coded styling: easy=green, medium=gold, hard=red.
@@ -1615,7 +1615,7 @@ export function openRecipeView(id) {
   let coverHtml;
   if (r.imageUrl) {
     coverHtml = `<div class="rv-cover">
-      <img src="${r.imageUrl}" alt="${(r.name || "").replace(/"/g, "&quot;")}" onerror="this.parentElement.style.display='none'"/>
+      <img src="${r.imageUrl}" loading="lazy" alt="${(r.name || "").replace(/"/g, "&quot;")}" onerror="this.parentElement.style.display='none'"/>
     </div>`;
   } else {
     coverHtml = `<div class="rv-cover-placeholder">
@@ -3235,7 +3235,7 @@ export function renderCommunity() {
 
     // Cover image (if available)
     const coverHtml = r.imageUrl
-      ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;height:160px"><img src="${r.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
+      ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;height:160px"><img src="${r.imageUrl}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
       : "";
 
     // Comment count badge on the card
@@ -3305,7 +3305,7 @@ function _appendComPage(allRecs, container) {
     const timeStr = r.cookTime || r.totalTime || "";
     const cmtCount = r.commentCount || 0;
     const coverHtml = r.imageUrl
-      ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;height:160px"><img src="${r.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
+      ? `<div style="margin:-14px -14px 12px;border-radius:14px 14px 0 0;overflow:hidden;height:160px"><img src="${r.imageUrl}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
       : "";
 
     html += `<div class="rcd com-rcd" onclick="openComRecipe('${r.id}')">
@@ -3403,7 +3403,7 @@ export async function openComRecipe(id) {
 
   // Cover image
   const coverImg = r.imageUrl
-    ? `<div style="margin:-16px -16px 16px;overflow:hidden;max-height:240px"><img src="${r.imageUrl}" alt="" style="width:100%;height:240px;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
+    ? `<div style="margin:-16px -16px 16px;overflow:hidden;max-height:240px"><img src="${r.imageUrl}" loading="lazy" alt="" style="width:100%;height:240px;object-fit:cover;display:block" onerror="this.parentElement.style.display='none'"/></div>`
     : "";
 
   // Time and servings metadata pills — same style as private recipe view
