@@ -246,24 +246,25 @@ window.showScreen = function(n) {
 };
 
 // ── CONTEXT-AWARE FLOATING ACTION BUTTON ─────────────────────────────────────
-// The FAB shows a different shortcut depending on the active tab:
-//   Home → "+" (universal add), Supplies → "+" (add supply), Recipes → "+" (add recipe),
-//   Shop → "+" (add to list), Stats → hidden, Chat → hidden
+// The FAB shows a "+" icon per tab. No text label — just a circle that starts
+// large and fully opaque, then shrinks + fades to 50% after 2 seconds.
+// Tapping it at any size/opacity triggers the correct add action for the tab.
 const FAB_CONFIG = {
-  home:      { icon: "＋", action: "openUniversalAdd()",   label: "Add item" },
-  inventory: { icon: "＋", action: "openInvAddSheet()",    label: "Add supply" },
-  recipes:   { icon: "＋", action: "showOv('arec')",       label: "Add recipe" },
-  shopping:  { icon: "＋", action: "openShopAddSheet()",   label: "Add to list" },
+  home:      { action: "openUniversalAdd()",   ariaLabel: "Add item" },
+  inventory: { action: "openInvAddSheet()",    ariaLabel: "Add supply" },
+  recipes:   { action: "showOv('arec')",       ariaLabel: "Add recipe" },
+  shopping:  { action: "openShopAddSheet()",   ariaLabel: "Add to list" },
   insights:  null, // No FAB on stats tab
   chat:      null  // No FAB on chat tab
 };
 
-// _fabLabelTimer — tracks the timeout for the auto-fade label next to the FAB.
-// Cleared on each tab switch to avoid stale timeouts from previous labels.
-let _fabLabelTimer = null;
+// _fabSettleTimer — tracks the 2-second timeout before FAB shrinks + fades.
+// Cleared on each tab switch so the timer resets when navigating.
+let _fabSettleTimer = null;
 
-// _updateFAB(tab) — shows/hides the FAB and sets its icon and onclick for the given tab.
-// Also shows a brief animated label (e.g. "+ Add item") that fades after 2 seconds.
+// _updateFAB(tab) — shows/hides the FAB and sets its onclick for the given tab.
+// Resets the FAB to large/opaque, then adds "settled" class after 2 seconds
+// to smoothly shrink it and reduce opacity to 50%.
 function _updateFAB(tab) {
   const fab = g("fab-btn");
   if (!fab) return;
@@ -273,16 +274,18 @@ function _updateFAB(tab) {
     fab.classList.add("hidden");
   } else {
     fab.classList.remove("hidden");
-    // Build FAB inner: icon + animated contextual label
-    fab.innerHTML = `<span class="fab-icon">${cfg.icon}</span><span class="fab-label">${cfg.label}</span>`;
+    // Show only the "+" icon — no label text
+    fab.innerHTML = `<span class="fab-icon">＋</span>`;
     fab.setAttribute("onclick", cfg.action);
-    fab.setAttribute("aria-label", cfg.label);
+    fab.setAttribute("aria-label", cfg.ariaLabel);
 
-    // Auto-fade the label after 2 seconds — leaves just the "+" icon
-    clearTimeout(_fabLabelTimer);
-    _fabLabelTimer = setTimeout(() => {
-      const label = fab.querySelector(".fab-label");
-      if (label) label.classList.add("fade-out");
+    // Reset to large, fully opaque state on tab switch
+    fab.classList.remove("settled");
+
+    // After 2 seconds, shrink + fade to 50% opacity via CSS transition
+    clearTimeout(_fabSettleTimer);
+    _fabSettleTimer = setTimeout(() => {
+      fab.classList.add("settled");
     }, 2000);
   }
 }

@@ -921,3 +921,55 @@ to every function and every major code block — this is non-negotiable.
 - `src/ui/home.js` — Rewrote `renderActivityFeed()` (3→10 items, added action buttons), added 10+ new exported functions for activity actions, added imports for `dli`, `svShopItem`, `dlShopItem`, `dbSet`, `dbDelete`, `logActivity` from db.js
 - `src/main.js` — Imported and registered all 10 new activity action functions on `window`
 - `src/styles.css` — Added `.act-btn` styles for the activity action buttons
+
+---
+
+### Session 7 Changes — FAB Cleanup, Collapsed Defaults, Activity Button Simplification
+
+**Date:** 2026-03-22
+
+#### 1. FAB Button: Label Removed, Size/Opacity Shrink After 2s
+
+**What changed:** The floating action button no longer shows any text label. It starts as a larger (64px), fully opaque gold circle when a tab loads, then after 2 seconds it smoothly shrinks to 48px and fades to 50% opacity. Tapping it at any size still triggers the correct add action for the current tab.
+
+**Why:** The animated text label was unnecessary visual noise. A simple size/opacity transition communicates the same "it's here but not in your way" concept more cleanly.
+
+**How it works:**
+- CSS: `.fab` starts at 64px with full opacity. Transition on `width`, `height`, `font-size`, and `opacity`. New `.fab.settled` class sets 48px size and `opacity: .5`.
+- JS: `_updateFAB(tab)` removes `settled` class on tab switch (reset to large), then adds it after 2-second timeout. No label HTML is generated.
+- Removed: `.fab-label`, `@keyframes fabLabelIn`, `.fab-label.fade-out`, `@keyframes fabLabelOut` CSS rules. Removed `label` field from `FAB_CONFIG`. Renamed timer to `_fabSettleTimer`.
+
+**Files changed:**
+- `src/styles.css` — Replaced label animation CSS with `.fab.settled` shrink/fade class
+- `src/main.js` — Simplified `_updateFAB()` to use settled class instead of label
+- `index.html` — Updated comment on FAB button (markup unchanged)
+
+#### 2. Running Low & Recent Activity: Always Start Collapsed
+
+**What changed:** Both sections now always start collapsed when the Home tab loads. Previously, collapse state was persisted in localStorage so it remembered across sessions. Now it uses in-memory state that resets on every `renderHome()` call.
+
+**Why:** The user expects these sections to be tucked away by default, requiring an intentional tap to expand. Persisting expand state was confusing because the sections appeared open on return.
+
+**How it works:**
+- Replaced localStorage-based persistence (`J(lsKey)`, `Js(lsKey, ...)`) with an in-memory `_homeSectionCollapsed` object.
+- New `_resetHomeSectionStates()` function sets both keys to `true` (collapsed).
+- Called at the start of `renderHome()` before any section renders.
+- `toggleHomeSection(key)` flips the in-memory boolean (works within a session, resets on next render).
+- Removed `J` and `Js` imports from state.js (no longer needed in home.js).
+
+**Files changed:**
+- `src/ui/home.js` — Replaced localStorage collapse persistence with in-memory state, added `_resetHomeSectionStates()`
+
+#### 3. Recent Activity: Undo Button Only for Deleted Items
+
+**What changed:** `_actBtnFor(entry)` now only returns an Undo button for items that were "removed" from the Shopping List or Supplies. All other action buttons (Remove, Uncheck, Revert, Clear, Unclip, Undo Cook, Undo Deduct) have been removed from the activity feed.
+
+**Why:** The full set of action buttons was too noisy and some were just placeholder messages anyway. The persistent Undo for deleted items is the high-value feature — it lets users recover accidentally deleted items even after the 5-second swipe toast expires.
+
+**How it works:**
+- `_actBtnFor(e)` checks for "removed" + "shopping" or "removed" + "supplies" in the action string. Returns Undo button for those. Returns empty string for everything else.
+- The existing `activityUndo()` function handles the re-add logic (unchanged).
+- All other activity action functions (`activityUncheck`, `activityRemoveShop`, etc.) and their `window` registrations remain in the code but are no longer triggered by any UI button.
+
+**Files changed:**
+- `src/ui/home.js` — Simplified `_actBtnFor()` to only emit Undo for deleted shopping/supplies items

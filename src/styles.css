@@ -1373,31 +1373,24 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .ei{font-size:3.6rem;margin-bottom:22px;opacity:.6;filter:grayscale(.15)}
 
 /* ── FLOATING ACTION BUTTON ───────────────────────────────────────────────────
-   Context-aware FAB that shows different actions per tab.
-   Positioned above bottom nav, translucent gold with shadow. */
+   Context-aware FAB that shows different actions per tab. No text label —
+   starts as a large opaque circle, then shrinks and fades to 50% after 2s.
+   Positioned above bottom nav. */
 /* FAB floats above the floating pill nav: 56px pill + 12px pill bottom + safe area + 12px gap */
-.fab{position:fixed;right:20px;bottom:calc(var(--safe) + 56px + 12px + 16px);width:56px;height:56px;
+.fab{position:fixed;right:20px;bottom:calc(var(--safe) + 56px + 12px + 16px);width:64px;height:64px;
   border-radius:50%;background:var(--ac);color:#0D0B08;border:none;
-  font-size:1.5rem;font-weight:700;cursor:pointer;z-index:140;
+  font-size:1.6rem;font-weight:700;cursor:pointer;z-index:140;
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 4px 20px rgba(212,168,83,.35),0 2px 8px rgba(0,0,0,.3);
-  transition:transform .2s cubic-bezier(.34,1.56,.64,1),box-shadow .2s,opacity .2s}
+  /* Smooth transition for shrink + fade after 2s idle */
+  transition:width .4s ease,height .4s ease,font-size .4s ease,
+    opacity .4s ease,transform .2s cubic-bezier(.34,1.56,.64,1),box-shadow .2s}
 .fab:active{transform:scale(.9);box-shadow:0 2px 12px rgba(212,168,83,.25)}
 .fab.hidden{opacity:0;pointer-events:none;transform:scale(.6)}
-/* FAB icon transition when changing tabs */
-.fab-icon{transition:transform .2s,opacity .15s;display:flex;align-items:center;justify-content:center}
-
-/* ── FAB CONTEXTUAL LABEL ──
-   Animated label that appears next to the FAB on tab switch, then fades out
-   after 2 seconds so only the "+" icon remains. Gives context without clutter. */
-.fab-label{position:absolute;right:64px;top:50%;transform:translateY(-50%);
-  background:var(--card2);border:1px solid var(--b2);border-radius:10px;
-  padding:6px 12px;font-size:.78rem;font-weight:600;color:var(--tx);
-  white-space:nowrap;pointer-events:none;
-  opacity:0;animation:fabLabelIn .3s ease forwards}
-@keyframes fabLabelIn{from{opacity:0;transform:translateY(-50%) translateX(6px)}to{opacity:1;transform:translateY(-50%) translateX(0)}}
-.fab-label.fade-out{animation:fabLabelOut .4s ease forwards}
-@keyframes fabLabelOut{from{opacity:1;transform:translateY(-50%) translateX(0)}to{opacity:0;transform:translateY(-50%) translateX(6px)}}
+/* Settled state: smaller + semi-transparent after 2s of inactivity */
+.fab.settled{width:48px;height:48px;font-size:1.3rem;opacity:.5}
+/* FAB icon — centered plus sign, no label */
+.fab-icon{display:flex;align-items:center;justify-content:center}
 
 /* ── ACTIVITY ACTION BUTTONS ──
    Small contextual buttons in the Recent Activity feed (Undo, Remove, etc.) */

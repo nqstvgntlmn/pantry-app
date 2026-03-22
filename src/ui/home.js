@@ -10,7 +10,7 @@
 //   xSt(expiry) — returns { c: "expired"|"expiring"|"ok", l: label }
 //   ll(loc)     — human-readable storage-location label ("fridge" → "🌡 Fridge")
 
-import { state, J, Js } from '../state.js';
+import { state } from '../state.js';
 import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase, formatQtyWithUnit, combineQty, applyTitleCaseWhileTyping, gcat, FRAC_OPTIONS } from '../helpers.js';
 import { saveMp, dbList, svi, dli, svShopItem, dlShopItem, dbSet, dbDelete, logActivity } from '../db.js';
 import { consolidateShopItem, _getProductPreference, getShoppingListCouponMatchCount } from './shopping.js'; // Consolidation-aware add to shopping list + product preferences + coupon count for notif strip
@@ -139,6 +139,10 @@ export function renderHome() {
   const grtEl = g("grt");
   if (grtEl && !grtEl.innerHTML) grtEl.innerHTML = `${gr}, <span>${u}</span>`;
 
+  // Reset collapsible sections to collapsed on every Home render —
+  // Running Low and Recent Activity always start closed, requiring a tap.
+  _resetHomeSectionStates();
+
   // Refresh every home-screen section
   renderWeek();          // 7-day meal plan grid
   renderSum();           // numeric stat cards (inventory count, expiring, shopping, recipes)
@@ -155,32 +159,32 @@ export function renderHome() {
 }
 
 // ── COLLAPSIBLE HOME SECTIONS ─────────────────────────────────────────────────
-// "Running Low" and "Recent Activity" can be collapsed/expanded by tapping
-// their headers. State is persisted in localStorage so it survives sessions.
+// "Running Low" and "Recent Activity" always start collapsed when the Home tab
+// loads. Tapping a header expands it; the state is tracked in-memory only so
+// it resets every time the Home tab re-renders.
+
+// In-memory collapse state — resets to collapsed on every renderHome() call.
+// Keys: "lowstock", "activity", "cooktonight"
+const _homeSectionCollapsed = { lowstock: true, activity: true, cooktonight: false };
 
 /**
  * toggleHomeSection(key) — Toggles the collapsed/expanded state of a home
- * screen section. Updates the arrow indicator and saves state to localStorage.
+ * screen section. Updates the arrow indicator. State lives in memory only —
+ * sections always start collapsed on each Home tab load.
  * @param {string} key — Section key: "lowstock" or "activity"
  */
 export function toggleHomeSection(key) {
-  const lsKey = `ks-home-${key}-collapsed`;
-  // Default to collapsed (true) if never toggled before
-  const isCollapsed = J(lsKey) !== false;
-  Js(lsKey, !isCollapsed);
-
-  // Update the body visibility and arrow direction
+  // Flip the in-memory state and re-apply to DOM
+  _homeSectionCollapsed[key] = !_homeSectionCollapsed[key];
   _applyHomeSectionState(key);
 }
 
 /**
- * _applyHomeSectionState(key) — Reads the collapsed state from localStorage
- * and applies it to the DOM: hides/shows the body, rotates the arrow.
+ * _applyHomeSectionState(key) — Reads the in-memory collapsed state and
+ * applies it to the DOM: hides/shows the body, rotates the arrow.
  */
 function _applyHomeSectionState(key) {
-  const lsKey = `ks-home-${key}-collapsed`;
-  // Default to collapsed if localStorage has no value (first visit)
-  const isCollapsed = J(lsKey) !== false;
+  const isCollapsed = _homeSectionCollapsed[key] !== false;
   const arrow = g(`${key}-arrow`);
   // Map section keys to their body element IDs
   const bodyMap = { lowstock: "lowstocklist", activity: "activityfeed", cooktonight: "cooktonightbody" };
@@ -195,6 +199,16 @@ function _applyHomeSectionState(key) {
     if (isCollapsed) body.classList.add("collapsed");
     else body.classList.remove("collapsed");
   }
+}
+
+/**
+ * _resetHomeSectionStates() — Resets all collapsible sections to collapsed.
+ * Called at the start of each renderHome() so sections always default to
+ * collapsed, requiring a tap to expand.
+ */
+function _resetHomeSectionStates() {
+  _homeSectionCollapsed.lowstock = true;
+  _homeSectionCollapsed.activity = true;
 }
 
 /**
@@ -727,51 +741,23 @@ function _actAgo(ts) {
   return days + "d ago";
 }
 
-// _actBtnFor(entry) — returns the HTML for a contextual action button based on
-// the activity entry's action verb. Each action type gets a specific undo/revert
-// button. Returns empty string if no action button applies.
+// _actBtnFor(entry) — returns an Undo button ONLY for items deleted from the
+// Shopping List or Supplies. This persistent Undo stays available even after
+// the 5-second swipe toast has expired, until the entry scrolls off the list.
+// All other action types get no button.
 function _actBtnFor(e) {
   const id = e.id || "";
   const act = (e.action || "").toLowerCase();
-  const item = (e.itemName || "").replace(/</g, "&lt;");
 
-  // Match action verbs to contextual buttons
-  // Shopping list actions
+  // Undo for items removed from Shopping List
   if (act.includes("removed") && act.includes("shopping"))
     return `<button class="act-btn" onclick="activityUndo('${id}')">Undo</button>`;
-  if (act.includes("checked off") && act.includes("shopping"))
-    return `<button class="act-btn" onclick="activityUncheck('${id}')">Uncheck</button>`;
-  if (act.includes("added") && act.includes("shopping"))
-    return `<button class="act-btn" onclick="activityRemoveShop('${id}')">Remove</button>`;
 
-  // Supplies / inventory actions
-  if (act.includes("added") && act.includes("supplies"))
-    return `<button class="act-btn" onclick="activityRemoveInv('${id}')">Remove</button>`;
+  // Undo for items removed from Supplies
   if (act.includes("removed") && act.includes("supplies"))
     return `<button class="act-btn" onclick="activityUndo('${id}')">Undo</button>`;
-  if (act.includes("updated") && !act.includes("recipes") && !act.includes("community"))
-    return `<button class="act-btn" onclick="activityRevert('${id}')">Revert</button>`;
 
-  // Recipe actions
-  if (act.includes("added") && act.includes("recipes"))
-    return `<button class="act-btn" onclick="activityRemoveRec('${id}')">Remove</button>`;
-  if (act.includes("saved") && act.includes("community"))
-    return `<button class="act-btn" onclick="activityRemoveRec('${id}')">Remove</button>`;
-  if (act.includes("cooked"))
-    return `<button class="act-btn" onclick="activityUndoCook('${id}')">Undo</button>`;
-
-  // Meal plan actions
-  if (act.includes("planned"))
-    return `<button class="act-btn" onclick="activityClearMeal('${id}')">Clear</button>`;
-
-  // Coupon actions
-  if (act.includes("clipped"))
-    return `<button class="act-btn" onclick="activityUnclip('${id}')">Unclip</button>`;
-
-  // Deduction actions (ingredient deduction after cooking)
-  if (act.includes("deducted"))
-    return `<button class="act-btn" onclick="activityUndoDeduct('${id}')">Undo</button>`;
-
+  // No action button for any other activity type
   return "";
 }
 
