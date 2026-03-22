@@ -9,6 +9,8 @@
 //   "clipped" — Return IDs of already-clipped coupons for the PPC
 //
 // Env vars (set in Vercel):
+//   SHOPRITE_EMAIL        — ShopRite account email (for OAuth2 login)
+//   SHOPRITE_PASSWORD     — ShopRite account password (for OAuth2 login)
 //   SHOPRITE_PPC          — Price Plus Card number for coupon clipping
 //   FIREBASE_PROJECT_ID   — Firebase project ID (family-pantry-c65d6)
 //   FIREBASE_CLIENT_EMAIL — Firebase Admin SDK client email
@@ -36,8 +38,10 @@ const adminDb = getFirestore();
 
 // ── ShopRite API Configuration ──────────────────────────────────────────────
 // Wakefern storefront gateway — powers shoprite.com digital coupons.
+// Auth goes through sts.shoprite.com (OAuth2/OIDC Security Token Service).
 // If ShopRite changes their API, update these URLs.
-const SR_API_BASE = "https://storefrontgateway.shoprite.com/api/v2";
+const SR_GATEWAY = "https://storefrontgateway.shoprite.com/api";
+const SR_STS_BASE = "https://sts.shoprite.com";
 
 // Default ShopRite store ID — Edison, NJ (ShopRite of Edison on Rt 1).
 // Can be overridden in request body if user selects a different store.
@@ -50,6 +54,11 @@ const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 // Price Plus Card number — stored as Vercel env var, never sent to client
 const PPC = process.env.SHOPRITE_PPC || "";
 
+// ShopRite account credentials — required for OAuth2 login.
+// The PPC is linked to the account, but auth uses email/password.
+const SR_EMAIL = process.env.SHOPRITE_EMAIL || "";
+const SR_PASSWORD = process.env.SHOPRITE_PASSWORD || "";
+
 // ── Session management ──────────────────────────────────────────────────────
 // ShopRite requires an auth token to list and clip coupons.
 // We cache the session token in a module-level variable so it persists
@@ -58,46 +67,149 @@ let cachedToken = null;
 let tokenExpiresAt = 0;
 
 /**
- * getAuthToken() — Authenticate with ShopRite using the Price Plus Card.
+ * getAuthToken() — Authenticate with ShopRite via their OAuth2 STS endpoint.
+ * ShopRite uses email/password auth (not PPC number) for API access.
  * Returns a bearer token for subsequent API calls.
  * Caches the token and reuses it until expiry to minimize auth calls.
  */
 async function getAuthToken() {
   // Reuse cached token if still valid (with 5-minute buffer)
   if (cachedToken && Date.now() < tokenExpiresAt - 300000) {
+    console.log("[ShopRite Auth] Using cached token, expires in", Math.round((tokenExpiresAt - Date.now()) / 60000), "min");
     return cachedToken;
   }
 
-  // Authenticate with PPC number via ShopRite's session endpoint
-  const res = await fetch(`${SR_API_BASE}/user/login`, {
+  // Validate that email/password credentials are configured
+  if (!SR_EMAIL || !SR_PASSWORD) {
+    console.error("[ShopRite Auth] Missing credentials — SHOPRITE_EMAIL:", SR_EMAIL ? "set" : "NOT SET", "| SHOPRITE_PASSWORD:", SR_PASSWORD ? "set" : "NOT SET");
+    throw new Error("SHOPRITE_EMAIL and SHOPRITE_PASSWORD must be set in Vercel env vars");
+  }
+
+  console.log("[ShopRite Auth] Attempting login with email:", SR_EMAIL);
+
+  // Step 1: Try the storefront gateway's auth/login endpoint with email/password.
+  // This mirrors how the ShopRite website authenticates users.
+  const loginUrl = `${SR_GATEWAY}/v2/auth/login`;
+  console.log("[ShopRite Auth] POST", loginUrl);
+
+  const loginBody = {
+    email: SR_EMAIL,
+    password: SR_PASSWORD,
+    banner: "ShopRite",
+    ppcNumber: PPC || undefined,
+  };
+
+  const res = await fetch(loginUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Accept": "application/json",
-      "User-Agent": "KitchenApp/1.0",
+      // Mimic a browser user-agent to avoid Cloudflare bot blocking
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Origin": "https://www.shoprite.com",
+      "Referer": "https://www.shoprite.com/",
     },
-    body: JSON.stringify({
-      ppcNumber: PPC,
-      banner: "ShopRite",
-    }),
+    body: JSON.stringify(loginBody),
   });
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`ShopRite auth failed (HTTP ${res.status}): ${errText.substring(0, 200)}`);
+  // Read the raw response text for debug logging
+  const rawText = await res.text();
+  console.log("[ShopRite Auth] Response status:", res.status, res.statusText);
+  console.log("[ShopRite Auth] Response headers content-type:", res.headers.get("content-type"));
+  console.log("[ShopRite Auth] Response body (first 500 chars):", rawText.substring(0, 500));
+
+  // Detect Cloudflare challenge pages — they return HTML instead of JSON
+  if (rawText.includes("cf-browser-verification") || rawText.includes("challenge-platform") || rawText.includes("Just a moment")) {
+    throw new Error("Blocked by Cloudflare bot protection — ShopRite API requires browser-like access. Server-to-server calls are being challenged.");
   }
 
-  const data = await res.json();
+  if (!res.ok) {
+    // If /v2/auth/login fails, try the STS (Security Token Service) endpoint
+    // as an alternative OAuth2 flow
+    console.log("[ShopRite Auth] Gateway login failed (HTTP", res.status + "), trying STS endpoint...");
+    return await trySTSAuth();
+  }
 
-  // Extract token from response — ShopRite returns it in the accessToken field
-  const token = data.accessToken || data.token || data.access_token;
+  // Parse the JSON response
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch (e) {
+    throw new Error(`ShopRite auth returned non-JSON (HTTP ${res.status}): ${rawText.substring(0, 300)}`);
+  }
+
+  // Extract token — ShopRite may use various field names
+  const token = data.accessToken || data.token || data.access_token || data.jwt;
   if (!token) {
-    throw new Error("ShopRite auth response missing token — API may have changed");
+    console.error("[ShopRite Auth] No token in response. Keys:", Object.keys(data).join(", "));
+    throw new Error("ShopRite auth response missing token — response keys: " + Object.keys(data).join(", "));
   }
 
   // Cache the token with a 1-hour default expiry if not specified
   cachedToken = token;
   tokenExpiresAt = Date.now() + (data.expiresIn ? data.expiresIn * 1000 : 3600000);
+  console.log("[ShopRite Auth] Login successful, token cached for", Math.round((tokenExpiresAt - Date.now()) / 60000), "min");
+
+  return token;
+}
+
+/**
+ * trySTSAuth() — Fallback authentication via ShopRite's STS (Security Token Service).
+ * Uses the OAuth2 Resource Owner Password Credentials (ROPC) grant type.
+ * This is the same OAuth2 flow the ShopRite mobile app uses.
+ */
+async function trySTSAuth() {
+  // ROPC grant — sends email/password directly for a token
+  const stsUrl = `${SR_STS_BASE}/connect/token`;
+  console.log("[ShopRite Auth] POST", stsUrl, "(ROPC grant)");
+
+  const params = new URLSearchParams({
+    grant_type: "password",
+    username: SR_EMAIL,
+    password: SR_PASSWORD,
+    client_id: "mwg.ecm.storefrontmobile.app",
+    scope: "mwg.ecm.storefrontmobile:all offline_access",
+  });
+
+  const res = await fetch(stsUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    },
+    body: params.toString(),
+  });
+
+  const rawText = await res.text();
+  console.log("[ShopRite Auth STS] Response status:", res.status, res.statusText);
+  console.log("[ShopRite Auth STS] Response body (first 500 chars):", rawText.substring(0, 500));
+
+  // Detect Cloudflare challenge
+  if (rawText.includes("cf-browser-verification") || rawText.includes("challenge-platform") || rawText.includes("Just a moment")) {
+    throw new Error("Blocked by Cloudflare bot protection on STS endpoint — server-to-server calls are being challenged.");
+  }
+
+  if (!res.ok) {
+    throw new Error(`ShopRite STS auth failed (HTTP ${res.status}): ${rawText.substring(0, 300)}`);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch (e) {
+    throw new Error(`ShopRite STS returned non-JSON (HTTP ${res.status}): ${rawText.substring(0, 300)}`);
+  }
+
+  const token = data.access_token || data.accessToken || data.token;
+  if (!token) {
+    console.error("[ShopRite Auth STS] No token in response. Keys:", Object.keys(data).join(", "));
+    throw new Error("STS response missing token — keys: " + Object.keys(data).join(", "));
+  }
+
+  // Cache the token
+  cachedToken = token;
+  tokenExpiresAt = Date.now() + (data.expires_in ? data.expires_in * 1000 : 3600000);
+  console.log("[ShopRite Auth STS] Login successful, token cached for", Math.round((tokenExpiresAt - Date.now()) / 60000), "min");
 
   return token;
 }
@@ -108,18 +220,25 @@ async function getAuthToken() {
  * Returns an array of normalized coupon objects.
  */
 async function fetchCouponsFromAPI(token, storeId) {
-  const url = `${SR_API_BASE}/stores/${storeId}/coupons?limit=200`;
+  // Try the v2 coupons endpoint with store context
+  const url = `${SR_GATEWAY}/v2/stores/${storeId}/coupons?limit=200`;
+  console.log("[ShopRite Coupons] GET", url);
 
   const res = await fetch(url, {
     headers: {
       "Authorization": `Bearer ${token}`,
       "Accept": "application/json",
-      "User-Agent": "KitchenApp/1.0",
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Origin": "https://www.shoprite.com",
+      "Referer": "https://www.shoprite.com/",
     },
   });
 
+  console.log("[ShopRite Coupons] Response status:", res.status, res.statusText);
+
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
+    console.error("[ShopRite Coupons] Fetch failed. Body (first 500 chars):", errText.substring(0, 500));
     throw new Error(`ShopRite coupons fetch failed (HTTP ${res.status}): ${errText.substring(0, 200)}`);
   }
 
@@ -147,19 +266,27 @@ async function fetchCouponsFromAPI(token, storeId) {
  * the cashier scans the Price Plus Card.
  */
 async function clipCouponToCard(token, couponId) {
-  const res = await fetch(`${SR_API_BASE}/coupons/${couponId}/clip`, {
+  const url = `${SR_GATEWAY}/v2/coupons/${couponId}/clip`;
+  console.log("[ShopRite Clip] PUT", url);
+
+  const res = await fetch(url, {
     method: "PUT",
     headers: {
       "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
       "Accept": "application/json",
-      "User-Agent": "KitchenApp/1.0",
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Origin": "https://www.shoprite.com",
+      "Referer": "https://www.shoprite.com/",
     },
     body: JSON.stringify({ couponId }),
   });
 
+  console.log("[ShopRite Clip] Response status:", res.status, res.statusText);
+
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
+    console.error("[ShopRite Clip] Failed. Body:", errText.substring(0, 500));
     throw new Error(`Clip failed (HTTP ${res.status}): ${errText.substring(0, 200)}`);
   }
 
@@ -171,16 +298,24 @@ async function clipCouponToCard(token, couponId) {
  * Used to show "✓ Clipped" state in the UI without re-fetching all coupons.
  */
 async function fetchClippedIds(token) {
-  const res = await fetch(`${SR_API_BASE}/coupons/clipped`, {
+  const url = `${SR_GATEWAY}/v2/coupons/clipped`;
+  console.log("[ShopRite Clipped] GET", url);
+
+  const res = await fetch(url, {
     headers: {
       "Authorization": `Bearer ${token}`,
       "Accept": "application/json",
-      "User-Agent": "KitchenApp/1.0",
+      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Origin": "https://www.shoprite.com",
+      "Referer": "https://www.shoprite.com/",
     },
   });
 
+  console.log("[ShopRite Clipped] Response status:", res.status, res.statusText);
+
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
+    console.error("[ShopRite Clipped] Failed. Body:", errText.substring(0, 500));
     throw new Error(`Fetch clipped failed (HTTP ${res.status}): ${errText.substring(0, 200)}`);
   }
 
@@ -293,9 +428,14 @@ export default async function handler(req, res) {
   if (!action) return res.status(400).json({ error: "action is required (list, clip, clipped)" });
   if (!householdId) return res.status(400).json({ error: "householdId is required" });
 
-  // Verify PPC is configured — without it, we can't authenticate with ShopRite
+  // Verify credentials are configured — email/password are required for auth,
+  // PPC is needed to clip coupons to a specific card
+  if (!SR_EMAIL || !SR_PASSWORD) {
+    console.error("[ShopRite] Missing credentials. SHOPRITE_EMAIL:", SR_EMAIL ? "set" : "NOT SET", "| SHOPRITE_PASSWORD:", SR_PASSWORD ? "set" : "NOT SET", "| SHOPRITE_PPC:", PPC ? "set" : "NOT SET");
+    return res.status(500).json({ error: "SHOPRITE_EMAIL and SHOPRITE_PASSWORD must be configured in Vercel env vars" });
+  }
   if (!PPC) {
-    return res.status(500).json({ error: "SHOPRITE_PPC not configured — add it in Vercel env vars" });
+    console.warn("[ShopRite] SHOPRITE_PPC not set — coupons can be listed but not clipped to a card");
   }
 
   try {
