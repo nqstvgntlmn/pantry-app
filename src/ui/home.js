@@ -35,9 +35,42 @@ function _contextGreeting(hour) {
   return "Late night vibes";
 }
 
+// ── TIME-OF-DAY HERO IMAGES ─────────────────────────────────────────────────
+// Curated Unsplash food images baked into the app for the home header hero.
+// Each time period maps to a relevant food/kitchen image URL.
+// These are direct Unsplash image URLs with size parameters for fast loading.
+const HERO_IMAGES = {
+  morning:  "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=800&h=400&fit=crop&crop=center", // breakfast spread
+  afternoon:"https://images.unsplash.com/photo-1547592180-85f173990554?w=800&h=400&fit=crop&crop=center", // lunch salad bowls
+  evening:  "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=400&fit=crop&crop=center", // dinner cooking
+  night:    "https://images.unsplash.com/photo-1495195134817-aeb325a55b65?w=800&h=400&fit=crop&crop=center"  // cozy kitchen
+};
+
+// _getHeroPeriod(hour) — maps current hour to a time-of-day period
+// for selecting the appropriate hero background image.
+function _getHeroPeriod(hour) {
+  if (hour >= 5 && hour < 12) return "morning";
+  if (hour >= 12 && hour < 17) return "afternoon";
+  if (hour >= 17 && hour < 21) return "evening";
+  return "night";
+}
+
+// _applyHeroBg(hour) — sets the home header's hero background image
+// based on the current time of day. Adds the hero-bg class which
+// activates the scrim overlay and image styling in CSS.
+function _applyHeroBg(hour) {
+  const hhdr = document.querySelector(".hhdr");
+  if (!hhdr) return;
+  const period = _getHeroPeriod(hour);
+  const url = HERO_IMAGES[period];
+  hhdr.classList.add("hero-bg");
+  hhdr.style.backgroundImage = `url('${url}')`;
+}
+
 // initHome() — called once on app boot.
 // Sets the context-aware greeting with first name only, displays
-// today's full date, and kicks off the first render of the week grid.
+// today's full date, applies the hero background, and kicks off
+// the first render of the week grid.
 export function initHome() {
   // Determine greeting based on current hour + day context
   const h = new Date().getHours();
@@ -56,6 +89,9 @@ export function initHome() {
   // Show today's date in a human-friendly format, e.g. "Monday, March 9"
   const hdtEl = g("hdt");
   if (hdtEl) hdtEl.textContent = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  // Apply time-of-day hero background image to the home header
+  _applyHeroBg(h);
 
   renderWeek();
 }

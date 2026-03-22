@@ -3756,18 +3756,23 @@ function renderCouponCards() {
  */
 function buildCouponCard(coupon) {
   const card = document.createElement("div");
-  card.className = "coupon-card" + (coupon.clipped ? " clipped" : "");
+  // Add coupon-has-image class when image exists — triggers full-bleed imagery layout
+  // with scrim overlay so product photo fills the card prominently
+  const hasImage = !!coupon.image;
+  card.className = "coupon-card" + (coupon.clipped ? " clipped" : "") + (hasImage ? " coupon-has-image" : "");
   card.id = "coupon-" + coupon.id;
 
   // Coupon image (if available from ShopRite API)
+  // When coupon-has-image class is present, CSS positions this as a full background
   if (coupon.image) {
     const img = document.createElement("img");
     img.className = "coupon-img";
     img.src = coupon.image;
     img.alt = coupon.name || "Coupon";
     img.loading = "lazy";
-    // Hide broken images gracefully
-    img.onerror = function() { this.style.display = "none"; };
+    // Hide broken images gracefully — also remove the imagery class so card
+    // falls back to the standard text-only layout
+    img.onerror = function() { this.style.display = "none"; this.closest(".coupon-card")?.classList.remove("coupon-has-image"); };
     card.appendChild(img);
   }
 

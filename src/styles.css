@@ -3,6 +3,69 @@
    Extracted from index.html for Vite bundling.
    ════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   IMAGERY FEATURE — remove this entire block to disable all background imagery
+   Covers: recipe card full-bleed images with scrim, home hero time-of-day
+   backgrounds, and ShopRite coupon card prominent product images with scrim.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── RECIPE CARD FULL-BLEED IMAGERY ──
+   Makes recipe cover images fill the entire card edge-to-edge.
+   Dark gradient scrim on the bottom keeps title and metadata readable. */
+.rcd.rcd-has-image{padding:0;overflow:hidden;position:relative;min-height:200px;display:flex;flex-direction:column;justify-content:flex-end}
+.rcd.rcd-has-image .rcd-cover{margin:0;border-radius:0;max-height:none;position:absolute;inset:0;z-index:0}
+.rcd.rcd-has-image .rcd-cover img{width:100%;height:100%;object-fit:cover;display:block}
+/* Deep scrim gradient — transparent top, solid dark bottom for text legibility */
+.rcd.rcd-has-image .rcd-cover::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(13,11,8,.05) 0%,rgba(13,11,8,.35) 40%,rgba(13,11,8,.88) 75%,rgba(13,11,8,.97) 100%);
+  pointer-events:none;z-index:1}
+/* Card content sits above the scrim */
+.rcd.rcd-has-image .rcd-content{position:relative;z-index:2;padding:100px 18px 18px}
+.rcd.rcd-has-image .rnm{color:#F5F0E8;text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.rcd.rcd-has-image .rmeta{color:rgba(245,240,232,.6)}
+.rcd.rcd-has-image .rmeta a{color:var(--ac2)}
+.rcd.rcd-has-image .rnot{color:rgba(245,240,232,.75)}
+.rcd.rcd-has-image .stars .star{color:rgba(245,240,232,.3)}
+.rcd.rcd-has-image .stars .star.on{color:var(--ac)}
+
+/* ── HOME HERO TIME-OF-DAY BACKGROUND ──
+   Full-width hero banner on the home tab header with curated food imagery.
+   Uses a dark scrim overlay so greeting text stays readable.
+   Background images baked into CSS as Unsplash URLs for zero-dependency. */
+.hhdr.hero-bg{position:relative;background-size:cover;background-position:center;min-height:160px;padding-bottom:20px;
+  border-bottom:none;transition:background-image .6s ease}
+/* Scrim overlay — dark gradient ensures text contrast over any image */
+.hhdr.hero-bg::before{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(13,11,8,.55) 0%,rgba(13,11,8,.75) 60%,rgba(13,11,8,.95) 100%);
+  z-index:0;pointer-events:none}
+/* Ensure all header children sit above the scrim */
+.hhdr.hero-bg>*{position:relative;z-index:1}
+
+/* ── SHOPRITE COUPON CARD PROMINENT IMAGERY ──
+   When a coupon has an image, it fills the card background prominently
+   with a scrim overlay so text and clip button remain readable. */
+.coupon-card.coupon-has-image{position:relative;overflow:hidden;padding:0;min-height:120px;display:flex;align-items:flex-end}
+/* Product image fills the card as a background layer */
+.coupon-card.coupon-has-image .coupon-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:0;z-index:0;opacity:.6}
+/* Dark scrim over the image for text readability */
+.coupon-card.coupon-has-image::before{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(13,11,8,.2) 0%,rgba(13,11,8,.75) 50%,rgba(13,11,8,.95) 100%);
+  z-index:1;pointer-events:none}
+/* Card body and clip button sit above the scrim */
+.coupon-card.coupon-has-image .coupon-body{position:relative;z-index:2;padding:50px 16px 15px;flex:1;min-width:0}
+.coupon-card.coupon-has-image .coupon-clip-btn{position:relative;z-index:2;margin:0 16px 15px 0;align-self:flex-end}
+.coupon-card.coupon-has-image .coupon-brand{color:rgba(245,240,232,.6)}
+.coupon-card.coupon-has-image .coupon-name{color:#F5F0E8;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+.coupon-card.coupon-has-image .coupon-desc{color:rgba(245,240,232,.65)}
+.coupon-card.coupon-has-image .coupon-value{color:var(--gn);text-shadow:0 1px 2px rgba(0,0,0,.3)}
+.coupon-card.coupon-has-image .coupon-expiry{color:rgba(245,240,232,.5)}
+/* Clipped state: reduce image opacity further */
+.coupon-card.coupon-has-image.clipped .coupon-img{opacity:.35}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   END IMAGERY FEATURE
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
 /* CSS CUSTOM PROPERTIES (design tokens) — "Refined Dark Luxury" warm palette */
@@ -1350,3 +1413,109 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* ── DONE-SECTION BREATHING ───────────────────────────────────────────────────
    More spacing in checked-off items for visual clarity. */
 .done-section-hdr{margin:26px 0 11px}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   RISOPRINT ACCENTS — Recipes Tab Only
+   Subtle grainy/textured feel on recipe cards using CSS noise textures,
+   slightly muted earthy color overlaps, and a handmade artisanal aesthetic.
+   Feels like a beautiful indie food magazine, not digital-clean.
+   Scoped to #screen-recipes so it doesn't affect the rest of the app.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Noise grain overlay on the entire recipes screen — very subtle analog texture */
+#screen-recipes::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.045;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='r'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23r)'/%3E%3C/svg%3E");
+  mix-blend-mode:overlay}
+
+/* Recipe cards get a warm paper-like base and earthy risograph color overlap */
+#screen-recipes .rcd{position:relative;border:1px solid rgba(180,150,100,.15);
+  background:linear-gradient(165deg,rgba(35,30,22,.95) 0%,rgba(42,35,25,.9) 50%,rgba(30,25,18,.95) 100%);
+  box-shadow:inset 0 0 0 1px rgba(180,150,100,.06)}
+/* Warm earthy color bleed — subtle risograph registration offset effect */
+#screen-recipes .rcd::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 80% 50% at 70% 20%,rgba(190,140,70,.06),transparent 60%),
+             radial-gradient(ellipse 60% 40% at 20% 80%,rgba(140,90,60,.05),transparent 50%);
+  mix-blend-mode:screen}
+/* Recipe card inner content stays above the texture layers */
+#screen-recipes .rcd>*{position:relative;z-index:1}
+
+/* Recipe name on risoprint cards — warmer, slightly rough-edged look */
+#screen-recipes .rnm{color:rgba(245,235,215,1);letter-spacing:-.01em}
+/* Star ratings get a warmer muted terracotta on risoprint cards */
+#screen-recipes .stars .star.on{color:#c9a050}
+/* Metadata pills get earthy tones instead of flat grey */
+#screen-recipes .recipe-badge{border-color:rgba(160,130,80,.3);background:rgba(160,130,80,.08)}
+#screen-recipes .recipe-badge-time{border-color:rgba(140,160,130,.3);color:#a8c4a0;background:rgba(140,160,130,.08)}
+/* Date/source row — more muted, like a printed footnote */
+#screen-recipes .rmeta{color:rgba(160,140,110,.5);letter-spacing:.02em}
+/* Description preview — warm ivory instead of cool grey */
+#screen-recipes .rnot{color:rgba(210,195,170,.7)}
+
+/* Favorite cards get a warm amber glow instead of cold gold border */
+#screen-recipes .rcd.fav{border-color:rgba(190,140,70,.35);
+  background:linear-gradient(165deg,rgba(45,35,22,.95) 0%,rgba(55,40,25,.9) 50%,rgba(35,28,18,.95) 100%)}
+
+/* Recipe header area — slight earthy warmth */
+#screen-recipes .sttl{color:rgba(245,235,215,1)}
+#screen-recipes .ssub{color:rgba(180,160,130,.7)}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   REFINED BRUTALISM TYPOGRAPHY
+   Bold, confident section headers with strong contrast, oversized display
+   numbers on stat cards, strong grid lines between sections, and generous
+   deliberate spacing. Keeps the dark gold identity — typographic confidence,
+   not ugliness. Think bold food magazine editorial layout.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── DISPLAY NUMBERS — Oversized stat card values ── */
+/* Stat card numbers: bigger, bolder, more commanding presence */
+.scv{font-size:2.8rem;font-weight:400;letter-spacing:-.03em;line-height:.9}
+/* Savings hero number — even larger for impact */
+.savings-amount{font-size:2rem;font-weight:400;letter-spacing:-.02em}
+/* Today card values — bolder display treatment */
+.tc-val{font-size:1.5rem;font-weight:400;letter-spacing:-.02em}
+/* Inventory quantity — stronger presence */
+.iqt{font-size:1.5rem;font-weight:400;opacity:.85;letter-spacing:-.02em}
+
+/* ── SECTION HEADERS — Bold editorial dividers ── */
+/* All section labels: bolder, more authoritative, strong left border */
+.hsec-lbl{font-size:.8rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  padding-left:14px;border-left:4px solid var(--ac);margin:26px 0 14px}
+.slbl{font-size:.76rem;font-weight:800;letter-spacing:.12em;
+  padding-left:14px;border-left:4px solid var(--ac);margin:28px 0 14px}
+.shsec{font-size:.76rem;font-weight:800;letter-spacing:.12em;
+  padding-left:14px;border-left:4px solid var(--ac);margin:26px 0 12px}
+/* Section label divider line — thicker for brutalist feel */
+.hsec-lbl::after,.slbl::after{height:2px;background:var(--b2)}
+
+/* ── SCREEN TITLES — Oversized, heavy, editorial ── */
+.sttl{font-size:2.4rem;font-weight:900;letter-spacing:-.04em;line-height:1}
+.grt{font-size:2rem;font-weight:400;letter-spacing:-.03em}
+/* Overlay titles — bolder editorial feel */
+.ovttl{font-size:1.6rem;font-weight:400;letter-spacing:-.025em}
+/* Modal titles — same editorial weight */
+.mttl{font-size:1.4rem;font-weight:400;letter-spacing:-.02em}
+
+/* ── GRID LINES — Strong horizontal dividers between sections ── */
+/* Thick separator above section headers — visible editorial grid */
+.hsec-lbl{padding-top:16px;border-top:2px solid var(--b2)}
+/* First section label doesn't need top border */
+.hbody .hsec-lbl:first-child,.rbody .hsec-lbl:first-child{border-top:none;padding-top:0}
+/* Strong divider between inventory location groups */
+.lgrp+.lgrp{border-top:2px solid var(--b2);padding-top:16px;margin-top:8px}
+
+/* ── GENEROUS DELIBERATE SPACING ── */
+/* More breathing room around major content blocks */
+.sgrd{margin-bottom:20px}
+.today-grid{gap:12px;margin-bottom:20px}
+/* Recipe cards — more vertical breathing room */
+#screen-recipes .rcd{margin-bottom:14px}
+/* Stat card labels — slightly bigger for editorial weight */
+.scl{font-size:.78rem;font-weight:600;letter-spacing:.02em;margin-top:8px}
+/* Nav label — slightly bolder */
+.ni .lbl{font-size:.6rem;font-weight:700;letter-spacing:.07em}
+
+/* ── RECIPE TAB — Brutalist header with risoprint integration ── */
+/* Recipe tab labels: bolder, more confident */
+#screen-recipes .rtab{font-size:.76rem;font-weight:700;letter-spacing:.04em}
+#screen-recipes .rtab.active{font-weight:800}

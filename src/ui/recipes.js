@@ -635,7 +635,17 @@ function rH(r) {
       ? `<div class="rnot" style="color:var(--tx2);margin-top:6px">${r.description.substring(0, 100)}${r.description.length > 100 ? "…" : ""}</div>`
       : "";
 
-  return `<div class="rcd${r.favorited ? " fav" : ""}" onclick="openRecipeView('${r.id}')">${imgHtml}<div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited ? "❤️" : "🤍"}</div></div><div class="stars">${st}</div>${metaHtml}${descPreview}${r.notes ? `<div class="rnot">${r.notes}</div>` : ""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div></div>`;
+  // Build inner content (title row, stars, meta, description, notes, footer)
+  const innerHtml = `<div class="rrow"><div class="rnm">${r.name}</div><div class="rfav" onclick="event.stopPropagation();togFav('${r.id}')">${r.favorited ? "❤️" : "🤍"}</div></div><div class="stars">${st}</div>${metaHtml}${descPreview}${r.notes ? `<div class="rnot">${r.notes}</div>` : ""}<div class="rmeta"><span>${r.savedAt}</span>${srcLink}</div>`;
+
+  // When a cover image exists, use full-bleed imagery layout:
+  // - Add rcd-has-image class for edge-to-edge image styling
+  // - Wrap content in rcd-content div so it sits above the scrim overlay
+  // When no image, use the standard card layout with inline content
+  if (r.imageUrl) {
+    return `<div class="rcd rcd-has-image${r.favorited ? " fav" : ""}" onclick="openRecipeView('${r.id}')">${imgHtml}<div class="rcd-content">${innerHtml}</div></div>`;
+  }
+  return `<div class="rcd${r.favorited ? " fav" : ""}" onclick="openRecipeView('${r.id}')">${innerHtml}</div>`;
 }
 
 // ── TAB SWITCHING ────────────────────────────────────────────────────────────

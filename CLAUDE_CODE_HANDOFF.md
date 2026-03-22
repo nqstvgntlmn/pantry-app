@@ -663,3 +663,49 @@ to every function and every major code block — this is non-negotiable.
 
 - Shortcut posts to `/api/sync-reminders` with `x-api-key: kitchen-sync-2026`
 - **DO NOT TOUCH** `api/sync-reminders.js` or `api/completed-items.js`
+
+---
+
+## Design Enhancements — Session 7 (March 2026)
+
+### Three Visual Upgrades Applied
+
+#### 1. Risoprint Accents (Recipes Tab Only)
+- **Scope:** Only `#screen-recipes` — no other tab is affected
+- **What:** Subtle grainy noise texture overlay (CSS SVG filter at 4.5% opacity), earthy warm gradients on recipe cards, muted terracotta star ratings, warm color bleeds via `mix-blend-mode:screen` radial gradients, and paper-like card backgrounds
+- **Aesthetic:** Indie food magazine / artisanal zine — handmade, not digital-clean
+- **Files changed:** `src/styles.css` (new "RISOPRINT ACCENTS" block at bottom)
+
+#### 2. Refined Brutalism Typography (App-Wide)
+- **Scope:** Global — affects all section headers, stat numbers, screen titles, and grid lines
+- **What:**
+  - Oversized display numbers on stat cards (`.scv` bumped to `2.8rem`, `font-weight:400`)
+  - Bolder section headers (`.hsec-lbl`, `.slbl`, `.shsec` at `font-weight:800` with 4px gold left border)
+  - Screen titles at `2.4rem` / `font-weight:900`
+  - Strong 2px horizontal grid lines (`border-top`) above section headers
+  - Generous deliberate spacing throughout (more `margin`, `padding`, `gap`)
+- **Aesthetic:** Bold food magazine editorial — confident typography, not ugliness
+- **Files changed:** `src/styles.css` (new "REFINED BRUTALISM TYPOGRAPHY" block at bottom)
+
+#### 3. Immersive Background Imagery with Scrim Overlays
+- **Scope:** Recipe cards (with images), home tab hero, ShopRite coupon cards (with images)
+- **What:**
+  - **Recipe cards:** When a recipe has `imageUrl`, the image fills edge-to-edge with a dark gradient scrim. Card gets `rcd-has-image` class; content wrapped in `rcd-content` div. Cards without images render normally.
+  - **Home hero:** `.hhdr` gets `hero-bg` class with time-of-day Unsplash food images (morning/afternoon/evening/night). Dark scrim overlay keeps greeting text readable.
+  - **ShopRite coupons:** When coupon has `image`, card gets `coupon-has-image` class. Image fills background with scrim. Broken images gracefully fall back via `onerror`.
+  - **NOT applied to:** Supplies, Flipp deals, or empty states
+- **Revert instructions:** All image/scrim CSS is in a single clearly-marked block at the TOP of `styles.css` with the comment "IMAGERY FEATURE — remove this entire block to disable all background imagery"
+- **Files changed:** `src/styles.css` (imagery block at top), `src/ui/recipes.js` (rH function), `src/ui/shopping.js` (buildCouponCard function), `src/ui/home.js` (hero background logic)
+
+### Unsplash Hero Images (Baked In)
+| Period | Hours | Image |
+|--------|-------|-------|
+| Morning | 5–11 | Breakfast spread (photo-1533089860892) |
+| Afternoon | 12–16 | Lunch salad bowls (photo-1547592180) |
+| Evening | 17–20 | Dinner cooking (photo-1551218808) |
+| Night | 21–4 | Cozy kitchen (photo-1495195134817) |
+
+### How to Revert Each Feature
+- **Risoprint:** Delete the "RISOPRINT ACCENTS" CSS block (search for the header comment)
+- **Brutalism typography:** Delete the "REFINED BRUTALISM TYPOGRAPHY" CSS block
+- **Imagery:** Delete the "IMAGERY FEATURE" CSS block at top of styles.css + revert the JS changes in recipes.js, shopping.js, and home.js
