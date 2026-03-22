@@ -1497,14 +1497,14 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 4px 20px rgba(212,168,83,.35),0 2px 8px rgba(0,0,0,.3);
   /* Smooth transition for shrink + fade after 2s idle.
-     Uses cubic-bezier(0.4, 0, 0.2, 1) for a natural ease-in-out feel over 0.8s.
+     Uses cubic-bezier(0.4, 0, 0.2, 1) for a slow, deliberate ease-in-out over 2s.
      Box-shadow removed from transition — animating box-shadow forces full repaint each frame. */
-  transition:width .8s cubic-bezier(.4,0,.2,1),height .8s cubic-bezier(.4,0,.2,1),font-size .8s cubic-bezier(.4,0,.2,1),
-    opacity .8s cubic-bezier(.4,0,.2,1),transform .2s cubic-bezier(.34,1.56,.64,1)}
+  transition:width 2s cubic-bezier(.4,0,.2,1),height 2s cubic-bezier(.4,0,.2,1),font-size 2s cubic-bezier(.4,0,.2,1),
+    opacity 2s cubic-bezier(.4,0,.2,1),transform .2s cubic-bezier(.34,1.56,.64,1)}
 .fab:active{transform:scale(.9)}
 .fab.hidden{opacity:0;pointer-events:none;transform:scale(.6)}
-/* Settled state: smaller + semi-transparent (55% opacity) after 2s of inactivity */
-.fab.settled{width:48px;height:48px;font-size:1.3rem;opacity:.55}
+/* Settled state: smaller + semi-transparent (75% opacity) after 2s of inactivity */
+.fab.settled{width:48px;height:48px;font-size:1.3rem;opacity:.75}
 /* FAB icon — centered plus sign, no label */
 .fab-icon{display:flex;align-items:center;justify-content:center}
 

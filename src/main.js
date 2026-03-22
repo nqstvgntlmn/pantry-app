@@ -310,7 +310,7 @@ window.showScreen = function(n) {
 
 // ── CONTEXT-AWARE FLOATING ACTION BUTTON ─────────────────────────────────────
 // The FAB shows a "+" icon per tab. No text label — just a circle that starts
-// large and fully opaque, then shrinks + fades to 50% after 2 seconds.
+// large and fully opaque, then shrinks + fades to 75% after 2 seconds.
 // Tapping it at any size/opacity triggers the correct add action for the tab.
 const FAB_CONFIG = {
   home:      { action: "openHomeFabSheet()",   ariaLabel: "Add item" },
@@ -327,7 +327,7 @@ let _fabSettleTimer = null;
 
 // _updateFAB(tab) — shows/hides the FAB and sets its onclick for the given tab.
 // Resets the FAB to large/opaque, then adds "settled" class after 2 seconds
-// to smoothly shrink it and reduce opacity to 55% (0.8s cubic-bezier transition).
+// to smoothly shrink it and reduce opacity to 55% (2s cubic-bezier transition — slow and deliberate).
 function _updateFAB(tab) {
   const fab = g("fab-btn");
   if (!fab) return;
@@ -345,7 +345,7 @@ function _updateFAB(tab) {
     // Reset to large, fully opaque state on tab switch
     fab.classList.remove("settled");
 
-    // After 2 seconds, shrink + fade to 55% opacity via smooth 0.8s CSS transition
+    // After 2 seconds, shrink + fade to 75% opacity via slow 2s CSS transition
     clearTimeout(_fabSettleTimer);
     _fabSettleTimer = setTimeout(() => {
       fab.classList.add("settled");
