@@ -515,6 +515,39 @@ window.saveEditCustomCat = saveEditCustomCat;        // Save edits to a custom c
 window.addCustomCatFromSettings = addCustomCatFromSettings; // Create a new custom category from Settings
 window.renderCustomCategories = renderCustomCategories;     // Re-render custom categories list in Settings (used after delete)
 
+// ── INPUT CLEAR (×) BUTTON HANDLERS ──────────────────────────────────────────
+// These two functions power the inline × clear buttons on all search/filter inputs.
+// onSearchInput: toggles the .has-text class on the wrapper so CSS can show/hide the × button.
+// clearSearch: clears the input value, hides the × button, and calls the field's reset callback.
+
+/**
+ * onSearchInput(el) — Called on every keystroke in a clearable input.
+ * Adds or removes .has-text on the wrapper so the × button shows only when there's text.
+ */
+window.onSearchInput = function(el) {
+  const wrap = el.closest('.input-clear-wrap');
+  if (wrap) wrap.classList.toggle('has-text', el.value.length > 0);
+};
+
+/**
+ * clearSearch(inputId, callbackName) — Clears the input field, hides the × button,
+ * re-focuses the input, and invokes the named window function to reset filters/results.
+ */
+window.clearSearch = function(inputId, callbackName) {
+  const inp = g(inputId);
+  if (!inp) return;
+  // Clear the field and remove the has-text flag so × disappears
+  inp.value = '';
+  const wrap = inp.closest('.input-clear-wrap');
+  if (wrap) wrap.classList.remove('has-text');
+  // Re-focus so the user can keep typing immediately
+  inp.focus();
+  // Call the associated filter/reset function (e.g. filterDealsLocal, onShopInput)
+  if (callbackName && typeof window[callbackName] === 'function') {
+    window[callbackName]();
+  }
+};
+
 // manualRefresh(target) — Safety valve to force re-fetch all items from Firestore.
 // Triggered by the subtle ↻ button on Shopping/Inventory screens when real-time
 // sync feels stuck. Re-lists the collection from Firestore and re-renders.

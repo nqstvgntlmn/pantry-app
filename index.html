@@ -249,7 +249,11 @@
           <div id="coupons-section-body">
             <!-- Coupon search bar -->
             <div style="display:flex;gap:8px;margin-bottom:10px">
-              <input class="qainp" id="coupon-search" placeholder="Search coupons… e.g. yogurt, cereal" style="flex:1" onkeydown="if(event.key==='Enter')searchCoupons()" oninput="filterCouponsLocal()"/>
+              <!-- Coupon search input with inline clear (×) button -->
+              <div class="input-clear-wrap">
+                <input class="qainp" id="coupon-search" placeholder="Search coupons… e.g. yogurt, cereal" onkeydown="if(event.key==='Enter')searchCoupons()" oninput="onSearchInput(this);filterCouponsLocal()"/>
+                <button class="input-clear-btn" type="button" onclick="clearSearch('coupon-search','filterCouponsLocal')" aria-label="Clear search">&times;</button>
+              </div>
               <button class="btn bp" onclick="searchCoupons()" style="font-size:.8rem">Search</button>
             </div>
             <!-- Category filter chips for coupons -->
@@ -282,7 +286,11 @@
           <div id="deals-section-body">
             <!-- Search bar for filtering/searching within weekly deals -->
             <div style="display:flex;gap:8px;margin-bottom:10px">
-              <input class="qainp" id="dealsearch" placeholder="Search deals… e.g. chicken, milk, eggs" style="flex:1" onkeydown="if(event.key==='Enter')searchDeals()" oninput="filterDealsLocal()"/>
+              <!-- Deals search input with inline clear (×) button -->
+              <div class="input-clear-wrap">
+                <input class="qainp" id="dealsearch" placeholder="Search deals… e.g. chicken, milk, eggs" onkeydown="if(event.key==='Enter')searchDeals()" oninput="onSearchInput(this);filterDealsLocal()"/>
+                <button class="input-clear-btn" type="button" onclick="clearSearch('dealsearch','filterDealsLocal')" aria-label="Clear search">&times;</button>
+              </div>
               <button class="btn bp" onclick="searchDeals()">Search</button>
             </div>
             <!-- "Find deals for my list" button — fuzzy matches against shopping list -->
@@ -418,7 +426,11 @@
     <div class="bsheet-title">Add to list</div>
     <!-- Text input shown immediately when sheet opens -->
     <div id="shopAddTypeForm">
-      <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
+      <!-- Shopping add input with inline clear (×) button -->
+      <div class="input-clear-wrap">
+        <input class="fi" id="shi" placeholder="e.g. Milk, Eggs, Bread…" oninput="onSearchInput(this);onShopInput()" onkeydown="if(event.key==='Enter')qadd()"/>
+        <button class="input-clear-btn" type="button" onclick="clearSearch('shi','onShopInput')" aria-label="Clear input">&times;</button>
+      </div>
       <!-- Category badge: collapsed pill showing auto-detected category, tappable to change -->
       <div id="shopAddCatBadge" style="display:none"></div>
       <input type="hidden" id="shopAddCatKey" value=""/>
@@ -463,7 +475,11 @@
     <div class="bsheet-title">Add to supplies</div>
     <!-- Text input with live search dropdown (same UX as shopping) -->
     <div id="invAddTypeForm">
-      <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>
+      <!-- Inventory add input with inline clear (×) button -->
+      <div class="input-clear-wrap">
+        <input class="fi" id="invi" placeholder="e.g. Milk, Eggs, Olive Oil…" oninput="onSearchInput(this);onInvInput()" onkeydown="if(event.key==='Enter')qaddInv()"/>
+        <button class="input-clear-btn" type="button" onclick="clearSearch('invi','onInvInput')" aria-label="Clear input">&times;</button>
+      </div>
       <!-- Category badge: collapsed pill showing auto-detected category, tappable to change -->
       <div id="invAddCatBadge" style="display:none"></div>
       <input type="hidden" id="invAddCatKey" value=""/>
@@ -518,7 +534,11 @@
     <div class="bsheet-title">Add item</div>
     <!-- Text input with live search dropdown (same pattern as Shopping/Supplies) -->
     <div id="uniAddForm">
-      <input class="fi" id="uniAddInput" placeholder="e.g. Milk, Eggs, Bread…" oninput="onUniAddInput()" onkeydown="if(event.key==='Enter')uniAddToSupplies()"/>
+      <!-- Universal add input with inline clear (×) button -->
+      <div class="input-clear-wrap">
+        <input class="fi" id="uniAddInput" placeholder="e.g. Milk, Eggs, Bread…" oninput="onSearchInput(this);onUniAddInput()" onkeydown="if(event.key==='Enter')uniAddToSupplies()"/>
+        <button class="input-clear-btn" type="button" onclick="clearSearch('uniAddInput','onUniAddInput')" aria-label="Clear input">&times;</button>
+      </div>
       <!-- Category badge: collapsed pill showing auto-detected category, tappable to change -->
       <div id="uniAddCatBadge" style="display:none"></div>
       <input type="hidden" id="uniAddCatKey" value=""/>
@@ -1152,7 +1172,11 @@
     <input class="minp" id="mealMinp" placeholder="e.g. Chicken stir fry" onkeydown="if(event.key==='Enter')saveMeal()"/>
     <div id="recPickerWrap" style="display:none;margin-top:10px">
       <div id="recChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
-      <input id="recFilter" placeholder="Or type anything — chicken, garlic, 30 min…" oninput="filterRecs()" style="width:100%;box-sizing:border-box;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:10px;font-size:.9rem;margin-bottom:6px"/>
+      <!-- Recipe filter input with inline clear (×) button -->
+      <div class="input-clear-wrap" style="margin-bottom:6px">
+        <input id="recFilter" placeholder="Or type anything — chicken, garlic, 30 min…" oninput="onSearchInput(this);filterRecs()" style="width:100%;box-sizing:border-box;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:10px;padding-right:36px;font-size:.9rem"/>
+        <button class="input-clear-btn" type="button" onclick="clearSearch('recFilter','filterRecs')" aria-label="Clear filter">&times;</button>
+      </div>
       <select id="recPicker" style="width:100%;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:10px;font-size:.95rem" onchange="pickRec(this.value)"><option value="">— pick a saved recipe —</option></select>
     </div>
     <div class="brow" style="margin-top:12px"><button class="btn bs" style="flex:1" onclick="closeMealM()">Cancel</button><button class="btn bp" style="flex:2" onclick="saveMeal()">Save Meal</button></div>

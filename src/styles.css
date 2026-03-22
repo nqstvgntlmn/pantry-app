@@ -275,6 +275,18 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .sh-thumb{width:36px;height:36px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--sf);border:1px solid var(--b2)}
 */
 .qainp:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.1)}
+
+/* ── INPUT CLEAR (×) BUTTON ─────────────────────────────────────────────────
+   Inline clear button that appears inside search/filter inputs when they have text.
+   Positioned at the right inner edge of the field. Hidden by default, shown via JS. */
+.input-clear-wrap{position:relative;flex:1;display:flex}
+.input-clear-wrap>.qainp,.input-clear-wrap>.fi,.input-clear-wrap>.minp,.input-clear-wrap>input{width:100%;padding-right:36px}
+/* The × button itself — circular, subtle, centered vertically inside the input */
+.input-clear-btn{display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:var(--b2);border:none;color:var(--mt);font-size:.7rem;width:20px;height:20px;border-radius:50%;cursor:pointer;font-family:"DM Sans",sans-serif;line-height:1;padding:0;align-items:center;justify-content:center;transition:background .12s,color .12s;z-index:2}
+/* Show the button only when the sibling input has text (controlled by JS adding .has-text) */
+.input-clear-wrap.has-text .input-clear-btn{display:flex}
+.input-clear-btn:active{background:var(--mt);color:var(--bg)}
+
 /* ── VOICE INPUT MIC BUTTON ── */
 /* Pulsing animation when actively listening for speech */
 .mic-btn{transition:all .2s}
