@@ -68,28 +68,35 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
-/* CSS CUSTOM PROPERTIES (design tokens) — "Refined Dark Luxury" warm palette */
+/* CSS CUSTOM PROPERTIES (design tokens) — "Refined Dark Luxury" warm palette
+   --bg: deep near-black base, --sf: surface, --card/card2: elevated card layers.
+   Card tokens are intentionally lighter than --bg to create layered depth. */
 :root{
-  --bg:#0D0B08;--sf:#14110E;--card:#1C1814;--card2:#221E19;
-  --b1:#2A2520;--b2:#353028;
+  --bg:#0A0A0E;--sf:#111115;--card:#1A1A20;--card2:#212128;
+  --b1:#28282F;--b2:#333340;
   --ac:#D4A853;--ac2:#E8C27A;--acd:rgba(212,168,83,.13);
   --gn:#5aad6f;--gnd:rgba(90,173,111,.13);
   --rd:#d96b6b;--rdd:rgba(217,107,107,.13);
   --am:#c8960a;--amd:rgba(200,150,10,.13);
-  --tx:#F5F0E8;--tx2:#B5A892;--mt:#8A7F6E;
+  --tx:#F5F0E8;--tx2:#A8A0B0;--mt:#7A7585;
   --nh:72px;--safe:env(safe-area-inset-bottom,0px);
   /* Card border tokens — simulates ambient top-light on elevated surfaces */
-  --card-border:rgba(255,255,255,0.06);
-  --card-border-top:rgba(255,255,255,0.10);
-  /* Gradient card background — almost imperceptible depth */
-  --card-grad:linear-gradient(180deg,#1E1A15 0%,#1A1610 100%)
+  --card-border:rgba(255,255,255,0.07);
+  --card-border-top:rgba(255,255,255,0.12);
+  /* Gradient card background — subtly lighter than page to create depth separation */
+  --card-grad:linear-gradient(180deg,#1C1C24 0%,#18181F 100%);
+  /* Page-level deep gradient — near-black top to slightly deeper bottom, subtle blue undertone */
+  --page-grad:linear-gradient(180deg,#0C0C12 0%,#08080C 50%,#060609 100%)
 }
 *{transition:background-color .25s,border-color .25s,color .15s}
 .btn,.tog,.ni,.ov,.modal-inner,.pcard,.rcd,.iit,.wd,.sc{transition:background-color .25s,border-color .2s,color .15s,transform .15s,opacity .15s}
-html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;color:var(--tx);overflow:hidden}
+/* Page background uses the deep gradient for a premium, non-flat feel.
+   Falls back to --bg solid color for any gaps. */
+html,body{height:100%;background:var(--page-grad);background-color:var(--bg);font-family:"DM Sans",sans-serif;color:var(--tx);overflow:hidden}
 
 /* ── AUTH SCREEN ── */
-#LS{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px;text-align:center;gap:0;z-index:1000;
+/* Auth screen background — deep gradient with subtle gold radial glow at top */
+#LS{position:fixed;inset:0;background:var(--page-grad);background-color:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px;text-align:center;gap:0;z-index:1000;
   background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(212,168,83,.18) 0%,transparent 60%)}
 .ll{font-size:4rem;margin-bottom:16px;filter:drop-shadow(0 0 24px rgba(212,168,83,.4))}
 .lt{font-family:"Fraunces",serif;font-size:2.8rem;color:var(--ac);font-weight:300;letter-spacing:-.03em;line-height:1;margin-bottom:10px}
@@ -136,13 +143,15 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .screen.no-transition{transition:none !important}
 
 /* ── NAV ── */
-/* Floating pill-shaped bottom nav — iOS 16+ style, hovers above content with frosted glass */
-#NAV{position:fixed;bottom:calc(var(--safe) + 12px);left:16px;right:16px;height:56px;
-  border-radius:28px;background:rgba(20,17,14,0.72);
-  backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8);
-  border:1px solid rgba(255,255,255,0.08);
-  box-shadow:0 8px 32px rgba(0,0,0,0.45),0 2px 8px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.05);
-  display:flex;align-items:stretch;padding:0 4px;z-index:150}
+/* Floating pill-shaped bottom nav — capsule shape hovering well above the screen edge.
+   Generous bottom margin creates visible breathing room underneath the pill.
+   Frosted glass backdrop with subtle border for depth. */
+#NAV{position:fixed;bottom:calc(var(--safe) + 20px);left:20px;right:20px;height:58px;
+  border-radius:30px;background:rgba(16,16,22,0.78);
+  backdrop-filter:blur(28px) saturate(1.8);-webkit-backdrop-filter:blur(28px) saturate(1.8);
+  border:1px solid rgba(255,255,255,0.10);
+  box-shadow:0 8px 40px rgba(0,0,0,0.5),0 2px 10px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.06);
+  display:flex;align-items:stretch;padding:0 6px;z-index:150}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:var(--mt);position:relative;border-radius:24px}
 .ni .ico{font-size:1.5rem;transition:transform .2s,filter .2s;line-height:1}
 .ni .lbl{font-size:.54rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;transition:color .2s,opacity .2s;opacity:.6}
@@ -175,12 +184,13 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 @keyframes sp{to{transform:rotate(360deg)}}
 /* Empty state — centered layout with warm muted colors and generous breathing room */
 .es{text-align:center;padding:72px 28px;color:var(--mt)}.ei{font-size:3.2rem;margin-bottom:18px;filter:grayscale(.2);opacity:.8}.es p{font-size:.9rem;line-height:1.8;max-width:260px;margin:0 auto;color:rgba(138,127,110,.8)}
-/* Section label — gold left accent border, uppercase with generous letter-spacing */
-.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:.18em;color:rgba(212,168,83,.7);margin:20px 0 10px;display:flex;align-items:center;gap:10px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
+/* Section label — bold white text with gold left accent border for visual hierarchy */
+.slbl{font-size:.68rem;text-transform:uppercase;letter-spacing:.18em;color:var(--tx);margin:20px 0 10px;display:flex;align-items:center;gap:10px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
 .slbl::after{content:"";flex:1;height:1px;background:var(--b1)}
 
 /* ── HOME ── */
-.hhdr{padding:20px 20px 14px;flex-shrink:0;background:var(--sf);border-bottom:1px solid var(--b1)}
+/* Home header — clean minimal styling, no heavy border. Gradient handles separation. */
+.hhdr{padding:20px 20px 14px;flex-shrink:0;background:var(--sf);border-bottom:1px solid rgba(255,255,255,0.04)}
 .htop{display:flex;align-items:flex-start;justify-content:space-between}
 .grt{font-family:"Fraunces",serif;font-size:1.75rem;font-weight:300;letter-spacing:-.03em;line-height:1.15}
 .grt span{color:var(--ac)}.hdt{font-size:.8rem;color:var(--mt);margin-top:3px}
@@ -190,8 +200,9 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .hbody{padding:0 16px 16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1;overflow-y:auto}
 .setbtn{width:38px;height:38px;border-radius:12px;background:var(--card);border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:pointer;flex-shrink:0;transition:border-color .2s}
 .setbtn:active{border-color:var(--ac)}
-/* Home section header — gold accent with gold left border */
-.hsec-lbl{font-size:.7rem;font-weight:600;color:rgba(212,168,83,.7);letter-spacing:.15em;text-transform:uppercase;margin:18px 0 10px;display:flex;align-items:center;gap:7px;padding-left:10px;border-left:2px solid var(--ac)}
+/* Home section header — bold white text with gold left border for hierarchy.
+   White creates clear visual distinction from grey body content below. */
+.hsec-lbl{font-size:.7rem;font-weight:600;color:var(--tx);letter-spacing:.15em;text-transform:uppercase;margin:18px 0 10px;display:flex;align-items:center;gap:7px;padding-left:10px;border-left:2px solid var(--ac)}
 .hsec-lbl::after{content:"";flex:1;height:1px;background:var(--b1)}
 /* Collapsible home sections — toggle arrow and body visibility */
 .hsec-toggle{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -261,8 +272,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .itab.active{color:var(--ac);border-bottom-color:var(--ac)}
 .ibody{padding:16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1}
 .lgrp{margin-bottom:20px}
-/* Location group header — gold accent, uppercase tracking */
-.lgt{font-size:.66rem;text-transform:uppercase;letter-spacing:.18em;color:rgba(212,168,83,.7);margin-bottom:9px;display:flex;align-items:center;gap:10px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
+/* Location group header — bold white text with gold left border for hierarchy */
+.lgt{font-size:.66rem;text-transform:uppercase;letter-spacing:.18em;color:var(--tx);margin-bottom:9px;display:flex;align-items:center;gap:10px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
 .lgt::after{content:"";flex:1;height:1px;background:var(--b1)}
 .ilst{display:flex;flex-direction:column;gap:7px}
 /* Inventory item card — gradient background with warm ambient top-light border */
@@ -384,8 +395,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .mic-wave .bar{height:12px;animation-delay:.15s}
 .mic-wave::after{height:8px;animation-delay:.3s}
 @keyframes mic-bars{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
-/* Shopping section header — gold accent, uppercase tracking */
-.shsec{font-size:.68rem;text-transform:uppercase;letter-spacing:.18em;color:rgba(212,168,83,.7);margin:18px 0 9px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
+/* Shopping section header — bold white text with gold left border for hierarchy */
+.shsec{font-size:.68rem;text-transform:uppercase;letter-spacing:.18em;color:var(--tx);margin:18px 0 9px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
 
 /* ── CHAT ── */
 .chhdr{padding:24px 20px 14px;flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between}
@@ -411,7 +422,7 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* Apple-native swipe-to-delete: 1:1 finger tracking, rubber band resistance,
    animated trash can with opening lid, spring animations, haptic feedback */
 .swipe-wrap{position:relative;overflow:hidden;border-radius:14px;margin-bottom:7px}
-/* Swipe card inner — uses card gradient for depth */
+/* Swipe card inner — uses card background for depth separation from page */
 .swipe-inner{position:relative;z-index:1;will-change:transform;margin-bottom:0 !important;border-radius:14px;background:var(--card)}
 /* During active drag, disable transitions so the row tracks the finger/cursor at 1:1.
    user-select:none prevents accidental text selection during mouse drags on desktop. */
@@ -495,8 +506,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .swipe-wrap.selecting .iit>div[style*="text-align:right"]{pointer-events:none}
 
 /* ── OVERLAYS ── */
-/* Overlay screens — match page background with subtle radial depth gradient */
-.ov{position:fixed;inset:0;bottom:var(--nh);background:var(--bg);background-image:radial-gradient(ellipse 70% 50% at 50% 30%,rgba(28,24,20,.4),transparent);display:none;flex-direction:column;overflow-y:auto;z-index:100}
+/* Overlay screens — match page deep gradient background for consistency */
+.ov{position:fixed;inset:0;bottom:var(--nh);background:var(--page-grad);background-color:var(--bg);display:none;flex-direction:column;overflow-y:auto;z-index:100}
 .ov.active{display:flex}
 .ovhdr{padding:22px 20px 0;display:flex;align-items:center;gap:13px;flex-shrink:0}
 .bkbtn{width:38px;height:38px;border-radius:12px;background:var(--card);border:1.5px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:pointer;flex-shrink:0;transition:border-color .2s}
@@ -625,8 +636,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 .filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
 
 /* ── SETTINGS ── */
-/* Settings section — gold accent header with left border */
-.sset{margin-bottom:26px}.ssetttl{font-size:.68rem;text-transform:uppercase;letter-spacing:.18em;color:rgba(212,168,83,.7);margin-bottom:14px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
+/* Settings section — bold white header with gold left border for hierarchy */
+.sset{margin-bottom:26px}.ssetttl{font-size:.68rem;text-transform:uppercase;letter-spacing:.18em;color:var(--tx);margin-bottom:14px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
 .srow{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--b1)}
 .srow:last-child{border-bottom:none}.srlbl{font-size:.9rem}
 .tog{width:46px;height:26px;border-radius:13px;background:var(--b2);position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
@@ -659,7 +670,8 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 /* ── INSIGHTS ── */
 /* Insight stat card — warm card gradient with ambient border */
 .istat{background:var(--card-grad);border:1px solid var(--card-border);border-top-color:var(--card-border-top);border-radius:16px;padding:22px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04)}
-.istat-ttl{font-size:.68rem;text-transform:uppercase;letter-spacing:.18em;color:rgba(212,168,83,.7);margin-bottom:14px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
+/* Insight stat section title — bold white for clear hierarchy */
+.istat-ttl{font-size:.68rem;text-transform:uppercase;letter-spacing:.18em;color:var(--tx);margin-bottom:14px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
 .ibar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .ibar-lbl{font-size:.82rem;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .ibar-track{flex:2;height:7px;background:var(--b1);border-radius:4px;overflow:hidden}
@@ -940,15 +952,16 @@ html,body{height:100%;background:var(--bg);font-family:"DM Sans",sans-serif;colo
 body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.03;
   background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 
-/* ── RADIAL GRADIENT DEPTH ──
-   Subtle radial gradient on screens: slightly lighter warm center, darker edges.
-   Creates unconscious depth perception without being noticeable. */
-.screen{background:radial-gradient(ellipse 70% 50% at 50% 30%,rgba(28,24,20,.35),var(--bg))}
+/* ── DEEP GRADIENT BACKGROUND ──
+   Each screen inherits the page-level deep gradient with a subtle radial center
+   glow for depth perception. Blue-neutral undertone creates a premium, non-flat feel. */
+.screen{background:var(--page-grad);background-color:var(--bg)}
 
 /* ── HEADER AREA GRADIENT ──
-   Subtle gradient fade from header background to transparent going down */
-.hhdr{background:linear-gradient(180deg,var(--sf) 0%,rgba(20,17,14,.7) 100%)}
-.shdr{background:linear-gradient(180deg,var(--bg) 0%,transparent 100%)}
+   Clean, minimal header background. Subtle gradient fades into the page so
+   the header doesn't create a hard visual break — just the title and actions. */
+.hhdr{background:linear-gradient(180deg,var(--sf) 0%,rgba(17,17,21,.6) 100%)}
+.shdr{background:linear-gradient(180deg,rgba(12,12,18,.8) 0%,transparent 100%)}
 
 /* ── BUTTON MICRO-ANIMATIONS ──
    Tactile press effect: scale down on press, smooth ease-out on release.
@@ -999,7 +1012,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* ── DONE SECTION STYLING ──
    Enhanced "Done" section with gold divider and styling.
    Collapsible with count badge. */
-.done-section-hdr{font-size:.72rem;text-transform:uppercase;letter-spacing:.15em;color:rgba(212,168,83,.55);margin:22px 0 9px;font-weight:600;display:flex;align-items:center;gap:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;padding-left:10px;border-left:2px solid rgba(212,168,83,.3)}
+/* Done section header — slightly muted white to differentiate from active sections */
+.done-section-hdr{font-size:.72rem;text-transform:uppercase;letter-spacing:.15em;color:rgba(245,240,232,.55);margin:22px 0 9px;font-weight:600;display:flex;align-items:center;gap:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;padding-left:10px;border-left:2px solid rgba(212,168,83,.3)}
 .done-section-hdr::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(212,168,83,.2),transparent)}
 .done-count{font-size:.66rem;background:rgba(212,168,83,.1);color:rgba(212,168,83,.6);padding:1px 7px;border-radius:10px;font-weight:600}
 /* Collapsible done section body */
@@ -1063,7 +1077,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* ── FROSTED GLASS ENHANCEMENT ──
    Additional frosted glass styling for bottom sheets and modals.
    Blurred backdrop creates elevated foreground feel. */
-.undo-toast{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:rgba(34,30,25,.9);border:1px solid var(--card-border)}
+/* Undo toast frosted glass — matches the blue-neutral palette */
+.undo-toast{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);background:rgba(26,26,32,.92);border:1px solid var(--card-border)}
 
 /* ── TYPOGRAPHY HIERARCHY UPGRADE ──
    Consistent type scale with warm tones throughout. */
@@ -1221,18 +1236,21 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* ── GLASSMORPHISM CARDS ──────────────────────────────────────────────────────
    Frosted glass effect for coupon and deal cards — translucent background
    with backdrop blur for a layered, premium look on dark backgrounds. */
-.coupon-card{background:rgba(28,24,20,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-top-color:rgba(255,255,255,.12)}
+/* Coupon card glassmorphism — translucent with blue-neutral undertone */
+.coupon-card{background:rgba(22,22,30,.6);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-top-color:rgba(255,255,255,.12)}
 .coupon-card:hover,.coupon-card:active{border-color:rgba(212,168,83,.3);box-shadow:0 0 20px rgba(212,168,83,.06)}
-.coupon-card.clipped{background:rgba(28,24,20,.4)}
+.coupon-card.clipped{background:rgba(22,22,30,.4)}
 
-.deal-card{background:rgba(28,24,20,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-top-color:rgba(255,255,255,.12)}
+/* Deal card glassmorphism — same translucent blue-neutral base */
+.deal-card{background:rgba(22,22,30,.6);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-top-color:rgba(255,255,255,.12)}
 .deal-card:hover,.deal-card:active{border-color:rgba(212,168,83,.3);box-shadow:0 0 20px rgba(212,168,83,.06)}
 .deal-card.deal-match{background:rgba(90,173,111,.06);border-color:rgba(90,173,111,.3)}
 
-/* Glassmorphism for modals, bottom sheets, and bottom nav */
-.minner{background:rgba(20,17,14,.88);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,.08)}
-.bsheet{background:rgba(28,24,20,.92);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,.08)}
-#NAV{background:rgba(13,11,8,.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+/* Glassmorphism for modals and bottom sheets — frosted glass with blue-neutral tint */
+.minner{background:rgba(16,16,22,.9);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,.08)}
+.bsheet{background:rgba(22,22,30,.94);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,.08)}
+/* Nav pill glassmorphism — translucent dark with strong blur for frosted glass capsule */
+#NAV{background:rgba(12,12,18,.82);backdrop-filter:blur(28px) saturate(1.6);-webkit-backdrop-filter:blur(28px) saturate(1.6)}
 
 /* ── CARD HOVER/FOCUS GLOW ────────────────────────────────────────────────────
    Subtle gold border glow on hover/focus for all interactive cards.
@@ -1259,20 +1277,20 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
    Reimagined 2x2 stat grid with varied sizes, gradient backgrounds per tile,
    and a "hero" tile that spans full width for the most important stat. */
 .sgrd{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
-/* Each bento tile gets a unique subtle gradient accent */
-.sc.bento-inventory{background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(212,168,83,.08) 100%)}
-.sc.bento-expiring{background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(200,150,10,.1) 100%)}
-.sc.bento-shopping{background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(90,173,111,.08) 100%)}
-.sc.bento-recipes{background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(160,140,220,.08) 100%)}
+/* Each bento tile gets a unique subtle gradient accent — uses neutral-blue base */
+.sc.bento-inventory{background:linear-gradient(135deg,rgba(26,26,32,.95) 0%,rgba(212,168,83,.08) 100%)}
+.sc.bento-expiring{background:linear-gradient(135deg,rgba(26,26,32,.95) 0%,rgba(200,150,10,.1) 100%)}
+.sc.bento-shopping{background:linear-gradient(135deg,rgba(26,26,32,.95) 0%,rgba(90,173,111,.08) 100%)}
+.sc.bento-recipes{background:linear-gradient(135deg,rgba(26,26,32,.95) 0%,rgba(160,140,220,.08) 100%)}
 /* Hero tile: savings tracker spans full width */
 .sc.bento-hero{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:20px 22px;
-  background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(90,173,111,.1) 100%)}
+  background:linear-gradient(135deg,rgba(26,26,32,.95) 0%,rgba(90,173,111,.1) 100%)}
 .sc.bento-hero .sci{font-size:2.2rem;margin-bottom:0}
 .sc.bento-hero .scv{font-size:1.8rem;color:var(--gn)}
 .sc.bento-hero .scl{margin-top:2px}
 /* Suggested recipes tile spans full width */
 .sc.bento-suggest{grid-column:1/-1;padding:18px 20px;
-  background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(212,168,83,.06) 100%)}
+  background:linear-gradient(135deg,rgba(26,26,32,.95) 0%,rgba(212,168,83,.06) 100%)}
 .bento-suggest-title{font-size:.72rem;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
 .bento-suggest-list{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
 .bento-suggest-list::-webkit-scrollbar{display:none}
@@ -1301,11 +1319,12 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 
 /* ── WHITESPACE / BREATHING ROOM ──────────────────────────────────────────────
    More generous padding and spacing throughout to reduce cramped feel. */
-/* Bottom padding must clear the floating pill nav + FAB + safe area */
-.hbody{padding:4px 20px calc(56px + var(--safe) + 40px)}
+/* Bottom padding must clear the floating pill nav + FAB + safe area.
+   Nav pill is now 58px tall, 20px from bottom — needs ~50px extra clearance. */
+.hbody{padding:4px 20px calc(58px + var(--safe) + 48px)}
 .ibody{padding:18px 20px}
 /* Shopping body needs extra bottom padding to clear FAB + nav bar so last items aren't clipped */
-.shbody{padding:18px 20px calc(56px + var(--safe) + 60px)}
+.shbody{padding:18px 20px calc(58px + var(--safe) + 68px)}
 .rbody{padding:16px 20px}
 .ilst{gap:9px}
 .expl{gap:9px}
@@ -1379,8 +1398,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
    Context-aware FAB that shows different actions per tab. No text label —
    starts as a large opaque circle, then shrinks and fades to 50% after 2s.
    Positioned above bottom nav. */
-/* FAB floats above the floating pill nav: 56px pill + 12px pill bottom + safe area + 12px gap */
-.fab{position:fixed;right:20px;bottom:calc(var(--safe) + 56px + 12px + 16px);width:64px;height:64px;
+/* FAB floats above the floating pill nav: 58px pill + 20px pill bottom + safe area + 14px gap */
+.fab{position:fixed;right:20px;bottom:calc(var(--safe) + 58px + 20px + 14px);width:64px;height:64px;
   border-radius:50%;background:var(--ac);color:#0D0B08;border:none;
   font-size:1.6rem;font-weight:700;cursor:pointer;z-index:140;
   display:flex;align-items:center;justify-content:center;
@@ -1514,15 +1533,16 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* Inventory quantity — stronger presence */
 .iqt{font-size:1.5rem;font-weight:400;opacity:.85;letter-spacing:-.02em}
 
-/* ── SECTION HEADERS — Bold editorial dividers ── */
-/* All section labels: bolder, more authoritative, strong left border */
+/* ── SECTION HEADERS — Bold white for clear visual hierarchy ── */
+/* Section labels: bold white text creates strong contrast against page background.
+   Gold left border accent retained for brand identity. */
 .hsec-lbl{font-size:.8rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
-  padding-left:14px;border-left:4px solid var(--ac);margin:26px 0 14px}
+  color:var(--tx);padding-left:14px;border-left:4px solid var(--ac);margin:26px 0 14px}
 .slbl{font-size:.76rem;font-weight:800;letter-spacing:.12em;
-  padding-left:14px;border-left:4px solid var(--ac);margin:28px 0 14px}
+  color:var(--tx);padding-left:14px;border-left:4px solid var(--ac);margin:28px 0 14px}
 .shsec{font-size:.76rem;font-weight:800;letter-spacing:.12em;
-  padding-left:14px;border-left:4px solid var(--ac);margin:26px 0 12px}
-/* Section label divider line — thicker for brutalist feel */
+  color:var(--tx);padding-left:14px;border-left:4px solid var(--ac);margin:26px 0 12px}
+/* Section label divider line — subtle separator */
 .hsec-lbl::after,.slbl::after{height:2px;background:var(--b2)}
 
 /* ── SCREEN TITLES — Oversized, heavy, editorial ── */
@@ -1533,9 +1553,9 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* Modal titles — same editorial weight */
 .mttl{font-size:1.4rem;font-weight:400;letter-spacing:-.02em}
 
-/* ── GRID LINES — Strong horizontal dividers between sections ── */
-/* Thick separator above section headers — visible editorial grid */
-.hsec-lbl{padding-top:16px;border-top:2px solid var(--b2)}
+/* ── GRID LINES — Subtle horizontal dividers between sections ── */
+/* Separator above section headers — lighter to avoid visual noise */
+.hsec-lbl{padding-top:16px;border-top:1px solid var(--b1)}
 /* First section label doesn't need top border */
 .hbody .hsec-lbl:first-child,.rbody .hsec-lbl:first-child{border-top:none;padding-top:0}
 /* Strong divider between inventory location groups */
@@ -1590,8 +1610,9 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
    TONIGHT'S DINNER HERO — Enlarged hero card for the Home dashboard.
    Prominent Fraunces display font, warm gradient when meal is planned.
    ═══════════════════════════════════════════════════════════════════════════════ */
+/* Tonight's dinner hero card — warm gold accent gradient on dark card base */
 .tonight-card.tonight-hero{min-height:120px;padding:22px 24px;
-  background:linear-gradient(135deg,rgba(212,168,83,0.08) 0%,var(--card) 50%,rgba(28,24,20,1) 100%);
+  background:linear-gradient(135deg,rgba(212,168,83,0.08) 0%,var(--card) 50%,rgba(24,24,31,1) 100%);
   border-color:rgba(212,168,83,0.2)}
 .tonight-hero .tc-val{font-family:"Fraunces",serif;font-size:1.4rem;font-weight:300;letter-spacing:-.02em}
 .tonight-hero .tc-icon{font-size:2.6rem}

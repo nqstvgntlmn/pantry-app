@@ -536,6 +536,56 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
 - **Session 7:** ShopRite digital coupons via Azure proxy, email gate for beta users, Firestore cache (4hr TTL), On My List coupon matching, JWT expiry warning banner + daily cron job via Resend, dual PPC clipping (Bora + Bushra)
 - **Session 8:** Full UI modernization pass — see detailed changes below
 - **Session 9:** Major UX enhancements — sliding tab transitions, floating pill nav, home dashboard (quick chips, notifications, animated counters), shelf view + expiry timeline for Supplies, expanded aisle grouping (16 categories) + deal badges for Shopping
+- **Session 10:** Premium visual polish — deep gradient background (blue-neutral undertone), floating pill nav with more breathing room, card depth separation, bold white section headers, clean minimal headers
+
+---
+
+## Session 10 — Premium Visual Polish (March 2026)
+
+### Overview
+Five visual enhancements inspired by a reference app to make the UI feel more premium and three-dimensional. CSS-only changes in `src/styles.css` — no JS or HTML modified. No business logic affected.
+
+### Changes Made
+
+#### 1. Deep Dark Gradient Background
+- **What:** Replaced the flat `#0D0B08` background with a page-level gradient (`--page-grad`) that transitions from near-black at top (`#0C0C12`) to slightly deeper dark (`#060609`) at bottom.
+- **Why:** Flat black feels lifeless. The gradient with subtle blue-neutral undertone creates depth and a premium feel without being noticeable.
+- **How:** New CSS custom property `--page-grad` applied to `html,body`, `.screen`, `#LS`, and `.ov`. All surface colors (`--bg`, `--sf`, `--card`, `--card2`) shifted from warm brown undertone to neutral-blue undertone for consistency.
+
+#### 2. Floating Pill Nav — More Breathing Room
+- **What:** Increased bottom margin from 12px to 20px, side margins from 16px to 20px, height from 56px to 58px, border-radius from 28px to 30px.
+- **Why:** The pill was glued too close to the bottom edge. More breathing room underneath makes it feel like a true floating capsule.
+- **How:** Updated `#NAV` positioning and the glassmorphism override. Updated `padding-bottom` on all scrollable bodies (`.hbody`, `.shbody`) and FAB position to account for the larger nav offset.
+
+#### 3. Card Depth Separation
+- **What:** Card backgrounds (`--card-grad`) are now noticeably lighter than the page background, creating a visible layered depth effect.
+- **Why:** Previously, cards blended too much into the background. The subtle darkness difference makes the UI feel three-dimensional.
+- **How:** Updated `--card-grad` from warm brown (`#1E1A15→#1A1610`) to neutral-blue (`#1C1C24→#18181F`). Updated `--card-border` and `--card-border-top` for slightly more visible ambient light borders.
+
+#### 4. Header Simplicity
+- **What:** Simplified header backgrounds — lighter gradient fades, softer border on Home header (from solid `--b1` to subtle `rgba(255,255,255,0.04)`).
+- **Why:** Cleaner headers reduce visual noise, letting the tab title and action buttons speak for themselves.
+- **How:** Updated `.hhdr` and `.shdr` gradient backgrounds to use blue-neutral tones.
+
+#### 5. Typography Hierarchy — Bold White Section Headers
+- **What:** All section headers (`.hsec-lbl`, `.slbl`, `.shsec`, `.lgt`, `.istat-ttl`, `.ssetttl`) changed from gold (`rgba(212,168,83,.7)`) to white (`var(--tx)`).
+- **Why:** White section headers create clear visual hierarchy against the lighter grey body content. Gold is retained only as the left border accent.
+- **How:** Updated `color` property on all section header classes. Supporting content inside sections remains `--mt` (lighter grey) for contrast.
+
+### Palette Shift Summary
+| Token | Before (warm brown) | After (neutral-blue) |
+|-------|--------------------|--------------------|
+| `--bg` | `#0D0B08` | `#0A0A0E` |
+| `--sf` | `#14110E` | `#111115` |
+| `--card` | `#1C1814` | `#1A1A20` |
+| `--card2` | `#221E19` | `#212128` |
+| `--b1` | `#2A2520` | `#28282F` |
+| `--b2` | `#353028` | `#333340` |
+| `--tx2` | `#B5A892` | `#A8A0B0` |
+| `--mt` | `#8A7F6E` | `#7A7585` |
+
+### Files Changed
+- `src/styles.css` — All changes confined to this file
 
 ---
 
