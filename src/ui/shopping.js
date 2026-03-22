@@ -2753,6 +2753,26 @@ export async function bpConfirm() {
 // user's current shopping list — same pattern as ShopRite coupons.
 // ══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * _setCacheNote(listEl, fromCache, noteId) — Show or remove the "Cached results"
+ * message above a list element. Uses a unique ID to ensure only one note exists
+ * at a time, preventing duplication when the user taps Refresh multiple times.
+ */
+function _setCacheNote(listEl, fromCache, noteId) {
+  // Always remove the previous cache note first (prevents stacking)
+  const prev = document.getElementById(noteId);
+  if (prev) prev.remove();
+
+  // Insert a fresh note only if data came from cache
+  if (fromCache) {
+    const cacheNote = document.createElement("div");
+    cacheNote.id = noteId;
+    cacheNote.style.cssText = "font-size:.64rem;color:var(--mt);text-align:center;margin-top:6px";
+    cacheNote.textContent = "Cached results — tap ↻ Refresh for latest";
+    listEl.parentNode.insertBefore(cacheNote, listEl);
+  }
+}
+
 // Module-level deal state — tracks loaded deals and UI filtering state
 let _dealsLoaded = false;        // Whether weekly deals have been fetched this session
 let _allDeals = [];              // Full deal list from API (unfiltered)
@@ -2845,13 +2865,8 @@ export async function loadFlippDeals() {
     // Render the first page of deals with On My List matching
     renderDealCards();
 
-    // Show cache indicator if data came from Firestore cache
-    if (data.fromCache) {
-      const cacheNote = document.createElement("div");
-      cacheNote.style.cssText = "font-size:.64rem;color:var(--mt);text-align:center;margin-top:6px";
-      cacheNote.textContent = "Cached results — tap ↻ Refresh for latest";
-      listEl.parentNode.insertBefore(cacheNote, listEl);
-    }
+    // Show or replace cache indicator (remove any previous one first to avoid stacking)
+    _setCacheNote(listEl, data.fromCache, "deals-cache-note");
   } catch (err) {
     statusEl.style.display = "block";
     statusEl.style.color = "var(--rd)";
@@ -2954,14 +2969,14 @@ function getFilteredDeals() {
  * as a substring in any deal field.
  */
 function _dealMatchesItem(deal, itemTokens) {
-  // Build a single searchable string from deal fields
-  const haystack = [deal.name, deal.brand]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  // Tokenize deal fields for whole-word matching (same fix as _couponMatchesItem —
+  // substring matching caused false positives like "egg" matching "Kellogg's")
+  const haystackTokens = new Set(
+    _tokenize([deal.name, deal.brand].filter(Boolean).join(" "))
+  );
 
-  // A match requires at least one item token to appear in the deal text
-  return itemTokens.some(token => haystack.includes(token));
+  // Match if any shopping list token appears as a whole word in deal text
+  return itemTokens.some(token => haystackTokens.has(token));
 }
 
 /**
@@ -3352,13 +3367,8 @@ export async function loadCoupons() {
     // Render the first page of coupons
     renderCouponCards();
 
-    // Show cache indicator if data came from Firestore cache
-    if (data.fromCache) {
-      const cacheNote = document.createElement("div");
-      cacheNote.style.cssText = "font-size:.64rem;color:var(--mt);text-align:center;margin-top:6px";
-      cacheNote.textContent = "Cached results — tap ↻ Refresh for latest";
-      listEl.parentNode.insertBefore(cacheNote, listEl);
-    }
+    // Show or replace cache indicator (remove any previous one first to avoid stacking)
+    _setCacheNote(listEl, data.fromCache, "coupon-cache-note");
   } catch (err) {
     statusEl.style.display = "block";
     statusEl.style.color = "var(--rd)";
@@ -3394,6 +3404,10 @@ function renderCouponCategoryChips() {
   const container = g("coupon-cats");
   if (!container) return;
 
+  // Count how many coupons match the shopping list for the "On My List" chip
+  const { onList } = _splitCouponsByList(_allCoupons);
+  const onListCount = onList.length;
+
   // Collect unique categories from loaded coupons
   const cats = new Map();
   _allCoupons.forEach(c => {
@@ -3408,8 +3422,9 @@ function renderCouponCategoryChips() {
     return b[1] - a[1];
   });
 
-  // Build chips: "All" chip + one chip per category
-  let html = `<button class="coupon-chip${_activeCouponCat === "all" ? " active" : ""}" onclick="filterCouponCat('all')">All (${_allCoupons.length})</button>`;
+  // Build chips: "On My List" first → "All" → one chip per category
+  let html = `<button class="coupon-chip${_activeCouponCat === "onlist" ? " active" : ""}" onclick="filterCouponCat('onlist')">On My List (${onListCount})</button>`;
+  html += `<button class="coupon-chip${_activeCouponCat === "all" ? " active" : ""}" onclick="filterCouponCat('all')">All (${_allCoupons.length})</button>`;
   sorted.forEach(([cat, count]) => {
     const active = _activeCouponCat === cat ? " active" : "";
     html += `<button class="coupon-chip${active}" onclick="filterCouponCat('${cat.replace(/'/g, "\\'")}')">${cat} (${count})</button>`;
@@ -3509,8 +3524,12 @@ export async function searchCoupons() {
 function getFilteredCoupons() {
   let list = _allCoupons;
 
-  // Apply category filter
-  if (_activeCouponCat !== "all") {
+  // "On My List" chip — filter to only coupons matching the shopping list
+  if (_activeCouponCat === "onlist") {
+    const { onList } = _splitCouponsByList(list);
+    list = onList;
+  } else if (_activeCouponCat !== "all") {
+    // Apply category filter
     list = list.filter(c => (c.category || "Other") === _activeCouponCat);
   }
 
@@ -3560,14 +3579,15 @@ function _tokenize(text) {
  * substring in any coupon field — e.g. "yogurt" matches "Greek Yogurt Cup".
  */
 function _couponMatchesItem(coupon, itemTokens) {
-  // Build a single searchable string from all coupon fields
-  const haystack = [coupon.name, coupon.brand, coupon.description]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  // Tokenize all coupon fields so we compare whole words, not substrings.
+  // Substring matching caused false positives: "egg" matched "Kellogg's",
+  // "rice" matched "price", etc. Word-level matching eliminates this.
+  const haystackTokens = new Set(
+    _tokenize([coupon.name, coupon.brand, coupon.description].filter(Boolean).join(" "))
+  );
 
-  // A match requires at least one item token to appear in the coupon text
-  return itemTokens.some(token => haystack.includes(token));
+  // Match if any shopping list token appears as a whole word in coupon text
+  return itemTokens.some(token => haystackTokens.has(token));
 }
 
 /**
@@ -3580,12 +3600,20 @@ function _splitCouponsByList(filtered) {
   // Get unchecked shopping list items (checked items are already purchased)
   const activeItems = (state.shop || []).filter(item => !item.checked);
 
+  // Debug: log which shopping list items are being used for matching
+  console.log("[On My List] Active shopping items:", activeItems.map(i => i.name));
+
   // If no active shopping list items, everything goes to "rest"
   if (!activeItems.length) return { onList: [], rest: filtered };
 
   // Pre-tokenize all shopping list item names for efficient matching
   const itemTokenSets = activeItems
-    .map(item => _tokenize(item.name))
+    .map(item => {
+      const tokens = _tokenize(item.name);
+      // Debug: log the tokens extracted from each item name
+      console.log(`[On My List] "${item.name}" → tokens: [${tokens.join(", ")}]`);
+      return tokens;
+    })
     .filter(tokens => tokens.length > 0);
 
   // If no meaningful tokens after filtering, skip matching
@@ -3609,10 +3637,9 @@ function _splitCouponsByList(filtered) {
 
 /**
  * renderCouponCards() — Render the visible coupon cards into #coupon-list.
- * Splits coupons into two subsections:
- *   1. "On My List" — coupons matching current shopping list items
- *   2. "All Coupons" — remaining browsable/searchable coupons
- * Handles pagination (COUPONS_PER_PAGE at a time) and empty states.
+ * Shows a flat paginated list of coupons filtered by the active chip
+ * (category, "On My List", or "All"). The "On My List" chip replaces
+ * the old separate section — keeps UI cleaner with one unified list.
  * Uses DOM creation (not innerHTML) for card content to prevent XSS.
  */
 function renderCouponCards() {
@@ -3624,63 +3651,29 @@ function renderCouponCards() {
 
   // Empty state — no coupons match current filters
   if (!filtered.length) {
-    listEl.innerHTML = '<div class="es"><div class="ei">🎟</div><p>No coupons found.<br>Try a different search or category.</p></div>';
+    const msg = _activeCouponCat === "onlist"
+      ? "No coupons match your shopping list"
+      : "No coupons found.<br>Try a different search or category.";
+    listEl.innerHTML = `<div class="es"><div class="ei">🎟</div><p>${msg}</p></div>`;
     if (moreEl) moreEl.style.display = "none";
     return;
   }
 
-  // Split coupons into "on my list" and "all remaining"
-  const { onList, rest } = _splitCouponsByList(filtered);
-
   // Clear and rebuild the list
   listEl.innerHTML = "";
 
-  // ── "On My List" subsection ───────────────────────────────────────────
-  const onListHeader = document.createElement("div");
-  onListHeader.className = "coupon-section-header";
-  onListHeader.innerHTML = '<span class="coupon-section-icon">🛒</span> On My List';
-  listEl.appendChild(onListHeader);
+  // Paginate the filtered results — show COUPONS_PER_PAGE at a time
+  const limit = (_couponPage + 1) * COUPONS_PER_PAGE;
+  const visible = filtered.slice(0, limit);
+  const hasMore = filtered.length > limit;
 
-  if (onList.length) {
-    // Render all matching coupons (no pagination for this section — usually small)
-    onList.forEach(coupon => {
-      listEl.appendChild(buildCouponCard(coupon));
-    });
-  } else {
-    // Friendly empty state when no coupons match the shopping list
-    const emptyMsg = document.createElement("div");
-    emptyMsg.className = "coupon-list-empty";
-    emptyMsg.textContent = "No coupons found for your current list";
-    listEl.appendChild(emptyMsg);
-  }
+  visible.forEach(coupon => {
+    listEl.appendChild(buildCouponCard(coupon));
+  });
 
-  // ── "All Coupons" subsection ──────────────────────────────────────────
-  const allHeader = document.createElement("div");
-  allHeader.className = "coupon-section-header";
-  allHeader.innerHTML = '<span class="coupon-section-icon">🎟</span> All Coupons';
-  listEl.appendChild(allHeader);
-
-  if (rest.length) {
-    // Paginate the "All Coupons" section — show COUPONS_PER_PAGE at a time
-    const limit = (_couponPage + 1) * COUPONS_PER_PAGE;
-    const visible = rest.slice(0, limit);
-    const hasMore = rest.length > limit;
-
-    visible.forEach(coupon => {
-      listEl.appendChild(buildCouponCard(coupon));
-    });
-
-    // Show/hide "Show more" button based on remaining coupons
-    if (moreEl) {
-      moreEl.style.display = hasMore ? "block" : "none";
-    }
-  } else {
-    // All coupons matched the list — nothing left for "All Coupons"
-    const emptyMsg = document.createElement("div");
-    emptyMsg.className = "coupon-list-empty";
-    emptyMsg.textContent = "All matching coupons are shown above";
-    listEl.appendChild(emptyMsg);
-    if (moreEl) moreEl.style.display = "none";
+  // Show/hide "Show more" button based on remaining coupons
+  if (moreEl) {
+    moreEl.style.display = hasMore ? "block" : "none";
   }
 }
 
