@@ -1334,6 +1334,12 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .skeleton-text.short{width:40%}
 .skeleton-circle{width:40px;height:40px;border-radius:50%}
 
+/* ── HOME LOADING SKELETON ───────────────────────────────────────────────────
+   Shown on the Home tab while Firestore data loads on first boot.
+   Fades out smoothly when data arrives, then display:none to free layout. */
+.home-skeleton{padding:4px 0;transition:opacity .3s ease}
+.home-skeleton.hidden{opacity:0;pointer-events:none}
+
 /* ── COUPON CLIP ANIMATION ────────────────────────────────────────────────────
    Satisfying animation when clipping a coupon: button fills green with check bounce. */
 @keyframes clipSuccess{

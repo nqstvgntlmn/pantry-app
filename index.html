@@ -116,6 +116,27 @@
       </div>
     </div>
     <div class="hbody">
+      <!-- Loading skeleton — shown while Firestore data loads on first boot.
+           Replaced by real content once state.homeDataReady flips to true. -->
+      <div id="home-skeleton" class="home-skeleton">
+        <div class="skeleton skeleton-text" style="width:55%;height:18px;margin-bottom:12px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px">
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+        </div>
+        <div class="skeleton skeleton-text" style="width:35%;margin-bottom:10px"></div>
+        <div class="skeleton" style="height:64px;border-radius:14px;margin-bottom:14px"></div>
+        <div class="skeleton skeleton-text" style="width:40%;margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px;overflow:hidden">
+          <div class="skeleton" style="min-width:72px;height:88px;border-radius:14px"></div>
+          <div class="skeleton" style="min-width:72px;height:88px;border-radius:14px"></div>
+          <div class="skeleton" style="min-width:72px;height:88px;border-radius:14px"></div>
+          <div class="skeleton" style="min-width:72px;height:88px;border-radius:14px"></div>
+          <div class="skeleton" style="min-width:72px;height:88px;border-radius:14px"></div>
+        </div>
+      </div>
       <!-- Quick-access chips — horizontally scrollable action shortcuts -->
       <div id="quick-chips" class="chip-row"></div>
       <!-- Smart notifications strip — contextual alerts (expiring, low stock, deals) -->

@@ -801,3 +801,30 @@ to every function and every major code block — this is non-negotiable.
 - **Risoprint:** Delete the "RISOPRINT ACCENTS" CSS block (search for the header comment)
 - **Brutalism typography:** Delete the "REFINED BRUTALISM TYPOGRAPHY" CSS block
 - **Imagery:** Delete the "IMAGERY FEATURE" CSS block at top of styles.css + revert the JS changes in recipes.js, shopping.js, and home.js
+
+---
+
+### Home Tab Loading Skeleton (Race Condition Fix)
+
+**Problem:** On initial app load, the Home tab rendered blank because `showScreen("home")` was called at line 949 of `_appStart()` — before any Firestore data (inventory, recipes, shopping list) was loaded. All sections (stat cards, expiring items, low stock, activity feed) rendered with empty arrays and conditionally hid themselves, producing a blank screen. The user only saw content after switching tabs and back, since by then the data had arrived.
+
+**Root cause:** In `_appStart()`, the initialization order was:
+1. `showScreen("home")` → calls `renderHome()` with empty `state.inv/recs/shop` → blank
+2. `loadFirestoreData()` → loads config, meal plan (but not inv/recs/shop)
+3. `Promise.allSettled(...)` → loads inv/recs/shop → calls `renderAll()` with real data
+
+**Fix:**
+1. Added `state.homeDataReady` flag (default `false`) in `src/state.js` — gates whether `renderHome()` does real rendering or shows the skeleton
+2. Added a shimmer loading skeleton in `index.html` inside `#screen-home > .hbody` — visible by default, shows placeholder cards matching the layout of stat grid + tonight's dinner + week grid
+3. Modified `renderHome()` in `src/ui/home.js` — if `!state.homeDataReady`, keeps the skeleton visible and returns early (no empty renders). Once data is ready, fades out the skeleton with a 300ms opacity transition, then `display:none` after 320ms
+4. In `_appStart()` (`src/main.js`), set `state.homeDataReady = true` after `Promise.allSettled` resolves (or in the catch block for error resilience), then `renderAll()` triggers the first real render
+5. Added `.home-skeleton` CSS in `src/styles.css` with fade-out transition
+
+**Animated stat counters are safe:** `showScreen("home")` sets `window._shouldAnimateCounters = true` at line 208, but since `renderHome()` returns early (data not ready), the flag isn't consumed. When data arrives and `renderAll()` → `renderHome()` → `renderSum()` runs, the flag is still `true` and counters animate from 0 with real values.
+
+**Files changed:**
+- `src/state.js` — added `homeDataReady: false` to ephemeral state
+- `index.html` — added `#home-skeleton` div with shimmer placeholder cards inside `.hbody`
+- `src/ui/home.js` — `renderHome()` guards on `state.homeDataReady`, shows/hides skeleton
+- `src/main.js` — sets `state.homeDataReady = true` after data loads in `_appStart()`
+- `src/styles.css` — `.home-skeleton` and `.home-skeleton.hidden` transition styles

@@ -113,6 +113,22 @@ export function setRenderInv(fn) { renderInvFn = fn; }
 // Unlike initHome(), this skips overwriting the greeting if it was already set
 // (the `!grtEl.innerHTML` guard), so we don't flicker on every data refresh.
 export function renderHome() {
+  // Guard: if initial Firestore data hasn't loaded yet, keep the loading
+  // skeleton visible and skip rendering. This prevents the blank-screen
+  // flash on first boot where all sections render with empty arrays.
+  const skel = g("home-skeleton");
+  if (!state.homeDataReady) {
+    if (skel) skel.style.display = "";
+    return;
+  }
+
+  // Data is loaded — hide the skeleton with a smooth fade-out
+  if (skel && !skel.classList.contains("hidden")) {
+    skel.classList.add("hidden");
+    // Remove from layout after the fade-out transition completes
+    setTimeout(() => { if (skel) skel.style.display = "none"; }, 320);
+  }
+
   const h = new Date().getHours();
   const gr = _contextGreeting(h);
   // Show only the first name for a cleaner, friendlier greeting

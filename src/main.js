@@ -1029,10 +1029,20 @@ window._appStart = async function(code) {
     state.recs = v(res[1], state.recs);
     state.shop = v(res[2], state.shop);
     ss("synced");
+
+    // Mark data as ready so the Home screen can render with real data
+    // instead of showing the loading skeleton. This flag gates renderHome()
+    // to prevent the blank-screen flash on first boot.
+    state.homeDataReady = true;
+
     renderAll(); renderRecs(); renderShop(); renderSum();
   } catch (e) {
     console.error("initial load error", e);
     ss("error");
+    // Even on error, mark data as ready so the Home screen renders
+    // with whatever partial data we have instead of staying on the skeleton
+    state.homeDataReady = true;
+    renderAll();
   }
 
   // Schedule meal reminders for planned meals (9 AM browser notifications).

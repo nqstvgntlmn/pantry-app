@@ -49,6 +49,7 @@ export const state = {
   // These are never persisted to Firestore. They control transient UI state
   // like which overlay is open, which tab is selected, etc.
 
+  homeDataReady: false,   // set true after initial Firestore data (inv/recs/shop) is loaded — guards Home screen rendering
   chat: [],               // Claude AI chat message history — lives only in memory for this session
   cp: null,               // "current product" — the item returned by the last barcode/receipt scan
   selR: "fridge",         // location dropdown selection inside the scan-result overlay ("fridge", "pantry", etc.)
