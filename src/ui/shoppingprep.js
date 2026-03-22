@@ -229,12 +229,10 @@ export function closeShoppingPrep() {
   disableSwipeBack();
   hideOv("shoppingprep");
 
-  // Show summary toast with count of items added to shopping list
+  // Show summary toast only when items were actually added to shopping list
   const addedCount = _addedToShop.size;
   if (addedCount > 0) {
     showNotif(`Shopping Prep complete — ${addedCount} item${addedCount !== 1 ? "s" : ""} added to Shopping List`);
-  } else {
-    showNotif("No changes made");
   }
 }
 

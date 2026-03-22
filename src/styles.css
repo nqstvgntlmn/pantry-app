@@ -1191,8 +1191,14 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .cat-review-suggestion{font-size:.75rem;color:var(--mt);margin-top:3px}
 .cat-review-actions{display:flex;gap:6px;flex-shrink:0}
 
+/* ── SHOPPING PREP HEADER ─────────────────────────────────────────────────── */
+/* Overrides default .ovhdr padding to match Supplies tab .shdr (24px 20px 0) */
+.prep-hdr{padding:24px 20px 0}
+/* Title — matches Supplies .sttl font size/weight for consistent screen headers */
+.prep-ttl{font-family:"Fraunces",serif;font-size:2.4rem;font-weight:900;letter-spacing:-.04em;line-height:1}
+
 /* ── SHOPPING PREP SEARCH BAR ─────────────────────────────────────────────── */
-/* Search input at the top of the Shopping Prep overlay */
+/* Search input — matches Supplies tab .inv-search-input styling exactly */
 .prep-search-input{width:100%;padding:10px 14px;border-radius:12px;border:1.5px solid var(--b2);background:var(--card);color:var(--tx);font-size:.88rem;font-family:"DM Sans",sans-serif;transition:border-color .15s}
 .prep-search-input:focus{border-color:var(--ac);outline:none}
 

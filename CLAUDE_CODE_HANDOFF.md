@@ -279,7 +279,8 @@ Bottom navigation (left to right):
   - Audit checkbox (physical verification, session-only)
 - "Add all low (X)" button at top of each category
 - "+ Add new item to Shopping List" — closes Shopping Prep, opens Shopping add sheet
-- Summary toast on close: "X items added to Shopping List"
+- Summary toast on close: "X items added to Shopping List" (no toast shown when no items added — removed "No changes made" notification)
+- **Header styling:** Shopping Prep header and search bar match the Supplies tab exactly — same padding (24px 20px 0), font size (2.4rem), weight (900), and search bar wrapper spacing (8px 16px 0). Uses `.prep-hdr` and `.prep-ttl` CSS classes to override default overlay header styles.
 - Categories use stored prepCategory field first, then keyword/OFF mapping fallback
 - Custom categories supported with emoji picker and one level of sub-categories
 

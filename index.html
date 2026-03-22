@@ -1161,12 +1161,13 @@
 <!-- SHOPPING PREP — full-screen pre-shop audit overlay -->
 <!-- Opened from Supplies tab. Two-panel navigation: category grid → category detail. -->
 <div class="ov" id="ov-shoppingprep">
-  <div class="ovhdr">
+  <!-- Header — matches Supplies tab shdr layout: title + back button with same spacing -->
+  <div class="ovhdr prep-hdr">
     <div class="bkbtn" id="prep-back" onclick="closeShoppingPrep()">←</div>
-    <div class="ovttl" id="prep-title">Shopping Prep</div>
+    <div class="ovttl prep-ttl" id="prep-title">Shopping Prep</div>
   </div>
-  <!-- Search bar — searches across ALL categories simultaneously -->
-  <div style="padding:0 16px 8px">
+  <!-- Search bar — matches Supplies tab search wrapper padding (8px 16px 0) -->
+  <div style="padding:8px 16px 0">
     <input class="fi prep-search-input" id="prep-search" type="search" placeholder="Search all items..." oninput="filterPrepSearch()" autocomplete="off"/>
   </div>
   <div class="ovbody" id="prep-body"></div>
