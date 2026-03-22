@@ -973,3 +973,82 @@ to every function and every major code block — this is non-negotiable.
 
 **Files changed:**
 - `src/ui/home.js` — Simplified `_actBtnFor()` to only emit Undo for deleted shopping/supplies items
+
+---
+
+### Session 7 — Six UI/UX Fixes (March 2026)
+
+#### 1. Home Tab Quick Action Chips — Reduced to 3 Distinct Actions
+
+**What changed:** Replaced the 4 quick action chips (Scan Barcode, + Quick Add, Shopping List, What's Expiring) with 3 meaningful navigation chips: "🛒 Shopping List" → Shopping tab, "📦 Supplies" → Supplies tab, "⚠️ Expiring Soon" → Supplies tab scrolled to the expiry timeline.
+
+**Why:** The original chips had redundant functionality — Scan Barcode was already in the FAB "+" flow, Quick Add duplicated the FAB, and the remaining chips didn't go to distinct enough destinations. Three chips with clear, distinct targets reduce clutter.
+
+**Files changed:**
+- `src/ui/home.js` — `renderQuickChips()` now outputs 3 chips instead of 4
+
+#### 2. Home Tab FAB "+" Button — Two-Option Action Sheet
+
+**What changed:** Tapping the "+" FAB on the Home tab now shows a compact bottom sheet with two options: "Add to Supplies" and "Add to Shopping List". Each option opens the respective full add sheet.
+
+**Why:** Previously, the FAB opened the universal add sheet which was essentially a Supplies add form with a secondary shopping button at the bottom. The new 2-option picker makes the choice explicit upfront and routes to the purpose-built add sheets for each tab.
+
+**How it works:**
+- `FAB_CONFIG.home` now calls `openHomeFabSheet()` instead of `openUniversalAdd()`
+- New functions: `openHomeFabSheet()`, `closeHomeFabSheet()`, `fabToSupplies()`, `fabToShopping()`
+- New bottom sheet HTML: `#homeFabSheet` with `bsheet-compact` class (max-height 40vh)
+- Each option dismisses the picker then opens `openInvAddSheet()` or `openShopAddSheet()`
+
+**Files changed:**
+- `src/main.js` — FAB_CONFIG updated, 4 new functions + window registrations
+- `index.html` — New `#homeFabSheet` and `#homeFabBackdrop` elements
+
+#### 3. Supplies Shelf View — Improved Auto-Categorization (Fewer "General" Items)
+
+**What changed:** Massively expanded the `gcat()` keyword mapping in `helpers.js` to classify items into specific categories instead of the "General" catch-all. Added new categories: "Dry Goods & Pasta", "Sauces & Vinegars", "Canned Goods", "Baking & Spices", "Oils & Cooking", "Condiments & Pickled".
+
+**Why:** Items like Black Olives, Capers, Chocolate, Macaroni & Cheese, and Rice Vinegar were all falling into "General" because the keyword matching was too narrow. The broader mapping now catches these and many more items.
+
+**Key mappings added:**
+- Olives, capers, pickles, relish → Condiments & Pickled
+- Chocolate, chips, crackers, nuts → Snacks
+- Macaroni, pasta, rice, quinoa, lentils → Dry Goods & Pasta
+- Vinegar, soy sauce, hot sauce, tahini → Sauces & Vinegars
+- Canned tomatoes, broth, coconut milk → Canned Goods
+- Baking soda, vanilla, sugar, spices → Baking & Spices
+- Olive oil, cooking spray → Oils & Cooking
+
+**Files changed:**
+- `src/helpers.js` — `CATS` map expanded with 5 new categories; `gcat()` rewritten with ~15 keyword pattern groups
+
+#### 4. Shelf View Grid — Wrapping Multi-Row Layout
+
+**What changed:** Shelf view items now flow into multiple rows within each category section instead of being constrained to a single horizontal scroll row.
+
+**Why:** Categories with many items (e.g., Produce with 20+ items) forced the user to scroll a long horizontal strip. The wrapping grid shows all items at once in a natural reading flow.
+
+**CSS changes:**
+- `.shelf-items` — Changed from `display:flex;overflow-x:auto` to `display:flex;flex-wrap:wrap`
+- `.shelf-item` — Added `width:calc(25% - 8px)` for a 4-column grid (min 80px, max 110px)
+- `.shelf-name` — Changed from single-line truncation to 2-line clamp (`-webkit-line-clamp:2`)
+
+**Files changed:**
+- `src/styles.css` — `.shelf-items`, `.shelf-item`, `.shelf-name` rules updated
+
+#### 5. Shopping Tab Text Truncation Fix
+
+**What changed:** Added proper bottom padding to `.shbody` so the last shopping list items aren't clipped by the FAB or bottom nav bar.
+
+**Why:** The `.shbody` padding was overridden in the "breathing room" section from `padding-bottom:calc(56px + var(--safe) + 40px)` to `padding:18px 20px`, which clobbered the bottom clearance. Items at the end of the list (like "Yogurt Pouch") were getting cut off.
+
+**Files changed:**
+- `src/styles.css` — `.shbody` override now includes `calc(56px + var(--safe) + 60px)` bottom padding
+
+#### 6. Scan Barcode Chip Removed
+
+**What changed:** The "📷 Scan barcode" quick action chip was removed from the Home tab header. Barcode scanning remains accessible through the FAB "+" → "Add to Supplies" → "Scan barcode" flow.
+
+**Why:** Deduplicated functionality. The scan option exists in both the Supplies and Shopping add sheets, so having it as a standalone chip was redundant clutter.
+
+**Files changed:**
+- `src/ui/home.js` — `renderQuickChips()` no longer includes the scan chip

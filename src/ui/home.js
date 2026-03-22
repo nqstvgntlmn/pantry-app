@@ -549,11 +549,11 @@ function renderQuickChips() {
   if (el.dataset.rendered) return;
   el.dataset.rendered = "1";
 
+  // 3 distinct quick actions — scan barcode removed (accessible via FAB "+" flow)
   el.innerHTML = `
-    <button class="quick-chip" onclick="openScanForInventory()">📷 Scan barcode</button>
-    <button class="quick-chip" onclick="openUniversalAdd()">＋ Quick add</button>
-    <button class="quick-chip" onclick="showScreen('shopping')">🛒 Shopping list</button>
-    <button class="quick-chip" onclick="showScreen('inventory')">📦 What's expiring</button>
+    <button class="quick-chip" onclick="showScreen('shopping')">🛒 Shopping List</button>
+    <button class="quick-chip" onclick="showScreen('inventory')">📦 Supplies</button>
+    <button class="quick-chip" onclick="showScreen('inventory');setTimeout(()=>{const el=document.getElementById('expiryTimeline');if(el)el.scrollIntoView({behavior:'smooth'})},200)">⚠️ Expiring Soon</button>
   `;
 }
 

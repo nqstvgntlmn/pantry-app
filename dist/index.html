@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-CUl-xJfI.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DSA7a0SP.css">
+  <script type="module" crossorigin src="/assets/index-BA6N7AbN.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BnQa18EG.css">
 </head>
 <body>
 
@@ -555,6 +555,29 @@
       <button class="bsheet-opt" id="invAddMicOpt" onclick="invAddVoice()" style="display:none">
         <span class="bsheet-opt-icon">🎤</span>
         <span class="bsheet-opt-text">Voice input</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- BOTTOM SHEET: HOME FAB ACTION PICKER — small 2-option sheet from Home "+" button -->
+  <div class="bsheet-backdrop" id="homeFabBackdrop" onclick="closeHomeFabSheet()"></div>
+  <div class="bsheet bsheet-compact" id="homeFabSheet">
+    <div class="bsheet-handle"></div>
+    <div class="bsheet-title">Add to…</div>
+    <div class="bsheet-options">
+      <button class="bsheet-opt" onclick="fabToSupplies()">
+        <span class="bsheet-opt-icon">📦</span>
+        <div style="flex:1">
+          <span class="bsheet-opt-text">Add to Supplies</span>
+          <span class="bsheet-opt-sub">Track what you have at home</span>
+        </div>
+      </button>
+      <button class="bsheet-opt" onclick="fabToShopping()">
+        <span class="bsheet-opt-icon">🛒</span>
+        <div style="flex:1">
+          <span class="bsheet-opt-text">Add to Shopping List</span>
+          <span class="bsheet-opt-sub">Add items you need to buy</span>
+        </div>
       </button>
     </div>
   </div>

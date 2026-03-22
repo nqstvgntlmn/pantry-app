@@ -250,7 +250,7 @@ window.showScreen = function(n) {
 // large and fully opaque, then shrinks + fades to 50% after 2 seconds.
 // Tapping it at any size/opacity triggers the correct add action for the tab.
 const FAB_CONFIG = {
-  home:      { action: "openUniversalAdd()",   ariaLabel: "Add item" },
+  home:      { action: "openHomeFabSheet()",   ariaLabel: "Add item" },
   inventory: { action: "openInvAddSheet()",    ariaLabel: "Add supply" },
   recipes:   { action: "showOv('arec')",       ariaLabel: "Add recipe" },
   shopping:  { action: "openShopAddSheet()",   ariaLabel: "Add to list" },
@@ -366,6 +366,37 @@ window.addMissingToShop = addMissingToShop;   // Add a missing ingredient to sho
 window.changeWeek = changeWeek;               // Navigate week calendar forward/backward
 // toggleExp — toggle the export panel's visibility (show/hide)
 window.toggleExp = function() { const p = g("exppanel"); p.style.display = p.style.display === "none" ? "block" : "none"; };
+// ── Home FAB action sheet — small picker with "Add to Supplies" / "Add to Shopping List" ──
+// openHomeFabSheet() — shows the two-option action sheet when FAB is tapped on Home tab.
+// Each option opens the appropriate full add sheet (inventory or shopping).
+function openHomeFabSheet() {
+  const backdrop = g("homeFabBackdrop");
+  const sheet = g("homeFabSheet");
+  if (backdrop) backdrop.classList.add("active");
+  if (sheet) sheet.classList.add("active");
+}
+// closeHomeFabSheet() — dismisses the Home FAB action sheet
+function closeHomeFabSheet() {
+  const backdrop = g("homeFabBackdrop");
+  const sheet = g("homeFabSheet");
+  if (backdrop) backdrop.classList.remove("active");
+  if (sheet) sheet.classList.remove("active");
+}
+// fabToSupplies() — closes FAB sheet and opens the Supplies add sheet
+function fabToSupplies() {
+  closeHomeFabSheet();
+  openInvAddSheet();
+}
+// fabToShopping() — closes FAB sheet and opens the Shopping add sheet
+function fabToShopping() {
+  closeHomeFabSheet();
+  openShopAddSheet();
+}
+window.openHomeFabSheet = openHomeFabSheet;
+window.closeHomeFabSheet = closeHomeFabSheet;
+window.fabToSupplies = fabToSupplies;
+window.fabToShopping = fabToShopping;
+
 // ── Universal add sheet handlers (Home tab "＋ Add" button) ──
 window.openUniversalAdd = openUniversalAdd;     // Open the universal add bottom sheet
 window.closeUniversalAdd = closeUniversalAdd;   // Close the universal add bottom sheet

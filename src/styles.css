@@ -1251,6 +1251,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .swipe-del{border-radius:0 18px 18px 0}
 .swipe-add{border-radius:18px 0 0 18px}
 .bsheet{border-radius:24px 24px 0 0}
+/* Compact bottom sheet variant — shorter max-height for simple action pickers */
+.bsheet-compact{max-height:40vh;overflow-y:visible}
 .minner{border-radius:28px 28px 0 0}
 
 /* ── BENTO STAT GRID ──────────────────────────────────────────────────────────
@@ -1302,7 +1304,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* Bottom padding must clear the floating pill nav + FAB + safe area */
 .hbody{padding:4px 20px calc(56px + var(--safe) + 40px)}
 .ibody{padding:18px 20px}
-.shbody{padding:18px 20px}
+/* Shopping body needs extra bottom padding to clear FAB + nav bar so last items aren't clipped */
+.shbody{padding:18px 20px calc(56px + var(--safe) + 60px)}
 .rbody{padding:16px 20px}
 .ilst{gap:9px}
 .expl{gap:9px}
@@ -1601,11 +1604,10 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
   display:flex;align-items:center;gap:8px;letter-spacing:.02em}
 .shelf-label-emoji{font-size:1.1rem}
 .shelf-label-count{font-size:.68rem;color:var(--mt);background:var(--card);padding:2px 8px;border-radius:10px;margin-left:auto}
-/* Horizontally scrollable items on each shelf */
-.shelf-items{display:flex;overflow-x:auto;gap:10px;padding:0 16px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.shelf-items::-webkit-scrollbar{display:none}
+/* Wrapping grid of items on each shelf — flows into multiple rows */
+.shelf-items{display:flex;flex-wrap:wrap;gap:10px;padding:0 16px}
 /* Individual shelf item card — compact, centered, tappable */
-.shelf-item{min-width:92px;max-width:110px;padding:14px 10px 12px;background:var(--card-grad);
+.shelf-item{width:calc(25% - 8px);min-width:80px;max-width:110px;padding:14px 10px 12px;background:var(--card-grad);
   border:1px solid var(--card-border);border-top-color:var(--card-border-top);border-radius:14px;
   text-align:center;flex-shrink:0;cursor:pointer;transition:transform .15s,border-color .15s;
   box-shadow:inset 0 1px 0 rgba(255,255,255,0.04)}
@@ -1615,7 +1617,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
   box-shadow:0 0 10px rgba(200,150,10,0.12),inset 0 1px 0 rgba(255,255,255,0.04)}
 .shelf-item.shelf-item-low:active{transform:scale(0.84)}
 .shelf-emoji{font-size:1.6rem;margin-bottom:6px;line-height:1.2}
-.shelf-name{font-size:.76rem;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+/* Shelf item name — allow wrapping up to 2 lines to avoid truncation */
+.shelf-name{font-size:.76rem;color:var(--tx);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .shelf-qty{font-size:.7rem;color:var(--tx2);margin-top:4px;font-weight:500}
 /* Visual shelf edge — subtle wood-like line below each row */
 .shelf-line{height:3px;background:linear-gradient(90deg,var(--b1),var(--b2),var(--b1));

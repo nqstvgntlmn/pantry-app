@@ -265,6 +265,8 @@ export function ll(l) {
 export const CATS = {
   Produce: "🥦", Proteins: "🍗", Dairy: "🧀", Grains: "🌾",
   Condiments: "🧴", Snacks: "🍿", Beverages: "🥤", Frozen: "❄️",
+  "Dry Goods & Pasta": "🍝", "Sauces & Vinegars": "🫙", "Canned Goods": "🥫",
+  "Baking & Spices": "🧂", "Oils & Cooking": "🫒", "Condiments & Pickled": "🫒",
   General: "📦", Imported: "📥"
 };
 
@@ -368,14 +370,52 @@ export function getItemEmoji(item) {
 export function gcat(item) {
   const n = (item.name || "").toLowerCase();
   const c = (item.category || "").toLowerCase();
-  // Check category field first (may already be set), then fall back to name-based keyword matching
-  if (c.includes("produce") || c.includes("vegetable") || c.includes("fruit") || n.match(/apple|banana|broccoli|carrot|celery|cabbage|tomato|onion|garlic|jalap|spinach|mushroom|squash|lettuce|cucumber|pepper/)) return "Produce";
-  if (c.includes("protein") || c.includes("meat") || c.includes("seafood") || c.includes("poultry") || n.match(/chicken|beef|lamb|turkey|salmon|cod|tuna|fish|steak|pork|shrimp/)) return "Proteins";
-  if (c.includes("dairy") || c.includes("egg") || n.match(/egg|butter|cheese|milk|cream|yogurt|ghee/)) return "Dairy";
-  if (c.includes("grain") || c.includes("bread") || c.includes("pasta") || n.match(/rice|pasta|bread|flour|oat|cereal|grain|noodle|tortilla/)) return "Grains";
-  if (c.includes("condiment") || c.includes("sauce") || n.match(/sauce|ketchup|mustard|oil|vinegar|salt|pepper|spice|herb|seasoning|mayo/)) return "Condiments";
-  // Items stored in the freezer that didn't match a more specific category
-  if (item.location === "freezer") return "Frozen";
+
+  // Check category field first (may already be set), then fall back to name-based keyword matching.
+  // ORDER MATTERS: multi-word compound names checked before single keywords to avoid
+  // false positives (e.g. "olive oil" must match Oils before "olive" matches Condiments,
+  // "macaroni & cheese" must match Dry Goods before "cheese" matches Dairy).
+
+  // Oils & Cooking — checked early so "olive oil" doesn't fall into Condiments
+  if (n.match(/olive oil|vegetable oil|canola oil|coconut oil|sesame oil|avocado oil|cooking spray|oil(?:\s|$)/)) return "Oils & Cooking";
+
+  // Sauces & Vinegars — checked early so "rice vinegar" doesn't match Dry Goods "rice"
+  if (n.match(/vinegar|rice vinegar|balsamic|soy sauce|fish sauce|worcestershire|hot sauce|sriracha|teriyaki|hoisin|oyster sauce|tahini|pesto|salsa|marinara|tomato sauce|bbq sauce|wing sauce/)) return "Sauces & Vinegars";
+
+  // Dry Goods & Pasta — checked before Dairy so "macaroni & cheese" matches here
+  if (c.includes("pasta") || c.includes("grain") || n.match(/pasta|macaroni|spaghetti|penne|fusilli|linguine|rigatoni|orzo|ramen|noodle|rice(?!.*vinegar)|couscous|quinoa|barley|farro|lentil|chickpea|bean(?!.*green)|oat|cereal|granola|flour|cornmeal|polenta|bulgur|millet/)) return "Dry Goods & Pasta";
+
+  // Produce — fresh fruits, vegetables, herbs
+  if (c.includes("produce") || c.includes("vegetable") || c.includes("fruit") || n.match(/apple|banana|broccoli|carrot|celery|cabbage|tomato(?!.*sauce|.*paste|.*puree)|onion|garlic|jalap|spinach|mushroom|squash|lettuce|cucumber|pepper(?!corn)|avocado|potato|sweet potato|zucchini|corn(?!starch|meal)|pea(?:s|$)|green bean|asparagus|beet|kale|arugula|cilantro|parsley|dill|mint|basil|lemon|lime|orange|grape(?!.*seed)|berr|strawberr|blueberr|raspberr|mango|peach|pear|plum|melon|pineapple|ginger|scallion|leek|radish|eggplant|artichoke/)) return "Produce";
+
+  // Proteins — meat, poultry, seafood, plant proteins
+  if (c.includes("protein") || c.includes("meat") || c.includes("seafood") || c.includes("poultry") || n.match(/chicken|beef|lamb|turkey|salmon|cod(?:\s|$)|tuna|fish|steak|pork|shrimp|sausage|bacon|ham(?:\s|$)|ground meat|meatball|crab|lobster|clam|mussel|anchov|tofu|tempeh|seitan/)) return "Proteins";
+
+  // Dairy — milk, cheese, eggs, yogurt, butter
+  if (c.includes("dairy") || c.includes("egg") || n.match(/egg|butter(?!.*nut)|cheese|milk(?!.*coconut)|cream(?!.*of)|yogurt|ghee|sour cream|whipping|half.and.half|cottage|ricotta|mozzarella|parmesan|cheddar|feta|brie|gouda|cream cheese/)) return "Dairy";
+
+  // Baking & Spices — baking essentials and dry spices/seasonings
+  if (c.includes("baking") || c.includes("spice") || n.match(/baking soda|baking powder|yeast|vanilla|cocoa powder|cornstarch|sugar|powdered sugar|brown sugar|maple syrup|honey|molasses|cinnamon|cumin|turmeric|paprika|oregano|thyme|rosemary|cayenne|chili powder|nutmeg|clove|allspice|cardamom|saffron|curry powder|garam masala|bay lea|peppercorn|seasoning|spice/)) return "Baking & Spices";
+
+  // Condiments & Pickled — spreadable condiments, pickled items, olives, capers
+  if (c.includes("condiment") || c.includes("pickle") || n.match(/ketchup|mustard|mayo|mayonnaise|relish|pickle|olive|caper|jam|jelly|preserves|hummus|guacamole|chutney|horseradish|ranch|dressing/)) return "Condiments & Pickled";
+
+  // Canned Goods — canned/jarred shelf-stable foods
+  if (c.includes("canned") || n.match(/canned|tomato paste|tomato puree|diced tomato|crushed tomato|coconut milk|broth|stock|soup(?:\s|$)|condensed/)) return "Canned Goods";
+
+  // Snacks & Treats — chips, chocolate, candy, popcorn, crackers, cookies
+  if (c.includes("snack") || n.match(/chip|cracker|cookie|pretzel|popcorn|chocolate|candy|gumm|trail mix|granola bar|protein bar|nut(?:s|$)|almond(?:s|$)|cashew|walnut|pistachio|peanut(?!.*butter)|dried fruit|fruit snack|brownie/)) return "Snacks";
+
+  // Beverages — drinks, juice, coffee, tea
+  if (c.includes("beverage") || c.includes("drink") || n.match(/juice|coffee|tea(?:\s|$)|water(?:\s|$)|soda|seltzer|sparkling|kombucha|lemonade|smoothie|wine(?:\s|$)|beer(?:\s|$)/)) return "Beverages";
+
+  // Bread & Bakery — catch bread/tortilla that didn't match Dry Goods
+  if (c.includes("bread") || c.includes("bakery") || n.match(/bread|tortilla|pita|bagel|naan|flatbread|bun(?:\s|$)|roll(?:\s|$)|croissant|muffin|wrap(?:\s|$)/)) return "Grains";
+
+  // Frozen — items stored in the freezer that didn't match a more specific category
+  if (c.includes("frozen") || item.location === "freezer") return "Frozen";
+
+  // General — true catch-all for items that don't match any keyword pattern
   return "General";
 }
 

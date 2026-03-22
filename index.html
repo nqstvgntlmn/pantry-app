@@ -557,6 +557,29 @@
     </div>
   </div>
 
+  <!-- BOTTOM SHEET: HOME FAB ACTION PICKER — small 2-option sheet from Home "+" button -->
+  <div class="bsheet-backdrop" id="homeFabBackdrop" onclick="closeHomeFabSheet()"></div>
+  <div class="bsheet bsheet-compact" id="homeFabSheet">
+    <div class="bsheet-handle"></div>
+    <div class="bsheet-title">Add to…</div>
+    <div class="bsheet-options">
+      <button class="bsheet-opt" onclick="fabToSupplies()">
+        <span class="bsheet-opt-icon">📦</span>
+        <div style="flex:1">
+          <span class="bsheet-opt-text">Add to Supplies</span>
+          <span class="bsheet-opt-sub">Track what you have at home</span>
+        </div>
+      </button>
+      <button class="bsheet-opt" onclick="fabToShopping()">
+        <span class="bsheet-opt-icon">🛒</span>
+        <div style="flex:1">
+          <span class="bsheet-opt-text">Add to Shopping List</span>
+          <span class="bsheet-opt-sub">Add items you need to buy</span>
+        </div>
+      </button>
+    </div>
+  </div>
+
   <!-- BOTTOM SHEET: UNIVERSAL ADD (Home tab — adds to Supplies or Shopping) -->
   <div class="bsheet-backdrop" id="uniAddBackdrop" onclick="closeUniversalAdd()"></div>
   <div class="bsheet" id="uniAddSheet" style="max-height:85vh">
