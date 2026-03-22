@@ -11,10 +11,9 @@ import { consolidateShopItem } from './shopping.js'; // Consolidation-aware add 
 // g        – getElementById shorthand
 // xSt      – returns expiry status object { c: class, l: label } for a date
 // ll       – location label (e.g. "fridge" → "🌡 Fridge")
-// gcat     – guess/get category for an item
-// CATS     – map of category name → emoji icon
+// gcat     – guess/get category for an item (used when saving items, not for shelf grouping)
 // showNotif/showOv/hideOv – toast notifications and overlay show/hide
-import { g, xSt, ll, gcat, CATS, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, pluralizeUnit, renderFracSelect, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS, getItemEmoji } from '../helpers.js';
+import { g, xSt, ll, gcat, showNotif, showOv, hideOv, guessLocation, toTitleCase, splitQty, combineQty, formatQty, pluralizeUnit, renderFracSelect, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS, getItemEmoji } from '../helpers.js';
 // updExport refreshes the "export" button / data on the home screen
 // _defaultThreshold returns the smart restock threshold based on unit type
 import { updExport, _defaultThreshold } from './home.js';
@@ -165,9 +164,9 @@ export function iH(item) {
   </div>`;
 }
 
-// ── SHELF VIEW ──────────────────────────────────────────────────────────────
-// Visual grid layout grouped by category. Items displayed as compact cards
-// on "shelves" (horizontal scrollable rows). Toggle between list/shelf views.
+// ── GRID VIEW ───────────────────────────────────────────────────────────────
+// Alternate flat grid layout for inventory items — compact emoji cards.
+// No category grouping; just a simple wrapping grid. Toggle via view button.
 
 // View mode persisted in localStorage: "list" (default) or "shelf"
 let _invViewMode = localStorage.getItem("ks-inv-view") || "list";
@@ -186,46 +185,24 @@ export function toggleInvViewMode() {
 }
 
 /**
- * _renderInvShelf(items) — Renders items in a shelf/grid layout grouped by
- * category. Each category becomes a horizontal scrollable row of item cards.
+ * _renderInvShelf(items) — Renders items in a flat grid layout (no category grouping).
+ * Each item becomes a card with emoji, name, and quantity.
  * Low-stock items are visually smaller with an amber border.
  */
 function _renderInvShelf(items) {
-  // Group items by their guessed category
-  const groups = {};
-  for (const item of items) {
-    const cat = gcat(item) || "Other";
-    if (!groups[cat]) groups[cat] = [];
-    groups[cat].push(item);
-  }
-
-  // Sort category names alphabetically for consistent ordering
-  const sortedCats = Object.keys(groups).sort((a, b) => a.localeCompare(b));
-
-  let html = "";
-  for (const cat of sortedCats) {
-    const catItems = groups[cat];
-    const emoji = CATS[cat] || "📦";
-
-    html += `<div class="shelf-row">
-      <div class="shelf-label">${emoji} ${cat}</div>
-      <div class="shelf-items">
-        ${catItems.map(item => {
-          const ic = getItemEmoji(item);
-          const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(item.unit);
-          const isLow = !item.doNotRestock && typeof item.qty === "number" && item.qty <= thresh && item.qty > 0;
-          return `<div class="shelf-item${isLow ? " shelf-item-low" : ""}" onclick="openInvItemDetail('${item.id}')">
-            <div class="shelf-emoji">${ic}</div>
-            <div class="shelf-name">${toTitleCase(item.scanTitle || item.name)}</div>
-            <div class="shelf-qty">${formatQty(item.qty)} ${pluralizeUnit(item.unit || "Unit", item.qty)}</div>
-          </div>`;
-        }).join("")}
-      </div>
-      <div class="shelf-line"></div>
-    </div>`;
-  }
-
-  return html;
+  // Flat grid — no category grouping, just a simple wrap of item cards
+  return `<div class="shelf-items" style="padding:0 16px">
+    ${items.map(item => {
+      const ic = getItemEmoji(item);
+      const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(item.unit);
+      const isLow = !item.doNotRestock && typeof item.qty === "number" && item.qty <= thresh && item.qty > 0;
+      return `<div class="shelf-item${isLow ? " shelf-item-low" : ""}" onclick="openInvItemDetail('${item.id}')">
+        <div class="shelf-emoji">${ic}</div>
+        <div class="shelf-name">${toTitleCase(item.scanTitle || item.name)}</div>
+        <div class="shelf-qty">${formatQty(item.qty)} ${pluralizeUnit(item.unit || "Unit", item.qty)}</div>
+      </div>`;
+    }).join("")}
+  </div>`;
 }
 
 // ── EXPIRY TIMELINE ──────────────────────────────────────────────────────────

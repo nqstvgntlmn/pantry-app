@@ -784,11 +784,12 @@ Transforms the app from a utility-first tool into an iOS-native-feeling experien
 
 ### Phase 3: Supplies — Shelf View + Expiry Timeline
 
-#### Shelf View
+#### Grid View (formerly Shelf View)
 - **File:** `src/ui/inventory.js` (`_renderInvShelf()`, `toggleInvViewMode()`)
-- **What:** New visual grid layout grouped by category (via `gcat()`). Each category = horizontal scrollable shelf row of item cards. Cards show emoji + name + qty. Low-stock items get `.shelf-item-low` class (amber border, slight scale down).
+- **What:** Flat grid layout of item cards — no category grouping. Cards show emoji + name + qty. Low-stock items get `.shelf-item-low` class (amber border, slight scale down). Category grouping was removed in Session 11 due to auto-categorization bugs.
 - **Toggle:** `_invViewMode` persisted in localStorage `ks-inv-view`. Toggle button `#inv-view-toggle` (🗄) in inventory header.
-- **CSS classes:** `.shelf-row`, `.shelf-label`, `.shelf-items`, `.shelf-item`, `.shelf-item-low`, `.shelf-emoji`, `.shelf-name`, `.shelf-qty`, `.shelf-line`
+- **CSS classes:** `.shelf-items`, `.shelf-item`, `.shelf-item-low`, `.shelf-emoji`, `.shelf-name`, `.shelf-qty`
+- **Note:** `gcat()` and `CATS` still exist in `helpers.js` — used for setting item categories on save and by Shopping Prep. They are NOT used for shelf/grid view grouping anymore.
 
 #### Expiry Timeline
 - **File:** `src/ui/inventory.js` (`_renderExpiryTimeline()`)
@@ -1414,3 +1415,31 @@ The canonical mapping (per Bora) is:
 - `src/helpers.js` — Separated "condiment" → 🧴 from sauces → 🫙
 - `src/main.js` — Added one-time emoji migration (v1) in `_appStart`
 - `src/ui/inventory.js` — Cleaned up redundant inline styles on emoji placeholder
+
+---
+
+## Session 11 — Remove Auto-Categorization Shelf View Grouping (March 2026)
+
+### What changed
+Removed the auto-categorization category grouping from the Supplies tab grid (shelf) view. The grid view now shows a flat list of item cards with no category section headers ("General", "Condiments & Pickled", "Dry Goods & Pasta", etc.).
+
+### Why
+The auto-categorization mapping (`gcat()`) was causing persistent bugs — items were being placed in wrong categories, "General" was a catch-all dumping ground, and the category headers added visual noise without clear user value. Bora requested a return to a simple flat layout.
+
+### What was removed
+- **Category grouping in `_renderInvShelf()`** — no longer calls `gcat()` to group items into sections. Items render as a flat wrapping grid.
+- **Category section headers** — the `.shelf-row`, `.shelf-label`, `.shelf-line` DOM elements and CSS classes are gone.
+- **`CATS` import in inventory.js** — no longer needed since shelf view doesn't display category headers.
+
+### What was kept (intentionally NOT removed)
+- **`gcat()` function in `helpers.js`** — still used when saving new items (sets their `category` field) and by Shopping Prep.
+- **`CATS` constant in `helpers.js`** — still exported, used by other code paths.
+- **Location filter tabs** (All, Fridge, Freezer, Pantry, Household) — unchanged.
+- **Grid/list view toggle button** — still works, just shows flat grid vs flat list.
+- **Item emoji on each card** — unchanged.
+- **Category field on detail sheets** — users can still manually set categories.
+- **Shopping Prep** — completely untouched.
+
+### Files changed
+- `src/ui/inventory.js` — `_renderInvShelf()` rewritten to flat grid (no grouping); `CATS` removed from import; section comments updated
+- `src/styles.css` — Removed `.shelf-row`, `.shelf-label`, `.shelf-label-emoji`, `.shelf-label-count`, `.shelf-line` CSS rules; kept all `.shelf-item` card styles
