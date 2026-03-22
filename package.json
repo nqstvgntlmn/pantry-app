@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "vite",
+    "dev:api": "node dev-server.mjs",
+    "dev:full": "node dev-server.mjs & vite --open",
     "build": "vite build",
     "preview": "vite preview"
   },

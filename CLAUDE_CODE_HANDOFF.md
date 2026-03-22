@@ -152,6 +152,47 @@ Text search API calls are commented out in Shopping and Supplies add sheets with
 
 ---
 
+## Local Development Setup
+
+**Problem solved:** Running `npm run dev` (Vite only on port 5173) doesn't serve the `/api/*` serverless functions. All Firestore calls fail silently, `resolveHousehold` gets null for the user doc, and the app shows the onboarding/join screen instead of the user's actual household.
+
+**Solution:** A lightweight local API server (`dev-server.mjs`) serves the Vercel-style serverless functions on port 3000. Vite's dev server proxy (`vite.config.js`) already forwards `/api/*` requests to `http://localhost:3000`.
+
+### How to run locally
+
+1. Start the API dev server (port 3000):
+```
+npm run dev:api
+```
+
+2. In a second terminal, start Vite (port 5173):
+```
+npm run dev
+```
+
+Or use the combined command (starts both in one terminal):
+```
+npm run dev:full
+```
+
+### What works locally vs. Vercel
+
+| Feature | Local | Vercel |
+|---|---|---|
+| Google/Apple/Email Auth | ✅ | ✅ |
+| Household resolution & CRUD | ✅ | ✅ |
+| Recipe import, barcode scan | ✅ (if env vars set) | ✅ |
+| Admin-delete (owner deletes member's community recipe) | ❌ (needs `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY`) | ✅ |
+| ShopRite coupons | ❌ (needs `SHOPRITE_PPC` env vars) | ✅ |
+
+### Changes made (Session 7 — March 2026)
+
+- **`api/db.js`**: Firebase Admin SDK initialization changed from eager (module-level) to lazy (`_ensureAdminInit()`). Previously, missing `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` would crash the entire module on import, making ALL API calls fail — even basic CRUD that doesn't need admin access. Now admin SDK is only initialized when an `admin-delete` op is requested. Also added fallback for `FIREBASE_API_KEY` to the public Firebase Web API key so local dev works without env vars.
+- **`dev-server.mjs`**: New file — lightweight Node.js HTTP server that dynamically imports and serves Vercel-style serverless functions from `api/*.js`. Handles JSON body parsing and creates Express-compatible `req`/`res` objects.
+- **`package.json`**: Added `dev:api` (starts API server) and `dev:full` (starts both Vite + API server) scripts.
+
+---
+
 ## Tabs & Navigation
 
 Bottom navigation (left to right):

@@ -8,37 +8,58 @@
 // community recipes authored by other household members.
 // ──────────────────────────────────────────────────────────────────────
 
-// Firebase Admin SDK — used for admin-delete operations that need to
-// bypass Firestore security rules (e.g. owner deleting member's recipes)
+// Firebase Admin SDK — used only for admin-delete operations that need to
+// bypass Firestore security rules (e.g. owner deleting member's recipes).
+// Imported at module level but initialized LAZILY so the module still loads
+// when admin credentials are missing (local dev without FIREBASE_PRIVATE_KEY).
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 
-// ── Firebase Admin SDK initialization (module-level) ─────────────────────────
-// Must happen at module level, not lazily inside a function, because Vercel
-// serverless functions can cold-start and getAuth()/getFirestore() will throw
-// "The default Firebase app does not exist" if the app isn't initialized first.
-// Uses getApps() guard to avoid double-initialization on warm invocations.
-// Same pattern used in api/import-recipe.js — proven to work on Vercel.
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID || "family-pantry-c65d6",
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-    }),
-  });
-}
+// ── Lazy Firebase Admin SDK initialization ───────────────────────────────────
+// Admin SDK is only needed for admin-delete operations. By deferring init to
+// the first admin call, we avoid crashing the entire module when
+// FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY are missing (e.g. local dev).
+// On Vercel these env vars are always present, so the behavior is identical.
+let _adminDb = null;
+let _adminAuth = null;
 
-// Admin Firestore + Auth instances — safe to grab after module-level init above
-const adminDb = getFirestore();
-const adminAuth = getAuth();
+/**
+ * _ensureAdminInit — lazily initializes the Firebase Admin SDK the first time
+ * an admin operation is needed. Throws if credentials are missing so the
+ * caller gets a clear error instead of a silent failure.
+ */
+function _ensureAdminInit() {
+  if (_adminDb && _adminAuth) return;
+  if (!getApps().length) {
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    if (!clientEmail || !privateKey) {
+      throw new Error(
+        "Firebase Admin credentials missing (FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY). " +
+        "Admin operations are unavailable in this environment."
+      );
+    }
+    initializeApp({
+      credential: cert({
+        projectId: process.env.FIREBASE_PROJECT_ID || "family-pantry-c65d6",
+        clientEmail,
+        privateKey: privateKey.replace(/\\n/g, "\n"),
+      }),
+    });
+  }
+  _adminDb = getFirestore();
+  _adminAuth = getAuth();
+}
 
 // Firebase project ID — determines which Firestore database we hit
 const PROJECT = "family-pantry-c65d6";
 
-// API key is stored as a Vercel environment variable, never shipped to the client
-const API_KEY = process.env.FIREBASE_API_KEY;
+// API key for unauthenticated Firestore REST calls. Stored as a Vercel env var
+// on production. Falls back to the public Firebase Web API key (same value —
+// safe to embed client-side per Firebase docs) so local dev works without
+// manually configuring env vars.
+const API_KEY = process.env.FIREBASE_API_KEY || "AIzaSyAFURz8fEGSTameAW5YvBKWpr2LXv9Ang0";
 
 // Firestore REST API base URL — all document paths are appended to this
 const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
@@ -219,12 +240,16 @@ export default async function handler(req, res) {
       }
 
       try {
+        // Lazily initialize Admin SDK — only needed for this operation.
+        // Throws a clear error if credentials are missing (e.g. local dev).
+        _ensureAdminInit();
+
         // Verify the caller's identity using Firebase Admin Auth
-        const decodedToken = await adminAuth.verifyIdToken(bearerToken);
+        const decodedToken = await _adminAuth.verifyIdToken(bearerToken);
         const callerUid = decodedToken.uid;
 
         // Read the target document to verify ownership before deleting
-        const db = adminDb;
+        const db = _adminDb;
         const docRef = db.doc(path);
         const docSnap = await docRef.get();
 
