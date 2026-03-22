@@ -5,7 +5,7 @@
 // a Deals sub-tab that searches for live grocery deals via Flipp API,
 // and bidirectional Reminders sync (records completed items for iOS Shortcut polling).
 
-import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
+import { state } from '../state.js';                // Global app state (shopping list, config, etc.)
 import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
 import { getCurrentUser } from '../auth.js'; // getCurrentUser = get Firebase auth user object (email for deals gate)
 import { defaultThreshold } from '../helpers.js';  // Smart restock threshold by unit — used for "already have" inventory check
@@ -2477,8 +2477,9 @@ export function setSHT(t) {
       renderDealsZipBanner();
       // Check if the ShopRite service JWT is near expiry and warn
       renderJwtExpiryBanner();
-      // Auto-load coupons on first visit to Deals tab
+      // Auto-load coupons and weekly deals on first visit to Deals tab
       if (!_couponsLoaded) loadCoupons();
+      if (!_dealsLoaded) loadFlippDeals();
     }
   }
 }
@@ -2745,12 +2746,20 @@ export async function bpConfirm() {
   showNotif(`Added ${toAdd.length} item${toAdd.length !== 1 ? "s" : ""}! 🛒`);
 }
 
-// ── DEALS (FLIPP API) ────────────────────────────────────────────────────────
-// The Deals sub-tab fetches REAL local grocery deals from the Flipp API.
-// Flipp aggregates weekly flyer/circular data from hundreds of US grocery chains
-// including ShopRite, Stop & Shop, Walmart, Target, Aldi, and many more.
-// Results are actual store circular data — no AI-generated estimates.
-// If no deals are found, we show a clear message (never falls back to AI).
+// ── WEEKLY CIRCULAR DEALS (FLIPP API) ────────────────────────────────────────
+// Fetches full weekly circulars from target stores (Walmart, ALDI, Stop & Shop,
+// Wegmans) via the Flipp API. Deals are cached server-side in Firestore (24hr TTL).
+// Features "On My List" fuzzy matching that highlights deals matching the
+// user's current shopping list — same pattern as ShopRite coupons.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Module-level deal state — tracks loaded deals and UI filtering state
+let _dealsLoaded = false;        // Whether weekly deals have been fetched this session
+let _allDeals = [];              // Full deal list from API (unfiltered)
+let _dealStores = [];            // Store metadata from API (name, count, validTo)
+let _dealPage = 0;               // Current page for "show more" pagination
+let _activeStoreCat = "all";     // Active store filter chip
+const DEALS_PER_PAGE = 20;      // How many deals to show per page load
 
 /**
  * renderDealsZipBanner() — Shows the user's configured zipcode in the Deals tab,
@@ -2771,74 +2780,397 @@ export function renderDealsZipBanner() {
 }
 
 /**
- * renderDeals(deals, query) — Renders an array of deal objects into the #dealslist container.
- * Each deal object has: { name, brand, store, storeAddress, regular, sale_price, onSale, savings, image, size }.
- * If no deals are found, shows an empty-state placeholder with a clear message.
- *
- * Uses imperative DOM creation (createElement) rather than innerHTML for the cards,
- * which avoids XSS issues with deal names that could contain HTML.
+ * loadFlippDeals() — Fetch weekly circular deals from Flipp API (or Firestore cache).
+ * Called automatically when user first opens the Deals tab.
+ * Shows loading skeleton while fetching, then renders deal cards with On My List matching.
  */
-function renderDeals(deals, query) {
-  const el = g("dealslist");
-  if (!deals || !deals.length) {
-    el.innerHTML = `<div class="es"><div class="ei">🏷</div><p>No deals found for <strong>${query}</strong>.<br>Try a different search term or check back later for new circulars.</p></div>`;
+export async function loadFlippDeals() {
+  const statusEl = g("dealsstatus");
+  const listEl = g("dealslist");
+  if (!statusEl || !listEl) return;
+
+  // Don't re-fetch if already loaded this session
+  if (_dealsLoaded && _allDeals.length > 0) {
+    renderDealStoreChips();
+    renderDealCards();
     return;
   }
-  el.innerHTML = ""; // Clear previous results
-  deals.forEach(d => {
-    // Build each deal card using DOM elements (avoids XSS with untrusted API data)
-    const card = document.createElement("div"); card.className = "deal-card" + (d.onSale ? " deal-match" : "");
-    const left = document.createElement("div"); left.style.flex = "1"; // Left side: text content
 
-    // Store name (with merchant logo if available from Flipp)
-    const store = document.createElement("div"); store.className = "deal-store"; store.textContent = d.store || "Store";
-    const name = document.createElement("div"); name.className = "deal-name"; name.textContent = d.name || "";
+  // Check that zipcode is configured
+  const zipcode = state.cfg.zipcode;
+  if (!zipcode) {
+    statusEl.style.display = "block";
+    statusEl.style.color = "var(--am)";
+    statusEl.textContent = "Set your zipcode in Settings to see weekly deals.";
+    return;
+  }
 
-    // Brand + size line (if available)
-    if (d.brand || d.size) {
-      const meta = document.createElement("div");
-      meta.style.cssText = "font-size:.72rem;color:var(--mt);margin-top:1px";
-      meta.textContent = [d.brand, d.size].filter(Boolean).join(" · ");
-      left.appendChild(store); left.appendChild(name); left.appendChild(meta);
-    } else {
-      left.appendChild(store); left.appendChild(name);
+  // Show loading state with skeleton shimmer
+  statusEl.style.display = "block";
+  statusEl.style.color = "var(--mt)";
+  statusEl.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><span class="shimmer" style="display:inline-block;width:16px;height:16px;border-radius:50%"></span> Loading weekly circulars from Walmart, ALDI, Stop & Shop, Wegmans…</div>';
+  listEl.innerHTML = "";
+
+  try {
+    // Call the serverless API endpoint for weekly circular browsing
+    const res = await fetch("/api/deals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "browse",
+        zipcode,
+        householdId: state.hid,
+      }),
+    });
+
+    const data = await res.json();
+
+    // Handle API-level errors
+    if (!res.ok || data.error) {
+      throw new Error(data.error || "Failed to load weekly deals");
     }
 
-    // Price row: sale price, regular price (strikethrough via CSS), and savings badge
-    const priceRow = document.createElement("div"); priceRow.style.cssText = "display:flex;align-items:baseline;gap:6px;margin-top:4px;flex-wrap:wrap";
-    if (d.sale_price) { const sp = document.createElement("span"); sp.className = "deal-price"; sp.textContent = d.sale_price; priceRow.appendChild(sp); }
-    // Show original price with strikethrough only when item is on sale
-    if (d.onSale && d.regular) { const op = document.createElement("span"); op.className = "deal-orig"; op.textContent = d.regular; priceRow.appendChild(op); }
-    if (d.savings) { const sv = document.createElement("span"); sv.className = "deal-badge"; sv.textContent = "Save " + d.savings; priceRow.appendChild(sv); }
-    left.appendChild(priceRow);
+    // Store the full deal list and metadata for filtering/pagination
+    _allDeals = data.deals || [];
+    _dealStores = data.stores || [];
+    _dealsLoaded = true;
+    _dealPage = 0;
+    _activeStoreCat = "all";
 
-    // "+ List" button: adds this deal's item to the shopping list
-    const btn = document.createElement("button"); btn.className = "btn bs bsm"; btn.style.cssText = "align-self:center;flex-shrink:0;margin-left:8px"; btn.textContent = "+ List";
-    // Closure captures the deal name for the click handler (avoids stale reference in loop)
-    ((n) => { btn.onclick = () => addDealToList(n); })(d.name || "");
-    card.appendChild(left); card.appendChild(btn); el.appendChild(card);
-  });
+    statusEl.style.display = "none";
+
+    // Build store filter chips from the loaded data
+    renderDealStoreChips();
+
+    // Render the first page of deals with On My List matching
+    renderDealCards();
+
+    // Show cache indicator if data came from Firestore cache
+    if (data.fromCache) {
+      const cacheNote = document.createElement("div");
+      cacheNote.style.cssText = "font-size:.64rem;color:var(--mt);text-align:center;margin-top:6px";
+      cacheNote.textContent = "Cached results — tap ↻ Refresh for latest";
+      listEl.parentNode.insertBefore(cacheNote, listEl);
+    }
+  } catch (err) {
+    statusEl.style.display = "block";
+    statusEl.style.color = "var(--rd)";
+    statusEl.textContent = err.message || "Could not load weekly deals";
+    console.error("loadFlippDeals error:", err);
+  }
 }
 
 /**
- * renderNearbyStores(stores) — Displays a compact list of stores with deals
- * found near the user's zipcode. Shown after the first successful search.
+ * refreshFlippDeals() — Force-refresh weekly deals by bypassing Firestore cache.
+ * Called when user taps the ↻ Refresh button. Clears local state and refetches.
  */
-function renderNearbyStores(stores) {
-  const el = g("deals-stores");
-  if (!el || !stores || !stores.length) return;
-  el.style.display = "block";
-  el.innerHTML = `<div style="font-size:.72rem;color:var(--mt);font-weight:600;margin-bottom:4px">Stores with deals</div>` +
-    stores.map(s => `<div style="font-size:.74rem;color:var(--tx2);padding:2px 0">${s.name}</div>`).join("");
+export async function refreshFlippDeals() {
+  _dealsLoaded = false;
+  _allDeals = [];
+  _dealStores = [];
+  _dealPage = 0;
+
+  // Visual feedback on refresh button
+  const btn = g("deals-refresh-btn");
+  if (btn) { btn.textContent = "↻ …"; btn.disabled = true; }
+
+  await loadFlippDeals();
+
+  if (btn) { btn.textContent = "↻ Refresh"; btn.disabled = false; }
+}
+
+/**
+ * renderDealStoreChips() — Build horizontally scrollable store filter chips
+ * from the loaded weekly deals. Tapping a chip filters deals to one store.
+ */
+function renderDealStoreChips() {
+  const container = g("deals-store-chips");
+  if (!container) return;
+
+  // If no stores loaded yet, hide the chips container
+  if (!_dealStores.length) { container.innerHTML = ""; return; }
+
+  // Build chips: "All" chip + one chip per store with deal count
+  let html = `<button class="coupon-chip${_activeStoreCat === "all" ? " active" : ""}" onclick="filterDealStore('all')">All (${_allDeals.length})</button>`;
+  _dealStores.forEach(s => {
+    const active = _activeStoreCat === s.name ? " active" : "";
+    // Escape store names with apostrophes (e.g. "Wegman's")
+    const safeName = s.name.replace(/'/g, "\\'");
+    html += `<button class="coupon-chip${active}" onclick="filterDealStore('${safeName}')">${s.name} (${s.count})</button>`;
+  });
+  container.innerHTML = html;
+}
+
+/**
+ * filterDealStore(store) — Handle store chip tap. Filters the deal list
+ * to show only deals from the selected store.
+ */
+export function filterDealStore(store) {
+  _activeStoreCat = store;
+  _dealPage = 0;
+  renderDealStoreChips();
+  renderDealCards();
+}
+
+/**
+ * filterDealsLocal() — Live filter as user types in the deals search input.
+ * Filters the already-loaded deal list client-side for instant results.
+ */
+export function filterDealsLocal() {
+  _dealPage = 0;
+  renderDealCards();
+}
+
+/**
+ * getFilteredDeals() — Apply current filters (store + search text) to
+ * the loaded deal list. Returns the filtered array.
+ */
+function getFilteredDeals() {
+  let list = _allDeals;
+
+  // Apply store filter
+  if (_activeStoreCat !== "all") {
+    list = list.filter(d => d.store === _activeStoreCat);
+  }
+
+  // Apply search text filter (from the deals search input)
+  const searchInput = g("dealsearch");
+  const q = (searchInput?.value || "").trim().toLowerCase();
+  if (q) {
+    list = list.filter(d =>
+      (d.name || "").toLowerCase().includes(q) ||
+      (d.brand || "").toLowerCase().includes(q) ||
+      (d.store || "").toLowerCase().includes(q)
+    );
+  }
+
+  return list;
+}
+
+/**
+ * _dealMatchesItem(deal, itemTokens) — Check if a deal fuzzy-matches a shopping
+ * list item. Same algorithm as _couponMatchesItem — matches deal name/brand
+ * against the item's tokenized name. Returns true if ANY item token appears
+ * as a substring in any deal field.
+ */
+function _dealMatchesItem(deal, itemTokens) {
+  // Build a single searchable string from deal fields
+  const haystack = [deal.name, deal.brand]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  // A match requires at least one item token to appear in the deal text
+  return itemTokens.some(token => haystack.includes(token));
+}
+
+/**
+ * _splitDealsByList(filtered) — Partition filtered deals into two groups:
+ * 1. "onList" — deals that fuzzy-match any unchecked shopping list item
+ * 2. "rest"   — all remaining deals
+ * Same pattern as _splitCouponsByList — uses state.shop for matching.
+ */
+function _splitDealsByList(filtered) {
+  // Get unchecked shopping list items (checked items are already purchased)
+  const activeItems = (state.shop || []).filter(item => !item.checked);
+
+  // If no active shopping list items, everything goes to "rest"
+  if (!activeItems.length) return { onList: [], rest: filtered };
+
+  // Pre-tokenize all shopping list item names for efficient matching
+  // Reuses the _tokenize function defined in the coupons section below
+  const itemTokenSets = activeItems
+    .map(item => _tokenize(item.name))
+    .filter(tokens => tokens.length > 0);
+
+  // If no meaningful tokens after filtering, skip matching
+  if (!itemTokenSets.length) return { onList: [], rest: filtered };
+
+  const onList = [];
+  const rest = [];
+
+  // Classify each deal as matching or not matching the shopping list
+  for (const deal of filtered) {
+    const matches = itemTokenSets.some(tokens => _dealMatchesItem(deal, tokens));
+    if (matches) {
+      onList.push(deal);
+    } else {
+      rest.push(deal);
+    }
+  }
+
+  return { onList, rest };
+}
+
+/**
+ * renderDealCards() — Render the visible deal cards into #dealslist.
+ * Splits deals into two subsections (same pattern as coupon cards):
+ *   1. "On My List" — deals matching current shopping list items
+ *   2. "All Deals" — remaining browsable/searchable deals
+ * Handles pagination (DEALS_PER_PAGE at a time) and empty states.
+ * Uses DOM creation (not innerHTML) for card content to prevent XSS.
+ */
+function renderDealCards() {
+  const listEl = g("dealslist");
+  const moreEl = g("deals-more");
+  if (!listEl) return;
+
+  const filtered = getFilteredDeals();
+
+  // Empty state — no deals match current filters
+  if (!filtered.length) {
+    const searchInput = g("dealsearch");
+    const q = (searchInput?.value || "").trim();
+    if (q) {
+      listEl.innerHTML = `<div class="es"><div class="ei">🏷</div><p>No deals found for "<strong>${q}</strong>".<br>Try a different search term.</p></div>`;
+    } else {
+      listEl.innerHTML = '<div class="es"><div class="ei">📰</div><p>No weekly deals available.<br>Try refreshing or check back later for new circulars.</p></div>';
+    }
+    if (moreEl) moreEl.style.display = "none";
+    return;
+  }
+
+  // Split deals into "on my list" and "all remaining"
+  const { onList, rest } = _splitDealsByList(filtered);
+
+  // Clear and rebuild the list
+  listEl.innerHTML = "";
+
+  // ── "On My List" subsection ───────────────────────────────────────────
+  const onListHeader = document.createElement("div");
+  onListHeader.className = "coupon-section-header";
+  onListHeader.innerHTML = '<span class="coupon-section-icon">🛒</span> On My List';
+  listEl.appendChild(onListHeader);
+
+  if (onList.length) {
+    // Render all matching deals (no pagination for this section — usually small)
+    onList.forEach(deal => {
+      listEl.appendChild(buildDealCard(deal));
+    });
+  } else {
+    // Friendly empty state when no deals match the shopping list
+    const emptyMsg = document.createElement("div");
+    emptyMsg.className = "coupon-list-empty";
+    emptyMsg.textContent = "No deals found for your current list";
+    listEl.appendChild(emptyMsg);
+  }
+
+  // ── "All Deals" subsection ────────────────────────────────────────────
+  const allHeader = document.createElement("div");
+  allHeader.className = "coupon-section-header";
+  allHeader.innerHTML = '<span class="coupon-section-icon">📰</span> All Deals';
+  listEl.appendChild(allHeader);
+
+  if (rest.length) {
+    // Paginate the "All Deals" section — show DEALS_PER_PAGE at a time
+    const limit = (_dealPage + 1) * DEALS_PER_PAGE;
+    const visible = rest.slice(0, limit);
+    const hasMore = rest.length > limit;
+
+    visible.forEach(deal => {
+      listEl.appendChild(buildDealCard(deal));
+    });
+
+    // Show/hide "Show more" button based on remaining deals
+    if (moreEl) {
+      moreEl.style.display = hasMore ? "block" : "none";
+    }
+  } else {
+    // All deals matched the list — nothing left for "All Deals"
+    const emptyMsg = document.createElement("div");
+    emptyMsg.className = "coupon-list-empty";
+    emptyMsg.textContent = "All matching deals are shown above";
+    listEl.appendChild(emptyMsg);
+    if (moreEl) moreEl.style.display = "none";
+  }
+}
+
+/**
+ * buildDealCard(deal) — Create a single deal card DOM element.
+ * Each card shows: cutout image (optional), store name, deal name, brand,
+ * price, discount badge, and a "+ List" button to add to shopping list.
+ * Uses createElement to avoid XSS with untrusted deal data from the API.
+ */
+function buildDealCard(deal) {
+  const card = document.createElement("div");
+  card.className = "deal-card" + (deal.discount ? " deal-match" : "");
+
+  // Deal image (cutout from the store flyer, if available)
+  if (deal.image) {
+    const img = document.createElement("img");
+    img.className = "coupon-img";
+    img.src = deal.image;
+    img.alt = deal.name || "Deal";
+    img.loading = "lazy";
+    // Hide broken images gracefully
+    img.onerror = function() { this.style.display = "none"; };
+    card.appendChild(img);
+  }
+
+  // Text body: store, name, brand, price, discount
+  const body = document.createElement("div");
+  body.style.flex = "1";
+
+  // Store name line
+  const store = document.createElement("div");
+  store.className = "deal-store";
+  store.textContent = deal.store || "Store";
+  body.appendChild(store);
+
+  // Deal name/title
+  const name = document.createElement("div");
+  name.className = "deal-name";
+  name.textContent = deal.name || "";
+  body.appendChild(name);
+
+  // Brand line (if available)
+  if (deal.brand) {
+    const brand = document.createElement("div");
+    brand.style.cssText = "font-size:.72rem;color:var(--mt);margin-top:1px";
+    brand.textContent = deal.brand;
+    body.appendChild(brand);
+  }
+
+  // Price row: price + discount badge
+  const priceRow = document.createElement("div");
+  priceRow.style.cssText = "display:flex;align-items:baseline;gap:6px;margin-top:4px;flex-wrap:wrap";
+
+  if (deal.price) {
+    const sp = document.createElement("span");
+    sp.className = "deal-price";
+    sp.textContent = deal.price;
+    priceRow.appendChild(sp);
+  }
+
+  // Discount badge (e.g. "20% off")
+  if (deal.discount) {
+    const sv = document.createElement("span");
+    sv.className = "deal-badge";
+    sv.textContent = deal.discount;
+    priceRow.appendChild(sv);
+  }
+
+  body.appendChild(priceRow);
+  card.appendChild(body);
+
+  // "+ List" button: adds this deal's item to the shopping list
+  const btn = document.createElement("button");
+  btn.className = "btn bs bsm";
+  btn.style.cssText = "align-self:center;flex-shrink:0;margin-left:8px";
+  btn.textContent = "+ List";
+  // Closure captures the deal name for the click handler
+  ((n) => { btn.onclick = () => addDealToList(n); })(deal.name || "");
+
+  card.appendChild(btn);
+  return card;
 }
 
 /**
  * addDealToList(name) — Adds a deal item to the shopping list.
- * Deduplicates by checking if an item with the same name (case-insensitive) already exists.
+ * Consolidates with existing items — increments qty if already on the list.
  */
 export async function addDealToList(name) {
   const decoded = (name || "").replace(/&#39;/g, "'"); // Fix any HTML-encoded apostrophes
-  // Consolidate with existing items — increments qty if already on the list
   const result = await consolidateShopItem({ id: Date.now().toString(), name: decoded, qty: 1, checked: false, src: "deal" });
   if (result.action === "new") {
     showNotif(decoded + " added!");
@@ -2848,121 +3180,106 @@ export async function addDealToList(name) {
 }
 
 /**
- * fetchDeals(query) — Core deal-fetching function via the Flipp API.
- *
- * Calls /api/deals with the user's configured zipcode and the search query.
- * Results are cached in localStorage for 2 hours per query to reduce API calls.
- * Flipp covers ShopRite, Stop & Shop, Walmart, Target, Aldi, and many more.
- *
- * @param {string} query — What to search for (e.g. "chicken breast")
- * @returns {Object} — { deals: [...], stores: [...], sources: [...] }
- */
-async function fetchDeals(query) {
-  const zipcode = state.cfg.zipcode;
-  if (!zipcode) throw new Error("Set your zipcode in Settings to search for local deals.");
-
-  // Check localStorage cache (2-hour TTL — flyer data updates weekly, so this is fine)
-  const cacheKey = "ks-deals-" + zipcode + "-" + query.toLowerCase().replace(/\s+/g, "_").substring(0, 40);
-  const cached = J(cacheKey);
-  if (cached && cached.ts && (Date.now() - cached.ts) < 7200000) return cached; // 2 hours
-
-  // Call the serverless deals proxy endpoint (Flipp API)
-  const r = await fetch("/api/deals", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ zipcode, query })
-  });
-
-  const data = await r.json();
-
-  // Handle API-level errors
-  if (!r.ok || data.error) {
-    throw new Error(data.message || data.error || "Deals API request failed");
-  }
-
-  // Cache successful results for 2 hours
-  Js(cacheKey, { ...data, ts: Date.now() });
-  return data;
-}
-
-/**
  * searchDeals() — Triggered by the "Search" button in the Deals tab.
- * Reads the user's search query, calls the Flipp API via /api/deals, and renders results.
- * Shows clear error messages when the API is unavailable or no deals are found.
+ * If deals are already loaded, filters client-side for instant results.
+ * Otherwise falls back to searching the Flipp search API directly.
  */
 export async function searchDeals() {
   const q = g("dealsearch").value.trim();
-  if (!q) { showNotif("Enter something to search"); return; }
 
-  const st = g("dealsstatus"); // Status message element
+  if (!q) {
+    // Empty search — reset to showing all deals
+    _dealPage = 0;
+    _activeStoreCat = "all";
+    renderDealStoreChips();
+    renderDealCards();
+    return;
+  }
+
+  // If deals are already loaded, filter client-side for instant UX
+  if (_dealsLoaded && _allDeals.length > 0) {
+    _dealPage = 0;
+    renderDealCards();
+    return;
+  }
+
+  // Deals not loaded yet — fall back to API search
+  const st = g("dealsstatus");
   st.style.display = "block"; st.style.color = "var(--mt)";
   st.textContent = "🔍 Searching deals for " + q + " near " + (state.cfg.zipcode || "your area") + "…";
-  g("dealslist").innerHTML = ""; // Clear previous results
+  g("dealslist").innerHTML = "";
 
   try {
-    const data = await fetchDeals(q);
-    st.style.display = "none"; // Hide status on success
+    const zipcode = state.cfg.zipcode;
+    if (!zipcode) throw new Error("Set your zipcode in Settings to search for local deals.");
 
-    // Show message from API if provided (e.g. no coverage in this area)
-    if (data.message) {
-      g("dealslist").innerHTML = `<div class="es"><div class="ei">🏷</div><p>${data.message}</p></div>`;
+    const r = await fetch("/api/deals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ zipcode, query: q })
+    });
+
+    const data = await r.json();
+    if (!r.ok || data.error) throw new Error(data.error || "Deals API request failed");
+
+    st.style.display = "none";
+
+    // Temporarily show search results in the deal list
+    const listEl = g("dealslist");
+    listEl.innerHTML = "";
+    if (!data.deals || !data.deals.length) {
+      listEl.innerHTML = `<div class="es"><div class="ei">🏷</div><p>No deals found for "<strong>${q}</strong>".<br>Try a different search term.</p></div>`;
       return;
     }
 
-    // Render stores with deals (helps user see which stores are covered nearby)
-    if (data.stores) renderNearbyStores(data.stores);
-
-    renderDeals(data.deals, q);
+    // Render search results using buildDealCard
+    data.deals.forEach(d => { listEl.appendChild(buildDealCard(d)); });
   } catch (e) {
-    st.style.color = "var(--rd)"; // Red text for errors
+    st.style.color = "var(--rd)";
     st.textContent = e.message || "Unknown error";
   }
 }
 
 /**
  * dealsFromList() — "Find Deals for My List" button handler.
- *
- * Searches deals for all unchecked shopping list items at once (up to 8 items,
- * combined into a single search query to minimize API calls).
- *
- * If the shopping list is empty but there are meals planned,
- * offers to search deals based on the meal plan instead (via confirm dialog).
+ * If weekly deals are loaded, filters them client-side to show only
+ * deals matching shopping list items. Otherwise falls back to API search.
  */
 export async function dealsFromList() {
   const items = state.shop.filter(i => !i.checked);
 
-  // If list is empty, offer to search by meal plan instead
+  // If list is empty, show a helpful message
   if (!items.length) {
-    const meals = Object.values(state.mp).filter(Boolean);
-    if (!meals.length) { showNotif("Add items to your list first!"); return; }
-    const confirmed = confirm("Your list is empty. Search deals for this week's meals?\n\n" + meals.join(", "));
-    if (!confirmed) return;
-    const st = g("dealsstatus");
-    st.style.display = "block"; st.textContent = "Searching deals for your meal plan...";
-    g("dealslist").innerHTML = "";
-    try {
-      const data = await fetchDeals(meals.join(", "));
-      st.style.display = "none";
-      if (data.message) { g("dealslist").innerHTML = `<div class="es"><div class="ei">🏷</div><p>${data.message}</p></div>`; return; }
-      if (data.stores) renderNearbyStores(data.stores);
-      renderDeals(data.deals, meals.join(", "));
-    } catch (e) { st.style.color = "var(--rd)"; st.textContent = e.message; }
+    showNotif("Add items to your list first!");
     return;
   }
 
-  // Normal path: search deals for up to 8 unchecked shopping list items
-  const st = g("dealsstatus");
-  const names = items.slice(0, 8).map(i => i.name).join(", "); // Cap at 8 for a reasonable query
-  st.style.display = "block"; st.style.color = "var(--mt)"; st.textContent = "Searching deals for: " + names + "...";
-  g("dealslist").innerHTML = "";
-  try {
-    const data = await fetchDeals(names);
-    st.style.display = "none";
-    if (data.message) { g("dealslist").innerHTML = `<div class="es"><div class="ei">🏷</div><p>${data.message}</p></div>`; return; }
-    if (data.stores) renderNearbyStores(data.stores);
-    if (!data.deals.length) g("dealslist").innerHTML = '<div class="es"><div class="ei">🏷</div><p>No deals found for your list items.<br/>Try searching for individual items.</p></div>';
-    else renderDeals(data.deals, names);
-  } catch (e) { st.style.color = "var(--rd)"; st.textContent = e.message; }
+  // If weekly deals are loaded, just filter to On My List matches
+  if (_dealsLoaded && _allDeals.length > 0) {
+    // Clear search input and store filter to show full list
+    const searchInput = g("dealsearch");
+    if (searchInput) searchInput.value = "";
+    _activeStoreCat = "all";
+    _dealPage = 0;
+    renderDealStoreChips();
+    renderDealCards();
+    // Scroll to the On My List section
+    const listEl = g("dealslist");
+    if (listEl) listEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  // Deals not loaded yet — try loading them first
+  await loadFlippDeals();
+}
+
+/**
+ * loadMoreDeals() — Show the next page of deal cards.
+ * Called when user taps "Show more deals" button.
+ */
+export function loadMoreDeals() {
+  _dealPage++;
+  renderDealCards();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

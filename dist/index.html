@@ -7,7 +7,7 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-BNW2GHgu.js"></script>
+  <script type="module" crossorigin src="/assets/index-C-HnvSYT.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-BGJ_-SqY.css">
 </head>
 <body>
@@ -237,6 +237,9 @@
         <!-- Zipcode status banner — shows current zipcode or prompts user to set one -->
         <div id="deals-zip-banner" style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:.82rem;color:var(--tx2);line-height:1.5"></div>
 
+        <!-- JWT expiry warning banner — shown when ShopRite service JWT is within 7 days of expiring -->
+        <div id="jwt-expiry-banner" style="display:none;background:#2a1a00;border:1px solid #D4A853;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:.82rem;color:#D4A853;line-height:1.5;font-weight:600"></div>
+
         <!-- ═══ SHOPRITE DIGITAL COUPONS SECTION ═══ -->
         <div id="coupons-section" style="margin-bottom:16px">
           <!-- Coupons header with refresh button -->
@@ -261,22 +264,32 @@
           </div>
         </div>
 
-        <!-- ═══ FLIPP CIRCULAR DEALS SECTION ═══ -->
+        <!-- ═══ FLIPP WEEKLY CIRCULAR DEALS SECTION ═══ -->
+        <!-- Fetches full weekly circulars from Walmart, ALDI, Stop & Shop, and Wegmans -->
+        <!-- via Flipp API. Deals are cached in Firestore with 24hr TTL. -->
         <div style="border-top:1px solid var(--b2);padding-top:14px;margin-top:6px">
-          <div style="font-size:.75rem;color:var(--ac);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">📰 Weekly Circular Deals</div>
-          <!-- Search bar for local grocery deals (via Flipp) -->
-          <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:12px">
-            <div style="font-size:.75rem;color:var(--mt);margin-bottom:8px;font-weight:500">Search for deals</div>
-            <div style="display:flex;gap:8px">
-              <input class="qainp" id="dealsearch" placeholder="e.g. chicken, milk, eggs…" style="flex:1" onkeydown="if(event.key==='Enter')searchDeals()"/>
-              <button class="btn bp" onclick="searchDeals()">Search</button>
-            </div>
+          <!-- Section header with refresh button -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:.75rem;color:var(--ac);font-weight:600;text-transform:uppercase;letter-spacing:.5px">📰 Weekly Circular Deals</div>
+            <button class="btn bsm bs" onclick="refreshFlippDeals()" id="deals-refresh-btn" style="font-size:.7rem;padding:4px 10px">↻ Refresh</button>
           </div>
-          <button class="btn bs bsm bf" style="margin-bottom:14px" onclick="dealsFromList()">🛒 Find deals for everything on my list</button>
-          <!-- Nearby stores display (populated after first deal search) -->
-          <div id="deals-stores" style="display:none;margin-bottom:12px"></div>
+          <!-- Search bar for filtering/searching within weekly deals -->
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <input class="qainp" id="dealsearch" placeholder="Search deals… e.g. chicken, milk, eggs" style="flex:1" onkeydown="if(event.key==='Enter')searchDeals()" oninput="filterDealsLocal()"/>
+            <button class="btn bp" onclick="searchDeals()">Search</button>
+          </div>
+          <!-- "Find deals for my list" button — fuzzy matches against shopping list -->
+          <button class="btn bs bsm bf" style="margin-bottom:12px" onclick="dealsFromList()">🛒 Find deals for everything on my list</button>
+          <!-- Store filter chips — Walmart, ALDI, Stop & Shop, Wegmans -->
+          <div id="deals-store-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
+          <!-- Status message (loading, errors, cache info) -->
           <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:10px;padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
+          <!-- Deal cards list (with On My List + All Deals subsections) -->
           <div id="dealslist"></div>
+          <!-- Load more pagination button -->
+          <div id="deals-more" style="display:none;text-align:center;margin-top:10px">
+            <button class="btn bs bsm" onclick="loadMoreDeals()">Show more deals</button>
+          </div>
         </div>
       </div>
     </div>
