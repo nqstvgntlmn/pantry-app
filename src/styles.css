@@ -1154,12 +1154,14 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .prep-item-name{font-size:.9rem;font-weight:500;color:var(--tx);line-height:1.3}
 .prep-item-meta{font-size:.7rem;color:var(--mt);margin-top:2px}
 
-/* Inline quantity stepper — compact row of [−] qty [+] */
-.prep-qty-group{display:flex;align-items:center;gap:4px;flex-shrink:0}
+/* Stepper buttons reused in cart popover and search results */
 .prep-qty-btn{width:30px;height:30px;border-radius:8px;border:1.5px solid var(--b2);background:var(--card2);color:var(--tx);font-size:1rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;font-family:"DM Sans",sans-serif}
 .prep-qty-btn:active{background:var(--ac);color:#0c0c0a;border-color:var(--ac);transform:scale(.92)}
-.prep-qty-val{min-width:28px;text-align:center;font-size:.88rem;font-weight:600;color:var(--tx)}
-.prep-unit{font-size:.72rem;color:var(--mt);min-width:30px;text-align:center;flex-shrink:0}
+
+/* Read-only stock badge — shows current Supplies quantity next to item name */
+.prep-stock-badge{display:inline-block;padding:1px 7px;border-radius:6px;font-size:.72rem;font-weight:600;background:var(--card2);color:var(--mt);border:1px solid var(--b2);margin-right:6px;vertical-align:middle;line-height:1.5}
+/* Low-stock variant — amber to draw attention */
+.prep-stock-low{background:var(--amd);color:var(--am);border-color:var(--am)}
 
 /* Add to Shopping List button — compact, green accent */
 .prep-shop-btn{padding:6px 10px;border-radius:8px;border:1.5px solid var(--gn);background:var(--gnd);color:var(--gn);font-size:.78rem;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:"DM Sans",sans-serif;min-height:34px}
@@ -1198,12 +1200,20 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .prep-search-cat-header{font-size:.78rem;font-weight:600;color:var(--ac);text-transform:uppercase;letter-spacing:.06em;padding:12px 0 4px;border-bottom:1px solid var(--b1);margin-top:8px}
 .prep-search-cat-header:first-child{margin-top:0}
 
-/* ── SHOPPING PREP QUANTITY PICKER ─────────────────────────────────────── */
-/* Inline quantity picker shown when tapping the cart button */
-.prep-qty-picker{display:flex;align-items:center;gap:4px;flex-shrink:0}
-.prep-picker-val{min-width:24px;text-align:center;font-size:.85rem;font-weight:600;color:var(--tx)}
-.prep-picker-confirm{width:30px;height:30px;border-radius:8px;border:1.5px solid var(--gn);background:var(--gnd);color:var(--gn);font-size:.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;font-family:"DM Sans",sans-serif}
-.prep-picker-confirm:active{background:var(--gn);color:#0c0c0a;transform:scale(.92)}
+/* ── SHOPPING PREP CART POPOVER ────────────────────────────────────────── */
+/* Floating popover anchored to cart button — qty stepper + "Add" confirm */
+.prep-shop-popover{z-index:10001;background:var(--card);border:1.5px solid var(--b2);border-radius:14px;padding:12px 14px;box-shadow:0 4px 20px rgba(0,0,0,.25);display:flex;flex-direction:column;align-items:center;gap:8px;min-width:130px}
+/* "Qty to add" label at top of popover */
+.prep-popover-label{font-size:.72rem;font-weight:600;color:var(--mt);text-transform:uppercase;letter-spacing:.04em}
+/* Stepper row inside popover */
+.prep-popover-stepper{display:flex;align-items:center;gap:6px}
+/* Qty value inside popover stepper */
+.prep-picker-val{min-width:24px;text-align:center;font-size:.95rem;font-weight:700;color:var(--tx)}
+/* "Add" confirmation button inside popover */
+.prep-popover-add{width:100%;padding:8px 0;border-radius:8px;border:none;background:var(--gn);color:#0c0c0a;font-size:.82rem;font-weight:700;cursor:pointer;font-family:"DM Sans",sans-serif;transition:all .12s}
+.prep-popover-add:active{transform:scale(.96);opacity:.85}
+/* Invisible full-screen backdrop behind popover — tapping dismisses */
+.prep-popover-backdrop{position:fixed;inset:0;z-index:10000;background:transparent}
 
 /* ── SHOPPING PREP ADD CATEGORY ─────────────────────────────────────────── */
 /* "+ Add Category" button at the bottom of the category grid */

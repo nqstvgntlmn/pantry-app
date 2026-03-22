@@ -76,7 +76,7 @@ import { scheduleMealReminders } from './ui/reminders.js';
 import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, removeMyCommRecipes, removeHouseholdCommRecipes, deleteAccount, scanRecipesForIssues, closeScanResults, fixAllFlaggedRecipes, openUtilities, closeUtilities, clearScanCacheUI, editCustomCat, pickSettingsCatEmoji, pickEditCatEmoji, saveEditCustomCat, addCustomCatFromSettings, renderCustomCategories, openSettingsAddEmojiPicker, openSettingsEditEmojiPicker } from './ui/settings.js';
 
 // Shopping Prep: pre-shop audit flow — walk through categories, verify quantities, build shopping list
-import { openShoppingPrep, closeShoppingPrep, openPrepCategory, backToGrid, prepToggleVerify, prepAddToShop, prepAddAllLow, prepQtyStep, prepAddNewItem, prepRecategorize, prepCatLongPress, filterPrepSearch, prepPickerStep, prepConfirmAdd, openPrepAddCategory, openPrepCatEmojiPicker, confirmPrepAddCategory, prepCatRename, prepCatAddSub, prepCatReorder, prepCatDelete } from './ui/shoppingprep.js';
+import { openShoppingPrep, closeShoppingPrep, openPrepCategory, backToGrid, prepToggleVerify, prepAddToShop, prepAddAllLow, prepAddNewItem, prepRecategorize, prepCatLongPress, filterPrepSearch, prepPickerStep, prepConfirmAdd, dismissPrepPopover, openPrepAddCategory, openPrepCatEmojiPicker, confirmPrepAddCategory, prepCatRename, prepCatAddSub, prepCatReorder, prepCatDelete } from './ui/shoppingprep.js';
 import { selectCategory, closeCategoryPicker, showCreateCustomCategory, pickCustomEmoji, confirmCreateCustomCategory, deleteCustomCategory, openCatCreateEmojiPicker, selectEmojiFromPicker, closeEmojiPicker, confirmItemCategory, saveProductCategory } from './ui/categorypicker.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
@@ -553,13 +553,13 @@ window.backToGrid = backToGrid;               // Return from category detail to 
 window.prepToggleVerify = prepToggleVerify;   // Toggle audit verify checkbox on an item
 window.prepAddToShop = prepAddToShop;         // Add a single item to shopping list from prep
 window.prepAddAllLow = prepAddAllLow;         // Add all low-stock items in a category to shopping
-window.prepQtyStep = prepQtyStep;             // Adjust item quantity +/- from prep detail view
 window.prepAddNewItem = prepAddNewItem;       // Open add-item sheet from prep detail view
 window.prepRecategorize = prepRecategorize;   // Open category picker to recategorize an item in prep
 window.prepCatLongPress = prepCatLongPress;   // Long-press handler for custom category cards in prep grid
 window.filterPrepSearch = filterPrepSearch;   // Search bar filter handler for Shopping Prep
-window.prepPickerStep = prepPickerStep;       // Qty stepper in inline quantity picker
-window.prepConfirmAdd = prepConfirmAdd;       // Confirm add from inline quantity picker
+window.prepPickerStep = prepPickerStep;       // Qty stepper in cart popover quantity picker
+window.prepConfirmAdd = prepConfirmAdd;       // Confirm add from cart popover quantity picker
+window.dismissPrepPopover = dismissPrepPopover; // Dismiss cart popover without adding
 window.openPrepAddCategory = openPrepAddCategory; // Open inline add-category form in prep grid
 window.openPrepCatEmojiPicker = openPrepCatEmojiPicker; // Emoji picker for prep add-category form
 window.confirmPrepAddCategory = confirmPrepAddCategory; // Confirm new category from prep form

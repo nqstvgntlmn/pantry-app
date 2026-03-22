@@ -272,15 +272,14 @@ Bottom navigation (left to right):
 - **"+ Add Category" button** at the bottom of the category grid — opens an inline form with emoji picker and name input
 - **Long-press on custom category cards** — shows action menu with Rename, Add Sub-category, Move Up, Move Down, and Delete options
 - Category detail view shows all items in that category with:
-  - Inline − / + quantity correction (auto-saves with 500ms debounce)
-  - "Last updated X days ago" timestamp
-  - Amber highlight if at/below restock threshold
-  - **Inline quantity picker on cart button** — tapping the 🛒 button shows a small stepper (−/qty/+/✓) instead of defaulting to 1 unit, so users can pick how many to add
-  - "✓ Added" state after adding (with quantity shown if > 1)
+  - **Read-only stock badge** next to item name showing current Supplies quantity (e.g. "2 lbs") — informational only, not editable from Shopping Prep
+  - Amber badge variant for low-stock items
+  - **Cart popover** — tapping the 🛒 button opens a floating popover with a qty stepper (defaults to 1) and "Add" button. Tapping outside dismisses without adding.
+  - "✓ Added" state after confirming (with quantity shown if > 1)
   - Audit checkbox (physical verification, session-only)
 - "Add all low (X)" button at top of each category
 - "+ Add new item to Shopping List" — closes Shopping Prep, opens Shopping add sheet
-- Summary toast on close: "X items added, Y quantities updated"
+- Summary toast on close: "X items added to Shopping List"
 - Categories use stored prepCategory field first, then keyword/OFF mapping fallback
 - Custom categories supported with emoji picker and one level of sub-categories
 
@@ -606,10 +605,16 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
   3. Auto-categorization review system — new items get auto-suggested categories, badge shows "X to review", review overlay lets Bora confirm/change. Confirmed categories saved permanently to `productPreferences/{normalizedName}.prepCategory` in Firestore
   4. Added "Pantry Staples" (🏺) to default Shopping Prep categories
   5. Added search bar to Shopping Prep (searches across all categories simultaneously)
-  6. Quantity picker on Shopping Prep cart button — inline stepper instead of defaulting to 1
+  6. Quantity picker on Shopping Prep cart button — replaced with floating popover in Session 14
   7. "+ Add Category" button + long-press management menu (Rename, Add Sub-category, Move Up/Down, Delete). One level of sub-categories supported
   8. Fixed bottom padding across ALL tabs — increased to 80px clearance above nav bar + FAB so last items are always fully visible
   9. Added git recovery instructions (Rule #16) to CLAUDE_CODE_HANDOFF.md
+- **Session 14:** Shopping Prep item row overhaul:
+  1. Removed the −/+ inventory quantity stepper from item rows (was incorrectly modifying Supplies inventory from within Shopping Prep)
+  2. Added read-only stock badge next to item name showing current Supplies quantity (informational only). Amber variant for low-stock items.
+  3. Replaced inline cart picker with floating popover — tapping 🛒 shows a popover with qty stepper (default 1) and "Add" button. Tapping outside dismisses without adding.
+  4. Removed `prepQtyStep` function, `svi` import, `splitQty`/`combineQty` imports, and all qty-save-related session state (`_saveTimers`, `_qtyUpdated`, `_qtyCounted`)
+  5. Summary toast now only reports items added (no longer mentions "quantities updated")
 
 ---
 

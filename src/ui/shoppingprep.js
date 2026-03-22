@@ -7,13 +7,12 @@
 //   1. Category grid — shows all aisle categories with item counts
 //   2. Category detail — shows items in one category with qty controls
 //
-// Session state (verified items, added-to-shop items, qty changes) is held
-// in memory and reset when Shopping Prep is closed. Only qty changes are
-// persisted to Firestore (auto-saved with 500ms debounce).
+// Session state (verified items, added-to-shop items) is held in memory
+// and reset when Shopping Prep is closed.
 
 import { state } from '../state.js';
-import { svi, dbSet } from '../db.js';
-import { g, showNotif, showOv, hideOv, toTitleCase, formatQty, splitQty, combineQty, mapOffCategory } from '../helpers.js';
+import { dbSet } from '../db.js';
+import { g, showNotif, showOv, hideOv, toTitleCase, formatQty, mapOffCategory } from '../helpers.js';
 import { consolidateShopItem } from './shopping.js';
 import { _defaultThreshold } from './home.js';
 import { enableSwipeBack, disableSwipeBack } from './swipeback.js';
@@ -26,10 +25,7 @@ import { PREP_CATEGORIES, getAllCategories, getCategoryDisplay, autoCategorize, 
 // Reset when the overlay is closed.
 let _verified = new Set();       // item IDs physically verified during this audit
 let _addedToShop = new Set();    // item IDs already added to shopping list this session
-let _qtyUpdated = 0;             // count of items whose qty was changed this session
 let _currentCategory = null;     // currently viewing category key, null = grid view
-let _saveTimers = new Map();     // per-item debounce timers for qty auto-save (itemId → timerId)
-let _qtyCounted = new Set();     // item IDs whose qty change has been counted for the summary
 let _prepSearchQuery = "";       // current search query for filtering across all categories
 
 /**
@@ -77,22 +73,22 @@ function _renderSearchResults() {
     // Category header
     html += `<div class="prep-search-cat-header">${cat.emoji} ${cat.name} (${items.length})</div>`;
 
-    // Render matching items with full controls
+    // Render matching items with read-only qty and cart popover button
     for (const item of items) {
       const isLow = _isLowStock(item);
       const isAdded = _addedToShop.has(item.id);
       const displayName = toTitleCase(item.scanTitle || item.name);
+      const qtyLabel = `${formatQty(item.qty)} ${item.unit || ""}`.trim();
 
       html += `<div class="prep-item${isLow ? " prep-item-low" : ""}" id="prep-row-${item.id}">
         <div class="prep-item-info" style="flex:1;min-width:0">
-          <div class="prep-item-name">${displayName}</div>
+          <div class="prep-item-name">
+            <!-- Read-only badge showing current Supplies quantity -->
+            <span class="prep-stock-badge${isLow ? " prep-stock-low" : ""}">${qtyLabel}</span>
+            ${displayName}
+          </div>
         </div>
-        <div class="prep-qty-group">
-          <button class="prep-qty-btn" onclick="prepQtyStep('${item.id}',-1)">−</button>
-          <span class="prep-qty-val" id="prep-qty-${item.id}">${formatQty(item.qty)}</span>
-          <button class="prep-qty-btn" onclick="prepQtyStep('${item.id}',1)">+</button>
-        </div>
-        <div class="prep-unit">${item.unit || "Unit"}</div>
+        <!-- Cart button: tapping opens a qty popover for adding to shopping list -->
         <button class="prep-shop-btn${isAdded ? " prep-shop-added" : ""}" id="prep-shop-${item.id}"
           onclick="prepAddToShop('${item.id}')"${isAdded ? " disabled" : ""}>
           ${isAdded ? "✓ Added" : "🛒"}
@@ -207,12 +203,8 @@ export function openShoppingPrep() {
   // Reset session state for a fresh audit
   _verified = new Set();
   _addedToShop = new Set();
-  _qtyUpdated = 0;
   _currentCategory = null;
-  _qtyCounted = new Set();
   _prepSearchQuery = "";
-  _saveTimers.forEach(timerId => clearTimeout(timerId));
-  _saveTimers.clear();
 
   // Clear search input
   const searchInp = g("prep-search");
@@ -231,21 +223,16 @@ export function openShoppingPrep() {
  * Clears any pending save timers and resets session state.
  */
 export function closeShoppingPrep() {
-  // Clear any pending debounced saves
-  _saveTimers.forEach(timerId => clearTimeout(timerId));
-  _saveTimers.clear();
+  // Dismiss any open cart popover before closing
+  dismissPrepPopover();
 
   disableSwipeBack();
   hideOv("shoppingprep");
 
-  // Show summary toast
+  // Show summary toast with count of items added to shopping list
   const addedCount = _addedToShop.size;
-  const qtyCount = _qtyUpdated;
-  if (addedCount > 0 || qtyCount > 0) {
-    const parts = [];
-    if (addedCount > 0) parts.push(`${addedCount} item${addedCount !== 1 ? "s" : ""} added to Shopping List`);
-    if (qtyCount > 0) parts.push(`${qtyCount} quantit${qtyCount !== 1 ? "ies" : "y"} updated`);
-    showNotif(`Shopping Prep complete — ${parts.join(", ")}`);
+  if (addedCount > 0) {
+    showNotif(`Shopping Prep complete — ${addedCount} item${addedCount !== 1 ? "s" : ""} added to Shopping List`);
   } else {
     showNotif("No changes made");
   }
@@ -379,14 +366,13 @@ function _renderDetail(categoryKey) {
       <p>No items in ${cat.name}</p></div>`;
   }
 
-  // Render each item row
+  // Render each item row with read-only stock qty and cart popover button
   for (const item of items) {
     const isLow = _isLowStock(item);
     const isVerified = _verified.has(item.id);
     const isAdded = _addedToShop.has(item.id);
     const displayName = toTitleCase(item.scanTitle || item.name);
-    const { whole, frac } = splitQty(item.qty);
-    const unitDisplay = item.unit || "Unit";
+    const qtyLabel = `${formatQty(item.qty)} ${item.unit || ""}`.trim();
 
     html += `<div class="prep-item${isLow ? " prep-item-low" : ""}${isVerified ? " prep-item-verified" : ""}" id="prep-row-${item.id}">
       <!-- Verify checkbox: marks item as physically checked during audit -->
@@ -394,18 +380,15 @@ function _renderDetail(categoryKey) {
         ${isVerified ? "✓" : ""}
       </div>
       <div class="prep-item-info">
-        <div class="prep-item-name">${displayName}</div>
+        <div class="prep-item-name">
+          <!-- Read-only badge showing current Supplies quantity (informational only) -->
+          <span class="prep-stock-badge${isLow ? " prep-stock-low" : ""}">${qtyLabel}</span>
+          ${displayName}
+        </div>
         <!-- Category badge: tappable pill to recategorize this item -->
         <div class="prep-cat-badge" onclick="event.stopPropagation();prepRecategorize('${item.id}')">${getCategoryDisplay(_categorizeItem(item)).emoji} ${getCategoryDisplay(_categorizeItem(item)).name} ▼</div>
       </div>
-      <!-- Inline quantity stepper: auto-saves to Firestore with 500ms debounce -->
-      <div class="prep-qty-group">
-        <button class="prep-qty-btn" onclick="prepQtyStep('${item.id}',-1)">−</button>
-        <span class="prep-qty-val" id="prep-qty-${item.id}">${formatQty(item.qty)}</span>
-        <button class="prep-qty-btn" onclick="prepQtyStep('${item.id}',1)">+</button>
-      </div>
-      <div class="prep-unit">${unitDisplay}</div>
-      <!-- Add to Shopping List / Added indicator -->
+      <!-- Cart button: tapping opens a qty popover for adding to shopping list -->
       <button class="prep-shop-btn${isAdded ? " prep-shop-added" : ""}" id="prep-shop-${item.id}"
         onclick="prepAddToShop('${item.id}')"${isAdded ? " disabled" : ""}>
         ${isAdded ? "✓ Added" : "🛒"}
@@ -448,9 +431,9 @@ export function prepToggleVerify(itemId) {
 }
 
 /**
- * prepAddToShop(itemId) — Shows a quick quantity picker before adding an item
- * to the shopping list. The picker appears inline next to the cart button
- * for a fast, non-intrusive selection experience.
+ * prepAddToShop(itemId) — Opens a small popover with a qty stepper (default 1)
+ * anchored to the cart button. User adjusts qty and taps "Add" to confirm.
+ * Tapping outside the popover dismisses it without adding anything.
  */
 export function prepAddToShop(itemId) {
   // Prevent double-add
@@ -459,25 +442,48 @@ export function prepAddToShop(itemId) {
   const item = state.inv.find(i => i.id === itemId);
   if (!item) return;
 
-  // Replace the cart button with an inline quantity stepper + confirm button
   const btn = g(`prep-shop-${itemId}`);
   if (!btn) return;
 
-  // Create the inline quantity picker
-  const parent = btn.parentElement;
-  const picker = document.createElement("div");
-  picker.className = "prep-qty-picker";
-  picker.id = `prep-picker-${itemId}`;
-  picker.innerHTML = `
-    <button class="prep-qty-btn" onclick="event.stopPropagation();prepPickerStep('${itemId}',-1)">−</button>
-    <span class="prep-picker-val" id="prep-pick-val-${itemId}">1</span>
-    <button class="prep-qty-btn" onclick="event.stopPropagation();prepPickerStep('${itemId}',1)">+</button>
-    <button class="prep-picker-confirm" onclick="event.stopPropagation();prepConfirmAdd('${itemId}')">✓</button>
+  // Dismiss any previously open popover first
+  dismissPrepPopover();
+
+  // Initialize picker qty for this item
+  _pickerQtys.set(itemId, 1);
+
+  // Create the popover element anchored near the cart button
+  const popover = document.createElement("div");
+  popover.className = "prep-shop-popover";
+  popover.id = "prep-active-popover";
+  popover.dataset.itemId = itemId;
+  popover.innerHTML = `
+    <div class="prep-popover-label">Qty to add</div>
+    <div class="prep-popover-stepper">
+      <button class="prep-qty-btn" onclick="event.stopPropagation();prepPickerStep('${itemId}',-1)">−</button>
+      <span class="prep-picker-val" id="prep-pick-val-${itemId}">1</span>
+      <button class="prep-qty-btn" onclick="event.stopPropagation();prepPickerStep('${itemId}',1)">+</button>
+    </div>
+    <button class="prep-popover-add" onclick="event.stopPropagation();prepConfirmAdd('${itemId}')">Add</button>
   `;
 
-  // Hide the original cart button and show the picker
-  btn.style.display = "none";
-  parent.appendChild(picker);
+  // Create invisible backdrop — tapping outside closes the popover
+  const backdrop = document.createElement("div");
+  backdrop.className = "prep-popover-backdrop";
+  backdrop.id = "prep-popover-backdrop";
+  backdrop.onclick = () => dismissPrepPopover();
+
+  // Append backdrop first, then popover on top
+  document.body.appendChild(backdrop);
+
+  // Position the popover near the cart button
+  const rect = btn.getBoundingClientRect();
+  popover.style.position = "fixed";
+  // Horizontally: align right edge with button right edge
+  popover.style.right = (window.innerWidth - rect.right) + "px";
+  // Vertically: place above the button with a small gap
+  popover.style.bottom = (window.innerHeight - rect.top + 6) + "px";
+
+  document.body.appendChild(popover);
 }
 
 // Tracks qty values for the inline quantity pickers (itemId → qty)
@@ -496,7 +502,7 @@ export function prepPickerStep(itemId, delta) {
 
 /**
  * prepConfirmAdd(itemId) — Confirms the quantity and adds the item to shopping list.
- * Uses the quantity from the inline picker.
+ * Dismisses the popover and updates the cart button to show "✓ Added".
  */
 export async function prepConfirmAdd(itemId) {
   const item = state.inv.find(i => i.id === itemId);
@@ -504,6 +510,9 @@ export async function prepConfirmAdd(itemId) {
 
   const qty = _pickerQtys.get(itemId) || 1;
   _pickerQtys.delete(itemId);
+
+  // Close the popover immediately for snappy feedback
+  dismissPrepPopover();
 
   // Add to shopping list via the consolidation-aware function
   await consolidateShopItem({
@@ -518,17 +527,29 @@ export async function prepConfirmAdd(itemId) {
 
   _addedToShop.add(itemId);
 
-  // Remove the picker and show "✓ Added" on the original button
-  const picker = g(`prep-picker-${itemId}`);
-  if (picker) picker.remove();
-
+  // Update the cart button to show confirmed state
   const btn = g(`prep-shop-${itemId}`);
   if (btn) {
-    btn.style.display = "";
     btn.classList.add("prep-shop-added");
     btn.textContent = `✓ ${qty > 1 ? qty + " " : ""}Added`;
     btn.disabled = true;
   }
+}
+
+/**
+ * dismissPrepPopover() — Removes the active cart popover and its backdrop.
+ * Safe to call even if no popover is open. Cleans up picker qty state.
+ */
+export function dismissPrepPopover() {
+  const popover = document.getElementById("prep-active-popover");
+  const backdrop = document.getElementById("prep-popover-backdrop");
+  if (popover) {
+    // Clean up picker qty for this item
+    const itemId = popover.dataset.itemId;
+    if (itemId) _pickerQtys.delete(itemId);
+    popover.remove();
+  }
+  if (backdrop) backdrop.remove();
 }
 
 /**
@@ -567,53 +588,6 @@ export async function prepAddAllLow(categoryKey) {
   }
 
   showNotif(`Added ${items.length} low item${items.length !== 1 ? "s" : ""} to Shopping List`);
-}
-
-/**
- * prepQtyStep(itemId, delta) — Adjusts the whole-number part of an item's qty by +1 or -1.
- * Updates the UI immediately for snappy feedback, then auto-saves to Firestore
- * after a 500ms debounce so rapid taps only produce one write.
- */
-export function prepQtyStep(itemId, delta) {
-  const item = state.inv.find(i => i.id === itemId);
-  if (!item) return;
-
-  const { whole, frac } = splitQty(item.qty);
-  const newWhole = Math.max(0, Math.min(99, whole + delta));
-  const combined = combineQty(newWhole, frac);
-
-  // Don't go below minimum
-  if (delta < 0 && item.qty <= 0.25) return;
-
-  // Update in-memory state immediately for instant UI feedback
-  item.qty = combined;
-
-  // Update displayed qty
-  const el = g(`prep-qty-${itemId}`);
-  if (el) el.textContent = formatQty(combined);
-
-  // Update low-stock highlight on the row
-  const row = g(`prep-row-${itemId}`);
-  if (row) {
-    if (_isLowStock(item)) {
-      row.classList.add("prep-item-low");
-    } else {
-      row.classList.remove("prep-item-low");
-    }
-  }
-
-  // Track that a qty was changed (for summary toast) — count each item only once
-  if (!_qtyCounted.has(itemId)) {
-    _qtyUpdated++;
-    _qtyCounted.add(itemId);
-  }
-
-  // Debounced save to Firestore — clears previous timer for this item
-  if (_saveTimers.has(itemId)) clearTimeout(_saveTimers.get(itemId));
-  _saveTimers.set(itemId, setTimeout(() => {
-    svi({ ...item, qty: combined });
-    _saveTimers.delete(itemId);
-  }, 500));
 }
 
 /**
@@ -818,9 +792,8 @@ export async function confirmPrepAddCategory() {
 
 export function prepAddNewItem() {
   // Close Shopping Prep without showing the summary toast — we're continuing
-  // the workflow, not finishing it. Clear pending save timers and swipe-back.
-  _saveTimers.forEach(timerId => clearTimeout(timerId));
-  _saveTimers.clear();
+  // the workflow, not finishing it. Dismiss any open popover and swipe-back.
+  dismissPrepPopover();
   disableSwipeBack();
   hideOv("shoppingprep");
 
