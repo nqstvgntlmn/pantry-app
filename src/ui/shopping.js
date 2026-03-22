@@ -2414,6 +2414,44 @@ function isDealsAllowed() {
   return DEALS_WHITELIST.includes(user.email.toLowerCase());
 }
 
+// ── JWT EXPIRY WARNING ──────────────────────────────────────────────────────
+// The ShopRite service JWT expires on 2026-04-23 (exp: 1776863263).
+// Show a warning banner when the JWT is within 7 days of expiring so
+// Bora knows to extract and replace it before the coupons stop working.
+const JWT_EXPIRY_DATE = new Date("2026-04-23T00:00:00Z");
+const JWT_WARN_DAYS = 7; // Show warning this many days before expiry
+
+/**
+ * renderJwtExpiryBanner() — Show or hide the JWT expiry warning banner.
+ * Compares today's date against the known JWT expiry date. If within 7 days
+ * (or past expiry), shows a visible warning at the top of the Deals tab.
+ */
+function renderJwtExpiryBanner() {
+  const banner = g("jwt-expiry-banner");
+  if (!banner) return;
+
+  const now = new Date();
+  const msUntilExpiry = JWT_EXPIRY_DATE - now;
+  const daysUntilExpiry = Math.ceil(msUntilExpiry / (1000 * 60 * 60 * 24));
+
+  if (daysUntilExpiry <= 0) {
+    // JWT has already expired — show urgent error banner
+    banner.style.display = "block";
+    banner.style.borderColor = "var(--rd)";
+    banner.style.color = "var(--rd)";
+    banner.textContent = "⚠️ ShopRite service JWT has expired — coupons will not load. Contact Bora to refresh the token.";
+  } else if (daysUntilExpiry <= JWT_WARN_DAYS) {
+    // JWT expiring soon — show warning banner with exact date
+    banner.style.display = "block";
+    banner.style.borderColor = "#D4A853";
+    banner.style.color = "#D4A853";
+    banner.textContent = "⚠️ ShopRite deals expire soon — refresh needed by April 23";
+  } else {
+    // JWT is fine — hide the banner
+    banner.style.display = "none";
+  }
+}
+
 export function setSHT(t) {
   // First, hide all tab bodies and deactivate all tab headers
   ["list", "deals"].forEach(x => {
@@ -2437,6 +2475,8 @@ export function setSHT(t) {
       if (gate) gate.style.display = "none";
       if (content) content.style.display = "block";
       renderDealsZipBanner();
+      // Check if the ShopRite service JWT is near expiry and warn
+      renderJwtExpiryBanner();
       // Auto-load coupons on first visit to Deals tab
       if (!_couponsLoaded) loadCoupons();
     }
@@ -2929,8 +2969,8 @@ export async function dealsFromList() {
 // ── SHOPRITE DIGITAL COUPONS ────────────────────────────────────────────────
 // Fetches digital coupons from ShopRite via /api/shoprite-coupons and renders
 // them as clippable cards. Coupons are cached server-side in Firestore (4hr TTL).
-// Clipping loads a coupon onto the household's Price Plus Card (PPC).
-// Single PPC for now — dual-card support is a future enhancement.
+// Clipping loads a coupon onto both household Price Plus Cards (dual PPC —
+// Bora's SHOPRITE_PPC and Bushra's SHOPRITE_PPC_BUSHRA) in a single tap.
 // ══════════════════════════════════════════════════════════════════════════════
 
 // Module-level coupon state — tracks loaded coupons and UI state

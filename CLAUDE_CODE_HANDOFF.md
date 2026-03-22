@@ -117,7 +117,8 @@ recipes/{recipeId}/comments/{commentId}/{photoIndex}.jpg
 | `api/db.js` | Firestore proxy + Admin SDK for privileged operations |
 | `api/import-recipe.js` | Claude AI recipe importer |
 | `api/parse-recipe.js` | Claude AI recipe parser (Parse with AI button) |
-| `api/shoprite-coupons.js` | ShopRite digital coupons — list, clip, clipped actions |
+| `api/shoprite-coupons.js` | ShopRite digital coupons — list, clip (dual PPC), clipped actions |
+| `api/check-jwt-expiry.js` | Daily cron — monitors ShopRite service JWT expiry, emails alert via Resend |
 | `api/text-search.js` | Product text search — DISABLED in Shopping and Supplies |
 | `api/sync-reminders.js` | **DO NOT TOUCH** |
 | `api/completed-items.js` | **DO NOT TOUCH** |
@@ -150,7 +151,9 @@ Text search API calls are commented out in Shopping and Supplies add sheets with
 | `FIREBASE_CLIENT_EMAIL` | Firebase Admin SDK |
 | `FIREBASE_PRIVATE_KEY` | Firebase Admin SDK |
 | `FIREBASE_PROJECT_ID` | `family-pantry-c65d6` |
-| `SHOPRITE_PPC` | Price Plus Card number for ShopRite digital coupon clipping |
+| `SHOPRITE_PPC` | Bora's Price Plus Card number (primary) for ShopRite coupon clipping |
+| `SHOPRITE_PPC_BUSHRA` | Bushra's Price Plus Card number (secondary) for dual PPC clipping |
+| `RESEND_API_KEY` | Resend email API key for JWT expiry monitoring cron |
 
 ---
 
@@ -261,16 +264,21 @@ Custom categories stored in `households/{hid}/settings/customPrepCategories[]` w
 - `customProducts/{barcode}` checked FIRST — household overrides always win
 
 ### ShopRite Digital Coupons (Deals Tab)
+- **Backend:** Azure proxy (`shop-rite-web-prod.azurewebsites.net`) — bypasses Cloudflare, proxies Wakefern coupon API
+- **Auth:** Service JWT (hardcoded in ShopRite's Angular app) → POST `/getToken/auth/login` → access token (~24hr)
+- **Service JWT expiry:** 2026-04-23 (exp: 1776863263). Must be replaced before then. Frontend shows warning banner 7 days before.
+- **JWT expiry cron:** `api/check-jwt-expiry.js` — daily Vercel cron that emails Bora via Resend when JWT is within 30 days of expiry
 - **Email gate:** Only `byisguder@gmail.com` and `bushra.hoss1989@gmail.com` can access Deals tab
-- **PPC:** Env var `SHOPRITE_PPC` in Vercel — single Price Plus Card for now (dual-card = future)
+- **Dual PPC clipping:** Env vars `SHOPRITE_PPC` (Bora) and `SHOPRITE_PPC_BUSHRA` (Bushra) — one tap clips to both cards simultaneously. Secondary clip failure is non-fatal.
 - **API:** `api/shoprite-coupons.js` — actions: `list`, `clip`, `clipped`
 - **Firestore cache:** `households/{hid}/cache/shopriteCoupons` with 4-hour TTL
 - **UI:** Coupon cards with image, brand, name, description, value, expiry, and Clip button
 - **Category chips:** Horizontal scrollable filter chips built from coupon categories
 - **Pagination:** 20 coupons per page, "Show more" button for next page
-- **Clip flow:** Tap "Clip" → loading → "✓ Clipped" + toast + cache update
+- **Clip flow:** Tap "Clip" → loading → clips to both PPCs → "✓ Clipped" + toast + cache update
 - **Search:** Client-side filtering on loaded coupons (instant) or API search
-- **Sections:** Coupons at top of Deals tab, Flipp circular deals below (separated)
+- **Sections:** JWT expiry banner (if near expiry) → Coupons → "On My List" matching section → Flipp circular deals
+- **On My List:** Fuzzy-matches coupons against unchecked shopping list items, shown in a prioritized section above "All Coupons"
 
 ### Product Display
 - `formatScanResult(product)` in `src/helpers.js` returns `{ title, subtitle, brand }`
@@ -515,7 +523,7 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
 - **What to Cook Tonight** — was erroring (TypeError on ingredient .toLowerCase()) — fix was applied but needs retesting with supplies in inventory
 - **Parse with AI** — was returning 500 error due to Anthropic API credit issue — needs testing after credits are added
 - **Undo toast draining line** — JavaScript animation approach applied, needs verification
-- **Deals tab** — currently uses Claude AI web search which is unreliable. Plan to implement Flipp API (powers ShopRite, Stop & Shop, Walmart, Aldi, Wegmans etc. circulars). Research ongoing.
+- **Deals tab** — ShopRite digital coupons fully working via Azure proxy. Flipp API powers the Weekly Circular Deals section (ShopRite, Stop & Shop, Walmart, Aldi, Wegmans etc.). Service JWT expires 2026-04-23 — cron + frontend banner monitor this.
 - **Stats tab** — largely untested/unbuilt
 - **Meal reminders** — implemented via browser Notifications API, needs testing
 - **Ingredient deduction on Mark as Cooked** — implemented, needs testing
@@ -530,6 +538,7 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
 - **Session 4:** Supplies tab rename, sub-tabs, recipe import engine, community recipe database, What to Cook Tonight, tag overhaul, home screen cleanup
 - **Session 5:** Major feature additions — household sync fix (ghost household bug), bulk recipe import, Shopping Prep, unit preference memory, fraction picker, community recipe improvements, visual premium upgrade, barcode scanner overhaul, category system, Shopping Prep with custom categories and emoji picker
 - **Session 6:** Deals tab investigation (Flipp API planned), ongoing bug fixes
+- **Session 7:** ShopRite digital coupons via Azure proxy, email gate for beta users, Firestore cache (4hr TTL), On My List coupon matching, JWT expiry warning banner + daily cron job via Resend, dual PPC clipping (Bora + Bushra)
 
 ---
 

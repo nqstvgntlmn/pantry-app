@@ -39,7 +39,8 @@
 //   "clipped" — Return IDs of already-clipped coupons for the PPC
 //
 // Env vars (set in Vercel):
-//   SHOPRITE_PPC          — Price Plus Card number for coupon clipping
+//   SHOPRITE_PPC          — Bora's Price Plus Card number (primary)
+//   SHOPRITE_PPC_BUSHRA   — Bushra's Price Plus Card number (secondary, dual clip)
 //   FIREBASE_PROJECT_ID   — Firebase project ID (family-pantry-c65d6)
 //   FIREBASE_CLIENT_EMAIL — Firebase Admin SDK client email
 //   FIREBASE_PRIVATE_KEY  — Firebase Admin SDK private key
@@ -82,16 +83,17 @@ const DEFAULT_STORE_ID = "592";
 // so 4 hours keeps data fresh without hammering the API.
 const CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 
-// Price Plus Card number — stored as Vercel env var, never sent to client.
-// Needed for clipping coupons and getting a PPC-linked access token.
+// Price Plus Card numbers — stored as Vercel env vars, never sent to client.
+// SHOPRITE_PPC = Bora's card, SHOPRITE_PPC_BUSHRA = Bushra's card.
+// Both cards get coupons clipped simultaneously (dual PPC clipping).
 const PPC = process.env.SHOPRITE_PPC || "";
+const PPC_BUSHRA = process.env.SHOPRITE_PPC_BUSHRA || "";
 
 // ── Session management ──────────────────────────────────────────────────────
 // The Azure proxy returns access tokens valid for ~24 hours.
-// We cache the token in a module-level variable so it persists
-// across warm invocations of the serverless function.
-let cachedToken = null;
-let tokenExpiresAt = 0;
+// We cache tokens per PPC in a module-level map so each card gets its own
+// auth session. This supports dual PPC clipping (Bora + Bushra).
+const _tokenCache = {}; // { [ppc]: { token, expiresAt } }
 
 /**
  * buildXUserKey(ppc) — Construct the x-user-key header value.
@@ -105,23 +107,28 @@ function buildXUserKey(ppc) {
 }
 
 /**
- * getAuthToken() — Authenticate with the Azure coupon center proxy.
+ * getAuthToken(ppc) — Authenticate with the Azure coupon center proxy.
  * POSTs to /getToken/auth/login with the service JWT and x-user-key header.
- * When PPC is provided, the returned token is linked to that card (needed for clipping).
- * Caches the token and reuses it until near expiry to minimize auth calls.
+ * When a PPC is provided, the returned token is linked to that card (needed for clipping).
+ * Caches tokens per PPC and reuses them until near expiry to minimize auth calls.
+ * @param {string} ppc — Price Plus Card number (empty string for anonymous browsing)
  */
-async function getAuthToken() {
+async function getAuthToken(ppc = PPC) {
+  // Cache key — use "anon" for anonymous (no PPC) tokens
+  const cacheKey = ppc || "anon";
+
   // Reuse cached token if still valid (with 5-minute buffer)
-  if (cachedToken && Date.now() < tokenExpiresAt - 300000) {
-    console.log("[ShopRite Auth] Using cached token, expires in", Math.round((tokenExpiresAt - Date.now()) / 60000), "min");
-    return cachedToken;
+  const cached = _tokenCache[cacheKey];
+  if (cached && Date.now() < cached.expiresAt - 300000) {
+    console.log("[ShopRite Auth] Using cached token for", cacheKey, "expires in", Math.round((cached.expiresAt - Date.now()) / 60000), "min");
+    return cached.token;
   }
 
   const loginUrl = `${AZURE_BASE}/getToken/auth/login`;
-  console.log("[ShopRite Auth] POST", loginUrl, "| PPC:", PPC ? "set" : "anonymous");
+  console.log("[ShopRite Auth] POST", loginUrl, "| PPC:", ppc ? "set" : "anonymous");
 
   // Build the request body — include PPC if available for card-linked token
-  const body = PPC ? { ppc: PPC } : {};
+  const body = ppc ? { ppc } : {};
 
   const res = await fetch(loginUrl, {
     method: "POST",
@@ -131,7 +138,7 @@ async function getAuthToken() {
       // Service JWT — authenticates us as a valid coupon center client
       "Authorization": `Bearer ${SERVICE_JWT}`,
       // x-user-key — required by the Azure proxy, encodes PPC + timestamp
-      "x-user-key": buildXUserKey(PPC),
+      "x-user-key": buildXUserKey(ppc),
     },
     body: JSON.stringify(body),
   });
@@ -160,18 +167,20 @@ async function getAuthToken() {
     throw new Error("Azure coupon center response missing token — keys: " + Object.keys(data).join(", "));
   }
 
-  // Cache the token — Azure proxy tokens are valid ~24 hours,
+  // Cache the token per PPC — Azure proxy tokens are valid ~24 hours,
   // but we default to 12 hours to be safe if exp isn't parseable
-  cachedToken = token;
+  let expiresAt;
   try {
     // Decode the JWT payload to read the expiration timestamp
     const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
-    tokenExpiresAt = payload.exp ? payload.exp * 1000 : Date.now() + 12 * 60 * 60 * 1000;
+    expiresAt = payload.exp ? payload.exp * 1000 : Date.now() + 12 * 60 * 60 * 1000;
   } catch {
     // If JWT decode fails, default to 12-hour cache
-    tokenExpiresAt = Date.now() + 12 * 60 * 60 * 1000;
+    expiresAt = Date.now() + 12 * 60 * 60 * 1000;
   }
-  console.log("[ShopRite Auth] Login successful, token cached for", Math.round((tokenExpiresAt - Date.now()) / 60000), "min");
+
+  _tokenCache[cacheKey] = { token, expiresAt };
+  console.log("[ShopRite Auth] Login successful for", cacheKey, "— token cached for", Math.round((expiresAt - Date.now()) / 60000), "min");
 
   return token;
 }
@@ -415,6 +424,9 @@ export default async function handler(req, res) {
   if (!PPC) {
     console.warn("[ShopRite] SHOPRITE_PPC not set — coupons can be listed but not clipped to a card");
   }
+  if (!PPC_BUSHRA) {
+    console.warn("[ShopRite] SHOPRITE_PPC_BUSHRA not set — coupons will only clip to primary PPC");
+  }
 
   // Resolve store ID — default to 592 if not provided
   const store = storeId || DEFAULT_STORE_ID;
@@ -478,18 +490,34 @@ export default async function handler(req, res) {
       });
     }
 
-    // ── CLIP: Clip a coupon to the Price Plus Card ──
+    // ── CLIP: Clip a coupon to both Price Plus Cards (dual PPC) ──
+    // When both SHOPRITE_PPC and SHOPRITE_PPC_BUSHRA are configured, clip to
+    // both cards simultaneously so one tap covers the whole household.
     if (action === "clip") {
       if (!couponId) return res.status(400).json({ error: "couponId is required" });
       if (!PPC) return res.status(400).json({ error: "SHOPRITE_PPC not configured — cannot clip without a Price Plus Card" });
 
-      const token = await getAuthToken();
+      // Clip to Bora's PPC (primary card)
+      const token = await getAuthToken(PPC);
       await clipCouponToCard(token, couponId, store);
+      console.log("[ShopRite Clip] Clipped coupon", couponId, "to primary PPC");
+
+      // Clip to Bushra's PPC (second card) if configured
+      if (PPC_BUSHRA) {
+        try {
+          const tokenB = await getAuthToken(PPC_BUSHRA);
+          await clipCouponToCard(tokenB, couponId, store);
+          console.log("[ShopRite Clip] Clipped coupon", couponId, "to Bushra's PPC");
+        } catch (err2) {
+          // Non-fatal — primary clip succeeded, log the secondary failure
+          console.warn("[ShopRite Clip] Failed to clip to Bushra's PPC:", err2.message);
+        }
+      }
 
       // Update the Firestore cache to reflect the newly clipped coupon
       await updateClippedInCache(householdId, couponId);
 
-      return res.json({ ok: true, couponId });
+      return res.json({ ok: true, couponId, dualClipped: !!PPC_BUSHRA });
     }
 
     // ── CLIPPED: Get list of already-clipped coupon IDs ──
