@@ -40,6 +40,15 @@ git add .
 git commit -m "[relevant message]"
 git push origin main
 ```
+12. **Every terminal prompt given to Bora must be in a copyable code block, on separate lines** — no `&&` chaining. Each command goes on its own line so Bora can copy and run them one at a time.
+13. **Every Claude Code prompt must end with the standing protection footer:**
+```
+Do NOT modify api/sync-reminders.js or api/completed-items.js unless directly
+and unavoidably impacted by this change, and only after confirming with Bora first.
+Apply our standing comments rule to all changes: add clear, utilitarian comments
+to every function and every major code block — this is non-negotiable.
+```
+14. **Git push commands must be on separate lines, not chained with `&&`.** Each git command (add, commit, push) gets its own line in code blocks.
 
 ---
 
@@ -66,6 +75,8 @@ households/{hid}
   recipes/{recipeId}                — household recipes
   productPreferences/{normalizedName} — unit + location preference per product
     fields: unit, location, updatedAt
+  cache/shopriteCoupons             — cached ShopRite digital coupons (4hr TTL)
+    fields: coupons[], clippedIds[], cachedAt
 
 household_codes/{code}              — invite code index
   fields: householdId
@@ -106,6 +117,7 @@ recipes/{recipeId}/comments/{commentId}/{photoIndex}.jpg
 | `api/db.js` | Firestore proxy + Admin SDK for privileged operations |
 | `api/import-recipe.js` | Claude AI recipe importer |
 | `api/parse-recipe.js` | Claude AI recipe parser (Parse with AI button) |
+| `api/shoprite-coupons.js` | ShopRite digital coupons — list, clip, clipped actions |
 | `api/text-search.js` | Product text search — DISABLED in Shopping and Supplies |
 | `api/sync-reminders.js` | **DO NOT TOUCH** |
 | `api/completed-items.js` | **DO NOT TOUCH** |
@@ -138,6 +150,7 @@ Text search API calls are commented out in Shopping and Supplies add sheets with
 | `FIREBASE_CLIENT_EMAIL` | Firebase Admin SDK |
 | `FIREBASE_PRIVATE_KEY` | Firebase Admin SDK |
 | `FIREBASE_PROJECT_ID` | `family-pantry-c65d6` |
+| `SHOPRITE_PPC` | Price Plus Card number for ShopRite digital coupon clipping |
 
 ---
 
@@ -226,7 +239,7 @@ Custom categories stored in `households/{hid}/settings/customPrepCategories[]` w
 - **Swipe left** to delete (5-second undo toast)
 - **Tap row** to open detail sheet
 - **Select mode:** tap anywhere on row to check, Delete All button
-- **Deals sub-tab:** Claude AI web search for local deals near Edison NJ 08817
+- **Deals sub-tab:** Email-gated (beta), has two sections: ShopRite Digital Coupons + Weekly Circular Deals (Flipp)
 - **Build from meal plan** button
 - **By category** sort option (uses favourite store aisle order if set)
 
@@ -246,6 +259,18 @@ Custom categories stored in `households/{hid}/settings/customPrepCategories[]` w
 - Tap to focus: tapping camera view triggers autofocus
 - **Client-side localStorage cache** (30 days TTL, 200 item max) for instant repeat scans
 - `customProducts/{barcode}` checked FIRST — household overrides always win
+
+### ShopRite Digital Coupons (Deals Tab)
+- **Email gate:** Only `byisguder@gmail.com` and `bushra.hoss1989@gmail.com` can access Deals tab
+- **PPC:** Env var `SHOPRITE_PPC` in Vercel — single Price Plus Card for now (dual-card = future)
+- **API:** `api/shoprite-coupons.js` — actions: `list`, `clip`, `clipped`
+- **Firestore cache:** `households/{hid}/cache/shopriteCoupons` with 4-hour TTL
+- **UI:** Coupon cards with image, brand, name, description, value, expiry, and Clip button
+- **Category chips:** Horizontal scrollable filter chips built from coupon categories
+- **Pagination:** 20 coupons per page, "Show more" button for next page
+- **Clip flow:** Tap "Clip" → loading → "✓ Clipped" + toast + cache update
+- **Search:** Client-side filtering on loaded coupons (instant) or API search
+- **Sections:** Coupons at top of Deals tab, Flipp circular deals below (separated)
 
 ### Product Display
 - `formatScanResult(product)` in `src/helpers.js` returns `{ title, subtitle, brand }`

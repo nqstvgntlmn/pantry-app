@@ -224,22 +224,58 @@
       </div>
     </div>
     <div id="sh-deals-body" style="display:none;flex:1;overflow-y:auto">
-      <div class="shbody">
+      <!-- Email gate overlay — shown to non-whitelisted users -->
+      <div id="deals-gate" style="display:none;padding:40px 20px;text-align:center">
+        <div style="font-size:2rem;margin-bottom:12px">🔒</div>
+        <div style="font-size:.9rem;color:var(--tx2);font-weight:600;margin-bottom:8px">Deals tab is invite-only</div>
+        <div style="font-size:.78rem;color:var(--mt);line-height:1.5">This feature is currently in beta testing.<br>Contact Bora to request access.</div>
+      </div>
+      <!-- Deals content — only visible to whitelisted emails -->
+      <div id="deals-content" class="shbody">
         <!-- Zipcode status banner — shows current zipcode or prompts user to set one -->
         <div id="deals-zip-banner" style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:.82rem;color:var(--tx2);line-height:1.5"></div>
-        <!-- Search bar for local grocery deals (via Flipp) -->
-        <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:12px">
-          <div style="font-size:.75rem;color:var(--mt);margin-bottom:8px;font-weight:500">Search for deals</div>
-          <div style="display:flex;gap:8px">
-            <input class="qainp" id="dealsearch" placeholder="e.g. chicken, milk, eggs…" style="flex:1" onkeydown="if(event.key==='Enter')searchDeals()"/>
-            <button class="btn bp" onclick="searchDeals()">Search</button>
+
+        <!-- ═══ SHOPRITE DIGITAL COUPONS SECTION ═══ -->
+        <div id="coupons-section" style="margin-bottom:16px">
+          <!-- Coupons header with refresh button -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:.75rem;color:var(--ac);font-weight:600;text-transform:uppercase;letter-spacing:.5px">🎟 ShopRite Digital Coupons</div>
+            <button class="btn bsm bs" onclick="refreshCoupons()" id="coupon-refresh-btn" style="font-size:.7rem;padding:4px 10px">↻ Refresh</button>
+          </div>
+          <!-- Coupon search bar -->
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <input class="qainp" id="coupon-search" placeholder="Search coupons… e.g. yogurt, cereal" style="flex:1" onkeydown="if(event.key==='Enter')searchCoupons()" oninput="filterCouponsLocal()"/>
+            <button class="btn bp" onclick="searchCoupons()" style="font-size:.8rem">Search</button>
+          </div>
+          <!-- Category filter chips for coupons -->
+          <div id="coupon-cats" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
+          <!-- Coupon status message (loading, errors) -->
+          <div id="coupon-status" style="font-size:.8rem;color:var(--mt);padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
+          <!-- Coupon cards grid -->
+          <div id="coupon-list"></div>
+          <!-- Load more / pagination -->
+          <div id="coupon-more" style="display:none;text-align:center;margin-top:10px">
+            <button class="btn bs bsm" onclick="loadMoreCoupons()">Show more coupons</button>
           </div>
         </div>
-        <button class="btn bs bsm bf" style="margin-bottom:14px" onclick="dealsFromList()">🛒 Find deals for everything on my list</button>
-        <!-- Nearby stores display (populated after first deal search) -->
-        <div id="deals-stores" style="display:none;margin-bottom:12px"></div>
-        <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:10px;padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
-        <div id="dealslist"></div>
+
+        <!-- ═══ FLIPP CIRCULAR DEALS SECTION ═══ -->
+        <div style="border-top:1px solid var(--b2);padding-top:14px;margin-top:6px">
+          <div style="font-size:.75rem;color:var(--ac);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">📰 Weekly Circular Deals</div>
+          <!-- Search bar for local grocery deals (via Flipp) -->
+          <div style="background:var(--card);border:1px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:12px">
+            <div style="font-size:.75rem;color:var(--mt);margin-bottom:8px;font-weight:500">Search for deals</div>
+            <div style="display:flex;gap:8px">
+              <input class="qainp" id="dealsearch" placeholder="e.g. chicken, milk, eggs…" style="flex:1" onkeydown="if(event.key==='Enter')searchDeals()"/>
+              <button class="btn bp" onclick="searchDeals()">Search</button>
+            </div>
+          </div>
+          <button class="btn bs bsm bf" style="margin-bottom:14px" onclick="dealsFromList()">🛒 Find deals for everything on my list</button>
+          <!-- Nearby stores display (populated after first deal search) -->
+          <div id="deals-stores" style="display:none;margin-bottom:12px"></div>
+          <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:10px;padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
+          <div id="dealslist"></div>
+        </div>
       </div>
     </div>
   </div>

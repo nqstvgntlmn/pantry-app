@@ -7,6 +7,7 @@
 
 import { state, J, Js } from '../state.js';       // J = read from localStorage (JSON parse), Js = write to localStorage (JSON stringify) — Js also used for deals caching
 import { svShopItem, dlShopItem, dbSet, dbGet, logActivity } from '../db.js';  // svShopItem = save/upsert a shopping item, dlShopItem = delete one, dbSet = raw Firestore write, dbGet = read single doc, logActivity = log to activity feed
+import { getCurrentUser } from '../auth.js'; // getCurrentUser = get Firebase auth user object (email for deals gate)
 import { defaultThreshold } from '../helpers.js';  // Smart restock threshold by unit — used for "already have" inventory check
 import { g, guessAisle, guessLocation, gcat, showNotif, showOv, hideOv, fmtR, toTitleCase, splitQty, combineQty, formatQty, formatQtyWithUnit, pluralizeUnit, renderFracSelect, getStoreAisleOrder, parseVoiceMultiItems, deduplicateSubtitle, applyTitleCaseWhileTyping, FRAC_OPTIONS } from '../helpers.js';
 // g = getElementById shorthand, guessAisle = heuristic aisle label from item name,
@@ -2395,6 +2396,24 @@ export function togAisle() {
  * Deactivates all tabs, then activates the selected one by toggling CSS classes and display.
  * @param {string} t — "list" or "deals"
  */
+// ── DEALS TAB EMAIL GATE ─────────────────────────────────────────────────────
+// Only whitelisted emails can access the Deals tab (beta feature).
+// Non-whitelisted users see a locked placeholder instead of deals content.
+const DEALS_WHITELIST = [
+  "byisguder@gmail.com",
+  "bushra.hoss1989@gmail.com",
+];
+
+/**
+ * isDealsAllowed() — Check if the current user's email is in the whitelist.
+ * Returns true if the user is allowed to see the Deals tab content.
+ */
+function isDealsAllowed() {
+  const user = getCurrentUser();
+  if (!user || !user.email) return false;
+  return DEALS_WHITELIST.includes(user.email.toLowerCase());
+}
+
 export function setSHT(t) {
   // First, hide all tab bodies and deactivate all tab headers
   ["list", "deals"].forEach(x => {
@@ -2405,8 +2424,23 @@ export function setSHT(t) {
   const _tt = g("shtab-" + t); if (_tt) _tt.classList.add("active");
   const body = g("sh-" + t + "-body"); if (body) body.style.display = "block";
 
-  // When switching to the Deals tab, refresh the zipcode status banner
-  if (t === "deals") renderDealsZipBanner();
+  // When switching to the Deals tab, check email gate and load content
+  if (t === "deals") {
+    const gate = g("deals-gate");
+    const content = g("deals-content");
+    if (!isDealsAllowed()) {
+      // Non-whitelisted user — show locked gate, hide deals content
+      if (gate) gate.style.display = "block";
+      if (content) content.style.display = "none";
+    } else {
+      // Whitelisted user — hide gate, show deals content
+      if (gate) gate.style.display = "none";
+      if (content) content.style.display = "block";
+      renderDealsZipBanner();
+      // Auto-load coupons on first visit to Deals tab
+      if (!_couponsLoaded) loadCoupons();
+    }
+  }
 }
 
 /**
@@ -2889,4 +2923,451 @@ export async function dealsFromList() {
     if (!data.deals.length) g("dealslist").innerHTML = '<div class="es"><div class="ei">🏷</div><p>No deals found for your list items.<br/>Try searching for individual items.</p></div>';
     else renderDeals(data.deals, names);
   } catch (e) { st.style.color = "var(--rd)"; st.textContent = e.message; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── SHOPRITE DIGITAL COUPONS ────────────────────────────────────────────────
+// Fetches digital coupons from ShopRite via /api/shoprite-coupons and renders
+// them as clippable cards. Coupons are cached server-side in Firestore (4hr TTL).
+// Clipping loads a coupon onto the household's Price Plus Card (PPC).
+// Single PPC for now — dual-card support is a future enhancement.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Module-level coupon state — tracks loaded coupons and UI state
+let _couponsLoaded = false;     // Whether coupons have been fetched this session
+let _allCoupons = [];           // Full coupon list from API (unfiltered)
+let _clippedIds = new Set();    // Set of coupon IDs already clipped to PPC
+let _couponPage = 0;            // Current page for "show more" pagination
+let _activeCouponCat = "all";   // Active category filter chip
+const COUPONS_PER_PAGE = 20;    // How many coupons to show per page load
+
+/**
+ * loadCoupons() — Fetch digital coupons from ShopRite API (or Firestore cache).
+ * Called automatically when user first opens the Deals tab.
+ * Shows loading skeleton while fetching, then renders coupon cards.
+ */
+export async function loadCoupons() {
+  const statusEl = g("coupon-status");
+  const listEl = g("coupon-list");
+  if (!statusEl || !listEl) return;
+
+  // Show loading state with skeleton shimmer
+  statusEl.style.display = "block";
+  statusEl.style.color = "var(--mt)";
+  statusEl.innerHTML = '<div style="display:flex;align-items:center;gap:8px"><span class="shimmer" style="display:inline-block;width:16px;height:16px;border-radius:50%"></span> Loading ShopRite digital coupons…</div>';
+  listEl.innerHTML = "";
+
+  try {
+    // Call the serverless API endpoint for coupon listing
+    const res = await fetch("/api/shoprite-coupons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "list",
+        householdId: state.hid,
+      }),
+    });
+
+    const data = await res.json();
+
+    // Handle API-level errors
+    if (!res.ok || data.error) {
+      throw new Error(data.error || "Failed to load coupons");
+    }
+
+    // Store the full coupon list and clipped IDs for filtering/pagination
+    _allCoupons = data.coupons || [];
+    _clippedIds = new Set(data.clippedIds || []);
+    _couponsLoaded = true;
+    _couponPage = 0;
+    _activeCouponCat = "all";
+
+    // Mark each coupon's clipped state from the clippedIds set
+    _allCoupons.forEach(c => {
+      c.clipped = _clippedIds.has(c.id);
+    });
+
+    statusEl.style.display = "none";
+
+    // Build category filter chips from the loaded coupons
+    renderCouponCategoryChips();
+
+    // Render the first page of coupons
+    renderCouponCards();
+
+    // Show cache indicator if data came from Firestore cache
+    if (data.fromCache) {
+      const cacheNote = document.createElement("div");
+      cacheNote.style.cssText = "font-size:.64rem;color:var(--mt);text-align:center;margin-top:6px";
+      cacheNote.textContent = "Cached results — tap ↻ Refresh for latest";
+      listEl.parentNode.insertBefore(cacheNote, listEl);
+    }
+  } catch (err) {
+    statusEl.style.display = "block";
+    statusEl.style.color = "var(--rd)";
+    statusEl.textContent = err.message || "Could not load coupons";
+    console.error("loadCoupons error:", err);
+  }
+}
+
+/**
+ * refreshCoupons() — Force-refresh coupons by bypassing Firestore cache.
+ * Called when user taps the ↻ Refresh button. Clears local state and refetches.
+ */
+export async function refreshCoupons() {
+  _couponsLoaded = false;
+  _allCoupons = [];
+  _clippedIds = new Set();
+  _couponPage = 0;
+
+  // Visual feedback on refresh button
+  const btn = g("coupon-refresh-btn");
+  if (btn) { btn.textContent = "↻ …"; btn.disabled = true; }
+
+  await loadCoupons();
+
+  if (btn) { btn.textContent = "↻ Refresh"; btn.disabled = false; }
+}
+
+/**
+ * renderCouponCategoryChips() — Build horizontally scrollable category filter
+ * chips from the available coupons. Tapping a chip filters the coupon list.
+ */
+function renderCouponCategoryChips() {
+  const container = g("coupon-cats");
+  if (!container) return;
+
+  // Collect unique categories from loaded coupons
+  const cats = new Map();
+  _allCoupons.forEach(c => {
+    const cat = c.category || "Other";
+    cats.set(cat, (cats.get(cat) || 0) + 1);
+  });
+
+  // Sort categories by count (most coupons first), "Other" always last
+  const sorted = [...cats.entries()].sort((a, b) => {
+    if (a[0] === "Other") return 1;
+    if (b[0] === "Other") return -1;
+    return b[1] - a[1];
+  });
+
+  // Build chips: "All" chip + one chip per category
+  let html = `<button class="coupon-chip${_activeCouponCat === "all" ? " active" : ""}" onclick="filterCouponCat('all')">All (${_allCoupons.length})</button>`;
+  sorted.forEach(([cat, count]) => {
+    const active = _activeCouponCat === cat ? " active" : "";
+    html += `<button class="coupon-chip${active}" onclick="filterCouponCat('${cat.replace(/'/g, "\\'")}')">${cat} (${count})</button>`;
+  });
+  container.innerHTML = html;
+}
+
+/**
+ * filterCouponCat(cat) — Handle category chip tap. Filters the coupon list
+ * to show only coupons in the selected category.
+ */
+export function filterCouponCat(cat) {
+  _activeCouponCat = cat;
+  _couponPage = 0;
+  renderCouponCategoryChips();
+  renderCouponCards();
+}
+
+/**
+ * filterCouponsLocal() — Live filter as user types in the coupon search input.
+ * Filters the already-loaded coupon list client-side for instant results.
+ */
+export function filterCouponsLocal() {
+  _couponPage = 0;
+  renderCouponCards();
+}
+
+/**
+ * searchCoupons() — Search coupons via the API (server-side search).
+ * Falls back to client-side filtering if the API supports it.
+ */
+export async function searchCoupons() {
+  const input = g("coupon-search");
+  const query = (input?.value || "").trim();
+  if (!query) {
+    // Empty search — reset to showing all coupons
+    _couponPage = 0;
+    _activeCouponCat = "all";
+    renderCouponCategoryChips();
+    renderCouponCards();
+    return;
+  }
+
+  // If coupons are already loaded, filter client-side for instant UX
+  if (_couponsLoaded && _allCoupons.length > 0) {
+    _couponPage = 0;
+    _activeCouponCat = "all";
+    renderCouponCategoryChips();
+    renderCouponCards();
+    return;
+  }
+
+  // Otherwise, fetch from API with search query
+  const statusEl = g("coupon-status");
+  if (statusEl) {
+    statusEl.style.display = "block";
+    statusEl.textContent = "Searching coupons for '" + query + "'...";
+  }
+
+  try {
+    const res = await fetch("/api/shoprite-coupons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "list",
+        householdId: state.hid,
+        query,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || "Search failed");
+
+    _allCoupons = data.coupons || [];
+    _clippedIds = new Set(data.clippedIds || []);
+    _couponsLoaded = true;
+    _couponPage = 0;
+
+    _allCoupons.forEach(c => { c.clipped = _clippedIds.has(c.id); });
+
+    if (statusEl) statusEl.style.display = "none";
+    renderCouponCategoryChips();
+    renderCouponCards();
+  } catch (err) {
+    if (statusEl) {
+      statusEl.style.display = "block";
+      statusEl.style.color = "var(--rd)";
+      statusEl.textContent = err.message;
+    }
+  }
+}
+
+/**
+ * getFilteredCoupons() — Apply current filters (category + search text) to
+ * the loaded coupon list. Returns the filtered array.
+ */
+function getFilteredCoupons() {
+  let list = _allCoupons;
+
+  // Apply category filter
+  if (_activeCouponCat !== "all") {
+    list = list.filter(c => (c.category || "Other") === _activeCouponCat);
+  }
+
+  // Apply search text filter (from the coupon search input)
+  const searchInput = g("coupon-search");
+  const q = (searchInput?.value || "").trim().toLowerCase();
+  if (q) {
+    list = list.filter(c =>
+      (c.name || "").toLowerCase().includes(q) ||
+      (c.brand || "").toLowerCase().includes(q) ||
+      (c.description || "").toLowerCase().includes(q)
+    );
+  }
+
+  return list;
+}
+
+/**
+ * renderCouponCards() — Render the visible coupon cards into #coupon-list.
+ * Handles pagination (COUPONS_PER_PAGE at a time) and empty states.
+ * Uses DOM creation (not innerHTML) for card content to prevent XSS.
+ */
+function renderCouponCards() {
+  const listEl = g("coupon-list");
+  const moreEl = g("coupon-more");
+  if (!listEl) return;
+
+  const filtered = getFilteredCoupons();
+
+  // Empty state
+  if (!filtered.length) {
+    listEl.innerHTML = '<div class="es"><div class="ei">🎟</div><p>No coupons found.<br>Try a different search or category.</p></div>';
+    if (moreEl) moreEl.style.display = "none";
+    return;
+  }
+
+  // Paginate — show up to (_couponPage + 1) * COUPONS_PER_PAGE items
+  const limit = (_couponPage + 1) * COUPONS_PER_PAGE;
+  const visible = filtered.slice(0, limit);
+  const hasMore = filtered.length > limit;
+
+  // Clear and rebuild the list
+  listEl.innerHTML = "";
+
+  visible.forEach(coupon => {
+    const card = buildCouponCard(coupon);
+    listEl.appendChild(card);
+  });
+
+  // Show/hide "Show more" button
+  if (moreEl) {
+    moreEl.style.display = hasMore ? "block" : "none";
+  }
+}
+
+/**
+ * buildCouponCard(coupon) — Create a single coupon card DOM element.
+ * Each card shows: image (optional), brand, name, description, value,
+ * expiry date, and a clip/clipped button.
+ * Uses createElement to avoid XSS with untrusted coupon data from the API.
+ */
+function buildCouponCard(coupon) {
+  const card = document.createElement("div");
+  card.className = "coupon-card" + (coupon.clipped ? " clipped" : "");
+  card.id = "coupon-" + coupon.id;
+
+  // Coupon image (if available from ShopRite API)
+  if (coupon.image) {
+    const img = document.createElement("img");
+    img.className = "coupon-img";
+    img.src = coupon.image;
+    img.alt = coupon.name || "Coupon";
+    img.loading = "lazy";
+    // Hide broken images gracefully
+    img.onerror = function() { this.style.display = "none"; };
+    card.appendChild(img);
+  }
+
+  // Text body: brand, name, description, value, expiry
+  const body = document.createElement("div");
+  body.className = "coupon-body";
+
+  // Brand line
+  if (coupon.brand) {
+    const brand = document.createElement("div");
+    brand.className = "coupon-brand";
+    brand.textContent = coupon.brand;
+    body.appendChild(brand);
+  }
+
+  // Coupon name/title
+  const name = document.createElement("div");
+  name.className = "coupon-name";
+  name.textContent = coupon.name || "Digital Coupon";
+  body.appendChild(name);
+
+  // Description (requirements, limits, etc.)
+  if (coupon.description) {
+    const desc = document.createElement("div");
+    desc.className = "coupon-desc";
+    desc.textContent = coupon.description;
+    body.appendChild(desc);
+  }
+
+  // Value line (e.g. "Save $1.00", "Buy 1 Get 1 Free")
+  if (coupon.value) {
+    const value = document.createElement("div");
+    value.className = "coupon-value";
+    value.textContent = coupon.value;
+    body.appendChild(value);
+  }
+
+  // Expiry date
+  if (coupon.expiryDate) {
+    const expiry = document.createElement("div");
+    expiry.className = "coupon-expiry";
+    // Format the date to a readable string
+    try {
+      const d = new Date(coupon.expiryDate);
+      const now = new Date();
+      const daysLeft = Math.ceil((d - now) / 86400000);
+      if (daysLeft <= 3 && daysLeft >= 0) {
+        expiry.style.color = "var(--am)"; // Amber for expiring soon
+        expiry.textContent = daysLeft === 0 ? "Expires today" : `Expires in ${daysLeft} day${daysLeft > 1 ? "s" : ""}`;
+      } else {
+        expiry.textContent = "Expires " + d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      }
+    } catch {
+      expiry.textContent = "Exp: " + coupon.expiryDate;
+    }
+    body.appendChild(expiry);
+  }
+
+  card.appendChild(body);
+
+  // Clip button — "Clip" or "✓ Clipped"
+  const btn = document.createElement("button");
+  btn.className = "coupon-clip-btn" + (coupon.clipped ? " clipped" : "");
+  btn.textContent = coupon.clipped ? "✓ Clipped" : "Clip";
+  btn.setAttribute("data-coupon-id", coupon.id);
+
+  // Only allow clipping if not already clipped
+  if (!coupon.clipped) {
+    btn.onclick = () => clipCoupon(coupon.id);
+  }
+
+  card.appendChild(btn);
+
+  return card;
+}
+
+/**
+ * clipCoupon(couponId) — Clip a single coupon to the household's Price Plus Card.
+ * Shows loading state on the button, calls the API, and updates UI on success.
+ * Single PPC for now — dual-card support is a future enhancement.
+ */
+export async function clipCoupon(couponId) {
+  // Find the clip button and show loading state
+  const card = g("coupon-" + couponId);
+  const btn = card?.querySelector(".coupon-clip-btn");
+  if (!btn || btn.classList.contains("clipped")) return;
+
+  btn.classList.add("loading");
+  btn.textContent = "…";
+
+  try {
+    // Call the serverless API to clip the coupon to the PPC
+    const res = await fetch("/api/shoprite-coupons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "clip",
+        householdId: state.hid,
+        couponId,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      throw new Error(data.error || "Clip failed");
+    }
+
+    // Success — update local state and UI
+    _clippedIds.add(couponId);
+
+    // Update the coupon in the local array
+    const coupon = _allCoupons.find(c => c.id === couponId);
+    if (coupon) coupon.clipped = true;
+
+    // Update the button to show clipped state
+    btn.classList.remove("loading");
+    btn.classList.add("clipped");
+    btn.textContent = "✓ Clipped";
+    btn.onclick = null;
+
+    // Add clipped styling to the card
+    if (card) card.classList.add("clipped");
+
+    showNotif("Coupon clipped to your Price Plus Card!");
+  } catch (err) {
+    // Revert button to clickable state on error
+    btn.classList.remove("loading");
+    btn.textContent = "Clip";
+    showNotif("Clip failed: " + (err.message || "Unknown error"));
+    console.error("clipCoupon error:", err);
+  }
+}
+
+/**
+ * loadMoreCoupons() — Show the next page of coupon cards.
+ * Called when user taps "Show more coupons" button.
+ */
+export function loadMoreCoupons() {
+  _couponPage++;
+  renderCouponCards();
 }

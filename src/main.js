@@ -48,7 +48,7 @@ import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit,
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
-import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, editShopDetailCombined, saveShopDetailCombined, initShopQtyToolbar, shopQtyStep, shopFracChange, toggleShopDone, resetShopStagger, openShopAddCatPicker, changeShopCategory } from './ui/shopping.js';
+import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQty, saveShQty, togAisle, setSHT, shareList, openAddToKitchen, setAtkLoc, confirmAddToKitchen, buildList, bpTog, bpSelAll, bpConfirm, searchDeals, dealsFromList, addDealToList, renderDealsZipBanner, initVoice, toggleVoice, recordCompleted, toggleAddNote, openShopAddSheet, closeShopAddSheet, shopAddScan, shopAddVoice, closeEnrichSheet, pickEnrichResult, searchAndEnrich, onShopInput, pickInlineResult, openItemDetail, closeItemDetail, deleteItemImage, triggerProductPhotoUpload, handleProductPhotoSelected, changeShopUnit, changeShopQty, changeShopQtyDirect, changeShopFrac, confirmVoiceMultiAdd, cancelVoiceMulti, editShopDetailName, saveShopDetailName, editShopDetailSubtitle, saveShopDetailSubtitle, editShopDetailCombined, saveShopDetailCombined, initShopQtyToolbar, shopQtyStep, shopFracChange, toggleShopDone, resetShopStagger, openShopAddCatPicker, changeShopCategory, loadCoupons, refreshCoupons, searchCoupons, filterCouponCat, filterCouponsLocal, clipCoupon, loadMoreCoupons } from './ui/shopping.js';
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
@@ -303,10 +303,18 @@ window.bpSelAll = bpSelAll;     // Select all items in the bulk-purchase overlay
 window.bpUpdBtn = function() { /* no-op: button state is handled internally by the shopping module */ };
 window.bpConfirm = bpConfirm;   // Confirm bulk purchase selections
 window._bpItems = [];           // Shared state: items selected for bulk purchase
-window.searchDeals = searchDeals;     // Search for grocery deals via Kroger API
+window.searchDeals = searchDeals;     // Search for grocery deals via Flipp API
 window.dealsFromList = dealsFromList; // Find deals matching current shopping list items
 window.addDealToList = addDealToList; // Add a found deal item to the shopping list
 window.renderDealsZipBanner = renderDealsZipBanner; // Update zipcode banner in Deals tab
+// ── ShopRite digital coupon handlers ──
+window.loadCoupons = loadCoupons;             // Fetch and display ShopRite digital coupons
+window.refreshCoupons = refreshCoupons;       // Force-refresh coupons (bypass cache)
+window.searchCoupons = searchCoupons;         // Search coupons via API or local filter
+window.filterCouponCat = filterCouponCat;     // Filter coupons by category chip
+window.filterCouponsLocal = filterCouponsLocal; // Live filter as user types in coupon search
+window.clipCoupon = clipCoupon;               // Clip a coupon to the household's Price Plus Card
+window.loadMoreCoupons = loadMoreCoupons;     // Show next page of coupon cards
 // clrChk — delete all checked (purchased) items from the shopping list.
 // Also records each item as completed for bidirectional Reminders sync,
 // so the iOS Shortcut can mark them done in Apple Reminders.
