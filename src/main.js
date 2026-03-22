@@ -310,7 +310,7 @@ window.showScreen = function(n) {
 
 // ── CONTEXT-AWARE FLOATING ACTION BUTTON ─────────────────────────────────────
 // The FAB shows a "+" icon per tab. No text label — just a circle that starts
-// large and fully opaque, then shrinks + fades to 75% after 2 seconds.
+// large and fully opaque, then shrinks + fades to 85% transparent after 0.5 seconds.
 // Tapping it at any size/opacity triggers the correct add action for the tab.
 const FAB_CONFIG = {
   home:      { action: "openHomeFabSheet()",   ariaLabel: "Add item" },
@@ -321,14 +321,14 @@ const FAB_CONFIG = {
   chat:      null  // No FAB on chat tab
 };
 
-// _fabSettleTimer — tracks the 2-second timeout before FAB shrinks + fades.
+// _fabSettleTimer — tracks the 0.5-second timeout before FAB shrinks + fades.
 // Cleared on each tab switch so the timer resets when navigating.
 let _fabSettleTimer = null;
 
 // _updateFAB(tab) — shows/hides the FAB and sets its onclick for the given tab.
 // Resets the FAB to full size + full opacity instantly (no grow animation),
-// then adds "settled" class after 2 seconds to trigger a 2s scale-down + fade
-// via transform:scale(0.75) and opacity:0.75 with cubic-bezier easing.
+// then adds "settled" class after 0.5 seconds to trigger a 2s scale-down + fade
+// via transform:scale(0.75) and opacity:0.15 with cubic-bezier easing.
 function _updateFAB(tab) {
   const fab = g("fab-btn");
   if (!fab) return;
@@ -351,13 +351,13 @@ function _updateFAB(tab) {
     fab.setAttribute("onclick", cfg.action);
     fab.setAttribute("aria-label", cfg.ariaLabel);
 
-    // After 2 seconds idle, add "settled" class to trigger the 2s shrink + fade.
+    // After 0.5 seconds idle, add "settled" class to trigger the 2s shrink + fade.
     // The transition is defined on .fab.settled in CSS, so it animates on add
     // and snaps back instantly on remove (no transition on base .fab for these props).
     clearTimeout(_fabSettleTimer);
     _fabSettleTimer = setTimeout(() => {
       fab.classList.add("settled");
-    }, 2000);
+    }, 500);
   }
 }
 

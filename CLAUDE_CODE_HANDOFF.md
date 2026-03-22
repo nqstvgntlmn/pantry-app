@@ -1058,13 +1058,13 @@ to every function and every major code block — this is non-negotiable.
 
 #### 1. FAB Button: Shrink/Fade Animation Reworked with transform:scale()
 
-**What changed:** The FAB shrink animation was reworked for a visually convincing physical shrink. Previously it animated `width`/`height`/`font-size` which looked like fading rather than shrinking. Now uses `transform: scale(0.75)` for a uniform scale-down that looks like the button physically reduces in size, paired with `opacity: 0.75` fade. Tab switches instantly reset to full size with zero grow-back animation.
+**What changed:** The FAB shrink animation was reworked for a visually convincing physical shrink. Previously it animated `width`/`height`/`font-size` which looked like fading rather than shrinking. Now uses `transform: scale(0.75)` for a uniform scale-down that looks like the button physically reduces in size, paired with `opacity: 0.15` (85% transparent) fade. The settle delay is 0.5 seconds. Tab switches instantly reset to full size with zero grow-back animation.
 
 **Why:** The old width/height animation wasn't visually convincing — layout-based size changes don't produce the same "pinch-to-zoom" effect as transform scaling. The grow-back animation on tab switch was also undesirable; the FAB should always appear at full size immediately.
 
 **How it works:**
 - CSS: The 2s transition is defined on `.fab.settled` (not on base `.fab`). This means adding the class triggers a smooth 2s shrink, but removing it causes an instant snap-back (no transition on base). Base `.fab` only has a quick `.2s` transform transition for the `:active` press bounce. `.fab.settled:active` provides a press effect at the shrunk scale.
-- JS: `_updateFAB(tab)` uses `fab.style.transition = 'none'` + `offsetHeight` reflow trick to force an instant reset when switching tabs. After 2s idle, adds "settled" class which brings its own 2s transition and triggers the shrink.
+- JS: `_updateFAB(tab)` uses `fab.style.transition = 'none'` + `offsetHeight` reflow trick to force an instant reset when switching tabs. After 0.5s idle, adds "settled" class which brings its own 2s transition and triggers the shrink.
 - Hidden state: `.fab.hidden` now has `transition: none` to prevent any animation artifact when toggling visibility.
 
 **Files changed:**
@@ -1475,3 +1475,29 @@ The auto-categorization mapping (`gcat()`) was causing persistent bugs — items
 ### Files changed
 - `src/ui/inventory.js` — `_renderInvShelf()` rewritten to flat grid (no grouping); `CATS` removed from import; section comments updated
 - `src/styles.css` — Removed `.shelf-row`, `.shelf-label`, `.shelf-label-emoji`, `.shelf-label-count`, `.shelf-line` CSS rules; kept all `.shelf-item` card styles
+
+## Session — FAB Settle Timing & Opacity Tuning (March 2026)
+
+### Overview
+Two quick tweaks to the floating "+" button to make it less intrusive at rest.
+
+### Changes Made
+
+#### 1. Faster Settle Delay (2s → 0.5s)
+**What changed:** The delay before the FAB begins its shrink+fade animation was reduced from 2 seconds to 0.5 seconds after landing on a tab.
+
+**Why:** 2 seconds felt too long — the full-size button blocked content unnecessarily. Half a second gives enough time to register the FAB's presence before it settles out of the way.
+
+**How:** Changed the `setTimeout` delay in `_updateFAB()` from `2000` to `500`. Updated all related comments in `main.js`.
+
+#### 2. More Transparent Resting State (opacity 0.75 → 0.15)
+**What changed:** The FAB's resting (settled) opacity was reduced from 0.75 (25% transparent) to 0.15 (85% transparent), making it much more subtle when not actively being used.
+
+**Why:** At 75% opacity the FAB was still visually prominent and competed with content. At 15% opacity it fades into the background but remains tappable and visible enough to find when needed.
+
+**How:** Changed `opacity:.75` to `opacity:.15` on `.fab.settled` in CSS. Updated all related comments in `styles.css`.
+
+### Files Changed
+- `src/main.js` — `_updateFAB()`: settle timeout 2000→500, updated all comments referencing old timing/opacity values
+- `src/styles.css` — `.fab.settled`: opacity .75→.15, updated block comment to reflect new values
+- `CLAUDE_CODE_HANDOFF.md` — Updated existing FAB section + added this session entry
