@@ -66,7 +66,7 @@ households/{hid}
   inventory/{itemId}                — supplies items
     fields: name, scanTitle, subtitle, brand, quantity, fraction, unit,
             location, prepCategory, barcode, restockThreshold,
-            doNotRestock, expiryDate, note, createdAt, updatedAt
+            doNotRestock, expiryDate, note, customEmoji, createdAt, updatedAt
   recipes/{recipeId}                — household recipes
   productPreferences/{normalizedName} — unit + location preference per product
     fields: unit, location, updatedAt
@@ -246,6 +246,7 @@ Bottom navigation (left to right):
 - **Detail sheet fields:** Location picker, Quantity (− / number / + with fraction picker and unit dropdown), Expiry Date (truly optional, "No expiry set" / "Set expiry"), Notes, Restock When Below, Don't Add to Running Low toggle, Add to Shopping List button, Remove button
 - **Inline title/subtitle editing:** tap ✏️ on title → shows two editable fields (Title + Subtitle) with Save button, auto Title Case, saves to Firestore + customProducts if barcoded
 - **Category badge:** shows prepCategory, tappable to change, saves to Firestore
+- **Custom emoji override:** tap the emoji icon on a detail sheet → opens the emoji picker popup (same component used for custom category creation) → selected emoji saved as `customEmoji` field on the inventory item in Firestore, persists across sessions and overrides auto-assignment
 - **Shopping Prep button** below "+ Add item" — gold text/icon on dark background with subtle gold border
 
 ### Shopping Prep Feature
@@ -579,6 +580,7 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
 - **Session 9:** Major UX enhancements — sliding tab transitions, floating pill nav, home dashboard (quick chips, notifications, animated counters), shelf view + expiry timeline for Supplies, expanded aisle grouping (16 categories) + deal badges for Shopping
 - **Session 10:** Premium visual polish — deep gradient background (blue-neutral undertone), floating pill nav with more breathing room, card depth separation, bold white section headers, clean minimal headers
 - **Session 11:** Added `start-dev.command` Finder-clickable dev launcher + `.gitignore`
+- **Session 12:** Supply item emoji improvements — overhauled `_EMOJI_MAP` keyword table (100+ keywords across 20+ categories, multi-word specifics first to prevent false matches), added manual emoji override via tappable emoji on detail sheet (reuses category emoji picker component, saves `customEmoji` to Firestore)
 
 ---
 

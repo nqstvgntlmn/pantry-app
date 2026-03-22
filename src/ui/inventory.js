@@ -22,7 +22,7 @@ import { updExport, _defaultThreshold } from './home.js';
 // scoreSearchResult — relevance scoring for search results
 // _savePreferredLocation / _getPreferredLocation — remember where user stores each product
 import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferredLocation, _savePreferredUnit, _getPreferredUnit, _getProductPreference } from './shopping.js';
-import { autoCategorizeByName, autoCategorize, getCategoryDisplay, renderCategoryBadge, openCategoryPicker, changeInvItemCategory } from './categorypicker.js';
+import { autoCategorizeByName, autoCategorize, getCategoryDisplay, renderCategoryBadge, openCategoryPicker, changeInvItemCategory, openEmojiPicker } from './categorypicker.js';
 // [IMAGES DISABLED] — Product images commented out pending decision.
 // See session notes: images caused false positives from external databases,
 // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
@@ -401,9 +401,10 @@ export async function openInvItemDetail(id) {
   //   ? `<div class="item-detail-change-photo" onclick="triggerInvPhotoUpload('${item.id}')">Change photo</div>`
   //   : "";
 
-  // No-image display: smart emoji placeholder based on product name/type
+  // No-image display: smart emoji placeholder based on product name/type.
+  // Tapping the emoji opens the emoji picker so the user can override it.
   const ic = getItemEmoji(item);
-  const img = `<div class="item-detail-img-ph" style="display:flex;align-items:center;justify-content:center">
+  const img = `<div class="item-detail-img-ph" style="display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="changeInvEmoji('${item.id}', this)" title="Tap to change emoji">
     <div style="font-size:1.6rem">${ic}</div>
   </div>`;
   const changePhotoLink = "";
@@ -1664,6 +1665,32 @@ export function changeInvCategory(id) {
     openInvItemDetail(id);
     const { name: catName } = getCategoryDisplay(catKey);
     showNotif(`Category: ${catName}`);
+  });
+}
+
+/**
+ * changeInvEmoji(id, triggerEl) — Opens the emoji picker popup so the user can
+ * manually choose a custom emoji for a supply item. The selected emoji is saved
+ * to the item's `customEmoji` field in Firestore so it persists across sessions.
+ * Reuses the same emoji picker component used for custom category creation.
+ *
+ * @param {string} id — inventory item ID
+ * @param {HTMLElement} triggerEl — the emoji placeholder element (for popup positioning)
+ */
+export function changeInvEmoji(id, triggerEl) {
+  const item = state.inv.find(i => i.id === id);
+  if (!item) return;
+
+  // Current emoji — either the user's custom choice or the auto-assigned one
+  const currentEmoji = getItemEmoji(item);
+
+  openEmojiPicker(triggerEl, currentEmoji, async (emoji) => {
+    // Save the custom emoji to the item and persist to Firestore
+    item.customEmoji = emoji;
+    await svi(item);
+    // Refresh the detail sheet to show the new emoji immediately
+    openInvItemDetail(id);
+    showNotif(`Emoji: ${emoji}`);
   });
 }
 

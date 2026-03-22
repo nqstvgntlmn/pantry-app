@@ -275,69 +275,121 @@ export const CATS = {
 // Falls back to 🛒 for unknown items. Used by inventory and shopping list rows
 // to display a more relevant icon than the generic category-level emoji.
 
-/** Keyword → emoji mapping table, checked top-to-bottom (first match wins) */
+/** Keyword → emoji mapping table, checked top-to-bottom (first match wins).
+ *  ORDER MATTERS: more-specific multi-word phrases must come before generic
+ *  single-word keywords to prevent false matches (e.g. "mac & cheese" before
+ *  "cheese", "energy drink" before "drink", "olive" before "oil"). */
 const _EMOJI_MAP = [
-  // Bread & bakery
-  { keywords: ["bread", "pita", "bagel", "tortilla", "naan", "flatbread", "bun", "roll", "croissant", "muffin"], emoji: "🫓" },
-  { keywords: ["loaf"], emoji: "🫓" },
-  // Spices & herbs
-  { keywords: ["peppercorn", "spice", "herb", "cumin", "turmeric", "paprika", "cinnamon", "oregano", "basil", "thyme", "rosemary", "cayenne", "chili flake", "seasoning"], emoji: "🌶️" },
-  // Chocolate & candy
+  // ── Multi-word specifics (must be checked first) ─────────────────────────
+  { keywords: ["mac & cheese", "mac and cheese", "mac n cheese", "macaroni and cheese"], emoji: "🧀" },
+  { keywords: ["energy drink", "red bull", "monster energy", "celsius", "bang"], emoji: "🥤" },
+  { keywords: ["ice cream", "gelato", "sorbet", "frozen yogurt"], emoji: "🍦" },
+  { keywords: ["olive oil", "cooking oil", "vegetable oil", "coconut oil", "canola oil", "sesame oil", "avocado oil"], emoji: "🫒" },
+  { keywords: ["soy sauce", "fish sauce", "hot sauce", "sriracha", "tabasco", "worcestershire"], emoji: "🫙" },
+  { keywords: ["baby food", "baby formula", "diaper"], emoji: "👶" },
+  { keywords: ["pet food", "dog food", "cat food", "dog treat", "cat treat"], emoji: "🐾" },
+  { keywords: ["dish soap", "hand soap", "body wash"], emoji: "🧴" },
+  { keywords: ["sparkling water", "seltzer", "club soda"], emoji: "💧" },
+  { keywords: ["oat milk", "almond milk", "soy milk", "coconut milk"], emoji: "🥛" },
   { keywords: ["chocolate bar"], emoji: "🍫" },
-  { keywords: ["chocolate"], emoji: "🍫" },
-  { keywords: ["candy", "gummy", "gum"], emoji: "🍬" },
-  // Beverages
-  { keywords: ["soda", "cola", "pepsi", "coke", "sprite", "fanta", "energy drink", "red bull", "monster"], emoji: "🥤" },
-  { keywords: ["water", "sparkling water", "seltzer"], emoji: "💧" },
-  { keywords: ["coffee", "espresso"], emoji: "☕" },
-  { keywords: ["tea", "matcha", "chai"], emoji: "🍵" },
-  // Dairy
-  { keywords: ["milk", "oat milk", "almond milk", "soy milk"], emoji: "🥛" },
-  { keywords: ["cheese", "cheddar", "mozzarella", "parmesan", "brie", "gouda", "feta"], emoji: "🧀" },
+  { keywords: ["peanut butter", "almond butter", "sunflower butter"], emoji: "🥜" },
+  { keywords: ["tomato sauce", "marinara", "pizza sauce", "pasta sauce"], emoji: "🥫" },
+
+  // ── Jarred / canned / preserved items ────────────────────────────────────
+  { keywords: ["caper", "pickle", "relish", "artichoke heart", "sun-dried", "sundried", "anchov"], emoji: "🫙" },
+  { keywords: ["olive", "black olive", "green olive", "kalamata"], emoji: "🫒" },
+  { keywords: ["canned", "can of"], emoji: "🥫" },
+
+  // ── Bread & bakery ──────────────────────────────────────────────────────
+  { keywords: ["bread", "pita", "bagel", "tortilla", "naan", "flatbread", "bun", "roll", "croissant", "muffin", "biscuit", "english muffin", "wrap"], emoji: "🫓" },
+  { keywords: ["loaf"], emoji: "🫓" },
+
+  // ── Spices & herbs ──────────────────────────────────────────────────────
+  { keywords: ["peppercorn", "spice", "herb", "cumin", "turmeric", "paprika", "cinnamon", "oregano", "basil", "thyme", "rosemary", "cayenne", "chili flake", "seasoning", "bay leaf", "nutmeg", "cardamom", "clove", "saffron", "dill", "parsley", "sage", "fennel seed", "coriander", "allspice", "ginger powder"], emoji: "🌶️" },
+
+  // ── Chocolate & candy ───────────────────────────────────────────────────
+  { keywords: ["chocolate", "cocoa", "cacao"], emoji: "🍫" },
+  { keywords: ["candy", "gummy", "gum", "licorice", "taffy"], emoji: "🍬" },
+
+  // ── Beverages ───────────────────────────────────────────────────────────
+  { keywords: ["soda", "cola", "pepsi", "coke", "sprite", "fanta", "ginger ale", "tonic", "drink"], emoji: "🥤" },
+  { keywords: ["water"], emoji: "💧" },
+  { keywords: ["coffee", "espresso", "cold brew"], emoji: "☕" },
+  { keywords: ["tea", "matcha", "chai", "herbal tea"], emoji: "🍵" },
+  { keywords: ["juice", "lemonade", "smoothie"], emoji: "🧃" },
+
+  // ── Dairy ───────────────────────────────────────────────────────────────
+  { keywords: ["milk", "cream", "half and half", "half & half", "creamer"], emoji: "🥛" },
+  { keywords: ["cheese", "cheddar", "mozzarella", "parmesan", "brie", "gouda", "feta", "ricotta", "provolone", "swiss", "gruyere", "colby", "pepper jack", "cream cheese"], emoji: "🧀" },
   { keywords: ["butter", "margarine", "ghee"], emoji: "🧈" },
   { keywords: ["egg"], emoji: "🥚" },
-  // Proteins
-  { keywords: ["chicken", "poultry", "turkey"], emoji: "🍗" },
-  { keywords: ["beef", "steak", "meat", "lamb", "pork", "bacon", "sausage", "ground"], emoji: "🥩" },
-  { keywords: ["fish", "salmon", "tuna", "cod", "shrimp", "seafood", "crab", "lobster"], emoji: "🐟" },
-  // Produce
-  { keywords: ["apple", "banana", "orange", "grape", "berry", "berries", "strawberry", "blueberry", "mango", "peach", "pear", "plum", "kiwi", "melon", "watermelon", "pineapple", "cherry", "lemon", "lime", "avocado", "fruit"], emoji: "🍎" },
-  { keywords: ["broccoli", "carrot", "celery", "cabbage", "tomato", "onion", "garlic", "spinach", "mushroom", "squash", "lettuce", "cucumber", "pepper", "potato", "corn", "zucchini", "eggplant", "vegetable", "produce", "jalap", "kale"], emoji: "🥦" },
-  // Snacks
-  { keywords: ["chip", "crisp", "pringles", "snack", "pretzel", "popcorn", "cracker"], emoji: "🍿" },
-  // Frozen
-  { keywords: ["ice cream", "gelato", "sorbet", "frozen yogurt"], emoji: "🍦" },
+  { keywords: ["yogurt", "yoghurt", "kefir"], emoji: "🥛" },
+
+  // ── Proteins ────────────────────────────────────────────────────────────
+  { keywords: ["chicken", "poultry", "turkey", "rotisserie"], emoji: "🍗" },
+  { keywords: ["beef", "steak", "meat", "lamb", "pork", "bacon", "sausage", "ground", "brisket", "ham", "prosciutto", "salami", "deli"], emoji: "🥩" },
+  { keywords: ["fish", "salmon", "tuna", "cod", "shrimp", "seafood", "crab", "lobster", "tilapia", "sardine", "clam", "mussel", "scallop"], emoji: "🐟" },
+  { keywords: ["tofu", "tempeh", "seitan"], emoji: "🥦" },
+
+  // ── Produce ─────────────────────────────────────────────────────────────
+  { keywords: ["apple", "banana", "orange", "grape", "berry", "berries", "strawberry", "blueberry", "mango", "peach", "pear", "plum", "kiwi", "melon", "watermelon", "pineapple", "cherry", "lemon", "lime", "avocado", "fruit", "raspberry", "blackberry", "clementine", "tangerine", "grapefruit", "papaya", "pomegranate", "fig", "date", "coconut"], emoji: "🍎" },
+  { keywords: ["broccoli", "carrot", "celery", "cabbage", "tomato", "onion", "garlic", "spinach", "mushroom", "squash", "lettuce", "cucumber", "pepper", "potato", "corn", "zucchini", "eggplant", "vegetable", "produce", "jalap", "kale", "asparagus", "cauliflower", "radish", "beet", "turnip", "sweet potato", "yam", "green bean", "snap pea", "arugula", "chard", "bok choy", "scallion", "leek", "ginger"], emoji: "🥦" },
+
+  // ── Snacks (specific items — NOT a catch-all) ───────────────────────────
+  { keywords: ["chip", "crisp", "pringles", "pretzel", "popcorn", "cracker", "granola bar", "protein bar", "trail mix", "jerky"], emoji: "🍿" },
+  { keywords: ["cookie", "biscotti", "wafer"], emoji: "🍪" },
+
+  // ── Frozen ──────────────────────────────────────────────────────────────
   { keywords: ["frozen"], emoji: "🧊" },
-  // Cleaning
-  { keywords: ["cleaning", "cleaner", "detergent", "bleach", "dish soap", "windex", "sponge", "mop", "broom"], emoji: "🧹" },
-  // Personal care
-  { keywords: ["lotion", "shampoo", "conditioner", "body wash", "deodorant", "sunscreen", "face wash", "moisturizer", "soap"], emoji: "🧴" },
-  // Health
-  { keywords: ["vitamin", "medicine", "supplement", "capsule", "tablet", "pain relief", "tylenol", "advil", "ibuprofen"], emoji: "💊" },
-  // Baby
-  { keywords: ["baby food", "baby formula", "diaper", "baby"], emoji: "👶" },
-  // Pet
-  { keywords: ["pet food", "dog food", "cat food", "dog treat", "cat treat", "pet"], emoji: "🐾" },
-  // Nuts
-  { keywords: ["nut", "almond", "cashew", "peanut", "walnut", "pecan", "pistachio"], emoji: "🥜" },
-  // Grains & pasta
-  { keywords: ["rice", "pasta", "noodle", "grain", "oat", "cereal", "flour", "quinoa"], emoji: "🌾" },
-  // Sauces & condiments
-  { keywords: ["sauce", "ketchup", "mustard", "mayo", "mayonnaise", "hot sauce", "sriracha", "soy sauce", "vinegar", "salsa", "dressing", "condiment", "jam", "jelly"], emoji: "🫙" },
-  // Oil
-  { keywords: ["oil", "olive oil", "cooking oil", "vegetable oil", "coconut oil"], emoji: "🫒" },
+
+  // ── Sauces & condiments ─────────────────────────────────────────────────
+  { keywords: ["sauce", "ketchup", "mustard", "mayo", "mayonnaise", "salsa", "dressing", "condiment", "jam", "jelly", "honey", "syrup", "marinade", "glaze", "chutney", "hummus", "tahini", "pesto"], emoji: "🫙" },
+  { keywords: ["vinegar", "rice vinegar", "balsamic", "apple cider vinegar", "white vinegar", "red wine vinegar"], emoji: "🍶" },
+  { keywords: ["oil"], emoji: "🫒" },
+
+  // ── Cleaning ────────────────────────────────────────────────────────────
+  { keywords: ["cleaning", "cleaner", "detergent", "bleach", "windex", "sponge", "mop", "broom", "disinfectant", "lysol", "scrub"], emoji: "🧹" },
+
+  // ── Personal care ───────────────────────────────────────────────────────
+  { keywords: ["lotion", "shampoo", "conditioner", "deodorant", "sunscreen", "face wash", "moisturizer", "soap", "toothpaste", "mouthwash", "floss", "razor", "tissue", "toilet paper", "paper towel"], emoji: "🧴" },
+
+  // ── Health ──────────────────────────────────────────────────────────────
+  { keywords: ["vitamin", "medicine", "supplement", "capsule", "tablet", "pain relief", "tylenol", "advil", "ibuprofen", "probiotic", "antacid", "allergy"], emoji: "💊" },
+
+  // ── Baby ────────────────────────────────────────────────────────────────
+  { keywords: ["baby", "infant", "formula"], emoji: "👶" },
+
+  // ── Pet ─────────────────────────────────────────────────────────────────
+  { keywords: ["pet", "dog", "cat", "kibble", "litter"], emoji: "🐾" },
+
+  // ── Nuts & seeds ────────────────────────────────────────────────────────
+  { keywords: ["nut", "almond", "cashew", "peanut", "walnut", "pecan", "pistachio", "seed", "sunflower", "pumpkin seed", "chia", "flax"], emoji: "🥜" },
+
+  // ── Grains & pasta ──────────────────────────────────────────────────────
+  { keywords: ["rice", "pasta", "noodle", "grain", "oat", "cereal", "flour", "quinoa", "couscous", "barley", "farro", "bulgur", "polenta", "cornmeal", "panko", "breadcrumb"], emoji: "🌾" },
+
+  // ── Baking ──────────────────────────────────────────────────────────────
+  { keywords: ["baking soda", "baking powder", "yeast", "vanilla extract", "extract", "food coloring", "sprinkle", "frosting"], emoji: "🧁" },
+  { keywords: ["sugar", "sweetener", "stevia", "splenda"], emoji: "🍯" },
+
+  // ── Wraps & foil & bags ─────────────────────────────────────────────────
+  { keywords: ["aluminum foil", "plastic wrap", "parchment", "wax paper", "ziploc", "storage bag", "trash bag", "garbage bag"], emoji: "🧻" },
 ];
 
 /**
  * getItemEmoji(item) — Returns a specific emoji icon for a product based on its
- * name, scanTitle, and category. Uses keyword matching against _EMOJI_MAP.
+ * name, scanTitle, and category. If the user has manually set a customEmoji on
+ * the item, that always wins. Otherwise uses keyword matching against _EMOJI_MAP.
  * Falls back to 🛒 (shopping cart) for unknown items.
  *
- * @param {object} item - Item with at least { name } and optionally { scanTitle, category }
+ * @param {object} item - Item with at least { name } and optionally { scanTitle, category, customEmoji }
  * @returns {string} A single emoji character
  */
 export function getItemEmoji(item) {
   if (!item) return "🛒";
+
+  // User-set custom emoji always takes priority over auto-assignment
+  if (item.customEmoji) return item.customEmoji;
 
   // Build a combined lowercase string from all available text fields for matching
   const text = [
