@@ -1022,14 +1022,14 @@ to every function and every major code block — this is non-negotiable.
 
 #### 1. FAB Button: Label Removed, Size/Opacity Shrink After 2s
 
-**What changed:** The floating action button no longer shows any text label. It starts as a larger (64px), fully opaque gold circle when a tab loads, then after 2 seconds it smoothly shrinks to 48px and fades to 50% opacity. Tapping it at any size still triggers the correct add action for the current tab.
+**What changed:** The floating action button no longer shows any text label. It starts as a larger (64px), fully opaque gold circle when a tab loads, then after 2 seconds it smoothly shrinks to 48px and fades to 55% opacity via a 0.8s cubic-bezier(0.4, 0, 0.2, 1) transition. Tapping it at any size still triggers the correct add action for the current tab.
 
 **Why:** The animated text label was unnecessary visual noise. A simple size/opacity transition communicates the same "it's here but not in your way" concept more cleanly.
 
 **How it works:**
-- CSS: `.fab` starts at 64px with full opacity. Transition on `width`, `height`, `font-size`, and `opacity`. New `.fab.settled` class sets 48px size and `opacity: .5`.
+- CSS: `.fab` starts at 64px with full opacity. Transition on `width`, `height`, `font-size`, and `opacity` uses `cubic-bezier(0.4, 0, 0.2, 1)` over `0.8s` for a smooth, natural ease-in-out curve. New `.fab.settled` class sets 48px size and `opacity: .55`.
 - JS: `_updateFAB(tab)` removes `settled` class on tab switch (reset to large), then adds it after 2-second timeout. No label HTML is generated.
-- Removed: `.fab-label`, `@keyframes fabLabelIn`, `.fab-label.fade-out`, `@keyframes fabLabelOut` CSS rules. Removed `label` field from `FAB_CONFIG`. Renamed timer to `_fabSettleTimer`.
+- Removed (earlier): `.fab-label`, `@keyframes fabLabelIn`, `.fab-label.fade-out`, `@keyframes fabLabelOut` CSS rules. Removed `label` field from `FAB_CONFIG`. Renamed timer to `_fabSettleTimer`.
 
 **Files changed:**
 - `src/styles.css` — Replaced label animation CSS with `.fab.settled` shrink/fade class

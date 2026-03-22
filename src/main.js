@@ -327,7 +327,7 @@ let _fabSettleTimer = null;
 
 // _updateFAB(tab) — shows/hides the FAB and sets its onclick for the given tab.
 // Resets the FAB to large/opaque, then adds "settled" class after 2 seconds
-// to smoothly shrink it and reduce opacity to 50%.
+// to smoothly shrink it and reduce opacity to 55% (0.8s cubic-bezier transition).
 function _updateFAB(tab) {
   const fab = g("fab-btn");
   if (!fab) return;
@@ -345,7 +345,7 @@ function _updateFAB(tab) {
     // Reset to large, fully opaque state on tab switch
     fab.classList.remove("settled");
 
-    // After 2 seconds, shrink + fade to 50% opacity via CSS transition
+    // After 2 seconds, shrink + fade to 55% opacity via smooth 0.8s CSS transition
     clearTimeout(_fabSettleTimer);
     _fabSettleTimer = setTimeout(() => {
       fab.classList.add("settled");
