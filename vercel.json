@@ -9,5 +9,11 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/recipe/:id", "destination": "/api/recipe/:id" }
+  ],
+  "crons": [
+    {
+      "path": "/api/check-jwt-expiry",
+      "schedule": "0 9 * * *"
+    }
   ]
 }
