@@ -44,6 +44,7 @@ export const state = {
   cookLog: [],            // history of cooked meals — used for analytics and "cook again" suggestions
   wasteLog: [],           // history of wasted/expired items — used for waste-reduction insights
   activity: [],           // recent household activity entries — populated by real-time listener
+  productPrefs: {},       // cached product preferences keyed by normalized name — { prepCategory, unit, location }
 
   // ── Ephemeral / UI-only state ────────────────────────────────────────────
   // These are never persisted to Firestore. They control transient UI state

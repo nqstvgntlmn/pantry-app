@@ -202,7 +202,7 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 .srow{display:flex;align-items:center;gap:6px;margin-top:12px}.slb{font-size:.72rem;color:var(--mt)}
 .arow{display:flex;gap:8px;margin-top:12px}
 /* Extra bottom padding so content scrolls above the floating pill nav */
-.hbody{padding:0 16px 16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1;overflow-y:auto}
+.hbody{padding:0 16px 16px;padding-bottom:calc(56px + var(--safe) + 80px);flex:1;overflow-y:auto}
 .setbtn{width:38px;height:38px;border-radius:12px;background:var(--card);border:1px solid var(--b1);display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:pointer;flex-shrink:0;transition:border-color .2s}
 .setbtn:active{border-color:var(--ac)}
 /* Home section header — bold white text with gold left border for hierarchy.
@@ -275,7 +275,7 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 .itabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;margin-top:14px;padding:0 6px;overflow-x:auto}
 .itab{flex:1;min-width:52px;padding:11px 4px;text-align:center;font-size:.72rem;font-weight:600;color:var(--mt);cursor:pointer;border-bottom:2.5px solid transparent;transition:all .18s;white-space:nowrap;letter-spacing:.03em}
 .itab.active{color:var(--ac);border-bottom-color:var(--ac)}
-.ibody{padding:16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1}
+.ibody{padding:16px;padding-bottom:calc(56px + var(--safe) + 80px);flex:1}
 .lgrp{margin-bottom:20px}
 /* Location group header — bold white text with gold left border for hierarchy */
 .lgt{font-size:.66rem;text-transform:uppercase;letter-spacing:.18em;color:var(--tx);margin-bottom:9px;display:flex;align-items:center;gap:10px;font-weight:600;padding-left:10px;border-left:2px solid var(--ac)}
@@ -299,7 +299,7 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 .rtabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;padding:0 6px;margin-top:14px}
 .rtab{flex:1;padding:11px 4px;text-align:center;font-size:.72rem;font-weight:600;color:var(--mt);cursor:pointer;border-bottom:2.5px solid transparent;transition:all .18s;letter-spacing:.03em}
 .rtab.active{color:var(--ac);border-bottom-color:var(--ac)}
-.rbody{padding:14px 16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1}
+.rbody{padding:14px 16px;padding-bottom:calc(56px + var(--safe) + 80px);flex:1}
 /* Recipe card — gradient background, warm border, hover elevation */
 /* No transform animation on tap — only border highlight. Prevents jitter on recipe cards. */
 .rcd{background:var(--card-grad);border:1px solid var(--card-border);border-top-color:var(--card-border-top);border-radius:16px;padding:18px;margin-bottom:10px;cursor:pointer;transition:box-shadow .2s ease,border-color .2s;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04)}
@@ -315,7 +315,7 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 .sbdg{font-size:.68rem;padding:2px 9px;border-radius:20px;background:var(--sf);color:var(--mt);border:1px solid var(--b1)}
 
 /* ── SHOPPING ── */
-.shbody{padding:16px;padding-bottom:calc(56px + var(--safe) + 40px);flex:1}
+.shbody{padding:16px;padding-bottom:calc(56px + var(--safe) + 80px);flex:1}
 /* Shopping item card — gradient background with warm ambient top-light border */
 /* No transform animation on tap — only border highlight. Prevents jitter on shopping rows. */
 .shit{background:var(--card-grad);border:1px solid var(--card-border);border-top-color:var(--card-border-top);border-radius:14px;padding:17px 19px;display:flex;align-items:center;gap:12px;margin-bottom:7px;cursor:pointer;transition:border-color .15s,opacity .15s;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04)}
@@ -415,7 +415,7 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 .cb.asst strong{color:var(--ac)}.cb.thinking{opacity:.55;font-style:italic}
 .csvbtn{margin-top:10px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;background:var(--acd);border:1px solid var(--ac);color:var(--ac);font-size:.74rem;font-weight:700;cursor:pointer;font-family:"DM Sans",sans-serif}
 /* Chat input area: extra bottom padding for floating pill nav */
-.chia{padding:12px 16px;border-top:1px solid var(--b1);background:var(--sf);display:flex;gap:10px;align-items:flex-end;flex-shrink:0;padding-bottom:calc(56px + var(--safe) + 32px)}
+.chia{padding:12px 16px;border-top:1px solid var(--b1);background:var(--sf);display:flex;gap:10px;align-items:flex-end;flex-shrink:0;padding-bottom:calc(56px + var(--safe) + 60px)}
 .chta{flex:1;background:var(--card);border:1.5px solid var(--b2);border-radius:14px;padding:12px 16px;color:var(--tx);font-size:.9rem;font-family:"DM Sans",sans-serif;resize:none;min-height:44px;max-height:120px;line-height:1.5}
 .chta:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px rgba(212,168,83,.1)}
 .chsb{width:44px;height:44px;border-radius:13px;background:var(--ac);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;transition:all .15s}
@@ -1171,6 +1171,54 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* "Add all low items" button at top of category detail */
 .prep-add-all-low{margin-bottom:12px;font-size:.88rem}
 
+/* ── SUPPLIES SEARCH BAR ─────────────────────────────────────────────────── */
+/* Search input at the top of the Supplies tab — searches across all locations */
+.inv-search-input{width:100%;padding:10px 14px;border-radius:12px;border:1.5px solid var(--b2);background:var(--card);color:var(--tx);font-size:.88rem;font-family:"DM Sans",sans-serif;transition:border-color .15s}
+.inv-search-input:focus{border-color:var(--ac);outline:none}
+
+/* ── CATEGORY REVIEW BADGE ─────────────────────────────────────────────── */
+/* Badge button on Supplies tab showing number of items needing category review */
+.cat-review-badge{background:var(--amd) !important;color:var(--am) !important;border:1.5px solid var(--am) !important;font-weight:600;white-space:nowrap;font-size:.78rem !important;padding:6px 10px !important}
+.cat-review-badge:active{transform:scale(.95)}
+
+/* ── CATEGORY REVIEW OVERLAY ─────────────────────────────────────────────── */
+/* Each row in the category review list */
+.cat-review-row{display:flex;align-items:center;gap:10px;padding:14px 0;border-bottom:1px solid var(--b1)}
+.cat-review-info{flex:1;min-width:0}
+.cat-review-name{font-size:.9rem;font-weight:500;color:var(--tx);line-height:1.3}
+.cat-review-suggestion{font-size:.75rem;color:var(--mt);margin-top:3px}
+.cat-review-actions{display:flex;gap:6px;flex-shrink:0}
+
+/* ── SHOPPING PREP SEARCH BAR ─────────────────────────────────────────────── */
+/* Search input at the top of the Shopping Prep overlay */
+.prep-search-input{width:100%;padding:10px 14px;border-radius:12px;border:1.5px solid var(--b2);background:var(--card);color:var(--tx);font-size:.88rem;font-family:"DM Sans",sans-serif;transition:border-color .15s}
+.prep-search-input:focus{border-color:var(--ac);outline:none}
+
+/* Category headers shown in search results */
+.prep-search-cat-header{font-size:.78rem;font-weight:600;color:var(--ac);text-transform:uppercase;letter-spacing:.06em;padding:12px 0 4px;border-bottom:1px solid var(--b1);margin-top:8px}
+.prep-search-cat-header:first-child{margin-top:0}
+
+/* ── SHOPPING PREP QUANTITY PICKER ─────────────────────────────────────── */
+/* Inline quantity picker shown when tapping the cart button */
+.prep-qty-picker{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.prep-picker-val{min-width:24px;text-align:center;font-size:.85rem;font-weight:600;color:var(--tx)}
+.prep-picker-confirm{width:30px;height:30px;border-radius:8px;border:1.5px solid var(--gn);background:var(--gnd);color:var(--gn);font-size:.85rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;font-family:"DM Sans",sans-serif}
+.prep-picker-confirm:active{background:var(--gn);color:#0c0c0a;transform:scale(.92)}
+
+/* ── SHOPPING PREP ADD CATEGORY ─────────────────────────────────────────── */
+/* "+ Add Category" button at the bottom of the category grid */
+.prep-add-cat-btn{margin-top:16px;font-size:.88rem;width:100%}
+/* Inline form for adding a new category */
+.prep-add-cat-form{padding:0 0 16px}
+
+/* ── CATEGORY ACTION MENU (long-press) ─────────────────────────────────── */
+/* Floating context menu shown on long-press of custom category cards */
+.prep-cat-action-backdrop{position:fixed;inset:0;z-index:299;background:transparent}
+.prep-cat-action-menu{position:fixed;z-index:300;background:var(--card);border:1px solid var(--b2);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.4);padding:6px 0;min-width:180px}
+.prep-cat-action{padding:12px 16px;font-size:.85rem;font-weight:500;color:var(--tx);cursor:pointer;transition:background .12s;font-family:"DM Sans",sans-serif}
+.prep-cat-action:active{background:var(--card2)}
+.prep-cat-action-danger{color:var(--rd)}
+
 /* ── CATEGORY PICKER & BADGE ─────────────────────────────────────────────── */
 /* Compact tappable pill showing current category on add sheets and detail views */
 .cat-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:.75rem;font-weight:500;color:var(--mt);background:var(--card);border:1px solid var(--b2);cursor:pointer;transition:all .15s;margin-top:8px;font-family:"DM Sans",sans-serif;-webkit-tap-highlight-color:transparent}
@@ -1347,11 +1395,13 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
    More generous padding and spacing throughout to reduce cramped feel. */
 /* Bottom padding must clear the floating pill nav + FAB + safe area.
    Nav pill is now 58px tall, 20px from bottom — needs ~50px extra clearance. */
-.hbody{padding:4px 20px calc(58px + var(--safe) + 48px)}
-.ibody{padding:18px 20px}
+/* Extra bottom padding so the last item in every scrollable list clears the FAB + nav bar.
+   Nav pill = 58px, FAB = 48-64px above it, plus safe area. Total clearance ~140px. */
+.hbody{padding:4px 20px calc(58px + var(--safe) + 80px)}
+.ibody{padding:18px 20px calc(58px + var(--safe) + 80px)}
 /* Shopping body needs extra bottom padding to clear FAB + nav bar so last items aren't clipped */
-.shbody{padding:18px 20px calc(58px + var(--safe) + 68px)}
-.rbody{padding:16px 20px}
+.shbody{padding:18px 20px calc(58px + var(--safe) + 80px)}
+.rbody{padding:16px 20px calc(58px + var(--safe) + 80px)}
 .ilst{gap:9px}
 .expl{gap:9px}
 /* More space between shopping items */

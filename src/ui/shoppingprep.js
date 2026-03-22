@@ -12,12 +12,12 @@
 // persisted to Firestore (auto-saved with 500ms debounce).
 
 import { state } from '../state.js';
-import { svi } from '../db.js';
+import { svi, dbSet } from '../db.js';
 import { g, showNotif, showOv, hideOv, toTitleCase, formatQty, splitQty, combineQty, mapOffCategory } from '../helpers.js';
 import { consolidateShopItem } from './shopping.js';
 import { _defaultThreshold } from './home.js';
 import { enableSwipeBack, disableSwipeBack } from './swipeback.js';
-import { PREP_CATEGORIES, getAllCategories, getCategoryDisplay, autoCategorize, openCategoryPicker, changeInvItemCategory, deleteCustomCategory } from './categorypicker.js';
+import { PREP_CATEGORIES, getAllCategories, getCategoryDisplay, autoCategorize, openCategoryPicker, changeInvItemCategory, deleteCustomCategory, renameCustomCategory, reorderCustomCategory, addSubCategory, confirmCreateCustomCategory, showCreateCustomCategory, DEFAULT_CUSTOM_EMOJI, openEmojiPicker } from './categorypicker.js';
 
 // PREP_CATEGORIES now imported from categorypicker.js (single source of truth)
 
@@ -30,6 +30,84 @@ let _qtyUpdated = 0;             // count of items whose qty was changed this se
 let _currentCategory = null;     // currently viewing category key, null = grid view
 let _saveTimers = new Map();     // per-item debounce timers for qty auto-save (itemId → timerId)
 let _qtyCounted = new Set();     // item IDs whose qty change has been counted for the summary
+let _prepSearchQuery = "";       // current search query for filtering across all categories
+
+/**
+ * filterPrepSearch() — Called on search input change. Updates the search query
+ * and re-renders the grid or detail view to show matching items.
+ */
+export function filterPrepSearch() {
+  const inp = g("prep-search");
+  _prepSearchQuery = inp ? inp.value.trim().toLowerCase() : "";
+
+  // If we're in grid view, render search results across all categories
+  if (!_currentCategory) {
+    if (_prepSearchQuery) {
+      _renderSearchResults();
+    } else {
+      _renderGrid();
+    }
+  } else {
+    // In detail view, re-render to filter within the category
+    _renderDetail(_currentCategory);
+  }
+}
+
+/**
+ * _renderSearchResults() — Renders search results across ALL categories.
+ * Groups matching items under their respective category headers.
+ */
+function _renderSearchResults() {
+  const body = g("prep-body");
+  if (!body) return;
+
+  const groups = _groupByCategory();
+  const allCats = getAllCategories();
+  let html = "";
+  let totalMatches = 0;
+
+  for (const cat of allCats) {
+    const items = (groups.get(cat.key) || []).filter(item => {
+      const searchStr = [item.scanTitle || "", item.name || "", item.brand || ""].join(" ").toLowerCase();
+      return searchStr.includes(_prepSearchQuery);
+    });
+    if (!items.length) continue;
+    totalMatches += items.length;
+
+    // Category header
+    html += `<div class="prep-search-cat-header">${cat.emoji} ${cat.name} (${items.length})</div>`;
+
+    // Render matching items with full controls
+    for (const item of items) {
+      const isLow = _isLowStock(item);
+      const isAdded = _addedToShop.has(item.id);
+      const displayName = toTitleCase(item.scanTitle || item.name);
+
+      html += `<div class="prep-item${isLow ? " prep-item-low" : ""}" id="prep-row-${item.id}">
+        <div class="prep-item-info" style="flex:1;min-width:0">
+          <div class="prep-item-name">${displayName}</div>
+        </div>
+        <div class="prep-qty-group">
+          <button class="prep-qty-btn" onclick="prepQtyStep('${item.id}',-1)">−</button>
+          <span class="prep-qty-val" id="prep-qty-${item.id}">${formatQty(item.qty)}</span>
+          <button class="prep-qty-btn" onclick="prepQtyStep('${item.id}',1)">+</button>
+        </div>
+        <div class="prep-unit">${item.unit || "Unit"}</div>
+        <button class="prep-shop-btn${isAdded ? " prep-shop-added" : ""}" id="prep-shop-${item.id}"
+          onclick="prepAddToShop('${item.id}')"${isAdded ? " disabled" : ""}>
+          ${isAdded ? "✓ Added" : "🛒"}
+        </button>
+      </div>`;
+    }
+  }
+
+  if (!totalMatches) {
+    html = `<div class="es" style="padding:40px 20px"><div class="ei">🔍</div>
+      <p>No items matching "${_prepSearchQuery}"</p></div>`;
+  }
+
+  body.innerHTML = html;
+}
 
 // ── CATEGORY MAPPING ───────────────────────────────────────────────────────
 
@@ -132,8 +210,13 @@ export function openShoppingPrep() {
   _qtyUpdated = 0;
   _currentCategory = null;
   _qtyCounted = new Set();
+  _prepSearchQuery = "";
   _saveTimers.forEach(timerId => clearTimeout(timerId));
   _saveTimers.clear();
+
+  // Clear search input
+  const searchInp = g("prep-search");
+  if (searchInp) searchInp.value = "";
 
   // Render the category grid and show the overlay
   _renderGrid();
@@ -205,7 +288,10 @@ function _renderGrid() {
     }
 
     // Show card even if empty (with 0 count) for complete category coverage.
-    // Custom categories support long-press to delete.
+    // Skip sub-categories (they render under their parent in detail view)
+    if (cat.isSubCategory) continue;
+
+    // Long-press opens management options for custom categories
     const longPressAttr = isCustom ? ` ontouchstart="prepCatLongPress(event,'${cat.key}')" oncontextmenu="prepCatLongPress(event,'${cat.key}')"` : "";
 
     html += `<div class="prep-cat-card${lowCount > 0 ? " prep-cat-low" : ""}" onclick="openPrepCategory('${cat.key}')"${longPressAttr}>
@@ -217,6 +303,12 @@ function _renderGrid() {
   }
 
   html += "</div>";
+
+  // "+ Add Category" button at the bottom of the grid
+  html += `<button class="btn bs bf prep-add-cat-btn" onclick="openPrepAddCategory()">
+    + Add Category
+  </button>`;
+
   body.innerHTML = html;
 }
 
@@ -356,21 +448,68 @@ export function prepToggleVerify(itemId) {
 }
 
 /**
- * prepAddToShop(itemId) — Adds a single inventory item to the shopping list.
- * Uses consolidateShopItem for dedup/qty-merge. Updates the button to show "✓ Added".
+ * prepAddToShop(itemId) — Shows a quick quantity picker before adding an item
+ * to the shopping list. The picker appears inline next to the cart button
+ * for a fast, non-intrusive selection experience.
  */
-export async function prepAddToShop(itemId) {
+export function prepAddToShop(itemId) {
   // Prevent double-add
   if (_addedToShop.has(itemId)) return;
 
   const item = state.inv.find(i => i.id === itemId);
   if (!item) return;
 
+  // Replace the cart button with an inline quantity stepper + confirm button
+  const btn = g(`prep-shop-${itemId}`);
+  if (!btn) return;
+
+  // Create the inline quantity picker
+  const parent = btn.parentElement;
+  const picker = document.createElement("div");
+  picker.className = "prep-qty-picker";
+  picker.id = `prep-picker-${itemId}`;
+  picker.innerHTML = `
+    <button class="prep-qty-btn" onclick="event.stopPropagation();prepPickerStep('${itemId}',-1)">−</button>
+    <span class="prep-picker-val" id="prep-pick-val-${itemId}">1</span>
+    <button class="prep-qty-btn" onclick="event.stopPropagation();prepPickerStep('${itemId}',1)">+</button>
+    <button class="prep-picker-confirm" onclick="event.stopPropagation();prepConfirmAdd('${itemId}')">✓</button>
+  `;
+
+  // Hide the original cart button and show the picker
+  btn.style.display = "none";
+  parent.appendChild(picker);
+}
+
+// Tracks qty values for the inline quantity pickers (itemId → qty)
+const _pickerQtys = new Map();
+
+/**
+ * prepPickerStep(itemId, delta) — Adjusts the quantity in the inline picker by +/- 1.
+ */
+export function prepPickerStep(itemId, delta) {
+  const current = _pickerQtys.get(itemId) || 1;
+  const newQty = Math.max(1, Math.min(99, current + delta));
+  _pickerQtys.set(itemId, newQty);
+  const el = g(`prep-pick-val-${itemId}`);
+  if (el) el.textContent = newQty;
+}
+
+/**
+ * prepConfirmAdd(itemId) — Confirms the quantity and adds the item to shopping list.
+ * Uses the quantity from the inline picker.
+ */
+export async function prepConfirmAdd(itemId) {
+  const item = state.inv.find(i => i.id === itemId);
+  if (!item) return;
+
+  const qty = _pickerQtys.get(itemId) || 1;
+  _pickerQtys.delete(itemId);
+
   // Add to shopping list via the consolidation-aware function
   await consolidateShopItem({
     id: "shop-" + Date.now() + "-" + Math.random().toString(36).slice(2),
     name: item.name,
-    qty: 1,
+    qty: qty,
     unit: item.unit || "Unit",
     checked: false,
     brand: item.brand || "",
@@ -379,11 +518,15 @@ export async function prepAddToShop(itemId) {
 
   _addedToShop.add(itemId);
 
-  // Update the button to show "✓ Added" state
+  // Remove the picker and show "✓ Added" on the original button
+  const picker = g(`prep-picker-${itemId}`);
+  if (picker) picker.remove();
+
   const btn = g(`prep-shop-${itemId}`);
   if (btn) {
+    btn.style.display = "";
     btn.classList.add("prep-shop-added");
-    btn.textContent = "✓ Added";
+    btn.textContent = `✓ ${qty > 1 ? qty + " " : ""}Added`;
     btn.disabled = true;
   }
 }
@@ -504,14 +647,173 @@ export function prepRecategorize(itemId) {
 
 /**
  * prepCatLongPress(event, catKey) — Handles long-press / context menu on a
- * custom category card in the grid. Shows a confirm dialog to delete the category.
+ * custom category card in the grid. Shows an inline action menu with
+ * Rename, Add Sub-category, Delete, and Reorder options.
  */
-export async function prepCatLongPress(event, catKey) {
+export function prepCatLongPress(event, catKey) {
   event.preventDefault();
   event.stopPropagation();
-  // Delete the custom category and re-render the grid
+
+  // Remove any existing action menu first
+  const existing = document.getElementById("prep-cat-actions");
+  if (existing) existing.remove();
+
+  // Build the action menu
+  const menu = document.createElement("div");
+  menu.id = "prep-cat-actions";
+  menu.className = "prep-cat-action-menu";
+  menu.innerHTML = `
+    <div class="prep-cat-action" onclick="prepCatRename('${catKey}')">✏️ Rename</div>
+    <div class="prep-cat-action" onclick="prepCatAddSub('${catKey}')">📁 Add Sub-category</div>
+    <div class="prep-cat-action" onclick="prepCatReorder('${catKey}',-1)">⬆️ Move Up</div>
+    <div class="prep-cat-action" onclick="prepCatReorder('${catKey}',1)">⬇️ Move Down</div>
+    <div class="prep-cat-action prep-cat-action-danger" onclick="prepCatDelete('${catKey}')">🗑 Delete</div>
+  `;
+
+  // Create backdrop to dismiss the menu
+  const backdrop = document.createElement("div");
+  backdrop.className = "prep-cat-action-backdrop";
+  backdrop.onclick = () => { menu.remove(); backdrop.remove(); };
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(menu);
+
+  // Position near the touch/click point
+  const x = event.touches ? event.touches[0].clientX : event.clientX;
+  const y = event.touches ? event.touches[0].clientY : event.clientY;
+  menu.style.left = Math.min(x, window.innerWidth - 200) + "px";
+  menu.style.top = Math.min(y, window.innerHeight - 250) + "px";
+}
+
+/**
+ * prepCatRename(catKey) — Prompts user to rename a custom category.
+ * Shows inline input fields for name and emoji.
+ */
+export function prepCatRename(catKey) {
+  _dismissCatActionMenu();
+  const customs = state.cfg.customPrepCategories || [];
+  const cat = customs.find(c => c.key === catKey);
+  if (!cat) return;
+
+  const newName = prompt(`Rename "${cat.name}" to:`, cat.name);
+  if (!newName || !newName.trim()) return;
+
+  renameCustomCategory(catKey, newName.trim(), null);
+  _renderGrid();
+}
+
+/**
+ * prepCatAddSub(catKey) — Prompts user to add a sub-category under a parent category.
+ */
+export function prepCatAddSub(catKey) {
+  _dismissCatActionMenu();
+  const name = prompt("Sub-category name:");
+  if (!name || !name.trim()) return;
+
+  addSubCategory(catKey, name.trim(), DEFAULT_CUSTOM_EMOJI);
+  _renderGrid();
+}
+
+/**
+ * prepCatReorder(catKey, direction) — Moves a custom category up or down in the list.
+ */
+export async function prepCatReorder(catKey, direction) {
+  _dismissCatActionMenu();
+  await reorderCustomCategory(catKey, direction);
+  _renderGrid();
+}
+
+/**
+ * prepCatDelete(catKey) — Deletes a custom category after confirmation.
+ */
+export async function prepCatDelete(catKey) {
+  _dismissCatActionMenu();
   await deleteCustomCategory(catKey);
   _renderGrid();
+}
+
+/**
+ * _dismissCatActionMenu() — Removes the category action menu and its backdrop.
+ */
+function _dismissCatActionMenu() {
+  const menu = document.getElementById("prep-cat-actions");
+  const backdrop = document.querySelector(".prep-cat-action-backdrop");
+  if (menu) menu.remove();
+  if (backdrop) backdrop.remove();
+}
+
+/**
+ * openPrepAddCategory() — Shows an inline form at the bottom of the grid
+ * for creating a new custom category. Uses the same flow as the category picker.
+ */
+export function openPrepAddCategory() {
+  const body = g("prep-body");
+  if (!body) return;
+
+  // Check if the add form already exists
+  let form = document.getElementById("prep-add-cat-form");
+  if (form) { form.scrollIntoView({ behavior: "smooth" }); return; }
+
+  // Create the inline add form
+  form = document.createElement("div");
+  form.id = "prep-add-cat-form";
+  form.className = "prep-add-cat-form";
+  form.innerHTML = `
+    <div class="cat-create-form" style="margin-top:12px">
+      <div style="font-size:.82rem;font-weight:600;color:var(--tx);margin-bottom:8px">New Category</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="emoji-trigger-btn" id="prepCatEmojiBtn" onclick="openPrepCatEmojiPicker(this)">📁</button>
+        <input class="fi cat-create-input" id="prepCatNameInput" placeholder="Category name..." style="flex:1"/>
+        <button class="btn bp bsm" onclick="confirmPrepAddCategory()">Add</button>
+      </div>
+    </div>
+  `;
+
+  body.appendChild(form);
+  form.scrollIntoView({ behavior: "smooth" });
+  setTimeout(() => { const inp = g("prepCatNameInput"); if (inp) inp.focus(); }, 150);
+}
+
+// Tracks the selected emoji for the prep add category form
+let _prepCatEmoji = DEFAULT_CUSTOM_EMOJI;
+
+/**
+ * openPrepCatEmojiPicker(triggerEl) — Opens the emoji picker for the add category form.
+ */
+export function openPrepCatEmojiPicker(triggerEl) {
+  openEmojiPicker(triggerEl, _prepCatEmoji, (emoji) => {
+    _prepCatEmoji = emoji;
+    const btn = g("prepCatEmojiBtn");
+    if (btn) btn.textContent = emoji;
+  });
+}
+
+/**
+ * confirmPrepAddCategory() — Creates the new category and adds it to Firestore.
+ * Re-renders the grid to show the new category immediately.
+ */
+export async function confirmPrepAddCategory() {
+  const inp = g("prepCatNameInput");
+  const name = inp ? inp.value.trim() : "";
+  if (!name) { showNotif("Please enter a category name"); return; }
+
+  // Generate a unique key from the name
+  const key = "custom-" + name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 40) + "-" + Date.now();
+  const newCat = { key, name, emoji: _prepCatEmoji };
+
+  // Add to the in-memory config and persist to Firestore
+  const existing = state.cfg.customPrepCategories || [];
+  state.cfg.customPrepCategories = [...existing, newCat];
+
+  try {
+    await dbSet(`households/${state.hid}/settings/config`, state.cfg);
+    showNotif(`${_prepCatEmoji} ${name} category created!`);
+    _prepCatEmoji = DEFAULT_CUSTOM_EMOJI; // Reset emoji for next time
+    _renderGrid(); // Re-render to show the new category
+  } catch (e) {
+    console.error("Failed to save custom category:", e);
+    showNotif("Failed to save category");
+  }
 }
 
 export function prepAddNewItem() {

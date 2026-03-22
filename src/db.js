@@ -854,6 +854,17 @@ export async function loadFirestoreData() {
       }
     }
 
+    // ── PRODUCT PREFERENCES ──
+    // Load saved product category/unit/location preferences into state.productPrefs
+    // keyed by normalized product name. Used for auto-categorization of recurring items.
+    try {
+      const prefDocs = await dbList(`households/${state.hid}/productPreferences`);
+      state.productPrefs = {};
+      for (const doc of prefDocs) {
+        if (doc.id) state.productPrefs[doc.id] = doc;
+      }
+    } catch (e) { console.warn("[loadFirestoreData] productPreferences load skipped:", e.message); }
+
     // ── WASTE LOG ──
     // Same structure and migration pattern as cook log
     const wlDocs = await dbList(`households/${state.hid}/wastelog`);

@@ -44,7 +44,7 @@ import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, 
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
-import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, stopInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, editInvDetailCombined, saveInvDetailCombined, initInvQtyToolbar, invQtyStep, invFracChange, resetInvStagger, openInvAddCatPicker, changeInvCategory, changeInvEmoji, toggleInvViewMode } from './ui/inventory.js';
+import { renderInv, openAdj, remItem, updL, adjQ, adjQD, adjE, adjNote, adjUnit, adjDoNotRestock, setIT, addManual, valMA, chgMQ, selML, importDoc, adjLowThresh, adjLowThreshD, openInvAddSheet, closeInvAddSheet, invAddScan, invAddVoice, setInvAddLoc, toggleInvAddNote, qaddInv, onInvInput, pickInvInlineResult, initInvVoice, toggleInvVoice, stopInvVoice, openInvItemDetail, closeInvItemDetail, deleteInvItemImage, triggerInvPhotoUpload, handleInvPhotoSelected, addInvToShopping, changeInvUnit, changeInvThreshold, changeInvThresholdDirect, toggleDoNotRestock, changeInvLocation, changeInvQty, changeInvQtyDirect, changeInvFrac, changeInvThreshFrac, changeInvExpiry, clearInvExpiry, setInvExpiry, changeInvNote, editInvDetailName, saveInvDetailName, editInvDetailSubtitle, saveInvDetailSubtitle, editInvDetailCombined, saveInvDetailCombined, initInvQtyToolbar, invQtyStep, invFracChange, resetInvStagger, openInvAddCatPicker, changeInvCategory, changeInvEmoji, toggleInvViewMode, filterInvSearch, openCategoryReview, closeCategoryReview, confirmCatReview, changeCatReview } from './ui/inventory.js';
 
 // Shopping screen: quick-add, toggle items, aisle grouping, share list,
 // "add to kitchen" flow, bulk purchase, deal search
@@ -76,8 +76,8 @@ import { scheduleMealReminders } from './ui/reminders.js';
 import { loadCfgUI, saveSettings, saveZipcode, toggleNotif, testNotif, scheduleNotifCheck, addHousehold, switchHousehold, removeHousehold, applyTheme, setMode, initTheme, refreshSettingsUI, copyInviteCode, shareInviteCode, regenInviteCode, removeMemberFromHH, transferOwnershipUI, leaveHousehold, checkMembershipOnInteraction, enrichExistingItems, bulkPublishAll, regenAllSummaries, removeDuplicateCommunityRecipes, removeMyCommRecipes, removeHouseholdCommRecipes, deleteAccount, scanRecipesForIssues, closeScanResults, fixAllFlaggedRecipes, openUtilities, closeUtilities, clearScanCacheUI, editCustomCat, pickSettingsCatEmoji, pickEditCatEmoji, saveEditCustomCat, addCustomCatFromSettings, renderCustomCategories, openSettingsAddEmojiPicker, openSettingsEditEmojiPicker } from './ui/settings.js';
 
 // Shopping Prep: pre-shop audit flow — walk through categories, verify quantities, build shopping list
-import { openShoppingPrep, closeShoppingPrep, openPrepCategory, backToGrid, prepToggleVerify, prepAddToShop, prepAddAllLow, prepQtyStep, prepAddNewItem, prepRecategorize, prepCatLongPress } from './ui/shoppingprep.js';
-import { selectCategory, closeCategoryPicker, showCreateCustomCategory, pickCustomEmoji, confirmCreateCustomCategory, deleteCustomCategory, openCatCreateEmojiPicker, selectEmojiFromPicker, closeEmojiPicker } from './ui/categorypicker.js';
+import { openShoppingPrep, closeShoppingPrep, openPrepCategory, backToGrid, prepToggleVerify, prepAddToShop, prepAddAllLow, prepQtyStep, prepAddNewItem, prepRecategorize, prepCatLongPress, filterPrepSearch, prepPickerStep, prepConfirmAdd, openPrepAddCategory, openPrepCatEmojiPicker, confirmPrepAddCategory, prepCatRename, prepCatAddSub, prepCatReorder, prepCatDelete } from './ui/shoppingprep.js';
+import { selectCategory, closeCategoryPicker, showCreateCustomCategory, pickCustomEmoji, confirmCreateCustomCategory, deleteCustomCategory, openCatCreateEmojiPicker, selectEmojiFromPicker, closeEmojiPicker, confirmItemCategory, saveProductCategory } from './ui/categorypicker.js';
 
 // Onboarding: first-time user experience (4-step walkthrough)
 import { checkOnboarding, onboardNext, finishOnboarding, skipOnboarding } from './ui/onboarding.js';
@@ -557,6 +557,16 @@ window.prepQtyStep = prepQtyStep;             // Adjust item quantity +/- from p
 window.prepAddNewItem = prepAddNewItem;       // Open add-item sheet from prep detail view
 window.prepRecategorize = prepRecategorize;   // Open category picker to recategorize an item in prep
 window.prepCatLongPress = prepCatLongPress;   // Long-press handler for custom category cards in prep grid
+window.filterPrepSearch = filterPrepSearch;   // Search bar filter handler for Shopping Prep
+window.prepPickerStep = prepPickerStep;       // Qty stepper in inline quantity picker
+window.prepConfirmAdd = prepConfirmAdd;       // Confirm add from inline quantity picker
+window.openPrepAddCategory = openPrepAddCategory; // Open inline add-category form in prep grid
+window.openPrepCatEmojiPicker = openPrepCatEmojiPicker; // Emoji picker for prep add-category form
+window.confirmPrepAddCategory = confirmPrepAddCategory; // Confirm new category from prep form
+window.prepCatRename = prepCatRename;         // Rename custom category from long-press menu
+window.prepCatAddSub = prepCatAddSub;         // Add sub-category from long-press menu
+window.prepCatReorder = prepCatReorder;       // Reorder custom category from long-press menu
+window.prepCatDelete = prepCatDelete;         // Delete custom category from long-press menu
 
 // ── Category picker handlers (shared across all surfaces) ──
 window.selectCategory = selectCategory;                       // Select a category in the picker sheet
@@ -573,7 +583,12 @@ window.changeShopCategory = changeShopCategory;               // Change category
 window.openInvAddCatPicker = openInvAddCatPicker;             // Open category picker from Supplies add sheet
 window.changeInvCategory = changeInvCategory;                 // Change category on an inventory item detail
 window.changeInvEmoji = changeInvEmoji;                       // Open emoji picker to customize a supply item's emoji
-window.toggleInvViewMode = toggleInvViewMode;                 // Toggle between list and shelf view in inventory
+window.toggleInvViewMode = toggleInvViewMode;                 // No-op (shelf view removed, always flat list)
+window.filterInvSearch = filterInvSearch;                     // Search bar filter handler for Supplies tab
+window.openCategoryReview = openCategoryReview;               // Open category review overlay
+window.closeCategoryReview = closeCategoryReview;             // Close category review overlay
+window.confirmCatReview = confirmCatReview;                   // Confirm suggested category in review
+window.changeCatReview = changeCatReview;                     // Change category in review via picker
 window.openUniAddCatPicker = openUniAddCatPicker;             // Open category picker from universal add sheet
 window.openScanCatPicker = openScanCatPicker;                 // Open category picker from scan result screen
 

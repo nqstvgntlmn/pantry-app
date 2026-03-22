@@ -15,8 +15,7 @@
 
 import { state } from '../state.js';
 import { g, showNotif, mapOffCategory } from '../helpers.js';
-import { dbSet } from '../db.js';
-import { svi, svShopItem } from '../db.js';
+import { dbSet, svi, svShopItem } from '../db.js';
 
 // ── PREP CATEGORY DEFINITIONS ──────────────────────────────────────────────
 // Each category has a display name, emoji, and keyword lists for mapping
@@ -120,6 +119,16 @@ export const PREP_CATEGORIES = [
       "noodle", "spaghetti", "penne", "macaroni", "couscous", "barley",
       "bulgur", "farro", "polenta", "cornmeal", "breadcrumb", "pancake mix",
       "oatmeal", "granola"]
+  },
+  {
+    key: "pantry",
+    name: "Pantry Staples",
+    emoji: "🏺",
+    // Catch-all for pantry-stored items not covered by other categories
+    keywords: ["pantry", "shelf stable", "canned good", "dry good", "staple",
+      "baking mix", "cooking oil", "shortening", "cornstarch", "gelatin",
+      "yeast", "cocoa", "chocolate chip", "powdered milk", "evaporated",
+      "instant", "bouillon", "broth cube", "stock cube"]
   },
   {
     key: "condiments",
@@ -240,15 +249,22 @@ export function getCustomCategories() {
 /**
  * getAllCategories() — Returns all default + custom categories merged.
  * Custom categories are appended after default ones (before "other").
+ * Includes sub-categories flattened under their parents for complete coverage.
  */
 export function getAllCategories() {
   const customs = getCustomCategories();
   if (!customs.length) return PREP_CATEGORIES;
 
-  // Insert custom categories before "other" (which is always last)
+  // Insert custom categories (and their sub-categories) before "other" (which is always last)
   const result = PREP_CATEGORIES.filter(c => c.key !== "other");
   for (const cc of customs) {
     result.push({ key: cc.key, name: cc.name, emoji: cc.emoji, keywords: [], isCustom: true });
+    // Flatten sub-categories so they're recognized as valid category keys
+    if (cc.children && cc.children.length > 0) {
+      for (const sub of cc.children) {
+        result.push({ key: sub.key, name: sub.name, emoji: sub.emoji, keywords: [], isCustom: true, isSubCategory: true, parentKey: cc.key });
+      }
+    }
   }
   result.push(PREP_CATEGORIES.find(c => c.key === "other"));
   return result;
@@ -653,4 +669,154 @@ export async function changeInvItemCategory(id, catKey) {
   const item = state.inv.find(i => i.id === id);
   if (!item) return;
   await svi({ ...item, prepCategory: catKey });
+}
+
+// ── SUBCATEGORY SUPPORT ────────────────────────────────────────────────────
+// Custom categories can have one level of sub-categories nested under them.
+// Sub-categories are stored as a children[] array on the parent custom category.
+// Example: { key: "custom-...", name: "Asian", emoji: "🍱", children: [{ key: "custom-...-sub-...", name: "Sauces", emoji: "🫙" }] }
+
+/**
+ * addSubCategory(parentKey, name, emoji) — Adds a sub-category under a parent custom category.
+ * Sub-categories share the same Firestore location as their parent (nested in customPrepCategories).
+ */
+export async function addSubCategory(parentKey, name, emoji) {
+  const existing = state.cfg.customPrepCategories || [];
+  const parent = existing.find(c => c.key === parentKey);
+  if (!parent) { showNotif("Parent category not found"); return; }
+
+  // Generate a unique key for the sub-category
+  const subKey = parentKey + "-sub-" + Date.now();
+  const subCat = { key: subKey, name, emoji: emoji || DEFAULT_CUSTOM_EMOJI };
+
+  // Initialize children array if needed, then add the sub-category
+  if (!parent.children) parent.children = [];
+  parent.children.push(subCat);
+
+  try {
+    await dbSet(`households/${state.hid}/settings/config`, state.cfg);
+    showNotif(`Sub-category "${name}" added`);
+  } catch (e) {
+    console.error("Failed to add sub-category:", e);
+    showNotif("Failed to add sub-category");
+  }
+}
+
+/**
+ * reorderCustomCategory(key, direction) — Moves a custom category up or down in the list.
+ * direction: -1 for up, +1 for down. Persists the new order to Firestore.
+ */
+export async function reorderCustomCategory(key, direction) {
+  const cats = state.cfg.customPrepCategories || [];
+  const idx = cats.findIndex(c => c.key === key);
+  if (idx < 0) return;
+
+  const newIdx = idx + direction;
+  // Bounds check — can't move before first or after last
+  if (newIdx < 0 || newIdx >= cats.length) return;
+
+  // Swap positions
+  [cats[idx], cats[newIdx]] = [cats[newIdx], cats[idx]];
+
+  try {
+    await dbSet(`households/${state.hid}/settings/config`, state.cfg);
+    showNotif("Category reordered");
+  } catch (e) {
+    console.error("Failed to reorder category:", e);
+  }
+}
+
+/**
+ * getAllCategories() variant that includes sub-categories flattened for display.
+ * Returns all categories including nested sub-categories with a parentKey field.
+ */
+export function getAllCategoriesFlat() {
+  const customs = getCustomCategories();
+  const result = PREP_CATEGORIES.filter(c => c.key !== "other");
+
+  for (const cc of customs) {
+    result.push({ key: cc.key, name: cc.name, emoji: cc.emoji, keywords: [], isCustom: true });
+    // Flatten sub-categories under their parent
+    if (cc.children && cc.children.length > 0) {
+      for (const sub of cc.children) {
+        result.push({ key: sub.key, name: sub.name, emoji: sub.emoji, keywords: [], isCustom: true, isSubCategory: true, parentKey: cc.key });
+      }
+    }
+  }
+
+  result.push(PREP_CATEGORIES.find(c => c.key === "other"));
+  return result;
+}
+
+// ── PRODUCT CATEGORY MEMORY ─────────────────────────────────────────────────
+// When a user confirms a category for a product name, save it to Firestore
+// under productPreferences/{normalizedName} so future additions auto-categorize.
+
+/**
+ * saveProductCategory(productName, catKey) — Permanently stores a category preference
+ * for a product name. Future additions of this product auto-get this category.
+ */
+export async function saveProductCategory(productName, catKey) {
+  if (!productName || !catKey || !state.hid) return;
+  const normalized = productName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  if (!normalized) return;
+
+  try {
+    await dbSet(`households/${state.hid}/productPreferences/${normalized}`, {
+      prepCategory: catKey,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error("Failed to save product category preference:", e);
+  }
+}
+
+/**
+ * getProductCategory(productName) — Looks up a previously saved category preference
+ * for a product name. Returns the catKey if found, null otherwise.
+ * Checks in-memory first (productPreferences loaded during boot), then falls back.
+ */
+export function getProductCategory(productName) {
+  if (!productName) return null;
+  const normalized = productName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+
+  // Check state.productPrefs if it's been loaded (populated by db.js during loadFirestoreData)
+  if (state.productPrefs && state.productPrefs[normalized]) {
+    return state.productPrefs[normalized].prepCategory || null;
+  }
+  return null;
+}
+
+// ── UNCATEGORIZED ITEMS TRACKING ──────────────────────────────────────────────
+// Tracks items that were auto-categorized but not yet confirmed by the user.
+// Items are "pending review" if they have no prepCategory AND no saved product preference.
+
+/**
+ * getUncategorizedItems() — Returns inventory items that need category confirmation.
+ * An item needs review if: no explicit prepCategory AND no saved product preference.
+ */
+export function getUncategorizedItems() {
+  return state.inv.filter(item => {
+    // If user already explicitly set a category, it's confirmed
+    if (item.prepCategory) return false;
+    // If there's a saved preference for this product name, it's confirmed
+    if (getProductCategory(item.name)) return false;
+    // Otherwise, needs review
+    return true;
+  });
+}
+
+/**
+ * confirmItemCategory(itemId, catKey) — Confirms an auto-suggested category for an item.
+ * Saves the category to the item AND as a permanent product preference.
+ */
+export async function confirmItemCategory(itemId, catKey) {
+  const item = state.inv.find(i => i.id === itemId);
+  if (!item) return;
+
+  // Save category on the item itself
+  await svi({ ...item, prepCategory: catKey });
+
+  // Save as a permanent product preference for future additions
+  await saveProductCategory(item.name, catKey);
 }

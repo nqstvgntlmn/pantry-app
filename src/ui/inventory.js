@@ -21,7 +21,7 @@ import { updExport, _defaultThreshold } from './home.js';
 // scoreSearchResult — relevance scoring for search results
 // _savePreferredLocation / _getPreferredLocation — remember where user stores each product
 import { searchAndEnrich, scoreSearchResult, _savePreferredLocation, _getPreferredLocation, _savePreferredUnit, _getPreferredUnit, _getProductPreference } from './shopping.js';
-import { autoCategorizeByName, autoCategorize, getCategoryDisplay, renderCategoryBadge, openCategoryPicker, changeInvItemCategory, openEmojiPicker } from './categorypicker.js';
+import { autoCategorizeByName, autoCategorize, getCategoryDisplay, renderCategoryBadge, openCategoryPicker, changeInvItemCategory, openEmojiPicker, getUncategorizedItems, confirmItemCategory, getProductCategory } from './categorypicker.js';
 // [IMAGES DISABLED] — Product images commented out pending decision.
 // See session notes: images caused false positives from external databases,
 // inconsistent UX, and unnecessary costs. Custom photo pipeline preserved.
@@ -164,45 +164,40 @@ export function iH(item) {
   </div>`;
 }
 
-// ── GRID VIEW ───────────────────────────────────────────────────────────────
-// Alternate flat grid layout for inventory items — compact emoji cards.
-// No category grouping; just a simple wrapping grid. Toggle via view button.
+// Shelf/grid view mode removed — always showing flat list view.
+// toggleInvViewMode() and _renderInvShelf() removed in favor of a single list view.
+export function toggleInvViewMode() { /* no-op — shelf view removed */ }
 
-// View mode persisted in localStorage: "list" (default) or "shelf"
-let _invViewMode = localStorage.getItem("ks-inv-view") || "list";
+// ── SEARCH STATE ──────────────────────────────────────────────────────────
+// Tracks the current search query for filtering the inventory list.
+// Search works across ALL items regardless of location filter tab.
+let _invSearchQuery = "";
 
 /**
- * toggleInvViewMode() — Switches between "list" and "shelf" view modes.
- * Persists the choice in localStorage and re-renders the inventory.
+ * filterInvSearch() — Called on search input change. Updates the search query
+ * and re-renders the inventory list to show only matching items.
  */
-export function toggleInvViewMode() {
-  _invViewMode = _invViewMode === "list" ? "shelf" : "list";
-  localStorage.setItem("ks-inv-view", _invViewMode);
-  // Update toggle button visual state
-  const btn = g("inv-view-toggle");
-  if (btn) btn.classList.toggle("inv-view-active", _invViewMode === "shelf");
+export function filterInvSearch() {
+  const inp = g("inv-search");
+  _invSearchQuery = inp ? inp.value.trim().toLowerCase() : "";
   renderInv();
 }
 
 /**
- * _renderInvShelf(items) — Renders items in a flat grid layout (no category grouping).
- * Each item becomes a card with emoji, name, and quantity.
- * Low-stock items are visually smaller with an amber border.
+ * _matchesSearch(item, query) — Returns true if an item matches the search query.
+ * Checks name, scanTitle, brand, note, location, and category.
  */
-function _renderInvShelf(items) {
-  // Flat grid — no category grouping, just a simple wrap of item cards
-  return `<div class="shelf-items" style="padding:0 16px">
-    ${items.map(item => {
-      const ic = getItemEmoji(item);
-      const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(item.unit);
-      const isLow = !item.doNotRestock && typeof item.qty === "number" && item.qty <= thresh && item.qty > 0;
-      return `<div class="shelf-item${isLow ? " shelf-item-low" : ""}" onclick="openInvItemDetail('${item.id}')">
-        <div class="shelf-emoji">${ic}</div>
-        <div class="shelf-name">${toTitleCase(item.scanTitle || item.name)}</div>
-        <div class="shelf-qty">${formatQty(item.qty)} ${pluralizeUnit(item.unit || "Unit", item.qty)}</div>
-      </div>`;
-    }).join("")}
-  </div>`;
+function _matchesSearch(item, query) {
+  if (!query) return true;
+  const searchStr = [
+    item.scanTitle || "",
+    item.name || "",
+    item.brand || "",
+    item.note || "",
+    item.location || "",
+    item.unit || ""
+  ].join(" ").toLowerCase();
+  return searchStr.includes(query);
 }
 
 // ── EXPIRY TIMELINE ──────────────────────────────────────────────────────────
@@ -250,19 +245,30 @@ function _renderExpiryTimeline() {
 // The active tab (state.it) controls which sub-tab is shown:
 //   "all" – all items from all locations, sorted alphabetically
 //   "fridge"/"freezer"/"pantry"/"household" – flat list filtered to one location
+// The search bar filters across ALL items regardless of location filter.
 export function renderInv() {
   // Sort by the display name (scanTitle if available, otherwise raw name) — matches what the user sees on each row
   const az = (a, b) => (a.scanTitle || a.name).localeCompare(b.scanTitle || b.name, undefined, { sensitivity: 'base' });
 
-  // Filter items by the selected location sub-tab; "all" shows everything
-  const f = state.it === "all"
-    ? state.inv.slice().sort(az)
-    : state.inv.filter(i => i.location === state.it).slice().sort(az);
+  // When searching, show results across ALL locations (ignore location filter)
+  let f;
+  if (_invSearchQuery) {
+    f = state.inv.filter(i => _matchesSearch(i, _invSearchQuery)).sort(az);
+  } else {
+    // Filter items by the selected location sub-tab; "all" shows everything
+    f = state.it === "all"
+      ? state.inv.slice().sort(az)
+      : state.inv.filter(i => i.location === state.it).sort(az);
+  }
 
   // Update the subtitle text (e.g. "12 fridge items")
   const isub = g("isub");
   const labels = { all: "items", fridge: "fridge items", freezer: "frozen items", pantry: "pantry items", household: "household items" };
-  if (isub) isub.textContent = f.length + " " + (labels[state.it] || "items");
+  if (_invSearchQuery) {
+    if (isub) isub.textContent = f.length + " result" + (f.length !== 1 ? "s" : "");
+  } else {
+    if (isub) isub.textContent = f.length + " " + (labels[state.it] || "items");
+  }
 
   // Keep the export feature on the home screen in sync with current data
   updExport();
@@ -272,35 +278,30 @@ export function renderInv() {
 
   // Illustrated empty state — food-themed with warm, inviting message
   if (!f.length) {
-    const isFiltered = state.it !== "all";
-    const msg = isFiltered
-      ? `Nothing in your ${labels[state.it]?.replace(" items","") || "filter"} yet.`
-      : "Your pantry is waiting to be filled.";
+    const isFiltered = state.it !== "all" || _invSearchQuery;
+    const msg = _invSearchQuery
+      ? `No items matching "${_invSearchQuery}"`
+      : isFiltered
+        ? `Nothing in your ${labels[state.it]?.replace(" items","") || "filter"} yet.`
+        : "Your pantry is waiting to be filled.";
     c.innerHTML = `<div class="es"><div class="ei">🍳</div><p>${msg}<br><span style="font-size:.78rem;color:var(--ac);margin-top:8px;display:inline-block">Tap + Add item above to get started</span></p></div>`;
     return;
   }
 
-  // Render shelf view or flat list based on current view mode
-  if (_invViewMode === "shelf") {
-    c.innerHTML = _renderInvShelf(f);
-  } else {
-    // Render flat list for the selected location sub-tab
-    c.innerHTML = `<div class="ilst">${f.map(iH).join("")}</div>`;
-    // Apply multi-select state if active
-    if (state.selectMode === "inv") {
-      document.querySelectorAll("#ibody .swipe-wrap").forEach(w => { w.classList.add("selecting"); if (state.selectedIds.has(w.dataset.id)) w.classList.add("selected"); });
-    }
-    // Apply staggered entrance animation only on first render per tab activation.
-    // Subsequent re-renders (e.g. after checkoff, edit) skip animation to prevent flicker.
-    _applyInvStagger(c);
+  // Always render as flat list (shelf view removed)
+  c.innerHTML = `<div class="ilst">${f.map(iH).join("")}</div>`;
+  // Apply multi-select state if active
+  if (state.selectMode === "inv") {
+    document.querySelectorAll("#ibody .swipe-wrap").forEach(w => { w.classList.add("selecting"); if (state.selectedIds.has(w.dataset.id)) w.classList.add("selected"); });
   }
+  // Apply staggered entrance animation only on first render per tab activation.
+  _applyInvStagger(c);
 
   // Update expiry timeline strip (shown above the main item list)
   _renderExpiryTimeline();
 
-  // Sync view toggle button state
-  const vBtn = g("inv-view-toggle");
-  if (vBtn) vBtn.classList.toggle("inv-view-active", _invViewMode === "shelf");
+  // Update the category review badge count
+  _updateCatReviewBadge();
 }
 
 // [ADJUST OVERLAY DISABLED] — All fields merged into detail sheet. Uncomment to restore.
@@ -2090,4 +2091,135 @@ export async function addInvToShopping(id) {
     showNotif(`${item.name} quantity updated on shopping list 🛒`);
   }
   closeInvItemDetail();
+}
+
+// ── CATEGORY REVIEW SYSTEM ────────────────────────────────────────────────────
+// When new items are added without an explicit category, they need category
+// confirmation. Shows a badge count on the Supplies tab header and a review
+// overlay where Bora can confirm/change categories for each new item.
+
+/**
+ * _updateCatReviewBadge() — Updates the "X to review" badge on the Supplies tab.
+ * Hides the badge when no items need review.
+ */
+function _updateCatReviewBadge() {
+  const items = getUncategorizedItems();
+  const btn = g("inv-cat-review-btn");
+  const count = g("inv-cat-review-count");
+  if (btn) btn.style.display = items.length > 0 ? "inline-flex" : "none";
+  if (count) count.textContent = items.length;
+}
+
+/**
+ * openCategoryReview() — Opens the category review overlay showing all items
+ * that need category confirmation. Each row shows the item name, auto-suggested
+ * category, and Confirm / Change buttons.
+ */
+export function openCategoryReview() {
+  const body = g("cat-review-body");
+  if (!body) return;
+
+  const items = getUncategorizedItems();
+
+  if (!items.length) {
+    body.innerHTML = `<div class="es" style="padding:40px 20px"><div class="ei">✅</div>
+      <p>All items have confirmed categories!</p></div>`;
+    showOv("catreview");
+    return;
+  }
+
+  let html = `<div style="padding:0 0 8px;font-size:.82rem;color:var(--mt)">
+    Confirm or change the auto-suggested category for each item.
+    Once confirmed, future additions of the same product will auto-categorize.
+  </div>`;
+
+  for (const item of items) {
+    // Auto-suggest a category based on item data
+    const suggestedKey = autoCategorize(item);
+    const { name: catName, emoji: catEmoji } = getCategoryDisplay(suggestedKey);
+    const displayName = toTitleCase(item.scanTitle || item.name);
+
+    html += `<div class="cat-review-row" id="cat-review-${item.id}">
+      <div class="cat-review-info">
+        <div class="cat-review-name">${displayName}</div>
+        <div class="cat-review-suggestion">${catEmoji} ${catName}</div>
+      </div>
+      <div class="cat-review-actions">
+        <button class="btn bp bsm" onclick="confirmCatReview('${item.id}','${suggestedKey}')">Confirm</button>
+        <button class="btn bs bsm" onclick="changeCatReview('${item.id}')">Change</button>
+      </div>
+    </div>`;
+  }
+
+  body.innerHTML = html;
+  showOv("catreview");
+}
+
+/**
+ * closeCategoryReview() — Closes the category review overlay.
+ */
+export function closeCategoryReview() {
+  hideOv("catreview");
+  // Refresh the badge count and inventory list
+  renderInv();
+}
+
+/**
+ * confirmCatReview(itemId, catKey) — Confirms the suggested category for an item.
+ * Saves it permanently so future additions auto-categorize.
+ */
+export async function confirmCatReview(itemId, catKey) {
+  await confirmItemCategory(itemId, catKey);
+
+  // Remove the row from the review list with a fade-out
+  const row = g(`cat-review-${itemId}`);
+  if (row) {
+    row.style.transition = "opacity .3s, max-height .3s";
+    row.style.opacity = "0";
+    row.style.maxHeight = "0";
+    row.style.overflow = "hidden";
+    setTimeout(() => row.remove(), 300);
+  }
+
+  // Update badge count
+  _updateCatReviewBadge();
+
+  // Check if all items are reviewed
+  const remaining = getUncategorizedItems();
+  if (remaining.length === 0) {
+    showNotif("All categories confirmed!");
+    setTimeout(() => closeCategoryReview(), 600);
+  }
+}
+
+/**
+ * changeCatReview(itemId) — Opens the category picker for an item in the review list.
+ * When a new category is chosen, confirms it permanently.
+ */
+export function changeCatReview(itemId) {
+  const item = state.inv.find(i => i.id === itemId);
+  if (!item) return;
+
+  const currentCat = autoCategorize(item);
+  openCategoryPicker(currentCat, async (newCatKey) => {
+    await confirmItemCategory(itemId, newCatKey);
+
+    // Update the row to show confirmed state
+    const row = g(`cat-review-${itemId}`);
+    if (row) {
+      row.style.transition = "opacity .3s, max-height .3s";
+      row.style.opacity = "0";
+      row.style.maxHeight = "0";
+      row.style.overflow = "hidden";
+      setTimeout(() => row.remove(), 300);
+    }
+
+    _updateCatReviewBadge();
+
+    const remaining = getUncategorizedItems();
+    if (remaining.length === 0) {
+      showNotif("All categories confirmed!");
+      setTimeout(() => closeCategoryReview(), 600);
+    }
+  });
 }

@@ -44,6 +44,19 @@ to every function and every major code block — this is non-negotiable.
 ```
 14. **Git push commands must be on separate lines, not chained with `&&`.** Each git command (add, commit, push) gets its own line in code blocks.
 15. **After every change made in a Claude Code session, update this document (`CLAUDE_CODE_HANDOFF.md`) with a detailed explanation of what was changed, why, and how it works.** There is no length limit — be as extensive as needed. Add entries to the relevant sections (e.g., new features go under the appropriate tab section, new API endpoints go under API Endpoints, new rules go under Absolute Rules, etc.). This ensures the handoff document always reflects the current state of the app and serves as a living record of all changes across sessions.
+16. **Always commit before starting any task.** If interrupted mid-task, use these commands to recover:
+```
+git status
+```
+(See what changed)
+```
+git diff
+```
+(See exact line changes)
+```
+git checkout .
+```
+(Discard all uncommitted changes and revert to last clean commit)
 
 ---
 
@@ -68,8 +81,8 @@ households/{hid}
             location, prepCategory, barcode, restockThreshold,
             doNotRestock, expiryDate, note, customEmoji, createdAt, updatedAt
   recipes/{recipeId}                — household recipes
-  productPreferences/{normalizedName} — unit + location preference per product
-    fields: unit, location, updatedAt
+  productPreferences/{normalizedName} — unit + location + category preference per product
+    fields: unit, location, prepCategory, updatedAt
   cache/shopriteCoupons             — cached ShopRite digital coupons (4hr TTL)
     fields: coupons[], clippedIds[], cachedAt
 
@@ -238,6 +251,8 @@ Bottom navigation (left to right):
 ## Supplies Tab
 
 - **Sub-tabs:** All | Fridge | Freezer | Pantry | Household
+- **Always flat list view** — shelf/grid view toggle removed (Session 8)
+- **Search bar** at the top — searches across ALL items regardless of location filter, matches on name, brand, note, location, and unit
 - **Sorted alphabetically** by scanTitle first, then name
 - **Swipe left** to delete (5-second undo toast with draining gold line at bottom)
 - **Swipe right** to add to Shopping List
@@ -247,28 +262,32 @@ Bottom navigation (left to right):
 - **Inline title/subtitle editing:** tap ✏️ on title → shows two editable fields (Title + Subtitle) with Save button, auto Title Case, saves to Firestore + customProducts if barcoded
 - **Category badge:** shows prepCategory, tappable to change, saves to Firestore
 - **Custom emoji override:** tap the emoji icon on a detail sheet → opens the emoji picker popup (same component used for custom category creation) → selected emoji saved as `customEmoji` field on the inventory item in Firestore, persists across sessions and overrides auto-assignment
-- **Shopping Prep button** below "+ Add item" — gold text/icon on dark background with subtle gold border
+- **Shopping Prep button** and **Category Review badge** side by side below search bar
+- **Auto-categorization review system:** When new items are added without an explicit category, a badge shows "X to review" next to the Shopping Prep button. Tapping opens a review overlay where users can confirm or change the auto-suggested category. Once confirmed, the category is saved permanently as a product preference in Firestore (`productPreferences/{normalizedName}.prepCategory`), so future additions of the same product auto-categorize without asking again.
 
 ### Shopping Prep Feature
 - Full-screen audit mode for pre-shop preparation
+- **Search bar** at the top — searches across ALL categories simultaneously and shows matching results grouped under their category headers
 - Category overview grid with item counts and amber indicator for low items
+- **"+ Add Category" button** at the bottom of the category grid — opens an inline form with emoji picker and name input
+- **Long-press on custom category cards** — shows action menu with Rename, Add Sub-category, Move Up, Move Down, and Delete options
 - Category detail view shows all items in that category with:
   - Inline − / + quantity correction (auto-saves with 500ms debounce)
   - "Last updated X days ago" timestamp
   - Amber highlight if at/below restock threshold
-  - Green shopping cart button to add to Shopping List
-  - "✓ Added" state after adding
+  - **Inline quantity picker on cart button** — tapping the 🛒 button shows a small stepper (−/qty/+/✓) instead of defaulting to 1 unit, so users can pick how many to add
+  - "✓ Added" state after adding (with quantity shown if > 1)
   - Audit checkbox (physical verification, session-only)
 - "Add all low (X)" button at top of each category
 - "+ Add new item to Shopping List" — closes Shopping Prep, opens Shopping add sheet
 - Summary toast on close: "X items added, Y quantities updated"
 - Categories use stored prepCategory field first, then keyword/OFF mapping fallback
-- Custom categories supported with emoji picker
+- Custom categories supported with emoji picker and one level of sub-categories
 
 ### Shopping Prep Categories
-Default: 🥦 Produce, 🥛 Dairy Eggs & Milk, 🥩 Meat & Seafood, 🧁 Bakery & Bread, 🧊 Frozen, 🥫 Canned & Dry Goods, 🍿 Snacks & Beverages, 🧴 Personal Care, 🧹 Cleaning & Household, 🌾 Grains Pasta & Rice, 🫙 Condiments & Sauces, 🍳 Other
+Default: 🥦 Produce, 🥛 Dairy Eggs & Milk, 🥩 Meat & Seafood, 🧁 Bakery & Bread, 🧊 Frozen, 🥫 Canned & Dry Goods, 🍿 Snacks & Beverages, 🧴 Personal Care, 🧹 Cleaning & Household, 🌾 Grains Pasta & Rice, 🏺 Pantry Staples, 🫙 Condiments & Sauces, 🍳 Other
 
-Custom categories stored in `households/{hid}/settings/customPrepCategories[]` with name and emoji.
+Custom categories stored in `households/{hid}/settings/customPrepCategories[]` with name, emoji, and optional children[] for sub-categories.
 
 ---
 
@@ -581,6 +600,16 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
 - **Session 10:** Premium visual polish — deep gradient background (blue-neutral undertone), floating pill nav with more breathing room, card depth separation, bold white section headers, clean minimal headers
 - **Session 11:** Added `start-dev.command` Finder-clickable dev launcher + `.gitignore`
 - **Session 12:** Supply item emoji improvements — overhauled `_EMOJI_MAP` keyword table (100+ keywords across 20+ categories, multi-word specifics first to prevent false matches), added manual emoji override via tappable emoji on detail sheet (reuses category emoji picker component, saves `customEmoji` to Firestore)
+- **Session 13:** Major Supplies + Shopping Prep overhaul — 9-item task:
+  1. Removed shelf/grid view toggle from Supplies (always flat list now)
+  2. Added search bar to Supplies tab (searches across ALL items regardless of location filter)
+  3. Auto-categorization review system — new items get auto-suggested categories, badge shows "X to review", review overlay lets Bora confirm/change. Confirmed categories saved permanently to `productPreferences/{normalizedName}.prepCategory` in Firestore
+  4. Added "Pantry Staples" (🏺) to default Shopping Prep categories
+  5. Added search bar to Shopping Prep (searches across all categories simultaneously)
+  6. Quantity picker on Shopping Prep cart button — inline stepper instead of defaulting to 1
+  7. "+ Add Category" button + long-press management menu (Rename, Add Sub-category, Move Up/Down, Delete). One level of sub-categories supported
+  8. Fixed bottom padding across ALL tabs — increased to 80px clearance above nav bar + FAB so last items are always fully visible
+  9. Added git recovery instructions (Rule #16) to CLAUDE_CODE_HANDOFF.md
 
 ---
 
@@ -784,12 +813,10 @@ Transforms the app from a utility-first tool into an iOS-native-feeling experien
 
 ### Phase 3: Supplies — Shelf View + Expiry Timeline
 
-#### Grid View (formerly Shelf View)
-- **File:** `src/ui/inventory.js` (`_renderInvShelf()`, `toggleInvViewMode()`)
-- **What:** Flat grid layout of item cards — no category grouping. Cards show emoji + name + qty. Low-stock items get `.shelf-item-low` class (amber border, slight scale down). Category grouping was removed in Session 11 due to auto-categorization bugs.
-- **Toggle:** `_invViewMode` persisted in localStorage `ks-inv-view`. Toggle button `#inv-view-toggle` (🗄) in inventory header.
-- **CSS classes:** `.shelf-items`, `.shelf-item`, `.shelf-item-low`, `.shelf-emoji`, `.shelf-name`, `.shelf-qty`
-- **Note:** `gcat()` and `CATS` still exist in `helpers.js` — used for setting item categories on save and by Shopping Prep. They are NOT used for shelf/grid view grouping anymore.
+#### Grid View (REMOVED in Session 13)
+- **Status:** Removed. Supplies always shows flat list view now.
+- **What was removed:** `_renderInvShelf()`, `toggleInvViewMode()` (now no-op), `_invViewMode` state, `#inv-view-toggle` button from HTML.
+- **Note:** `gcat()` and `CATS` still exist in `helpers.js` — used for setting item categories on save and by Shopping Prep.
 
 #### Expiry Timeline
 - **File:** `src/ui/inventory.js` (`_renderExpiryTimeline()`)
