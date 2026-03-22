@@ -1058,7 +1058,7 @@ to every function and every major code block — this is non-negotiable.
 
 #### 1. FAB Button: Shrink/Fade Animation Reworked with transform:scale()
 
-**What changed:** The FAB shrink animation was reworked for a visually convincing physical shrink. Previously it animated `width`/`height`/`font-size` which looked like fading rather than shrinking. Now uses `transform: scale(0.75)` for a uniform scale-down that looks like the button physically reduces in size, paired with `opacity: 0.15` (85% transparent) fade. The settle delay is 0.5 seconds. Tab switches instantly reset to full size with zero grow-back animation.
+**What changed:** The FAB shrink animation was reworked for a visually convincing physical shrink. Previously it animated `width`/`height`/`font-size` which looked like fading rather than shrinking. Now uses `transform: scale(0.75)` for a uniform scale-down that looks like the button physically reduces in size, paired with `opacity: 0.25` (75% transparent) fade. The settle delay is 0.5 seconds. Tab switches instantly reset to full size with zero grow-back animation.
 
 **Why:** The old width/height animation wasn't visually convincing — layout-based size changes don't produce the same "pinch-to-zoom" effect as transform scaling. The grow-back animation on tab switch was also undesirable; the FAB should always appear at full size immediately.
 
@@ -1490,14 +1490,15 @@ Two quick tweaks to the floating "+" button to make it less intrusive at rest.
 
 **How:** Changed the `setTimeout` delay in `_updateFAB()` from `2000` to `500`. Updated all related comments in `main.js`.
 
-#### 2. More Transparent Resting State (opacity 0.75 → 0.15)
-**What changed:** The FAB's resting (settled) opacity was reduced from 0.75 (25% transparent) to 0.15 (85% transparent), making it much more subtle when not actively being used.
+#### 2. More Transparent Resting State (opacity 0.75 → 0.25)
+**What changed:** The FAB's resting (settled) opacity was set to 0.25 (75% transparent). Previously was 0.15 (85% transparent) which was too subtle; reverted to 0.25 for better visibility while still being unobtrusive.
 
-**Why:** At 75% opacity the FAB was still visually prominent and competed with content. At 15% opacity it fades into the background but remains tappable and visible enough to find when needed.
+**Why:** At 15% opacity the FAB was too hard to see. At 25% opacity it strikes a better balance — visible enough to find quickly but still fades into the background so it doesn't compete with content.
 
-**How:** Changed `opacity:.75` to `opacity:.15` on `.fab.settled` in CSS. Updated all related comments in `styles.css`.
+**How:** Changed `opacity:.15` to `opacity:.25` on `.fab.settled` in CSS. Updated all related comments in `styles.css`, `main.js`, and `index.html`.
 
 ### Files Changed
-- `src/main.js` — `_updateFAB()`: settle timeout 2000→500, updated all comments referencing old timing/opacity values
-- `src/styles.css` — `.fab.settled`: opacity .75→.15, updated block comment to reflect new values
+- `src/main.js` — `_updateFAB()`: settle timeout 2000→500, updated all comments referencing opacity values (now 0.25)
+- `src/styles.css` — `.fab.settled`: opacity now .25 (75% transparent), updated block comment to reflect new values
+- `index.html` — Updated FAB HTML comment to reflect current settle behavior (0.5s idle, 25% opacity)
 - `CLAUDE_CODE_HANDOFF.md` — Updated existing FAB section + added this session entry

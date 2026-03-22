@@ -328,7 +328,7 @@ let _fabSettleTimer = null;
 // _updateFAB(tab) — shows/hides the FAB and sets its onclick for the given tab.
 // Resets the FAB to full size + full opacity instantly (no grow animation),
 // then adds "settled" class after 0.5 seconds to trigger a 2s scale-down + fade
-// via transform:scale(0.75) and opacity:0.15 with cubic-bezier easing.
+// via transform:scale(0.75) and opacity:0.25 with cubic-bezier easing.
 function _updateFAB(tab) {
   const fab = g("fab-btn");
   if (!fab) return;
