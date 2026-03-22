@@ -49,6 +49,7 @@ Apply our standing comments rule to all changes: add clear, utilitarian comments
 to every function and every major code block — this is non-negotiable.
 ```
 14. **Git push commands must be on separate lines, not chained with `&&`.** Each git command (add, commit, push) gets its own line in code blocks.
+15. **After every change made in a Claude Code session, update this document (`CLAUDE_CODE_HANDOFF.md`) with a detailed explanation of what was changed, why, and how it works.** There is no length limit — be as extensive as needed. Add entries to the relevant sections (e.g., new features go under the appropriate tab section, new API endpoints go under API Endpoints, new rules go under Absolute Rules, etc.). This ensures the handoff document always reflects the current state of the app and serves as a living record of all changes across sessions.
 
 ---
 
