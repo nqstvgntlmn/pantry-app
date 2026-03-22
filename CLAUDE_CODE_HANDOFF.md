@@ -578,6 +578,7 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
 - **Session 8:** Full UI modernization pass — see detailed changes below
 - **Session 9:** Major UX enhancements — sliding tab transitions, floating pill nav, home dashboard (quick chips, notifications, animated counters), shelf view + expiry timeline for Supplies, expanded aisle grouping (16 categories) + deal badges for Shopping
 - **Session 10:** Premium visual polish — deep gradient background (blue-neutral undertone), floating pill nav with more breathing room, card depth separation, bold white section headers, clean minimal headers
+- **Session 11:** Added `start-dev.command` Finder-clickable dev launcher + `.gitignore`
 
 ---
 
@@ -1290,3 +1291,25 @@ This prevents offscreen images from loading until the user scrolls to them, redu
 - `src/ui/home.js` — Lazy loading on recipe match images
 - `src/ui/recipes.js` — Lazy loading on all recipe cover images
 - `src/styles.css` — All CSS performance fixes (backdrop-filter reduction, animation fixes, reduced motion)
+
+---
+
+## Session 11 — Dev Launcher Script (March 2026)
+
+### Overview
+Added a macOS Finder-clickable shell script (`start-dev.command`) so Bora can double-click to start the full dev environment without opening a terminal manually. Also created `.gitignore` to keep local-only files out of the repo.
+
+### Changes Made
+
+#### 1. `start-dev.command` — Finder Dev Launcher
+- **What:** A bash script that `cd`s to `~/pantry-app` and runs `npm run dev:full`.
+- **Why:** Eliminates the need to open Terminal, navigate to the project, and type the dev command. Double-clicking from Finder launches everything.
+- **How:** Uses `.command` extension which macOS Terminal.app recognizes as executable. Marked `chmod +x`.
+
+#### 2. `.gitignore` — Keep Local Files Out of Repo
+- **What:** New `.gitignore` file that excludes `start-dev.command`.
+- **Why:** The launcher script is a local convenience tool with a hardcoded home directory path — it shouldn't be committed to the shared repo.
+
+### Files Added
+- `start-dev.command` — Finder-clickable dev launcher (gitignored)
+- `.gitignore` — Excludes local-only convenience files
