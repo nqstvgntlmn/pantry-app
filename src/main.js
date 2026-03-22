@@ -96,6 +96,22 @@ renderCallbacks.renderShop = renderShop;
 // inventory.js directly, so we inject it via a setter function.
 setRenderInv(renderInv);
 
+// ── GLOBAL ERROR BOUNDARY ────────────────────────────────────────────────────
+// Catch unhandled promise rejections and JS errors that would otherwise crash
+// the app silently. Logs to console and updates the sync status dot so the user
+// sees something went wrong instead of a frozen screen.
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("[unhandledrejection]", e.reason);
+  // Prevent the error from crashing the app — show sync error dot instead
+  e.preventDefault();
+  ss("error");
+});
+window.addEventListener("error", (e) => {
+  console.error("[global error]", e.message, e.filename, e.lineno);
+  // Don't crash the whole app for a single render error
+  ss("error");
+});
+
 // ── SCREEN NAVIGATION ────────────────────────────────────────────────────────
 // The app is a single-page app with 6 main screens (home, inventory, recipes,
 // shopping, insights, chat). Only one screen is visible at a time. Navigation
@@ -1130,7 +1146,8 @@ window._appStart = async function(code) {
     // to prevent the blank-screen flash on first boot.
     state.homeDataReady = true;
 
-    renderAll(); renderRecs(); renderShop(); renderSum();
+    // renderAll includes renderHome which calls renderSum, so no separate renderSum needed
+    renderAll(); renderRecs(); renderShop();
   } catch (e) {
     console.error("initial load error", e);
     ss("error");

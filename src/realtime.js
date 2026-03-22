@@ -21,6 +21,20 @@ const db = getFirestore(app);
 // Active listener unsubscribe functions — stored so we can clean up on sign-out
 let _unsubs = [];
 
+// _debouncedRenderAll — coalesces rapid-fire onSnapshot callbacks into a single
+// renderAll call. Multiple Firestore listeners (inventory, shopping, activity)
+// often fire within milliseconds of each other after a write; without debouncing
+// this causes 3-4 full re-renders in quick succession, leading to visible flicker
+// and occasional crashes on lower-end devices.
+let _renderAllTimer = null;
+function _debouncedRenderAll() {
+  if (_renderAllTimer) clearTimeout(_renderAllTimer);
+  _renderAllTimer = setTimeout(() => {
+    _renderAllTimer = null;
+    renderCallbacks.renderAll?.();
+  }, 80); // 80ms window — fast enough to feel instant, wide enough to coalesce
+}
+
 /**
  * startRealtimeSync(hid) — sets up onSnapshot listeners for the three main
  * collections that need instant cross-device updates: inventory, shopping, and recipes.
@@ -43,37 +57,40 @@ export function startRealtimeSync(hid) {
   const toDocs = (snap) => snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   // ── Inventory listener — updates state.inv in real time ──
+  // renderAll already calls renderHome() which includes renderSum(),
+  // so we don't call renderSum separately to avoid double-render loops.
   _unsubs.push(onSnapshot(
     collection(db, `households/${hid}/inventory`),
     (snap) => {
       state.inv = toDocs(snap);
       ss("synced");
-      renderCallbacks.renderAll?.();
-      renderCallbacks.renderSum?.();
+      _debouncedRenderAll();
     },
     (err) => { console.warn("realtime inv error:", err); ss("error"); }
   ));
 
   // ── Shopping list listener — updates state.shop in real time ──
+  // Render shop + home (for stat cards/quick chips) but debounced to prevent storms
   _unsubs.push(onSnapshot(
     collection(db, `households/${hid}/shopping`),
     (snap) => {
       state.shop = toDocs(snap);
       ss("synced");
       renderCallbacks.renderShop?.();
-      renderCallbacks.renderSum?.();
+      _debouncedRenderAll();
     },
     (err) => { console.warn("realtime shop error:", err); ss("error"); }
   ));
 
   // ── Recipes listener — updates state.recs in real time ──
+  // renderAll includes renderSum, so skip separate renderSum call
   _unsubs.push(onSnapshot(
     collection(db, `households/${hid}/recipes`),
     (snap) => {
       state.recs = toDocs(snap);
       ss("synced");
       renderCallbacks.renderRecs?.();
-      renderCallbacks.renderSum?.();
+      _debouncedRenderAll();
     },
     (err) => { console.warn("realtime recs error:", err); ss("error"); }
   ));
@@ -125,6 +142,7 @@ export function startRealtimeSync(hid) {
   // ── Activity feed listener — updates state.activity in real time ──
   // Ensures all household members see Recent Activity instantly, including
   // non-owner members (fixes issue where activity was missing for members).
+  // Uses debounced render to prevent cascade when multiple listeners fire at once.
   _unsubs.push(onSnapshot(
     collection(db, `households/${hid}/activity`),
     (snap) => {
@@ -132,8 +150,9 @@ export function startRealtimeSync(hid) {
       state.activity = toDocs(snap)
         .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
         .slice(0, 10);
-      // Re-render home screen to show updated activity feed
-      renderCallbacks.renderAll?.();
+      // Debounced render — prevents re-render storm when inventory + activity
+      // listeners fire back-to-back after a write
+      _debouncedRenderAll();
     },
     (err) => { console.warn("realtime activity error:", err); }
   ));

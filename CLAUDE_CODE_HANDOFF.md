@@ -1052,3 +1052,63 @@ to every function and every major code block — this is non-negotiable.
 
 **Files changed:**
 - `src/ui/home.js` — `renderQuickChips()` no longer includes the scan chip
+
+---
+
+### Session 7 Changes — Home Tab Dedup, Stability Fixes, Deals Default (March 2026)
+
+#### 1. Home Tab Quick Action Chips — Deduplicated & Centered
+
+**What changed:** Reduced quick-action chips from 3 overlapping chips to 3 non-overlapping, centered chips:
+- "🛒 X to buy" → Shopping tab (dynamic count, updates on every render)
+- "⚠️ Expiring Soon" → Inventory filtered by expiry
+- "✨ Deals" → Deals tab
+
+Removed "Shopping List" (duplicated "X to buy" notification pill) and "📦 Supplies" (overlapped with stat cards). Also removed "running low" and "shopping list count" notification pills from the smart notification strip since quick chips now handle those navigation paths.
+
+**Why:** Users reported the Home tab felt duplicative — "Shopping List" and "9 to buy" both went to the same place. The notification strip also repeated info already in the quick chips.
+
+**Files changed:**
+- `src/ui/home.js` — `renderQuickChips()` now renders 3 centered dynamic chips; `renderNotifications()` no longer includes low-stock or shopping-count pills
+- `src/styles.css` — `.chip-row` now includes `justify-content:center`
+
+#### 2. App Stability — Debounced Realtime Renders + Global Error Boundary
+
+**What changed:** Three stability improvements to prevent random refreshes/crashes:
+
+1. **Debounced realtime renders:** All Firestore `onSnapshot` listeners in `realtime.js` now use `_debouncedRenderAll()` (80ms coalesce window) instead of calling `renderCallbacks.renderAll()` directly. When a user writes data, inventory + shopping + activity listeners fire within milliseconds — without debouncing, this caused 3-4 full re-renders in quick succession.
+
+2. **Eliminated double renderSum:** Removed redundant `renderCallbacks.renderSum?.()` calls from realtime listeners since `renderAll → renderHome → renderSum` already covers it. Also removed the trailing `renderSum()` from the initial load sequence in `main.js`.
+
+3. **Global error boundary:** Added `window.addEventListener("unhandledrejection")` and `window.addEventListener("error")` handlers in `main.js` that log errors and show the sync-error dot instead of letting the app crash silently. Also wrapped `renderHome()` internals in try/catch so a single section failure doesn't blank the entire Home screen.
+
+**Why:** Users reported random app refreshes and crashes. The root causes were: (a) re-render storms from multiple Firestore listeners firing simultaneously, (b) unhandled promise rejections from network errors crashing the app silently.
+
+**Files changed:**
+- `src/realtime.js` — Added `_debouncedRenderAll()` helper; all 8 listeners now use it; removed redundant `renderSum` calls
+- `src/main.js` — Added global `unhandledrejection` and `error` handlers; removed duplicate `renderSum()` from initial load
+- `src/ui/home.js` — `renderHome()` body wrapped in try/catch error boundary
+
+#### 3. Deals Tab — Default Filter to "On My List"
+
+**What changed:** The coupon category filter on the Deals tab now defaults to "On My List" instead of "All" when the tab first loads. This shows coupons matching the user's shopping list items first.
+
+**Why:** "On My List" is the most useful default — users open Deals to find savings on items they're already buying. Defaulting to "All" forced an extra tap every time.
+
+**Files changed:**
+- `src/ui/shopping.js` — `_activeCouponCat` initial value changed from `"all"` to `"onlist"`; `loadCoupons()` reset changed from `"all"` to `"onlist"`
+
+#### 4. Quick Chips Centered Horizontally
+
+**What changed:** The `.chip-row` CSS class now includes `justify-content:center` so the three quick-action chips are centered on the Home tab instead of left-justified.
+
+**Why:** With only 3 chips, left-justification left awkward empty space on the right. Centering looks balanced and intentional.
+
+**Files changed:**
+- `src/styles.css` — `.chip-row` flex container now centered
+
+#### 5. Home Header Duplicate Navigation Audit
+
+**What changed:** Confirmed and cleaned up all duplicate navigation from the Home tab. The "+ Add" button was already removed (replaced by FAB). The notification strip no longer duplicates quick-chip navigation. The stat card grid still provides distinct value (showing counts/data, not just navigation).
+
+**Why:** Previous prompt partially addressed duplication but left "running low" and "to buy" pills that overlapped with quick chips.

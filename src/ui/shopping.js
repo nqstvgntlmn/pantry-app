@@ -3427,7 +3427,7 @@ let _couponsLoaded = false;     // Whether coupons have been fetched this sessio
 let _allCoupons = [];           // Full coupon list from API (unfiltered)
 let _clippedIds = new Set();    // Set of coupon IDs already clipped to PPC
 let _couponPage = 0;            // Current page for "show more" pagination (unused with page-size selector, kept for compat)
-let _activeCouponCat = "all";   // Active category filter chip
+let _activeCouponCat = "onlist"; // Default to "On My List" — shows list-matching coupons first
 let _couponsPageSize = 10;      // User-selected page size (10, 25, 50, or Infinity for "All")
 
 /**
@@ -3469,7 +3469,8 @@ export async function loadCoupons() {
     _clippedIds = new Set(data.clippedIds || []);
     _couponsLoaded = true;
     _couponPage = 0;
-    _activeCouponCat = "all";
+    // Default to "On My List" on first load — show list-matching coupons first
+    _activeCouponCat = "onlist";
 
     // Mark each coupon's clipped state from the clippedIds set
     _allCoupons.forEach(c => {

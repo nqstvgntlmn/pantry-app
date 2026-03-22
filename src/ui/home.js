@@ -129,33 +129,40 @@ export function renderHome() {
     setTimeout(() => { if (skel) skel.style.display = "none"; }, 320);
   }
 
-  const h = new Date().getHours();
-  const gr = _contextGreeting(h);
-  // Show only the first name for a cleaner, friendlier greeting
-  const fullName = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
-  const u = _firstName(fullName);
+  // Wrap all section renders in try/catch — a single section failure
+  // should not blank the entire Home screen (error boundary).
+  try {
+    const h = new Date().getHours();
+    const gr = _contextGreeting(h);
+    // Show only the first name for a cleaner, friendlier greeting
+    const fullName = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
+    const u = _firstName(fullName);
 
-  // Only populate greeting once — avoids overwriting on repeated renders
-  const grtEl = g("grt");
-  if (grtEl && !grtEl.innerHTML) grtEl.innerHTML = `${gr}, <span>${u}</span>`;
+    // Only populate greeting once — avoids overwriting on repeated renders
+    const grtEl = g("grt");
+    if (grtEl && !grtEl.innerHTML) grtEl.innerHTML = `${gr}, <span>${u}</span>`;
 
-  // Reset collapsible sections to collapsed on every Home render —
-  // Running Low and Recent Activity always start closed, requiring a tap.
-  _resetHomeSectionStates();
+    // Reset collapsible sections to collapsed on every Home render —
+    // Running Low and Recent Activity always start closed, requiring a tap.
+    _resetHomeSectionStates();
 
-  // Refresh every home-screen section
-  renderWeek();          // 7-day meal plan grid
-  renderSum();           // numeric stat cards (inventory count, expiring, shopping, recipes)
-  renderQuickChips();    // quick-access action chips (scan, ask Claude, build list, etc.)
-  renderNotifications(); // smart notification strip (expiring, low stock, deals, shopping)
-  renderExp();           // expiring-soon item list
-  renderLowStock();      // "Running Low" item list
-  renderTonight();       // "Tonight's Dinner" card
-  renderLastCooked();    // "Last cooked" line below Tonight's Dinner
-  renderActivityFeed();  // Recent household activity
-  updExport();           // plain-text inventory export panel
-  // Apply collapsed/expanded state to collapsible sections
-  _applyAllHomeSectionStates();
+    // Refresh every home-screen section
+    renderWeek();          // 7-day meal plan grid
+    renderSum();           // numeric stat cards (inventory count, expiring, shopping, recipes)
+    renderQuickChips();    // quick-access action chips (to buy count, expiring, deals)
+    renderNotifications(); // smart notification strip (expiring, coupon matches)
+    renderExp();           // expiring-soon item list
+    renderLowStock();      // "Running Low" item list
+    renderTonight();       // "Tonight's Dinner" card
+    renderLastCooked();    // "Last cooked" line below Tonight's Dinner
+    renderActivityFeed();  // Recent household activity
+    updExport();           // plain-text inventory export panel
+    // Apply collapsed/expanded state to collapsible sections
+    _applyAllHomeSectionStates();
+  } catch (err) {
+    // Log but don't crash — the screen keeps whatever it last rendered
+    console.error("[renderHome] section render error:", err);
+  }
 }
 
 // ── COLLAPSIBLE HOME SECTIONS ─────────────────────────────────────────────────
@@ -538,22 +545,23 @@ function _animateCounter(el, target, duration) {
 // Each chip triggers an existing app action (scan, AI, build list, expiring).
 
 /**
- * renderQuickChips() — Populates the #quick-chips container with action
- * shortcut chips. Each chip calls an existing window function.
+ * renderQuickChips() — Populates the #quick-chips container with three
+ * centered action shortcut chips. The "X to buy" count is dynamic (updates
+ * on each render), so we always rebuild to keep the count fresh.
+ * Chips: shopping count → expiring-soon filter → deals tab.
  */
 function renderQuickChips() {
   const el = g("quick-chips");
   if (!el) return;
 
-  // Only render once — chips are static and don't change with data
-  if (el.dataset.rendered) return;
-  el.dataset.rendered = "1";
+  // Dynamic count of unchecked shopping list items — updates on every render
+  const toBuy = state.shop.filter(i => !i.checked).length;
 
-  // 3 distinct quick actions — scan barcode removed (accessible via FAB "+" flow)
+  // 3 distinct quick actions — centered, no overlap with notification strip
   el.innerHTML = `
-    <button class="quick-chip" onclick="showScreen('shopping')">🛒 Shopping List</button>
-    <button class="quick-chip" onclick="showScreen('inventory')">📦 Supplies</button>
+    <button class="quick-chip" onclick="showScreen('shopping')">🛒 ${toBuy} to buy</button>
     <button class="quick-chip" onclick="showScreen('inventory');setTimeout(()=>{const el=document.getElementById('expiryTimeline');if(el)el.scrollIntoView({behavior:'smooth'})},200)">⚠️ Expiring Soon</button>
+    <button class="quick-chip" onclick="showScreen('shopping');setTimeout(()=>setSHT('deals'),100)">✨ Deals</button>
   `;
 }
 
@@ -590,21 +598,8 @@ function renderNotifications() {
     pills.push(`<button class="notif-pill notif-warn" onclick="showScreen('inventory')">⏱ ${expiring.length} expiring soon</button>`);
   }
 
-  // 3. Low stock items — warning urgency (amber)
-  const low = state.inv.filter(i => {
-    if (i.doNotRestock) return false;
-    const thresh = i.restockThreshold != null ? i.restockThreshold : _defaultThreshold(i.unit);
-    return i.qty <= thresh;
-  });
-  if (low.length) {
-    pills.push(`<button class="notif-pill notif-warn" onclick="showScreen('inventory')">📉 ${low.length} running low</button>`);
-  }
-
-  // 4. Shopping list unchecked count — info (blue)
-  const toBuy = state.shop.filter(i => !i.checked).length;
-  if (toBuy > 0) {
-    pills.push(`<button class="notif-pill notif-info" onclick="showScreen('shopping')">🛒 ${toBuy} to buy</button>`);
-  }
+  // 3. Low stock and shopping count removed — handled by quick-action chips
+  // to avoid duplicative navigation on the Home screen.
 
   // 5. Coupon matches — deal (gold), naturally 0 for non-whitelisted users
   const couponMatches = getShoppingListCouponMatchCount();

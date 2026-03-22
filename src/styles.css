@@ -1561,7 +1561,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
    QUICK-ACCESS CHIPS — Horizontally scrollable action shortcuts on Home tab.
    Each chip triggers an existing app function (scan, chat, build list, etc.).
    ═══════════════════════════════════════════════════════════════════════════════ */
-.chip-row{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 14px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0}
+/* Centered chip row — justify-content:center keeps 3 chips visually balanced */
+.chip-row{display:flex;gap:8px;overflow-x:auto;padding:4px 16px 14px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0;justify-content:center}
 .chip-row::-webkit-scrollbar{display:none}
 .quick-chip{white-space:nowrap;padding:9px 16px;border-radius:20px;background:var(--card);
   border:1px solid var(--b1);font-size:.82rem;color:var(--tx2);cursor:pointer;
