@@ -326,26 +326,34 @@ const FAB_CONFIG = {
 let _fabSettleTimer = null;
 
 // _updateFAB(tab) — shows/hides the FAB and sets its onclick for the given tab.
-// Resets the FAB to large/opaque, then adds "settled" class after 2 seconds
-// to smoothly shrink it and reduce opacity to 55% (2s cubic-bezier transition — slow and deliberate).
+// Resets the FAB to full size + full opacity instantly (no grow animation),
+// then adds "settled" class after 2 seconds to trigger a 2s scale-down + fade
+// via transform:scale(0.75) and opacity:0.75 with cubic-bezier easing.
 function _updateFAB(tab) {
   const fab = g("fab-btn");
   if (!fab) return;
   const cfg = FAB_CONFIG[tab];
   if (!cfg) {
-    // Hide FAB for tabs without a primary action
+    // Hide FAB for tabs without a primary action (e.g. Stats, Chat)
     fab.classList.add("hidden");
+    fab.classList.remove("settled");
+    clearTimeout(_fabSettleTimer);
   } else {
-    fab.classList.remove("hidden");
+    // Instant reset: disable transition → snap to full size → force reflow → restore CSS.
+    // This prevents any grow-back animation when switching tabs.
+    fab.style.transition = "none";
+    fab.classList.remove("hidden", "settled");
+    fab.offsetHeight; // force reflow so the browser applies the non-transitioned state
+    fab.style.transition = "";
+
     // Show only the "+" icon — no label text
     fab.innerHTML = `<span class="fab-icon">＋</span>`;
     fab.setAttribute("onclick", cfg.action);
     fab.setAttribute("aria-label", cfg.ariaLabel);
 
-    // Reset to large, fully opaque state on tab switch
-    fab.classList.remove("settled");
-
-    // After 2 seconds, shrink + fade to 75% opacity via slow 2s CSS transition
+    // After 2 seconds idle, add "settled" class to trigger the 2s shrink + fade.
+    // The transition is defined on .fab.settled in CSS, so it animates on add
+    // and snaps back instantly on remove (no transition on base .fab for these props).
     clearTimeout(_fabSettleTimer);
     _fabSettleTimer = setTimeout(() => {
       fab.classList.add("settled");

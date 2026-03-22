@@ -1488,23 +1488,27 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 
 /* ── FLOATING ACTION BUTTON ───────────────────────────────────────────────────
    Context-aware FAB that shows different actions per tab. No text label —
-   starts as a large opaque circle, then shrinks and fades to 55% after 2s.
-   Positioned above bottom nav. */
+   starts at full size + full opacity, then physically shrinks via transform:scale(0.75)
+   and fades to 75% opacity after 2 seconds of inactivity. Tab switches instantly reset
+   to full size with zero animation (transition lives on .settled, not base). */
 /* FAB floats above the floating pill nav: 58px pill + 20px pill bottom + safe area + 14px gap */
 .fab{position:fixed;right:20px;bottom:calc(var(--safe) + 58px + 20px + 14px);width:64px;height:64px;
   border-radius:50%;background:var(--ac);color:#0D0B08;border:none;
   font-size:1.6rem;font-weight:700;cursor:pointer;z-index:140;
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 4px 20px rgba(212,168,83,.35),0 2px 8px rgba(0,0,0,.3);
-  /* Smooth transition for shrink + fade after 2s idle.
-     Uses cubic-bezier(0.4, 0, 0.2, 1) for a slow, deliberate ease-in-out over 2s.
-     Box-shadow removed from transition — animating box-shadow forces full repaint each frame. */
-  transition:width 2s cubic-bezier(.4,0,.2,1),height 2s cubic-bezier(.4,0,.2,1),font-size 2s cubic-bezier(.4,0,.2,1),
-    opacity 2s cubic-bezier(.4,0,.2,1),transform .2s cubic-bezier(.34,1.56,.64,1)}
+  /* Quick transform transition for :active press bounce only.
+     The 2s settle transition lives on .fab.settled so removing the class = instant reset. */
+  transition:transform .2s cubic-bezier(.34,1.56,.64,1)}
 .fab:active{transform:scale(.9)}
-.fab.hidden{opacity:0;pointer-events:none;transform:scale(.6)}
-/* Settled state: smaller + semi-transparent (75% opacity) after 2s of inactivity */
-.fab.settled{width:48px;height:48px;font-size:1.3rem;opacity:.75}
+.fab.hidden{opacity:0;pointer-events:none;transform:scale(.6);transition:none}
+/* Settled state: scale down to 75% size + 75% opacity after 2s of inactivity.
+   Uses transform:scale() for a visually convincing physical shrink (not width/height).
+   The 2s transition is defined HERE so removing the class snaps back instantly. */
+.fab.settled{transform:scale(.75);opacity:.75;
+  transition:transform 2s cubic-bezier(.4,0,.2,1),opacity 2s cubic-bezier(.4,0,.2,1)}
+/* Press effect while FAB is in settled (shrunk) state */
+.fab.settled:active{transform:scale(.67);transition:transform .15s ease}
 /* FAB icon — centered plus sign, no label */
 .fab-icon{display:flex;align-items:center;justify-content:center}
 

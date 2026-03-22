@@ -1056,21 +1056,20 @@ to every function and every major code block — this is non-negotiable.
 
 **Date:** 2026-03-22
 
-#### 1. FAB Button: Label Removed, Size/Opacity Shrink After 2s
+#### 1. FAB Button: Shrink/Fade Animation Reworked with transform:scale()
 
-**What changed:** The floating action button no longer shows any text label. It starts as a larger (64px), fully opaque gold circle when a tab loads, then after 2 seconds it smoothly shrinks to 48px and fades to 75% opacity via a slow, deliberate 2s cubic-bezier(0.4, 0, 0.2, 1) transition. Tapping it at any size still triggers the correct add action for the current tab.
+**What changed:** The FAB shrink animation was reworked for a visually convincing physical shrink. Previously it animated `width`/`height`/`font-size` which looked like fading rather than shrinking. Now uses `transform: scale(0.75)` for a uniform scale-down that looks like the button physically reduces in size, paired with `opacity: 0.75` fade. Tab switches instantly reset to full size with zero grow-back animation.
 
-**Why:** The animated text label was unnecessary visual noise. A simple size/opacity transition communicates the same "it's here but not in your way" concept more cleanly. The 2s transition duration was chosen for a slow, elegant feel.
+**Why:** The old width/height animation wasn't visually convincing — layout-based size changes don't produce the same "pinch-to-zoom" effect as transform scaling. The grow-back animation on tab switch was also undesirable; the FAB should always appear at full size immediately.
 
 **How it works:**
-- CSS: `.fab` starts at 64px with full opacity. Transition on `width`, `height`, `font-size`, and `opacity` uses `cubic-bezier(0.4, 0, 0.2, 1)` over `2s` for a slow, deliberate ease-in-out curve. New `.fab.settled` class sets 48px size and `opacity: .75`.
-- JS: `_updateFAB(tab)` removes `settled` class on tab switch (reset to large), then adds it after 2-second timeout. No label HTML is generated.
-- Removed (earlier): `.fab-label`, `@keyframes fabLabelIn`, `.fab-label.fade-out`, `@keyframes fabLabelOut` CSS rules. Removed `label` field from `FAB_CONFIG`. Renamed timer to `_fabSettleTimer`.
+- CSS: The 2s transition is defined on `.fab.settled` (not on base `.fab`). This means adding the class triggers a smooth 2s shrink, but removing it causes an instant snap-back (no transition on base). Base `.fab` only has a quick `.2s` transform transition for the `:active` press bounce. `.fab.settled:active` provides a press effect at the shrunk scale.
+- JS: `_updateFAB(tab)` uses `fab.style.transition = 'none'` + `offsetHeight` reflow trick to force an instant reset when switching tabs. After 2s idle, adds "settled" class which brings its own 2s transition and triggers the shrink.
+- Hidden state: `.fab.hidden` now has `transition: none` to prevent any animation artifact when toggling visibility.
 
 **Files changed:**
-- `src/styles.css` — Replaced label animation CSS with `.fab.settled` shrink/fade class
-- `src/main.js` — Simplified `_updateFAB()` to use settled class instead of label
-- `index.html` — Updated comment on FAB button (markup unchanged)
+- `src/styles.css` — `.fab.settled` uses `transform:scale(.75)` instead of `width:48px;height:48px;font-size:1.3rem`. Transition moved from base to settled class. Added `.fab.settled:active` rule. Added `transition:none` to `.fab.hidden`.
+- `src/main.js` — `_updateFAB()` uses inline transition disable + reflow for instant reset. Also clears "settled" class when hiding FAB.
 
 #### 2. Running Low & Recent Activity: Always Start Collapsed
 
