@@ -101,7 +101,19 @@ setRenderInv(renderInv);
 // shopping, insights). Only one screen is visible at a time. Navigation is
 // driven by bottom nav bar taps which call showScreen().
 
-// showScreen(n) — switch to the named screen (e.g. "home", "inventory")
+// Ordered tab names for swipe navigation — matches bottom nav layout left-to-right
+const TAB_ORDER = ["home", "inventory", "recipes", "shopping", "insights", "chat"];
+
+// _currentTab() — returns the currently active tab name by checking which screen is visible.
+function _currentTab() {
+  for (const t of TAB_ORDER) {
+    if (g("screen-" + t)?.classList.contains("active")) return t;
+  }
+  return "home";
+}
+
+// showScreen(n) — switch to the named screen (e.g. "home", "inventory").
+// Handles deactivating current screen, activating new one, updating FAB, and re-rendering content.
 window.showScreen = function(n) {
   // Close any open overlays (modals) before switching screens
   document.querySelectorAll(".ov.active").forEach(o => o.classList.remove("active"));
@@ -121,7 +133,84 @@ window.showScreen = function(n) {
   if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
   if (n === "shopping") renderShop();
   if (n === "insights") renderInsights();
+  // Update context-aware FAB icon/action for the new tab
+  _updateFAB(n);
 };
+
+// ── CONTEXT-AWARE FLOATING ACTION BUTTON ─────────────────────────────────────
+// The FAB shows a different shortcut depending on the active tab:
+//   Home → "+" (universal add), Supplies → "+" (add supply), Recipes → "+" (add recipe),
+//   Shop → "+" (add to list), Stats → hidden, Chat → hidden
+const FAB_CONFIG = {
+  home:      { icon: "＋", action: "openUniversalAdd()",   label: "Add item" },
+  inventory: { icon: "＋", action: "openInvAddSheet()",    label: "Add supply" },
+  recipes:   { icon: "＋", action: "showOv('arec')",       label: "Add recipe" },
+  shopping:  { icon: "＋", action: "openShopAddSheet()",   label: "Add to list" },
+  insights:  null, // No FAB on stats tab
+  chat:      null  // No FAB on chat tab
+};
+
+// _updateFAB(tab) — shows/hides the FAB and sets its icon and onclick for the given tab.
+function _updateFAB(tab) {
+  const fab = g("fab-btn");
+  if (!fab) return;
+  const cfg = FAB_CONFIG[tab];
+  if (!cfg) {
+    // Hide FAB for tabs without a primary action
+    fab.classList.add("hidden");
+  } else {
+    fab.classList.remove("hidden");
+    fab.innerHTML = `<span class="fab-icon">${cfg.icon}</span>`;
+    fab.setAttribute("onclick", cfg.action);
+    fab.setAttribute("aria-label", cfg.label);
+  }
+}
+
+// ── SWIPE-BETWEEN-TABS GESTURE ───────────────────────────────────────────────
+// Horizontal swipe on the main app area navigates between adjacent tabs.
+// Uses touch events with a 50px threshold and 30deg max angle to prevent
+// false triggers during vertical scrolling or diagonal swipes.
+function _initTabSwipe() {
+  let startX = 0, startY = 0, tracking = false;
+  const THRESHOLD = 50;  // minimum swipe distance in px
+  const MAX_ANGLE = 30;  // max vertical deviation in degrees
+
+  const appEl = g("APP");
+  if (!appEl) return;
+
+  appEl.addEventListener("touchstart", (e) => {
+    // Don't intercept swipes inside scrollable sub-containers (deal search, etc.)
+    if (e.target.closest(".bsheet, .ov, .modal, .chmsgs")) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+  }, { passive: true });
+
+  appEl.addEventListener("touchend", (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    // Require horizontal dominance and minimum distance
+    if (absDx < THRESHOLD || absDy > absDx * Math.tan(MAX_ANGLE * Math.PI / 180)) return;
+
+    const cur = _currentTab();
+    const idx = TAB_ORDER.indexOf(cur);
+    if (idx === -1) return;
+
+    // Swipe left → next tab, swipe right → previous tab
+    const nextIdx = dx < 0 ? idx + 1 : idx - 1;
+    if (nextIdx >= 0 && nextIdx < TAB_ORDER.length) {
+      window.showScreen(TAB_ORDER[nextIdx]);
+    }
+  }, { passive: true });
+}
+
+// Initialize swipe navigation after DOM is ready
+setTimeout(_initTabSwipe, 0);
 
 // Wrap showOv so that opening the settings overlay also refreshes its UI.
 // The slight delay (80ms) ensures the overlay's DOM is visible before we

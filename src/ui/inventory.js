@@ -119,13 +119,19 @@ export function iH(item) {
   // Brand is only shown on the scan result preview and in the detail sheet.
   // Subtitle is only shown in the detail sheet when the user taps to open it.
 
+  // Determine if item is running low — at or below restock threshold.
+  // Shows a pulsing amber dot next to the quantity as a visual warning.
+  const thresh = item.restockThreshold != null ? item.restockThreshold : _defaultThreshold(item.unit);
+  const isLow = !item.doNotRestock && typeof item.qty === "number" && item.qty <= thresh && item.qty > 0;
+  const lowCls = isLow ? " low-stock" : "";
+
   // Build the full row HTML mirroring shopping list structure:
   //   .swipe-wrap  – outermost container, carries the item id for JS lookups
   //   .swipe-inner – the visible card (moves on swipe)
   //   .swipe-del   – the red delete button revealed behind the card on swipe
   return `<div class="swipe-wrap" id="sw-${item.id}" data-id="${item.id}" data-list="inv">
     <div class="swipe-inner">
-      <div class="iit${bc}" onclick="swipeRowTap('${item.id}','inv')">
+      <div class="iit${bc}${lowCls}" onclick="swipeRowTap('${item.id}','inv')">
         <div class="sel-cb">✓</div>
         <!-- Slim outlined circle: tapping opens detail sheet -->
         <div class="shck" onclick="event.stopPropagation();openInvItemDetail('${item.id}')"></div>
@@ -134,9 +140,9 @@ export function iH(item) {
           ${item.note ? `<div class="shnote" style="margin-top:2px">📝 ${item.note}</div>` : ""}
           ${et}
         </div>
-        <!-- Quantity and unit stacked on the right — clean row, no restock indicator (visible in detail sheet toggle) -->
+        <!-- Quantity and unit stacked on the right. Pulsing amber dot if low stock. -->
         <div style="text-align:right;flex-shrink:0">
-          <div class="iqt">${formatQty(item.qty)}</div>
+          <div class="iqt">${formatQty(item.qty)}${isLow ? '<span class="low-stock-dot" title="Running low"></span>' : ""}</div>
           <div class="iun">${pluralizeUnit(item.unit || "Unit", item.qty)}</div>
         </div>
       </div>
@@ -183,8 +189,15 @@ export function renderInv() {
   const c = g("ibody");
   if (!c) return;
 
-  // Enhanced empty-state with warm, inviting message
-  if (!f.length) { c.innerHTML = `<div class="es"><div class="ei">🧺</div><p>Your kitchen is bare — time to stock up.</p></div>`; return; }
+  // Illustrated empty state — food-themed with warm, inviting message
+  if (!f.length) {
+    const isFiltered = state.it !== "all";
+    const msg = isFiltered
+      ? `Nothing in your ${labels[state.it]?.replace(" items","") || "filter"} yet.`
+      : "Your pantry is waiting to be filled.";
+    c.innerHTML = `<div class="es"><div class="ei">🍳</div><p>${msg}<br><span style="font-size:.78rem;color:var(--ac);margin-top:8px;display:inline-block">Tap + Add item above to get started</span></p></div>`;
+    return;
+  }
 
   // Render flat list for the selected location sub-tab
   c.innerHTML = `<div class="ilst">${f.map(iH).join("")}</div>`;

@@ -607,12 +607,24 @@ function rH(r) {
   // Gradient goes from transparent at top → dark at bottom so text stays legible
   const imgHtml = r.imageUrl ? `<div class="rcd-cover"><img src="${r.imageUrl}" alt="" onerror="this.parentElement.style.display='none'"/></div>` : "";
 
-  // Time/servings metadata pills — show if imported via AI
+  // Time/servings metadata pills + difficulty/time badges — show if data available.
+  // Difficulty badge uses color-coded styling: easy=green, medium=gold, hard=red.
+  // Time badge uses blue accent. These make recipe cards more scannable.
+  const badgeParts = [];
+  if (r.difficulty) {
+    const dCls = r.difficulty === "easy" ? "recipe-badge-easy" : r.difficulty === "hard" ? "recipe-badge-hard" : "recipe-badge-medium";
+    const dLabel = r.difficulty.charAt(0).toUpperCase() + r.difficulty.slice(1);
+    badgeParts.push(`<span class="recipe-badge ${dCls}">${dLabel}</span>`);
+  }
+  if (r.totalTime || r.cookTime) {
+    badgeParts.push(`<span class="recipe-badge recipe-badge-time">⏱ ${r.totalTime || r.cookTime}</span>`);
+  }
   const metaParts = [
-    r.totalTime || r.cookTime ? `⏱ ${r.totalTime || r.cookTime}` : "",
     r.servings ? `🍽 ${r.servings} servings` : "",
   ].filter(Boolean);
-  const metaHtml = metaParts.length ? `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">${metaParts.map(m => `<span style="font-size:.68rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:2px 8px">${m}</span>`).join("")}</div>` : "";
+  // Combine badges and metadata into one flex row
+  const allMeta = [...badgeParts, ...metaParts.map(m => `<span style="font-size:.68rem;color:var(--mt);background:var(--b1);border-radius:8px;padding:2px 8px">${m}</span>`)];
+  const metaHtml = allMeta.length ? `<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">${allMeta.join("")}</div>` : "";
 
   // Assemble the full card — tapping opens the read-only view (not edit).
   // stopPropagation on the heart so tapping it doesn't also open the recipe.
@@ -731,7 +743,10 @@ export function renderRecs() {
   // Show a friendly empty state if no recipes match the filter
   if (!f.length) {
     const hasFilters = state.recSearch || rf.tags.length || rf.difficulty || rf.cookTime !== "any" || rf.serves !== "any" || rf.protein.length;
-    c.innerHTML = searchSortHtml + `<div class="es"><div class="ei">📖</div><p>${hasFilters ? "No recipes match your filters." : state.rt === "fav" ? "No favorites yet!" : state.rt === "top" ? "No 4–5 star recipes yet." : state.rt === "quick" ? "No quick recipes saved yet." : state.rt === "kid" ? "No kid-friendly recipes yet." : "No recipes saved yet.<br/>Mark meals as cooked or tap + Add."}</p></div>`;
+    // Food-themed illustrated empty states with contextual messaging per filter
+    const emptyIcon = hasFilters ? "🔍" : state.rt === "fav" ? "❤️" : state.rt === "top" ? "⭐" : state.rt === "quick" ? "⚡" : state.rt === "kid" ? "🧸" : "🍝";
+    const emptyMsg = hasFilters ? "No recipes match your filters.<br><span style='font-size:.78rem;color:var(--ac)'>Try adjusting or clearing filters</span>" : state.rt === "fav" ? "No favorites yet!<br><span style='font-size:.78rem;color:var(--ac)'>Tap the heart on any recipe to save it here</span>" : state.rt === "top" ? "No 4–5 star recipes yet.<br><span style='font-size:.78rem;color:var(--ac)'>Rate your recipes to see them here</span>" : state.rt === "quick" ? "No quick recipes saved yet." : state.rt === "kid" ? "No kid-friendly recipes yet." : "Your recipe book is empty.<br><span style='font-size:.78rem;color:var(--ac)'>Tap + Add or cook a meal to start collecting</span>";
+    c.innerHTML = searchSortHtml + `<div class="es"><div class="ei">${emptyIcon}</div><p>${emptyMsg}</p></div>`;
     return;
   }
 

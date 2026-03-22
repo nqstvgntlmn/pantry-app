@@ -575,8 +575,8 @@ export function renderShop() {
 
   if (!c) return; // Safety: if the list container doesn't exist in DOM, bail
 
-  // Enhanced empty state with warm, inviting message
-  if (!state.shop.length) { c.innerHTML = `<div class="es"><div class="ei">🛒</div><p>Your list is clear — enjoy the peace.</p></div>`; return; }
+  // Illustrated empty state — food-themed with action hint
+  if (!state.shop.length) { c.innerHTML = `<div class="es"><div class="ei">🥑</div><p>Your list is clear — enjoy the peace.<br><span style="font-size:.78rem;color:var(--ac);margin-top:8px;display:inline-block">Tap + Add item or ask Claude to build one</span></p></div>`; return; }
 
   // Build the enhanced "Done" section HTML with gold divider, count badge,
   // collapsible toggle, and "Clear all done" button
@@ -3883,14 +3883,28 @@ export async function clipCoupon(couponId) {
     const coupon = _allCoupons.find(c => c.id === couponId);
     if (coupon) coupon.clipped = true;
 
-    // Update the button to show clipped state
+    // Update the button to show clipped state with satisfying bounce animation
     btn.classList.remove("loading");
-    btn.classList.add("clipped");
+    btn.classList.add("clipped", "clip-animating");
     btn.textContent = "✓ Clipped";
     btn.onclick = null;
+    // Remove animation class after it completes so it doesn't replay
+    setTimeout(() => btn.classList.remove("clip-animating"), 500);
 
     // Add clipped styling to the card
     if (card) card.classList.add("clipped");
+
+    // Track cumulative savings for the savings dashboard widget.
+    // Parse the dollar value from the already-found coupon object (line 3883)
+    // and add to the weekly running total stored in localStorage.
+    if (coupon && coupon.value) {
+      const valMatch = coupon.value.match(/\$?([\d.]+)/);
+      if (valMatch) {
+        const saved = parseFloat(valMatch[1]) || 0;
+        const prev = parseFloat(localStorage.getItem("ks-clipped-savings") || "0");
+        localStorage.setItem("ks-clipped-savings", (prev + saved).toFixed(2));
+      }
+    }
 
     showNotif("Coupon clipped to your Price Plus Card!");
   } catch (err) {

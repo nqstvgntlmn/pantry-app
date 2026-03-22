@@ -17,17 +17,37 @@ import { consolidateShopItem, _getProductPreference } from './shopping.js'; // C
 import { UNITS } from './inventory.js'; // Shared unit list for the qty toolbar
 import { autoCategorizeByName, getCategoryDisplay, renderCategoryBadge, openCategoryPicker } from './categorypicker.js';
 
+// _firstName(name) — extracts first name by splitting on the first space.
+// "Bora Isguder" → "Bora", "Bora" → "Bora"
+function _firstName(name) {
+  return (name || "").split(" ")[0].trim() || name;
+}
+
+// _contextGreeting(hour) — returns a time-aware greeting with optional
+// day-of-week context for a more personal, warm feel.
+function _contextGreeting(hour) {
+  const dow = new Date().getDay(); // 0=Sun, 6=Sat
+  const isWeekend = dow === 0 || dow === 6;
+  if (hour < 5)  return "Burning the midnight oil";
+  if (hour < 12) return isWeekend ? "Lazy morning" : "Good morning";
+  if (hour < 17) return isWeekend ? "Happy afternoon" : "Good afternoon";
+  if (hour < 21) return "Good evening";
+  return "Late night vibes";
+}
+
 // initHome() — called once on app boot.
-// Sets the time-aware greeting ("Good morning/afternoon/evening"), displays
+// Sets the context-aware greeting with first name only, displays
 // today's full date, and kicks off the first render of the week grid.
 export function initHome() {
-  // Determine greeting based on current hour
+  // Determine greeting based on current hour + day context
   const h = new Date().getHours();
-  const gr = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  const gr = _contextGreeting(h);
 
   // Resolve the user's display name: prefer localStorage override ("ks-who"),
-  // fall back to the first adult listed in household config
-  const u = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
+  // fall back to the first adult listed in household config.
+  // Show only the first name for a cleaner, friendlier greeting.
+  const fullName = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
+  const u = _firstName(fullName);
 
   // Render "Good morning, <Name>" into the greeting element
   const grtEl = g("grt");
@@ -58,8 +78,10 @@ export function setRenderInv(fn) { renderInvFn = fn; }
 // (the `!grtEl.innerHTML` guard), so we don't flicker on every data refresh.
 export function renderHome() {
   const h = new Date().getHours();
-  const gr = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-  const u = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
+  const gr = _contextGreeting(h);
+  // Show only the first name for a cleaner, friendlier greeting
+  const fullName = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
+  const u = _firstName(fullName);
 
   // Only populate greeting once — avoids overwriting on repeated renders
   const grtEl = g("grt");
@@ -299,43 +321,118 @@ function checkVarietyNudge() {
   else { el.style.display = "none"; }
 }
 
-// renderSum() — updates the numeric summary cards at the top of the home screen.
-// There are two display areas:
-//   1. The "expiring" and "shopping" text cards (home-exp-val/sub, home-shop-val/sub)
-//   2. The 4-tile stat grid (sgrd) showing inventory count, expiring, to-buy, and recipes
+// _calcWeeklySavings() — estimates weekly savings from clipped coupons.
+// Scans cached coupon data for clipped items and sums up their dollar values.
+// Returns a numeric total (e.g. 12.50). Falls back to 0 if no data available.
+function _calcWeeklySavings() {
+  try {
+    const raw = localStorage.getItem("ks-clipped-savings");
+    if (raw) return parseFloat(raw) || 0;
+  } catch (_) { /* ignore parse errors */ }
+  return 0;
+}
+
+// _getSuggestedRecipes() — surfaces up to 3 recipes that use ingredients
+// expiring soon. Helps reduce food waste by suggesting timely meals.
+function _getSuggestedRecipes() {
+  // Get names of expiring/expired inventory items (lowercase for matching)
+  const expiringNames = state.inv
+    .filter(i => { const s = xSt(i.expiry); return s && (s.c === "expiring" || s.c === "expired"); })
+    .map(i => (i.name || "").toLowerCase());
+  if (!expiringNames.length || !state.recs.length) return [];
+
+  // Score each recipe by how many expiring ingredients it uses
+  const scored = state.recs.map(r => {
+    const ings = (r.ingredients || []).map(ig => (typeof ig === "string" ? ig : ig.name || "").toLowerCase());
+    const matches = expiringNames.filter(en => ings.some(ig => ig.includes(en) || en.includes(ig)));
+    return { recipe: r, matchCount: matches.length, matchNames: matches };
+  }).filter(s => s.matchCount > 0);
+
+  // Sort by most matches, take top 3
+  scored.sort((a, b) => b.matchCount - a.matchCount);
+  return scored.slice(0, 3);
+}
+
+// renderSum() — updates the bento-style summary cards on the home screen.
+// Displays: 4-tile stat grid, savings tracker (hero tile), and suggested recipes.
+// Each tile has a unique gradient accent and navigates to the relevant screen.
 export function renderSum() {
   // Count inventory items that are expired or expiring within 7 days
   const ex = state.inv.filter(i => { const s = xSt(i.expiry); return s && (s.c === "expiring" || s.c === "expired"); }).length;
   // Count unchecked (still-needed) shopping list items
   const tb = state.shop.filter(i => !i.checked).length;
 
-  // -- Expiring-items text card --
+  // -- Expiring-items text card (legacy, still used by Tonight's card area) --
   const expV = g("home-exp-val"), expS = g("home-exp-sub");
   if (expV) {
     if (ex > 0) {
-      // Show count in amber/warning color when items are expiring
       expV.textContent = ex + " item" + (ex > 1 ? "s" : "");
       expV.className = "tc-val";
-      expV.style.color = "var(--am)"; // amber warning color from CSS variables
+      expV.style.color = "var(--am)";
     } else {
-      // Green "all clear" state when nothing is expiring
       expV.textContent = "All fresh!";
       expV.className = "tc-val tc-green";
     }
   }
   if (expS) { expS.textContent = ex > 0 ? "expiring soon" : "Nothing in next 3 days"; }
 
-  // -- Shopping-list text card --
+  // -- Shopping-list text card (legacy) --
   const shopV = g("home-shop-val"), shopS = g("home-shop-sub");
   if (shopV) shopV.textContent = tb;
-  // Pluralize correctly: "1 item to buy", "0 → all stocked up", "3 items to buy"
   if (shopS) shopS.textContent = tb === 1 ? "item to buy" : tb === 0 ? "all stocked up" : "items to buy";
 
-  // -- 4-tile stat grid: inventory count, expiring count, to-buy count, saved recipes --
-  // Each tile is clickable and navigates to the relevant screen.
-  // The "expiring" tile gets a "warn" class when items need attention.
+  // -- Bento stat grid: 4 tiles + optional savings hero + suggested recipes --
   const sgrd = g("sgrd");
-  if (sgrd) sgrd.innerHTML = `<div class="sc" onclick="showScreen('inventory')"><div class="sci">🧺</div><div class="scv">${state.inv.length}</div><div class="scl">Items in stock</div></div><div class="sc${ex > 0 ? " warn" : ""}" onclick="showScreen('inventory')"><div class="sci">⏱</div><div class="scv">${ex}</div><div class="scl">Expiring soon</div></div><div class="sc" onclick="showScreen('shopping')"><div class="sci">🛒</div><div class="scv">${tb}</div><div class="scl">To buy</div></div><div class="sc" onclick="showScreen('recipes')"><div class="sci">📖</div><div class="scv">${state.recs.length}</div><div class="scl">Saved recipes</div></div>`;
+  if (!sgrd) return;
+
+  // Calculate weekly savings from clipped coupons
+  const savings = _calcWeeklySavings();
+
+  // Build the 4 core stat tiles with bento gradient accents
+  let html = `
+    <div class="sc bento-inventory card-enter" onclick="showScreen('inventory')">
+      <div class="sci">🧺</div><div class="scv">${state.inv.length}</div><div class="scl">Items in stock</div>
+    </div>
+    <div class="sc bento-expiring card-enter${ex > 0 ? " warn" : ""}" onclick="showScreen('inventory')" style="animation-delay:.05s">
+      <div class="sci">⏱</div><div class="scv">${ex}</div><div class="scl">Expiring soon</div>
+    </div>
+    <div class="sc bento-shopping card-enter" onclick="showScreen('shopping')" style="animation-delay:.1s">
+      <div class="sci">🛒</div><div class="scv">${tb}</div><div class="scl">To buy</div>
+    </div>
+    <div class="sc bento-recipes card-enter" onclick="showScreen('recipes')" style="animation-delay:.15s">
+      <div class="sci">📖</div><div class="scv">${state.recs.length}</div><div class="scl">Saved recipes</div>
+    </div>`;
+
+  // Savings hero tile — only shown if user has clipped coupons this week
+  if (savings > 0) {
+    html += `
+    <div class="sc bento-hero card-enter" style="animation-delay:.2s">
+      <div class="savings-icon">💰</div>
+      <div>
+        <div class="savings-amount">$${savings.toFixed(2)}</div>
+        <div class="savings-label">Saved this week from coupons</div>
+      </div>
+    </div>`;
+  }
+
+  // Suggested recipes tile — surfaces recipes using expiring ingredients
+  const suggestions = _getSuggestedRecipes();
+  if (suggestions.length) {
+    html += `
+    <div class="sc bento-suggest card-enter" style="animation-delay:.25s">
+      <div class="bento-suggest-title">🍳 Use it before you lose it</div>
+      <div class="bento-suggest-list">
+        ${suggestions.map(s => `
+          <div class="bento-suggest-item" onclick="openRecipeView('${s.recipe.id}')">
+            <div class="bento-suggest-name">${toTitleCase(s.recipe.name || "")}</div>
+            <div class="bento-suggest-reason">Uses ${s.matchNames.map(n => toTitleCase(n)).join(", ")}</div>
+          </div>
+        `).join("")}
+      </div>
+    </div>`;
+  }
+
+  sgrd.innerHTML = html;
 }
 
 // renderExp() — renders the "Expiring Soon" item list on the home screen.

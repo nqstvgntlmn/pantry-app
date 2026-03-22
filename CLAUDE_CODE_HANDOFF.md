@@ -534,6 +534,114 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
 - **Session 5:** Major feature additions — household sync fix (ghost household bug), bulk recipe import, Shopping Prep, unit preference memory, fraction picker, community recipe improvements, visual premium upgrade, barcode scanner overhaul, category system, Shopping Prep with custom categories and emoji picker
 - **Session 6:** Deals tab investigation (Flipp API planned), ongoing bug fixes
 - **Session 7:** ShopRite digital coupons via Azure proxy, email gate for beta users, Firestore cache (4hr TTL), On My List coupon matching, JWT expiry warning banner + daily cron job via Resend, dual PPC clipping (Bora + Bushra)
+- **Session 8:** Full UI modernization pass — see detailed changes below
+
+---
+
+## Session 8 — UI Modernization (March 2026)
+
+### Overview
+A comprehensive visual polish pass across all tabs. The dark gold identity is fully preserved — this is a refinement, not a redesign. All changes are purely visual/UX — no backend or API changes.
+
+### Changes Made
+
+#### 1. Home Tab Greeting — First Name Only
+- **File:** `src/ui/home.js` (`initHome()`, `renderHome()`)
+- **What:** "Good evening, Bora Isguder" → "Good evening, Bora". Parses first name by splitting display name on first space via `_firstName()`.
+- **Context-Aware Greetings:** New `_contextGreeting()` function adds day/time context: "Lazy morning" on weekends, "Late night vibes" after 9pm, "Burning the midnight oil" before 5am, etc.
+
+#### 2. Bento-Style Home Stat Grid
+- **File:** `src/ui/home.js` (`renderSum()`)
+- **What:** 4-tile stat grid now uses gradient-accented bento tiles with unique colors per stat (gold=inventory, amber=expiring, green=shopping, purple=recipes). Each tile has a `card-enter` animation for fade+slide-up on load.
+- **Savings Tracker:** Optional hero tile spans full width showing "You've saved $X this week" from clipped coupons. Savings tracked via `ks-clipped-savings` in localStorage, accumulated by `clipCoupon()` in `shopping.js`.
+- **Suggested Recipes:** Optional tile shows up to 3 recipes that use ingredients expiring soon. Scored by match count. Tapping opens the recipe view.
+- **CSS classes:** `.bento-inventory`, `.bento-expiring`, `.bento-shopping`, `.bento-recipes`, `.bento-hero`, `.bento-suggest`
+
+#### 3. Glassmorphism Effect
+- **File:** `src/styles.css`
+- **Where:** Coupon cards, deal cards, bottom sheets, modals, bottom nav, undo toast
+- **How:** `backdrop-filter:blur(16-24px)` with translucent backgrounds (`rgba`) and subtle border glow. Creates a frosted glass layered look on the dark background.
+
+#### 4. Card Hover/Focus Glow
+- **File:** `src/styles.css`
+- **What:** All interactive cards (`.sc`, `.today-card`, `.iit`, `.shit`, `.rcd`, `.istat`) get a subtle gold border glow on hover/focus. Focus-visible gets a 2px gold outline for accessibility.
+
+#### 5. More Rounded Corners
+- **File:** `src/styles.css`
+- **What:** Cards bumped from 14-18px to 18-22px radius. Bottom sheets 24px, modals 28px. Softer, more modern feel.
+
+#### 6. Category Chip Accent Colors
+- **File:** `src/styles.css`
+- **What:** Coupon category chips (`.coupon-chip`) get unique accent colors via `data-cat` attribute: dairy=blue, produce=green, meat=red, frozen=light blue, snacks=orange, bakery=brown, beverages=purple, etc.
+- **Note:** Requires coupon rendering to add `data-cat="categoryName"` attribute to chips.
+
+#### 7. Inventory Tab Chip Colors
+- **File:** `src/styles.css`
+- **What:** Fridge=blue, Freezer=light blue, Pantry=warm brown, Household=grey accent colors on active inventory tab chips.
+
+#### 8. Recipe Tab Chip Colors
+- **File:** `src/styles.css`
+- **What:** Favorites=red, Top Rated=gold, Quick=green, Kids=pink, Community=blue accent colors on active recipe tab chips.
+
+#### 9. Section Header Typography
+- **File:** `src/styles.css`
+- **What:** Section headers (`.hsec-lbl`, `.slbl`, `.shsec`) are bolder (700 weight), slightly larger, with thicker 3px gold left border. Screen titles (`.sttl`) bumped to 2.2rem/800 weight.
+
+#### 10. Whitespace / Breathing Room
+- **File:** `src/styles.css`
+- **What:** More generous padding on `.hbody`, `.ibody`, `.shbody`, `.rbody` (20px). Cards get more padding (18-24px). Item spacing increased.
+
+#### 11. Micro-Animations
+- **File:** `src/styles.css`
+- **`card-enter`** animation: cards fade+slide up (16px) on load, 350ms duration.
+- **`screenFadeIn`**: tabs cross-fade on switch (250ms).
+- **Button press effects:** Primary buttons get gold shadow pulse on press. Secondary buttons get subtle shadow.
+- **Nav press:** Nav items scale down on tap for tactile feel.
+
+#### 12. Loading Skeleton Enhancements
+- **File:** `src/styles.css`
+- **What:** Added `.skeleton-card`, `.skeleton-text`, `.skeleton-circle` classes for richer loading states.
+
+#### 13. Coupon Clip Animation
+- **File:** `src/ui/shopping.js` (`clipCoupon()`), `src/styles.css`
+- **What:** When clipping a coupon, the button plays a satisfying bounce animation (`clipSuccess` keyframes) with spring physics. `.clip-animating` class added/removed. Button shows "✓ Clipped" after animation.
+
+#### 14. Coupon Savings Tracking
+- **File:** `src/ui/shopping.js` (`clipCoupon()`)
+- **What:** On successful clip, parses the coupon's dollar value and adds it to `ks-clipped-savings` in localStorage. Used by the home screen savings hero tile.
+
+#### 15. Recipe Badges (Difficulty & Time)
+- **File:** `src/ui/recipes.js` (`rH()`)
+- **What:** Recipe cards now show color-coded difficulty badges (green=easy, gold=medium, red=hard) and blue time badges. These appear in the metadata row below the star rating.
+- **CSS classes:** `.recipe-badge`, `.recipe-badge-easy`, `.recipe-badge-medium`, `.recipe-badge-hard`, `.recipe-badge-time`
+
+#### 16. Low Stock Indicator
+- **File:** `src/ui/inventory.js` (`iH()`)
+- **What:** Inventory items at or below their restock threshold show a pulsing amber dot next to the quantity and get a gold left-border highlight (`.low-stock` class on `.iit`). Respects `doNotRestock` flag.
+- **CSS:** `.low-stock-dot` (pulsing amber dot), `.iit.low-stock` (amber left border)
+
+#### 17. Empty State Illustrations
+- **Files:** `src/ui/inventory.js`, `src/ui/shopping.js`, `src/ui/recipes.js`
+- **What:** All empty states now use contextual food emojis (🍳, 🥑, 🍝, etc.) with action hints in gold that tell the user what to do next. Recipe empty states are per-tab-filter (❤️ for favorites, ⭐ for top rated, etc.).
+
+#### 18. Context-Aware Floating Action Button (FAB)
+- **File:** `index.html`, `src/main.js`, `src/styles.css`
+- **What:** Gold circular FAB positioned above bottom nav. Shows "＋" and triggers the relevant add action per tab: Home→universal add, Supplies→add supply, Recipes→add recipe, Shop→add to list. Hidden on Stats and Chat tabs.
+- **Config:** `FAB_CONFIG` object in `main.js` maps tab→{icon, action, label}.
+- **CSS:** `.fab` class with shadow, scale animation on press, `.fab.hidden` for smooth hide.
+
+#### 19. Swipe-Between-Tabs Gesture
+- **File:** `src/main.js` (`_initTabSwipe()`)
+- **What:** Horizontal swipe on the main app area navigates between adjacent tabs. Uses 50px threshold and 30° max angle to prevent false triggers during vertical scrolling. Doesn't intercept swipes inside bottom sheets, overlays, or chat.
+- **Tab order:** home → inventory → recipes → shopping → insights → chat
+
+#### 20. Bottom Nav Refinements
+- **File:** `src/styles.css`
+- **What:** Active indicator line is thicker (2.5px). Active label is bold (700). Frosted glass background via glassmorphism.
+
+#### 21. Deal Card Enhancements
+- **File:** `src/styles.css`
+- **What:** "On My List" deal matches get green glassmorphism glow. All deal cards use glassmorphism background.
 
 ---
 

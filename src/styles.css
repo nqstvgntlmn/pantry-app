@@ -1105,3 +1105,248 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 /* Category badge on Shopping Prep item rows — smaller variant */
 .prep-cat-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:12px;font-size:.65rem;color:var(--mt);background:var(--card2);border:1px solid var(--b2);cursor:pointer;margin-top:3px;transition:all .12s}
 .prep-cat-badge:active{border-color:var(--ac)}
+
+/* ═══════════════════════════════════════════════════════════════
+   UI MODERNIZATION — "Polished Dark Gold" v2.0
+   Glassmorphism, micro-animations, bento grid, category accents,
+   typography hierarchy, empty-state illustrations, FAB, breathing room.
+   All visual-only — no business logic affected.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── CATEGORY CHIP ACCENT COLORS ──────────────────────────────────────────────
+   Each coupon/deal category gets a distinct subtle accent instead of flat grey.
+   Applied via data-cat attribute on .coupon-chip elements. */
+.coupon-chip[data-cat="dairy"]{border-color:rgba(100,180,255,.4);color:#8ac4ff;background:rgba(100,180,255,.08)}
+.coupon-chip[data-cat="dairy"].active{background:rgba(100,180,255,.25);border-color:#8ac4ff}
+.coupon-chip[data-cat="produce"]{border-color:rgba(120,200,100,.4);color:#8cd880;background:rgba(120,200,100,.08)}
+.coupon-chip[data-cat="produce"].active{background:rgba(120,200,100,.25);border-color:#8cd880}
+.coupon-chip[data-cat="meat"]{border-color:rgba(230,120,100,.4);color:#e8887a;background:rgba(230,120,100,.08)}
+.coupon-chip[data-cat="meat"].active{background:rgba(230,120,100,.25);border-color:#e8887a}
+.coupon-chip[data-cat="frozen"]{border-color:rgba(130,200,240,.4);color:#a0d8f0;background:rgba(130,200,240,.08)}
+.coupon-chip[data-cat="frozen"].active{background:rgba(130,200,240,.25);border-color:#a0d8f0}
+.coupon-chip[data-cat="snacks"]{border-color:rgba(255,180,80,.4);color:#f0b860;background:rgba(255,180,80,.08)}
+.coupon-chip[data-cat="snacks"].active{background:rgba(255,180,80,.25);border-color:#f0b860}
+.coupon-chip[data-cat="bakery"]{border-color:rgba(210,160,100,.4);color:#d8b07a;background:rgba(210,160,100,.08)}
+.coupon-chip[data-cat="bakery"].active{background:rgba(210,160,100,.25);border-color:#d8b07a}
+.coupon-chip[data-cat="beverages"]{border-color:rgba(160,140,220,.4);color:#b8a8e0;background:rgba(160,140,220,.08)}
+.coupon-chip[data-cat="beverages"].active{background:rgba(160,140,220,.25);border-color:#b8a8e0}
+.coupon-chip[data-cat="household"]{border-color:rgba(180,180,180,.4);color:#c0c0c0;background:rgba(180,180,180,.08)}
+.coupon-chip[data-cat="household"].active{background:rgba(180,180,180,.25);border-color:#c0c0c0}
+.coupon-chip[data-cat="health"]{border-color:rgba(100,210,180,.4);color:#78d8b0;background:rgba(100,210,180,.08)}
+.coupon-chip[data-cat="health"].active{background:rgba(100,210,180,.25);border-color:#78d8b0}
+.coupon-chip[data-cat="baby"]{border-color:rgba(240,170,200,.4);color:#f0b0c8;background:rgba(240,170,200,.08)}
+.coupon-chip[data-cat="baby"].active{background:rgba(240,170,200,.25);border-color:#f0b0c8}
+.coupon-chip[data-cat="pet"]{border-color:rgba(200,160,120,.4);color:#d0a878;background:rgba(200,160,120,.08)}
+.coupon-chip[data-cat="pet"].active{background:rgba(200,160,120,.25);border-color:#d0a878}
+
+/* ── GLASSMORPHISM CARDS ──────────────────────────────────────────────────────
+   Frosted glass effect for coupon and deal cards — translucent background
+   with backdrop blur for a layered, premium look on dark backgrounds. */
+.coupon-card{background:rgba(28,24,20,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-top-color:rgba(255,255,255,.12)}
+.coupon-card:hover,.coupon-card:active{border-color:rgba(212,168,83,.3);box-shadow:0 0 20px rgba(212,168,83,.06)}
+.coupon-card.clipped{background:rgba(28,24,20,.4)}
+
+.deal-card{background:rgba(28,24,20,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.07);border-top-color:rgba(255,255,255,.12)}
+.deal-card:hover,.deal-card:active{border-color:rgba(212,168,83,.3);box-shadow:0 0 20px rgba(212,168,83,.06)}
+.deal-card.deal-match{background:rgba(90,173,111,.06);border-color:rgba(90,173,111,.3)}
+
+/* Glassmorphism for modals, bottom sheets, and bottom nav */
+.minner{background:rgba(20,17,14,.88);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,.08)}
+.bsheet{background:rgba(28,24,20,.92);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid rgba(255,255,255,.08)}
+#NAV{background:rgba(13,11,8,.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+
+/* ── CARD HOVER/FOCUS GLOW ────────────────────────────────────────────────────
+   Subtle gold border glow on hover/focus for all interactive cards.
+   More pronounced on desktop (hover), subtle on mobile (active). */
+.sc:hover,.today-card:hover,.iit:hover,.shit:hover,.rcd:hover,.istat:hover{
+  border-color:rgba(212,168,83,.25);box-shadow:0 0 24px rgba(212,168,83,.05),inset 0 1px 0 rgba(255,255,255,.06)}
+.sc:focus-visible,.today-card:focus-visible,.iit:focus-visible,.shit:focus-visible,.rcd:focus-visible{
+  outline:2px solid var(--ac);outline-offset:2px}
+
+/* ── MORE ROUNDED CORNERS ─────────────────────────────────────────────────────
+   Slightly more rounded for a softer, modern look. Cards go from 14-18 to 18-22. */
+.sc,.today-card,.tonight-card{border-radius:22px}
+.iit,.shit,.deal-card,.coupon-card{border-radius:18px}
+.rcd{border-radius:20px}
+.swipe-wrap,.swipe-inner,.swipe-del{border-radius:18px}
+.swipe-del{border-radius:0 18px 18px 0}
+.swipe-add{border-radius:18px 0 0 18px}
+.bsheet{border-radius:24px 24px 0 0}
+.minner{border-radius:28px 28px 0 0}
+
+/* ── BENTO STAT GRID ──────────────────────────────────────────────────────────
+   Reimagined 2x2 stat grid with varied sizes, gradient backgrounds per tile,
+   and a "hero" tile that spans full width for the most important stat. */
+.sgrd{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+/* Each bento tile gets a unique subtle gradient accent */
+.sc.bento-inventory{background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(212,168,83,.08) 100%)}
+.sc.bento-expiring{background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(200,150,10,.1) 100%)}
+.sc.bento-shopping{background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(90,173,111,.08) 100%)}
+.sc.bento-recipes{background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(160,140,220,.08) 100%)}
+/* Hero tile: savings tracker spans full width */
+.sc.bento-hero{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:20px 22px;
+  background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(90,173,111,.1) 100%)}
+.sc.bento-hero .sci{font-size:2.2rem;margin-bottom:0}
+.sc.bento-hero .scv{font-size:1.8rem;color:var(--gn)}
+.sc.bento-hero .scl{margin-top:2px}
+/* Suggested recipes tile spans full width */
+.sc.bento-suggest{grid-column:1/-1;padding:18px 20px;
+  background:linear-gradient(135deg,rgba(28,24,20,.9) 0%,rgba(212,168,83,.06) 100%)}
+.bento-suggest-title{font-size:.72rem;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.bento-suggest-list{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.bento-suggest-list::-webkit-scrollbar{display:none}
+.bento-suggest-item{flex-shrink:0;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:12px 16px;min-width:160px;cursor:pointer;transition:all .15s}
+.bento-suggest-item:active{border-color:var(--ac);transform:scale(.97)}
+.bento-suggest-name{font-size:.84rem;font-weight:600;line-height:1.3;margin-bottom:4px}
+.bento-suggest-reason{font-size:.68rem;color:var(--gn);font-weight:500}
+
+/* ── LOW STOCK INDICATOR ──────────────────────────────────────────────────────
+   Visual warning badge on inventory items approaching zero stock.
+   Shown as a pulsing amber dot next to quantity. */
+.low-stock-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--am);
+  animation:lowPulse 2s ease-in-out infinite;margin-left:6px;vertical-align:middle}
+@keyframes lowPulse{0%,100%{opacity:.5;transform:scale(.9)}50%{opacity:1;transform:scale(1.1)}}
+/* Low stock row highlight in inventory */
+.iit.low-stock{border-left:3px solid var(--am)}
+
+/* ── SECTION HEADER TYPOGRAPHY ────────────────────────────────────────────────
+   Bolder, more expressive section headers with larger text and refined spacing. */
+.hsec-lbl{font-size:.76rem;font-weight:700;letter-spacing:.12em;margin:22px 0 12px;padding-left:12px;border-left:3px solid var(--ac)}
+.slbl{font-size:.72rem;font-weight:700;letter-spacing:.14em;margin:24px 0 12px;padding-left:12px;border-left:3px solid var(--ac)}
+.shsec{font-size:.72rem;font-weight:700;letter-spacing:.14em;margin:22px 0 11px;padding-left:12px;border-left:3px solid var(--ac)}
+/* Screen titles — bigger and bolder for impact */
+.sttl{font-size:2.2rem;font-weight:800;letter-spacing:-.03em}
+.grt{font-size:1.9rem;font-weight:300;letter-spacing:-.025em}
+
+/* ── WHITESPACE / BREATHING ROOM ──────────────────────────────────────────────
+   More generous padding and spacing throughout to reduce cramped feel. */
+.hbody{padding:4px 20px 20px}
+.ibody{padding:18px 20px}
+.shbody{padding:18px 20px}
+.rbody{padding:16px 20px}
+.ilst{gap:9px}
+.expl{gap:9px}
+/* More space between shopping items */
+.shit{margin-bottom:9px;padding:18px 20px}
+.iit{padding:18px 20px}
+/* More space in stat cards */
+.sc{padding:24px 20px}
+
+/* ── MICRO-ANIMATIONS — CARD LOAD-IN ─────────────────────────────────────────
+   Cards fade+slide up when entering view. Applied via JS stagger class. */
+@keyframes cardFadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.card-enter{animation:cardFadeUp .35s cubic-bezier(.4,0,.2,1) both}
+
+/* ── TAB TRANSITION ───────────────────────────────────────────────────────────
+   Smooth fade when switching tabs — screen content cross-fades. */
+.screen.active{animation:screenFadeIn .25s ease both}
+@keyframes screenFadeIn{from{opacity:0}to{opacity:1}}
+
+/* ── BUTTON PRESS MICRO-INTERACTION ───────────────────────────────────────────
+   Enhanced tactile press for primary buttons — gold shadow pulse on press. */
+.bp:active{box-shadow:0 0 20px rgba(212,168,83,.35);transform:scale(.96)}
+.bs:active{box-shadow:0 0 12px rgba(255,255,255,.04);transform:scale(.97)}
+/* Nav item press — subtle scale */
+.ni:active{transform:scale(.92);transition-duration:.1s}
+.ni{transition:transform .15s cubic-bezier(.4,0,.2,1),color .15s}
+
+/* ── LOADING SKELETON ENHANCEMENTS ────────────────────────────────────────────
+   Warm-tinted shimmer skeletons for loading states. Rounded pill shapes. */
+.skeleton-card{height:80px;border-radius:18px;margin-bottom:9px}
+.skeleton-text{height:14px;border-radius:7px;margin-bottom:8px;width:70%}
+.skeleton-text.short{width:40%}
+.skeleton-circle{width:40px;height:40px;border-radius:50%}
+
+/* ── COUPON CLIP ANIMATION ────────────────────────────────────────────────────
+   Satisfying animation when clipping a coupon: button fills green with check bounce. */
+@keyframes clipSuccess{
+  0%{transform:scale(1)}
+  30%{transform:scale(1.15)}
+  50%{transform:scale(.95)}
+  70%{transform:scale(1.05)}
+  100%{transform:scale(1)}
+}
+.coupon-clip-btn.clip-animating{animation:clipSuccess .5s cubic-bezier(.34,1.56,.64,1)}
+/* Confetti burst effect on clip — CSS-only sparkle */
+.coupon-clip-btn.clipped::after{content:"✓";margin-left:4px}
+
+/* ── RECIPE BADGES — Difficulty & Time ────────────────────────────────────────
+   Small colorful pills on recipe cards showing difficulty and cook time. */
+.recipe-badge{display:inline-flex;align-items:center;gap:3px;font-size:.66rem;padding:3px 9px;
+  border-radius:20px;font-weight:600;white-space:nowrap}
+.recipe-badge-easy{background:rgba(90,173,111,.12);color:var(--gn);border:1px solid rgba(90,173,111,.25)}
+.recipe-badge-medium{background:rgba(212,168,83,.12);color:var(--ac);border:1px solid rgba(212,168,83,.25)}
+.recipe-badge-hard{background:rgba(217,107,107,.12);color:var(--rd);border:1px solid rgba(217,107,107,.25)}
+.recipe-badge-time{background:rgba(130,200,240,.1);color:#a0d8f0;border:1px solid rgba(130,200,240,.25)}
+
+/* ── EMPTY STATE ILLUSTRATIONS ────────────────────────────────────────────────
+   Friendly food-themed illustrated empty states with warm feel.
+   Uses inline SVG data URIs for zero-dependency illustrations. */
+.es{padding:56px 32px 64px}
+.es-illustration{width:120px;height:120px;margin:0 auto 20px;opacity:.7}
+.es p{font-size:.88rem;line-height:1.7;max-width:240px;color:var(--mt)}
+/* Slightly larger emoji icon for empty states with more margin */
+.ei{font-size:3.6rem;margin-bottom:22px;opacity:.6;filter:grayscale(.15)}
+
+/* ── FLOATING ACTION BUTTON ───────────────────────────────────────────────────
+   Context-aware FAB that shows different actions per tab.
+   Positioned above bottom nav, translucent gold with shadow. */
+.fab{position:fixed;right:20px;bottom:calc(var(--nh) + var(--safe) + 16px);width:56px;height:56px;
+  border-radius:50%;background:var(--ac);color:#0D0B08;border:none;
+  font-size:1.5rem;font-weight:700;cursor:pointer;z-index:140;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(212,168,83,.35),0 2px 8px rgba(0,0,0,.3);
+  transition:transform .2s cubic-bezier(.34,1.56,.64,1),box-shadow .2s,opacity .2s}
+.fab:active{transform:scale(.9);box-shadow:0 2px 12px rgba(212,168,83,.25)}
+.fab.hidden{opacity:0;pointer-events:none;transform:scale(.6)}
+/* FAB icon transition when changing tabs */
+.fab-icon{transition:transform .2s,opacity .15s;display:flex;align-items:center;justify-content:center}
+
+/* ── SWIPE TAB GESTURE INDICATOR ──────────────────────────────────────────────
+   Visual feedback line at top of screen during horizontal swipe between tabs. */
+.swipe-tab-indicator{position:fixed;top:0;left:0;right:0;height:3px;z-index:999;
+  background:linear-gradient(90deg,transparent,var(--ac),transparent);
+  opacity:0;transition:opacity .15s;pointer-events:none}
+.swipe-tab-indicator.active{opacity:1}
+
+/* ── SAVINGS TRACKER ──────────────────────────────────────────────────────────
+   "You've saved $X this week" display shown in bento hero card. */
+.savings-amount{font-family:"Fraunces",serif;font-size:1.6rem;font-weight:300;color:var(--gn);line-height:1}
+.savings-label{font-size:.74rem;color:var(--mt);font-weight:500;margin-top:3px}
+.savings-icon{font-size:2rem;flex-shrink:0}
+
+/* ── TYPOGRAPHY HIERARCHY — Display Font ──────────────────────────────────────
+   Fraunces for hero headings, DM Sans for body. Already in use but reinforced. */
+.display-heading{font-family:"Fraunces",serif;font-weight:300;letter-spacing:-.03em;line-height:1.1}
+
+/* ── INVENTORY TAB CHIP COLORS ────────────────────────────────────────────────
+   Subtle accent colors for inventory location filter chips. */
+.itab[id="itab-fridge"].active{color:#8ac4ff;border-bottom-color:#8ac4ff}
+.itab[id="itab-freezer"].active{color:#a0d8f0;border-bottom-color:#a0d8f0}
+.itab[id="itab-pantry"].active{color:#d8b07a;border-bottom-color:#d8b07a}
+.itab[id="itab-household"].active{color:#c0c0c0;border-bottom-color:#c0c0c0}
+
+/* ── RECIPE TAB CHIP COLORS ─────────────────────────────────────────────────── */
+.rtab[id="rtab-fav"].active{color:#f07080;border-bottom-color:#f07080}
+.rtab[id="rtab-top"].active{color:#f0c860;border-bottom-color:#f0c860}
+.rtab[id="rtab-quick"].active{color:#80d8a0;border-bottom-color:#80d8a0}
+.rtab[id="rtab-kid"].active{color:#f0b8d0;border-bottom-color:#f0b8d0}
+.rtab[id="rtab-community"].active{color:#a8c8f0;border-bottom-color:#a8c8f0}
+
+/* ── SHOPPING CHECK-OFF ENHANCEMENT ───────────────────────────────────────────
+   More satisfying checkoff: green glow + scale bounce on the checkmark circle. */
+.shit.chk .shck{box-shadow:0 0 10px rgba(90,173,111,.3)}
+
+/* ── BOTTOM NAV REFINED ───────────────────────────────────────────────────────
+   Slightly thicker active indicator, smoother label transitions. */
+.ni::after{height:2.5px;left:20%;right:20%}
+.ni .lbl{transition:color .2s,opacity .2s}
+.ni.active .lbl{font-weight:700}
+
+/* ── DEAL CARD ON-MY-LIST HIGHLIGHT ───────────────────────────────────────────
+   Green glassmorphism glow for deals matching shopping list items. */
+.deal-match{box-shadow:0 0 16px rgba(90,173,111,.08);border-color:rgba(90,173,111,.35)}
+
+/* ── DONE-SECTION BREATHING ───────────────────────────────────────────────────
+   More spacing in checked-off items for visual clarity. */
+.done-section-hdr{margin:26px 0 11px}
