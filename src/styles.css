@@ -1299,7 +1299,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 
 /* ── WHITESPACE / BREATHING ROOM ──────────────────────────────────────────────
    More generous padding and spacing throughout to reduce cramped feel. */
-.hbody{padding:4px 20px 20px}
+/* Bottom padding must clear the floating pill nav + FAB + safe area */
+.hbody{padding:4px 20px calc(56px + var(--safe) + 40px)}
 .ibody{padding:18px 20px}
 .shbody{padding:18px 20px}
 .rbody{padding:16px 20px}
@@ -1385,6 +1386,26 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .fab.hidden{opacity:0;pointer-events:none;transform:scale(.6)}
 /* FAB icon transition when changing tabs */
 .fab-icon{transition:transform .2s,opacity .15s;display:flex;align-items:center;justify-content:center}
+
+/* ── FAB CONTEXTUAL LABEL ──
+   Animated label that appears next to the FAB on tab switch, then fades out
+   after 2 seconds so only the "+" icon remains. Gives context without clutter. */
+.fab-label{position:absolute;right:64px;top:50%;transform:translateY(-50%);
+  background:var(--card2);border:1px solid var(--b2);border-radius:10px;
+  padding:6px 12px;font-size:.78rem;font-weight:600;color:var(--tx);
+  white-space:nowrap;pointer-events:none;
+  opacity:0;animation:fabLabelIn .3s ease forwards}
+@keyframes fabLabelIn{from{opacity:0;transform:translateY(-50%) translateX(6px)}to{opacity:1;transform:translateY(-50%) translateX(0)}}
+.fab-label.fade-out{animation:fabLabelOut .4s ease forwards}
+@keyframes fabLabelOut{from{opacity:1;transform:translateY(-50%) translateX(0)}to{opacity:0;transform:translateY(-50%) translateX(6px)}}
+
+/* ── ACTIVITY ACTION BUTTONS ──
+   Small contextual buttons in the Recent Activity feed (Undo, Remove, etc.) */
+.act-btn{flex-shrink:0;font-size:.68rem;padding:4px 10px;border-radius:8px;
+  background:var(--sf);border:1px solid var(--b2);color:var(--ac);
+  font-weight:600;cursor:pointer;white-space:nowrap;
+  font-family:"DM Sans",sans-serif;transition:all .15s}
+.act-btn:active{background:var(--acd);transform:scale(.95)}
 
 /* ── SWIPE TAB GESTURE INDICATOR ──────────────────────────────────────────────
    Visual feedback line at top of screen during horizontal swipe between tabs. */

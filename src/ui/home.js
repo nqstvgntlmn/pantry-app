@@ -12,7 +12,7 @@
 
 import { state, J, Js } from '../state.js';
 import { g, tk, wDates, xSt, ll, showNotif, showOv, hideOv, toTitleCase, formatQtyWithUnit, combineQty, applyTitleCaseWhileTyping, gcat, FRAC_OPTIONS } from '../helpers.js';
-import { saveMp, dbList, svi } from '../db.js';
+import { saveMp, dbList, svi, dli, svShopItem, dlShopItem, dbSet, dbDelete, logActivity } from '../db.js';
 import { consolidateShopItem, _getProductPreference, getShoppingListCouponMatchCount } from './shopping.js'; // Consolidation-aware add to shopping list + product preferences + coupon count for notif strip
 import { UNITS } from './inventory.js'; // Shared unit list for the qty toolbar
 import { autoCategorizeByName, getCategoryDisplay, renderCategoryBadge, openCategoryPicker } from './categorypicker.js';
@@ -711,10 +711,74 @@ export async function addLowToShop(id) {
 // ─── ACTIVITY FEED ───────────────────────────────────────────────────────────
 // Shows recent household actions (e.g. "Bushra added Milk to shopping list")
 // on the home screen so members can see what's changed.
+// Each entry includes a contextual action button (Undo, Remove, Revert, etc.)
+// that persists until the entry is pushed off the list by newer actions.
 
-// renderActivityFeed() — displays the last 3 activity entries from state.activity.
+// _actAgo(ts) — format a timestamp as relative time (e.g. "2m ago", "3h ago", "yesterday")
+function _actAgo(ts) {
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + "h ago";
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "yesterday";
+  return days + "d ago";
+}
+
+// _actBtnFor(entry) — returns the HTML for a contextual action button based on
+// the activity entry's action verb. Each action type gets a specific undo/revert
+// button. Returns empty string if no action button applies.
+function _actBtnFor(e) {
+  const id = e.id || "";
+  const act = (e.action || "").toLowerCase();
+  const item = (e.itemName || "").replace(/</g, "&lt;");
+
+  // Match action verbs to contextual buttons
+  // Shopping list actions
+  if (act.includes("removed") && act.includes("shopping"))
+    return `<button class="act-btn" onclick="activityUndo('${id}')">Undo</button>`;
+  if (act.includes("checked off") && act.includes("shopping"))
+    return `<button class="act-btn" onclick="activityUncheck('${id}')">Uncheck</button>`;
+  if (act.includes("added") && act.includes("shopping"))
+    return `<button class="act-btn" onclick="activityRemoveShop('${id}')">Remove</button>`;
+
+  // Supplies / inventory actions
+  if (act.includes("added") && act.includes("supplies"))
+    return `<button class="act-btn" onclick="activityRemoveInv('${id}')">Remove</button>`;
+  if (act.includes("removed") && act.includes("supplies"))
+    return `<button class="act-btn" onclick="activityUndo('${id}')">Undo</button>`;
+  if (act.includes("updated") && !act.includes("recipes") && !act.includes("community"))
+    return `<button class="act-btn" onclick="activityRevert('${id}')">Revert</button>`;
+
+  // Recipe actions
+  if (act.includes("added") && act.includes("recipes"))
+    return `<button class="act-btn" onclick="activityRemoveRec('${id}')">Remove</button>`;
+  if (act.includes("saved") && act.includes("community"))
+    return `<button class="act-btn" onclick="activityRemoveRec('${id}')">Remove</button>`;
+  if (act.includes("cooked"))
+    return `<button class="act-btn" onclick="activityUndoCook('${id}')">Undo</button>`;
+
+  // Meal plan actions
+  if (act.includes("planned"))
+    return `<button class="act-btn" onclick="activityClearMeal('${id}')">Clear</button>`;
+
+  // Coupon actions
+  if (act.includes("clipped"))
+    return `<button class="act-btn" onclick="activityUnclip('${id}')">Unclip</button>`;
+
+  // Deduction actions (ingredient deduction after cooking)
+  if (act.includes("deducted"))
+    return `<button class="act-btn" onclick="activityUndoDeduct('${id}')">Undo</button>`;
+
+  return "";
+}
+
+// renderActivityFeed() — displays the last 10 activity entries from state.activity.
 // state.activity is populated by the real-time Firestore listener in realtime.js,
 // so all household members (including non-owners) see updates instantly.
+// Each entry includes a contextual action button (Undo, Remove, etc.).
 function renderActivityFeed() {
   const el = g("activityfeed");
   const lbl = g("activitylbl");
@@ -731,28 +795,175 @@ function renderActivityFeed() {
   // Always show the section label — no owner/role checks, all members see activity
   if (lbl) lbl.style.display = "flex";
 
-  // Format relative time (e.g. "2 min ago", "3h ago", "yesterday")
-  const ago = (ts) => {
-    const diff = Date.now() - new Date(ts).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return mins + "m ago";
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return hrs + "h ago";
-    const days = Math.floor(hrs / 24);
-    if (days === 1) return "yesterday";
-    return days + "d ago";
-  };
-
-  // Show only the 3 most recent entries — keeps the feed compact for small households.
+  // Show the 10 most recent entries with contextual action buttons.
   // Item names are displayed in Title Case for consistency (handles legacy entries).
-  el.innerHTML = entries.slice(0, 3).map(e =>
+  el.innerHTML = entries.slice(0, 10).map(e =>
     `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--b1)">
       <div style="width:28px;height:28px;border-radius:50%;background:var(--acd);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;color:var(--ac);font-weight:700">${(e.memberName || "?")[0].toUpperCase()}</div>
       <div style="flex:1;font-size:.82rem;color:var(--tx2);line-height:1.4;font-family:'DM Sans',sans-serif"><strong style="color:var(--tx);font-weight:600">${toTitleCase(e.memberName || "Someone").replace(/</g, "&lt;")}</strong> ${(e.action || "").replace(/</g, "&lt;")} <strong style="color:var(--tx);font-weight:600">${(e.itemName || "").replace(/</g, "&lt;")}</strong></div>
-      <div style="font-size:.68rem;color:var(--mt);flex-shrink:0">${ago(e.timestamp)}</div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        ${_actBtnFor(e)}
+        <div style="font-size:.68rem;color:var(--mt)">${_actAgo(e.timestamp)}</div>
+      </div>
     </div>`
   ).join("");
+}
+
+// ─── ACTIVITY UNDO ACTIONS ──────────────────────────────────────────────────
+// These functions handle the contextual action buttons in the activity feed.
+// Each one reverses or undoes a specific action type. They are persistent
+// (not time-limited like the 5-second swipe undo toast) — they stay available
+// until the entry is pushed off the list by newer actions.
+
+// _getActivityEntry(actId) — look up an activity entry by its Firestore doc ID
+function _getActivityEntry(actId) {
+  return (state.activity || []).find(e => e.id === actId);
+}
+
+// _extractItemName(entry) — pulls a clean item name from the activity entry's itemName.
+// Strips suffixes like " to Shopping List", " from Supplies", " to Recipes", etc.
+function _extractItemName(entry) {
+  if (!entry || !entry.itemName) return "";
+  return entry.itemName
+    .replace(/\s+(to|from|on)\s+(Shopping List|Supplies|Recipes)$/i, "")
+    .replace(/\s+tonight\s*🍳$/i, "")
+    .trim();
+}
+
+// activityUndo(actId) — generic undo for "removed" actions.
+// Re-adds the item to the list it was removed from (Shopping List or Supplies).
+export async function activityUndo(actId) {
+  const entry = _getActivityEntry(actId);
+  if (!entry) return showNotif("Activity entry not found");
+  const name = _extractItemName(entry);
+  if (!name) return;
+
+  const action = (entry.action || "").toLowerCase();
+  try {
+    if (action.includes("shopping")) {
+      // Re-add to shopping list via consolidation-aware helper
+      await consolidateShopItem({ name, qty: 1 });
+      showNotif(`${name} added back to shopping list`);
+    } else if (action.includes("supplies")) {
+      // Re-add to inventory with default qty 1
+      await svi({ name, qty: 1, location: "pantry" });
+      showNotif(`${name} added back to supplies`);
+    }
+    // Log the undo itself as an activity
+    await logActivity("undid removal of", name);
+  } catch (err) {
+    console.error("[activityUndo]", err);
+    showNotif("Couldn't undo — please try manually");
+  }
+}
+
+// activityUncheck(actId) — unchecks a shopping item that was checked off.
+// Finds the item by name in state.shop and toggles done back to false.
+export async function activityUncheck(actId) {
+  const entry = _getActivityEntry(actId);
+  if (!entry) return showNotif("Activity entry not found");
+  const name = _extractItemName(entry);
+  const item = state.shop.find(i => i.name && i.name.toLowerCase() === name.toLowerCase());
+  if (!item) return showNotif("Item not found on shopping list");
+
+  try {
+    item.done = false;
+    await svShopItem(item);
+    showNotif(`${name} unchecked`);
+    await logActivity("unchecked", toTitleCase(name) + " on Shopping List");
+  } catch (err) {
+    console.error("[activityUncheck]", err);
+    showNotif("Couldn't uncheck — please try manually");
+  }
+}
+
+// activityRemoveShop(actId) — removes a recently-added shopping item.
+export async function activityRemoveShop(actId) {
+  const entry = _getActivityEntry(actId);
+  if (!entry) return showNotif("Activity entry not found");
+  const name = _extractItemName(entry);
+  const item = state.shop.find(i => i.name && i.name.toLowerCase() === name.toLowerCase());
+  if (!item) return showNotif("Item not found on shopping list");
+
+  try {
+    await dlShopItem(item.id);
+    showNotif(`${name} removed from shopping list`);
+  } catch (err) {
+    console.error("[activityRemoveShop]", err);
+    showNotif("Couldn't remove — please try manually");
+  }
+}
+
+// activityRemoveInv(actId) — removes a recently-added supply/inventory item.
+export async function activityRemoveInv(actId) {
+  const entry = _getActivityEntry(actId);
+  if (!entry) return showNotif("Activity entry not found");
+  const name = _extractItemName(entry);
+  const item = state.inv.find(i => i.name && i.name.toLowerCase() === name.toLowerCase());
+  if (!item) return showNotif("Item not found in supplies");
+
+  try {
+    await dli(item.id);
+    showNotif(`${name} removed from supplies`);
+  } catch (err) {
+    console.error("[activityRemoveInv]", err);
+    showNotif("Couldn't remove — please try manually");
+  }
+}
+
+// activityRemoveRec(actId) — removes a recently-added/saved recipe.
+export async function activityRemoveRec(actId) {
+  const entry = _getActivityEntry(actId);
+  if (!entry) return showNotif("Activity entry not found");
+  const name = _extractItemName(entry);
+  const recipe = state.recs.find(r =>
+    (r.name || r.title || "").toLowerCase() === name.toLowerCase()
+  );
+  if (!recipe) return showNotif("Recipe not found");
+
+  try {
+    // Delete from Firestore directly — dlr import would cause circular deps
+    state.recs = state.recs.filter(r => r.id !== recipe.id);
+    await dbDelete(`households/${state.hid}/recipes/${recipe.id}`);
+    showNotif(`${name} removed from recipes`);
+    await logActivity("removed", toTitleCase(name) + " from Recipes");
+  } catch (err) {
+    console.error("[activityRemoveRec]", err);
+    showNotif("Couldn't remove — please try manually");
+  }
+}
+
+// activityRevert(actId) — placeholder for reverting quantity/field changes.
+// Full revert would require storing previous values in the activity entry,
+// which isn't currently supported. Shows a helpful message instead.
+export async function activityRevert(actId) {
+  showNotif("Open the item to adjust quantity manually");
+}
+
+// activityUndoCook(actId) — placeholder for undoing a "cooked" mark.
+// Meal plan cooked state is stored per-day, so undoing requires clearing
+// the cooked flag for that day.
+export async function activityUndoCook(actId) {
+  const entry = _getActivityEntry(actId);
+  if (!entry) return showNotif("Activity entry not found");
+  const name = _extractItemName(entry);
+  showNotif("Open meal plan to unmark " + name);
+}
+
+// activityClearMeal(actId) — placeholder for clearing a planned meal.
+export async function activityClearMeal(actId) {
+  showNotif("Open meal plan to change this day's plan");
+}
+
+// activityUnclip(actId) — placeholder for unclipping a coupon.
+// ShopRite API doesn't support unclipping, so we show a message.
+export async function activityUnclip(actId) {
+  showNotif("Coupons can't be unclipped once loaded to card");
+}
+
+// activityUndoDeduct(actId) — placeholder for undoing ingredient deduction.
+export async function activityUndoDeduct(actId) {
+  showNotif("Open Supplies to manually adjust quantities");
 }
 
 // ─── RECIPE MATCHING ("WHAT TO COOK TONIGHT?") ─────────────────────────────

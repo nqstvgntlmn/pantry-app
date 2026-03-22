@@ -850,3 +850,74 @@ to every function and every major code block — this is non-negotiable.
 
 **Files changed:**
 - `src/main.js` — `_currentTab()` returns null instead of "home" fallback; `showScreen()` has first-load fast path; debug logging in `_appStart()`
+
+---
+
+## Session 7 Changes — FAB Enhancement, Home Scroll Fix, Gesture Conflict, Activity Feed (March 2026)
+
+### 1. Floating "+" Button Enhancement (FAB-only add)
+
+**What:** Removed all static "+ Add item" / "+ Add" buttons from Supplies, Shopping, Recipes, and Home tab headers. The floating action button (FAB) in the bottom-right is now the sole entry point for adding items, and it's already context-aware per tab (Supplies → add supply, Shopping → add to list, Recipes → add recipe, Home → universal add).
+
+**New feature — animated contextual label:** When switching to a tab, a brief label (e.g. "Add supply", "Add to list") appears next to the FAB and auto-fades after 2 seconds, leaving just the "+" icon. This gives users context about what the FAB does on each tab without permanently taking up screen space.
+
+**Why:** Reduces visual clutter and duplicate tap targets. The FAB was already doing the same thing as the static buttons — now there's one clear affordance.
+
+**Files changed:**
+- `index.html` — Removed static add buttons from Home header (`.arow`), Supplies header (`shop-add-btn`), Shopping body (`shop-add-btn`), and Recipes header (`+ Add` button)
+- `src/main.js` — Updated `_updateFAB()` to inject an animated `.fab-label` span alongside the icon, with a 2-second auto-fade timer. Added `_updateFAB(n)` call to the first-load fast path so the label shows on initial boot.
+- `src/styles.css` — Added `.fab-label` styles (positioned to the left of the FAB, with `fabLabelIn`/`fabLabelOut` keyframe animations)
+
+### 2. Home Tab Bottom Content Scroll Fix
+
+**What:** The "Running Low" and "Recent Activity" sections at the bottom of the Home tab were being clipped and not fully visible/scrollable.
+
+**Root cause:** A CSS rule at line 1302 (`.hbody{padding:4px 20px 20px}`) in the "Whitespace / Breathing Room" section was overriding the original `.hbody` rule which had `padding-bottom:calc(56px + var(--safe) + 40px)`. The override stripped the bottom clearance needed for the floating pill nav and FAB.
+
+**Fix:** Changed the overriding rule to preserve the nav/FAB clearance: `.hbody{padding:4px 20px calc(56px + var(--safe) + 40px)}`.
+
+**Files changed:**
+- `src/styles.css` — Fixed `.hbody` bottom padding override
+
+### 3. Swipe Gesture Conflict Fix (Tab Swipe vs. Row Swipe-to-Delete)
+
+**What:** Swiping on a list item row in Shopping or Supplies was sometimes triggering a tab switch instead of the item's swipe-to-delete action.
+
+**Fix:** Added target checks to `_initTabSwipe()` touchstart handler. If the touch originates on a `.swipe-wrap`, `.shit` (shopping item), `.iit` (inventory item), or `.exi` (expiring item) — i.e., any interactive list row — the tab swipe gesture is not initiated, allowing the row's own swipe handler to process the gesture. Tab swipe only activates from safe non-interactive areas (headers, empty space, section dividers).
+
+**Files changed:**
+- `src/main.js` — Added `.swipe-wrap, .shit, .iit, .exi` exclusion check in `_initTabSwipe()` touchstart
+
+### 4. Recent Activity Feed Enhancements
+
+**What:** Expanded from 3 to 10 most recent actions, and added contextual action buttons per activity type.
+
+**Action buttons by type:**
+- Deleted from Shopping → **Undo** (re-adds item via `consolidateShopItem`)
+- Checked off shopping item → **Uncheck** (sets `done: false`)
+- Added to Shopping → **Remove** (deletes item)
+- Added supply → **Remove** (deletes from inventory)
+- Deleted supply → **Undo** (re-adds with qty 1)
+- Adjusted supply quantity → **Revert** (prompts user to adjust manually)
+- Saved recipe → **Remove** (deletes from recipes)
+- Marked as cooked → **Undo** (prompts user to open meal plan)
+- Planned dinner → **Clear** (prompts user to open meal plan)
+- Clipped coupon → **Unclip** (informs user coupons can't be unclipped)
+- Deducted ingredients → **Undo** (prompts user to adjust supplies)
+
+**Key design decisions:**
+- Undo actions are **persistent** — they stay available until the entry is pushed off the 10-item list by newer actions. NOT time-limited like the 5-second swipe-to-delete toast.
+- Some actions (Revert qty, Undo cook, Clear meal, Unclip, Undo deduct) show informational messages directing the user to the relevant screen, because those operations require more context than an activity entry stores.
+- The **Running Low section was NOT modified** per requirements.
+
+**New functions in `src/ui/home.js`:**
+- `_actAgo(ts)` — relative time formatter (extracted from inline)
+- `_actBtnFor(entry)` — maps activity action verbs to contextual button HTML
+- `_getActivityEntry(actId)` — look up activity entry by Firestore doc ID
+- `_extractItemName(entry)` — strips suffixes like "to Shopping List" from item names
+- `activityUndo()`, `activityUncheck()`, `activityRemoveShop()`, `activityRemoveInv()`, `activityRemoveRec()`, `activityRevert()`, `activityUndoCook()`, `activityClearMeal()`, `activityUnclip()`, `activityUndoDeduct()` — all exported and registered on `window`
+
+**Files changed:**
+- `src/ui/home.js` — Rewrote `renderActivityFeed()` (3→10 items, added action buttons), added 10+ new exported functions for activity actions, added imports for `dli`, `svShopItem`, `dlShopItem`, `dbSet`, `dbDelete`, `logActivity` from db.js
+- `src/main.js` — Imported and registered all 10 new activity action functions on `window`
+- `src/styles.css` — Added `.act-btn` styles for the activity action buttons

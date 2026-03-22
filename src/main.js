@@ -40,7 +40,7 @@ window.getIdToken = getIdToken;
 // so they can be attached to `window` for HTML onclick access.
 
 // Home screen: dashboard rendering, weekly/tonight views, export panel
-import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection, openRecipeMatch, showMoreMatches, addMissingToShop, changeWeek, openUniversalAdd, closeUniversalAdd, uniQtyStep, uniFracChange, setUniAddLoc, toggleUniAddNote, onUniAddInput, uniAddToSupplies, uniAddToShopping, uniAddScan, uniAddVoice, initUniQtyToolbar, openUniAddCatPicker } from './ui/home.js';
+import { initHome, renderHome, renderAll, renderSum, renderWeek, renderTonight, updExport, setRenderInv, addLowToShop, toggleHomeSection, openRecipeMatch, showMoreMatches, addMissingToShop, changeWeek, openUniversalAdd, closeUniversalAdd, uniQtyStep, uniFracChange, setUniAddLoc, toggleUniAddNote, onUniAddInput, uniAddToSupplies, uniAddToShopping, uniAddScan, uniAddVoice, initUniQtyToolbar, openUniAddCatPicker, activityUndo, activityUncheck, activityRemoveShop, activityRemoveInv, activityRemoveRec, activityRevert, activityUndoCook, activityClearMeal, activityUnclip, activityUndoDeduct } from './ui/home.js';
 
 // Inventory screen: render list, adjust quantities/expiry/notes, add items manually, import,
 // bottom sheet add flow (mirrors shopping), voice input for inventory
@@ -163,6 +163,8 @@ window.showScreen = function(n) {
     if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
     if (n === "shopping") renderShop();
     if (n === "insights") renderInsights();
+    // Update FAB for the initial tab (shows contextual label on first load)
+    _updateFAB(n);
     return;
   }
 
@@ -256,7 +258,12 @@ const FAB_CONFIG = {
   chat:      null  // No FAB on chat tab
 };
 
+// _fabLabelTimer — tracks the timeout for the auto-fade label next to the FAB.
+// Cleared on each tab switch to avoid stale timeouts from previous labels.
+let _fabLabelTimer = null;
+
 // _updateFAB(tab) — shows/hides the FAB and sets its icon and onclick for the given tab.
+// Also shows a brief animated label (e.g. "+ Add item") that fades after 2 seconds.
 function _updateFAB(tab) {
   const fab = g("fab-btn");
   if (!fab) return;
@@ -266,9 +273,17 @@ function _updateFAB(tab) {
     fab.classList.add("hidden");
   } else {
     fab.classList.remove("hidden");
-    fab.innerHTML = `<span class="fab-icon">${cfg.icon}</span>`;
+    // Build FAB inner: icon + animated contextual label
+    fab.innerHTML = `<span class="fab-icon">${cfg.icon}</span><span class="fab-label">${cfg.label}</span>`;
     fab.setAttribute("onclick", cfg.action);
     fab.setAttribute("aria-label", cfg.label);
+
+    // Auto-fade the label after 2 seconds — leaves just the "+" icon
+    clearTimeout(_fabLabelTimer);
+    _fabLabelTimer = setTimeout(() => {
+      const label = fab.querySelector(".fab-label");
+      if (label) label.classList.add("fade-out");
+    }, 2000);
   }
 }
 
@@ -287,6 +302,9 @@ function _initTabSwipe() {
   appEl.addEventListener("touchstart", (e) => {
     // Don't intercept swipes inside scrollable sub-containers (deal search, etc.)
     if (e.target.closest(".bsheet, .ov, .modal, .chmsgs")) return;
+    // Don't intercept swipes on list item rows — those need swipe-to-delete.
+    // Only allow tab swipe from safe non-interactive areas (headers, empty space, dividers).
+    if (e.target.closest(".swipe-wrap, .shit, .iit, .exi")) return;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     tracking = true;
@@ -357,6 +375,18 @@ window.uniAddToSupplies = uniAddToSupplies;     // Add item to Supplies from uni
 window.uniAddToShopping = uniAddToShopping;     // Add item to Shopping from universal sheet
 window.uniAddScan = uniAddScan;                 // Scan barcode from universal add sheet
 window.uniAddVoice = uniAddVoice;               // Voice input from universal add sheet
+
+// ── Activity feed action buttons (Recent Activity on Home tab) ──
+window.activityUndo = activityUndo;               // Undo a "removed" action (re-add item)
+window.activityUncheck = activityUncheck;         // Uncheck a checked-off shopping item
+window.activityRemoveShop = activityRemoveShop;   // Remove a recently-added shopping item
+window.activityRemoveInv = activityRemoveInv;     // Remove a recently-added supply item
+window.activityRemoveRec = activityRemoveRec;     // Remove a recently-added/saved recipe
+window.activityRevert = activityRevert;           // Revert a quantity/field change
+window.activityUndoCook = activityUndoCook;       // Undo a "cooked" mark on a meal
+window.activityClearMeal = activityClearMeal;     // Clear a planned meal
+window.activityUnclip = activityUnclip;           // Unclip a coupon (not supported by API)
+window.activityUndoDeduct = activityUndoDeduct;   // Undo ingredient deduction
 
 // ── Inventory screen handlers ──
 window.openAdj = openAdj;       // Open the adjust-item overlay for a specific inventory item
