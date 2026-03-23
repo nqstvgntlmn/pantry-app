@@ -23,16 +23,17 @@ function _firstName(name) {
   return (name || "").split(" ")[0].trim() || name;
 }
 
-// _contextGreeting(hour) — returns a time-aware greeting with optional
-// day-of-week context for a more personal, warm feel.
+// _contextGreeting(hour) — returns a warm, positive time-aware greeting.
+// Slots: after-midnight → early morning → morning → midday → afternoon → evening → late night.
+// All phrases are encouraging and never judgmental.
 function _contextGreeting(hour) {
-  const dow = new Date().getDay(); // 0=Sun, 6=Sat
-  const isWeekend = dow === 0 || dow === 6;
   if (hour < 5)  return "Burning the midnight oil";
-  if (hour < 12) return isWeekend ? "Lazy morning" : "Good morning";
-  if (hour < 17) return isWeekend ? "Happy afternoon" : "Good afternoon";
+  if (hour < 8)  return "Good morning";
+  if (hour < 11) return "Beautiful morning";
+  if (hour < 13) return "Good afternoon";
+  if (hour < 17) return "Hope your day is going well";
   if (hour < 21) return "Good evening";
-  return "Late night vibes";
+  return "Good evening";
 }
 
 // ── TIME-OF-DAY HERO IMAGES ─────────────────────────────────────────────────
