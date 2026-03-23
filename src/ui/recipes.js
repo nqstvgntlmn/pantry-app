@@ -582,7 +582,7 @@ function _hasActiveRecFilters() {
 /**
  * _ensureRecSearchFab — lazily creates the floating magnifying glass button
  * that appears when the user scrolls past 100px in the Recipes list. Positioned
- * as a fixed element in the top-right corner at 73px top / 31px right. Small,
+ * as a fixed element in the top-right corner at 71px top / 31px right. Small,
  * semi-transparent, with blur backdrop. Hidden when inside individual recipe
  * pages so it doesn't interfere with the back button or recipe content.
  */
@@ -2083,42 +2083,39 @@ export async function saveHouseholdNotes(recipeId) {
 
 /**
  * handleRecipeBack — handles the back button in the recipe overlay.
- * If in edit mode, goes back to read-only view. If in read-only, closes the overlay.
- * Clears stale inline styles from swipe-back gestures to prevent visual glitches
- * on subsequent overlay opens (swipe leaves transform/transition inline on the element).
+ * Follows the same direct pattern as every other working back button in the app
+ * (e.g. onclick="hideOv('settings')"), with added branching for edit→view→list.
+ *
+ * IMPORTANT: when closing the overlay entirely, hideOv runs BEFORE disableSwipeBack
+ * so the overlay is hidden first — prevents the visual flash that occurs when
+ * swipe-back inline styles (translateX) are cleared while the overlay is still visible.
  */
 export function handleRecipeBack() {
-  // Disable swipe-back on the current page before navigating away
-  // (also clears inline transform/transition styles left by partial swipes)
-  disableSwipeBack();
-
-  // Safety: clear any stale inline transform/transition on the overlay element
-  // in case disableSwipeBack didn't catch it (e.g., _overlayEl was already null)
-  const ovEl = g("ov-erec");
-  if (ovEl) {
-    ovEl.style.transform = '';
-    ovEl.style.transition = '';
-  }
-
-  // If editing a community recipe, go back to its detail view
+  // Editing a community recipe → tear down swipe, return to its detail view
   if (_recipeViewMode === "edit" && state._editingComId) {
+    disableSwipeBack();
     const comId = state._editingComId;
     state._editingComId = null;
     openComRecipe(comId);
     return;
   }
-  // If editing a private recipe, go back to read-only view
-  if (_recipeViewMode === "edit" && state.eid) {
-    openRecipeView(state.eid);
-  } else {
-    // Reset title when closing the overlay entirely
-    const titleEl = g("erecTitle");
-    if (titleEl) titleEl.textContent = "Recipes";
-    hideOv("erec");
 
-    // Restore floating magnifying glass now that we're back on the Recipes list
-    _restoreRecSearchFab();
+  // Editing a private recipe → tear down swipe, return to read-only view
+  if (_recipeViewMode === "edit" && state.eid) {
+    disableSwipeBack();
+    openRecipeView(state.eid);
+    return;
   }
+
+  // View mode → close the overlay entirely, same as all other back buttons.
+  // Hide first, THEN clean up swipe state so style-clearing happens off-screen.
+  const titleEl = g("erecTitle");
+  if (titleEl) titleEl.textContent = "Recipes";
+  hideOv("erec");
+  disableSwipeBack();
+
+  // Restore floating magnifying glass now that we're back on the Recipes list
+  _restoreRecSearchFab();
 }
 
 /**

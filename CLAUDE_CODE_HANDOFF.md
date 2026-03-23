@@ -1620,3 +1620,32 @@ Two targeted fixes: (1) glitchy back button on recipe detail pages, and (2) magn
 - `src/styles.css` — `.rec-search-fab` repositioned to top:73px right:31px
 - `src/ui/recipes.js` — Updated FAB position comment to reflect new coordinates
 - `CLAUDE_CODE_HANDOFF.md` — Added this session entry
+
+---
+
+## Session — March 23, 2026: FAB Up 2px + Recipe Back Button Fix
+
+### What Changed
+
+#### Magnifying Glass Moved Up 2px
+**What:** On the main Recipes list page only, the floating magnifying glass search FAB moved up 2px from its previous position.
+- `top: 73px` → `top: 71px`
+
+**Why:** User requested this exact 2px upward adjustment.
+
+**How:** Updated `.rec-search-fab` in `src/styles.css` and the position comment in `src/ui/recipes.js`.
+
+#### Recipe Detail Back Button Fixed
+**What:** The back button on individual recipe pages (private, community, and edit views) was glitchy and unreliable. Rewrote `handleRecipeBack()` to follow the same direct pattern used by every other working back button in the app.
+
+**Why:** The old implementation had a subtle visual flash bug: it called `disableSwipeBack()` (which clears inline `transform`/`transition` styles) BEFORE calling `hideOv("erec")`. When a swipe-back gesture completed, the overlay would snap back to its original un-transformed position and be briefly visible before `hideOv` hid it. The redundant triple style-clearing (swipeback timeout + disableSwipeBack + manual DOM clear) also caused unnecessary layout thrashing.
+
+**How:**
+1. **`handleRecipeBack` rewritten** (`src/ui/recipes.js`): Removed redundant manual style clearing. For the close-overlay path (view mode → list), `hideOv("erec")` now runs BEFORE `disableSwipeBack()` so the overlay is hidden first — style clearing then happens on a hidden element with no visual flash. Edit-mode branches still call `disableSwipeBack()` first since the overlay stays visible. Each branch now uses explicit early returns for clearer control flow.
+2. **Swipe-back completion order fixed** (`src/ui/swipeback.js`): In `_handleTouchEnd`, the callback now fires BEFORE inline styles are cleared (was the reverse). This ensures `hideOv` hides the overlay before `transform: ''` would snap it back on-screen.
+
+### Files Changed
+- `src/styles.css` — `.rec-search-fab` repositioned to top:71px right:31px
+- `src/ui/recipes.js` — Updated FAB position comment; rewrote `handleRecipeBack` to match working back-button pattern
+- `src/ui/swipeback.js` — Reordered swipe completion: callback fires before style clearing to prevent flash
+- `CLAUDE_CODE_HANDOFF.md` — Added this session entry

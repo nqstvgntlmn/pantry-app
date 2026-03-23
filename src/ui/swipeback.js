@@ -181,13 +181,15 @@ function _handleTouchEnd(e) {
     _overlayEl.style.transition = `transform 0.25s ${SLIDE_EASE}`;
     _overlayEl.style.transform = `translateX(${screenWidth}px)`;
 
-    // Wait for the slide-out animation, then reset and fire callback
+    // Wait for the slide-out animation, then fire callback and clean up.
+    // Callback runs FIRST so hideOv() can hide the overlay before styles are
+    // cleared — prevents a visible flash where the overlay snaps back on-screen.
     const overlay = _overlayEl;
     const callback = _onBack;
     setTimeout(() => {
+      if (callback) callback();
       overlay.style.transform = '';
       overlay.style.transition = '';
-      if (callback) callback();
     }, 260);
   } else {
     // ── SNAP BACK: spring the overlay back to its resting position ──
