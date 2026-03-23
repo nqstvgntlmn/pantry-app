@@ -361,6 +361,7 @@ Bag, Bar, Bottle, Box, Bucket, Bunch, Can, Carton, Clove, Container, Dozen, Gall
 ## Recipe Tab
 
 ### My Recipes
+- **Floating search FAB:** When scrolled past 100px, a small semi-transparent magnifying glass button appears (top-right, z-index 130). Tapping expands into a full panel with search bar, sort dropdown (A→Z / Newest / Highest rated), and all filter options (difficulty, cook time, serves, protein, tags). Tapping outside the panel or the backdrop collapses it back to the magnifying glass. When within the top 100px, search/sort/filters appear inline as normal — no FAB needed. The FAB highlights in accent color when filters are active.
 - Search bar with real-time filter
 - Alphabetical sort (A-Z default)
 - Filters: Tags, Cuisine, Difficulty, Cook time, Serves, Protein type
@@ -520,6 +521,14 @@ Bag, Bar, Bottle, Box, Bucket, Bunch, Can, Carton, Clove, Container, Dozen, Gall
 - Applied to: Community recipe → detail, My Recipes → detail, Recipe detail → Edit, Shopping Prep → Category detail
 - To apply to new pages: call `enableSwipeBack(() => goBack())`
 
+### Status Bar Tap-to-Scroll-Top
+- **Global behavior** — works on every tab in the app
+- Invisible touch target in the top 44px of the screen (iOS status bar zone, `z-index: 190`)
+- Single tap smoothly scrolls the active tab's scrollable content to the top
+- Mimics native iOS status-bar-tap behavior that doesn't work automatically in PWAs
+- Disabled when overlays/modals/bottom sheets are open (so tap doesn't scroll behind them)
+- Implementation: IIFE in `main.js` creates a `.status-bar-tap` div, uses `_currentTab()` to find the active screen, then queries for the scrollable child (`.hbody`, `.ibody`, `.rbody`, `.shbody`, `.chmsgs`, or any `overflow-y:auto` child)
+
 ### Page Transitions
 - Forward: slide in from right, 300ms ease-out
 - Back: slide out to right
@@ -622,6 +631,9 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
   3. Replaced inline cart picker with floating popover — tapping 🛒 shows a popover with qty stepper (default 1) and "Add" button. Tapping outside dismisses without adding.
   4. Removed `prepQtyStep` function, `svi` import, `splitQty`/`combineQty` imports, and all qty-save-related session state (`_saveTimers`, `_qtyUpdated`, `_qtyCounted`)
   5. Summary toast now only reports items added (no longer mentions "quantities updated")
+- **Session 15:** Two UX features:
+  1. **Floating Recipe Search FAB:** Removed always-visible static search bar, sort dropdown, and filter panel from the Recipes tab. Instead: inline search/sort/filters appear normally at the top of the page (within 100px scroll). Once user scrolls past 100px, a small semi-transparent magnifying glass button appears at the top-right (`rec-search-fab`). Tapping expands into a frosted-glass panel (`rec-search-panel`) with search bar, sort dropdown, and full filter options. Tapping outside (backdrop) collapses it. FAB highlights in accent color when filters are active. Panel auto-focuses search input. FAB hidden when navigating away from Recipes tab. New exports: `toggleRecSearchPanel`, `openRecSearchPanel`, `closeRecSearchPanel`, `hideRecSearchFab`.
+  2. **Status Bar Tap-to-Scroll-Top:** Global feature across all tabs — invisible `.status-bar-tap` div covers the top 44px of the screen (iOS status bar zone). Tapping it smoothly scrolls the active tab's content to the top, mimicking native iOS behavior that PWAs don't get automatically. Skips scroll when overlays/modals are open. Uses `_currentTab()` to find the active screen's scrollable child container.
 
 ---
 

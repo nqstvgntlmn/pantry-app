@@ -1819,3 +1819,58 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
    foundation for placeholder sizing.
    ═══════════════════════════════════════════════════════════════════════════════ */
 img[loading="lazy"] { content-visibility: auto }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   RECIPE SEARCH FAB — Floating magnifying glass that appears after scrolling
+   past 100px on the Recipes tab. Tapping expands into a full search/sort/filter
+   panel. Collapses back to the magnifying glass on tap-outside or clear.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Magnifying glass button — small, semi-transparent, top-right corner */
+.rec-search-fab{position:fixed;top:calc(env(safe-area-inset-top,0px) + 60px);right:14px;
+  width:38px;height:38px;border-radius:50%;
+  background:rgba(var(--bg-rgb,13,11,8),.7);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  border:1px solid var(--b2);color:var(--mt);
+  font-size:1rem;cursor:pointer;z-index:130;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;
+  transform:scale(.6);
+  transition:opacity .25s ease,transform .25s ease}
+/* Visible state when user has scrolled past threshold */
+.rec-search-fab.visible{opacity:.55;pointer-events:auto;transform:scale(1)}
+.rec-search-fab.visible:active{transform:scale(.9);opacity:.7}
+/* Highlight when search/filters are active */
+.rec-search-fab.has-filters{border-color:var(--ac);color:var(--ac);opacity:.75}
+
+/* Expanded search panel — slides down from top-right */
+.rec-search-panel{position:fixed;top:calc(env(safe-area-inset-top,0px) + 56px);
+  left:10px;right:10px;z-index:131;
+  background:rgba(var(--bg-rgb,13,11,8),.92);
+  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  border:1px solid var(--b2);border-radius:14px;
+  padding:14px;max-height:70vh;overflow-y:auto;
+  box-shadow:0 8px 32px rgba(0,0,0,.5);
+  opacity:0;pointer-events:none;
+  transform:translateY(-12px) scale(.97);
+  transition:opacity .22s ease,transform .22s ease}
+.rec-search-panel.open{opacity:1;pointer-events:auto;
+  transform:translateY(0) scale(1)}
+
+/* Backdrop overlay behind expanded panel — click to close */
+.rec-search-backdrop{position:fixed;inset:0;z-index:129;
+  background:rgba(0,0,0,.3);
+  opacity:0;pointer-events:none;
+  transition:opacity .22s ease}
+.rec-search-backdrop.open{opacity:1;pointer-events:auto}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STATUS BAR TAP-TO-SCROLL — Invisible touch target in the top 44px (iOS status
+   bar zone). Tapping scrolls the active tab's content smoothly to the top.
+   Mimics native iOS status-bar-tap behavior that doesn't work in PWAs.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+.status-bar-tap{position:fixed;top:0;left:0;right:0;
+  height:calc(env(safe-area-inset-top,0px) + 8px);min-height:44px;
+  z-index:190;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  background:transparent}

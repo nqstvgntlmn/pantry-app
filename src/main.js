@@ -52,7 +52,7 @@ import { renderShop, qadd, togShop, toggleShNote, saveShNote, openShQty, adjShQt
 
 // Recipes screen: CRUD, favorites, import from URL, scale servings, "what can I make",
 // add recipe ingredients to shopping list, star rating, tag filtering
-import { renderRecs, togFav, valR, importFromUrl, setImportMode, startBulkImport, retryBulkImport, saveRec, openER, openRecipeView, handleRecipeBack, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, clearComRating, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif, triggerCoverUpload, handleCoverSelected, handleCoverDrop, removeCoverPhoto, triggerStepPhotoUpload, handleStepPhotoSelected, removeStepPhoto, openPhotoViewer, closePhotoViewer, photoViewerNav, triggerCommentPhotoUpload, handleCommentPhotosSelected, removeCommentPhoto, recipeTimeChanged, markTotalTimeManual, selectDifficulty, setRecSearch, setRecSort, toggleFilterPanel, setRecDifficulty, setRecCookTime, setRecServes, toggleRecProtein, toggleRecTag, toggleRecTagsExpand, clearRecFilters, toggleComTagsPanel, clearComFilters, setViewStar, editComRecipe, saveComRecipeEdit, parseRecipeWithAI, closeParsePreview, applyParsedRecipe, editHouseholdNotes, saveHouseholdNotes, resetRecipeStagger } from './ui/recipes.js';
+import { renderRecs, togFav, valR, importFromUrl, setImportMode, startBulkImport, retryBulkImport, saveRec, openER, openRecipeView, handleRecipeBack, updR, delER, scaleRec, whatCanIMake, addRecIngToShop, setStar, setRT, togTag, togglePublic, loadCommunity, setComCuisine, setComSearch, setComSort, toggleComTag, setComTime, setComMinRating, renderCommunity, openComRecipe, likeComRecipe, saveComToKitchen, addComComment, shareComRecipe, submitComReview, unpublishComRecipe, rateComRecipe, clearComRating, deleteComComment, openReportSheet, closeReportSheet, submitComReport, loadMoreComments, updateNotifBadge, openNotifications, openComRecipeFromNotif, triggerCoverUpload, handleCoverSelected, handleCoverDrop, removeCoverPhoto, triggerStepPhotoUpload, handleStepPhotoSelected, removeStepPhoto, openPhotoViewer, closePhotoViewer, photoViewerNav, triggerCommentPhotoUpload, handleCommentPhotosSelected, removeCommentPhoto, recipeTimeChanged, markTotalTimeManual, selectDifficulty, setRecSearch, setRecSort, toggleFilterPanel, setRecDifficulty, setRecCookTime, setRecServes, toggleRecProtein, toggleRecTag, toggleRecTagsExpand, clearRecFilters, toggleComTagsPanel, clearComFilters, setViewStar, editComRecipe, saveComRecipeEdit, parseRecipeWithAI, closeParsePreview, applyParsedRecipe, editHouseholdNotes, saveHouseholdNotes, resetRecipeStagger, toggleRecSearchPanel, closeRecSearchPanel, hideRecSearchFab } from './ui/recipes.js';
 
 // Insights screen: usage analytics and charts
 import { renderInsights } from './ui/insights.js';
@@ -289,6 +289,9 @@ window.showScreen = function(n) {
   resetInvStagger();
   resetShopStagger();
   resetRecipeStagger();
+
+  // Hide recipe search FAB when navigating away from Recipes tab
+  if (cur === "recipes" && n !== "recipes") hideRecSearchFab();
 
   // Re-render the target screen's content so data is fresh on each visit.
   // Wrapped in try/catch error boundary — a crash in one tab's render must not
@@ -756,6 +759,9 @@ window.toggleRecTagsExpand = toggleRecTagsExpand; // Expand/collapse tag pills i
 window.clearRecFilters = clearRecFilters;       // Reset all My Recipes filters to default
 window.toggleComTagsPanel = toggleComTagsPanel; // Collapse/expand community tags panel (Feature 1)
 window.clearComFilters = clearComFilters;       // Reset all community filters to default
+// ── Floating recipe search FAB handlers ──
+window.toggleRecSearchPanel = toggleRecSearchPanel; // Toggle floating search/filter panel open/closed
+window.closeRecSearchPanel = closeRecSearchPanel;   // Close the floating search panel
 // ── Read-only view star rating (Feature 8) ──
 window.setViewStar = setViewStar;               // Rate a recipe from the read-only view (saves immediately)
 // ── Community recipe editing / forking (Feature 10) ──
@@ -1450,6 +1456,37 @@ window.doSignOut = async function() {
   if (!confirm("Sign out of Kitchen?")) return;
   await signOut();
 };
+
+// ── STATUS BAR TAP-TO-SCROLL ────────────────────────────────────────────────
+// Mimics the native iOS status-bar-tap-to-scroll-top behavior. PWAs don't get
+// this automatically, so we add an invisible touch target in the top 44px of
+// the screen. A single tap smoothly scrolls the active tab's scrollable
+// content area back to the top.
+(function _initStatusBarTap() {
+  const tapZone = document.createElement("div");
+  tapZone.className = "status-bar-tap";
+  tapZone.setAttribute("aria-hidden", "true");
+  document.body.appendChild(tapZone);
+
+  tapZone.addEventListener("click", () => {
+    // Don't scroll when an overlay/modal is open — let the overlay handle taps
+    if (document.querySelector(".ov.active, .modal[style*='flex'], .bsheet.open")) return;
+
+    // Find the currently active screen's scrollable body element
+    const activeTab = _currentTab();
+    if (!activeTab) return;
+    const screen = g("screen-" + activeTab);
+    if (!screen) return;
+
+    // Each tab uses a different scrollable container — try known class names
+    // first, then fall back to any child with overflow-y:auto, then the screen itself
+    const scrollable = screen.querySelector(".hbody, .ibody, .rbody, .shbody, .chmsgs")
+      || screen.querySelector("[style*='overflow-y:auto']")
+      || screen;
+    // Smooth scroll to top
+    scrollable.scrollTo({ top: 0, behavior: "smooth" });
+  });
+})();
 
 // ── Auth state listener — drives the entire app lifecycle ───────────────────
 // Firebase calls this callback whenever the auth state changes:

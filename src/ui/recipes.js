@@ -37,6 +37,11 @@ let _photoViewerIndex = 0;    // Current index in the photo viewer
 // not on every re-render (e.g. after filtering, sorting, favoriting)
 let _recipeStaggerPlayed = false;
 
+// ── RECIPE SEARCH FAB STATE ──────────────────────────────────────────────────
+// Tracks whether the floating search panel is expanded and the scroll listener
+let _recSearchPanelOpen = false; // true when the expanded search panel is visible
+let _recScrollListenerAttached = false; // prevents duplicate scroll listener registration
+
 /**
  * _applyRecipeStagger(container) — Applies staggered entrance animation to recipe cards.
  * First 8 .rcd cards get a cascading 40ms delay (total ~320ms entrance).
@@ -432,6 +437,12 @@ function _buildFilterPanelHtml(ctx) {
  */
 export function setRecSearch(val) {
   state.recSearch = val;
+  // Sync the search value between inline and FAB panel inputs so both stay
+  // in sync regardless of which one the user is typing into
+  const inlineInput = g("rec-search");
+  const fabInput = g("rec-search-fab-input");
+  if (inlineInput && inlineInput !== document.activeElement) inlineInput.value = val;
+  if (fabInput && fabInput !== document.activeElement) fabInput.value = val;
   renderRecs();
 }
 
@@ -550,6 +561,163 @@ function _loadRecFilters() {
 
 // Restore persisted filters on module load
 _loadRecFilters();
+
+// ── RECIPE SEARCH FAB ──────────────────────────────────────────────────────
+// Floating magnifying glass that appears when user scrolls past 100px on the
+// Recipes tab. Expands into a full panel with search bar, sort dropdown, and
+// filters. Collapses on tap-outside or clear.
+
+/**
+ * _hasActiveRecFilters — returns true if any search text, sort change, or
+ * filter is active beyond defaults. Used to highlight the magnifying glass.
+ */
+function _hasActiveRecFilters() {
+  const rf = state.recFilters;
+  return !!(state.recSearch || (state.recSort && state.recSort !== "az") ||
+    rf.tags.length || rf.difficulty || rf.cookTime !== "any" ||
+    rf.serves !== "any" || rf.protein.length);
+}
+
+/**
+ * _ensureRecSearchFabElements — lazily creates the FAB button, panel, and
+ * backdrop elements in the DOM if they don't exist yet. Called once on first
+ * Recipes tab render.
+ */
+function _ensureRecSearchFabElements() {
+  if (g("rec-search-fab")) return; // already created
+
+  // Magnifying glass button
+  const fab = document.createElement("button");
+  fab.id = "rec-search-fab";
+  fab.className = "rec-search-fab";
+  fab.innerHTML = "🔍";
+  fab.setAttribute("aria-label", "Search & filter recipes");
+  fab.onclick = () => toggleRecSearchPanel();
+  document.body.appendChild(fab);
+
+  // Backdrop overlay — tapping outside the panel closes it
+  const backdrop = document.createElement("div");
+  backdrop.id = "rec-search-backdrop";
+  backdrop.className = "rec-search-backdrop";
+  backdrop.onclick = () => closeRecSearchPanel();
+  document.body.appendChild(backdrop);
+
+  // Expanded panel container — content is populated dynamically
+  const panel = document.createElement("div");
+  panel.id = "rec-search-panel";
+  panel.className = "rec-search-panel";
+  document.body.appendChild(panel);
+}
+
+/**
+ * _attachRecScrollListener — attaches a scroll listener to the .rbody element
+ * to show/hide the floating search magnifying glass based on scroll position.
+ * Only the first 100px zone toggles between inline search and the FAB.
+ */
+function _attachRecScrollListener() {
+  const rbody = g("rbody");
+  if (!rbody || _recScrollListenerAttached) return;
+  _recScrollListenerAttached = true;
+
+  rbody.addEventListener("scroll", () => {
+    const fab = g("rec-search-fab");
+    if (!fab) return;
+    // Show the FAB once user scrolls past 100px, hide when back near top
+    const scrolled = rbody.scrollTop > 100;
+    fab.classList.toggle("visible", scrolled && !_recSearchPanelOpen);
+    // Highlight if filters are active
+    fab.classList.toggle("has-filters", _hasActiveRecFilters());
+  }, { passive: true });
+}
+
+/**
+ * toggleRecSearchPanel — opens or closes the floating search/filter panel.
+ * When opening, populates the panel with the current search bar, sort dropdown,
+ * and filter panel HTML. When closing, hides panel and backdrop.
+ */
+export function toggleRecSearchPanel() {
+  if (_recSearchPanelOpen) {
+    closeRecSearchPanel();
+  } else {
+    openRecSearchPanel();
+  }
+}
+
+/**
+ * openRecSearchPanel — expands the floating search panel with search bar,
+ * sort dropdown, and all filter options. Hides the magnifying glass FAB
+ * while the panel is open.
+ */
+export function openRecSearchPanel() {
+  _recSearchPanelOpen = true;
+  const panel = g("rec-search-panel");
+  const backdrop = g("rec-search-backdrop");
+  const fab = g("rec-search-fab");
+
+  if (!panel) return;
+
+  // Build the same search/sort/filter HTML used in the inline view
+  const sort = state.recSort || "az";
+  panel.innerHTML = `
+    <input class="fi" id="rec-search-fab-input" placeholder="Search recipes…"
+      value="${(state.recSearch || "").replace(/"/g, "&quot;")}"
+      oninput="setRecSearch(this.value)" style="margin-bottom:8px"/>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <select class="fsel" onchange="setRecSort(this.value)" style="font-size:.78rem;padding:7px 10px;flex:1">
+        <option value="az"${sort === "az" ? " selected" : ""}>A → Z</option>
+        <option value="newest"${sort === "newest" ? " selected" : ""}>Newest first</option>
+        <option value="rating"${sort === "rating" ? " selected" : ""}>Highest rated</option>
+      </select>
+    </div>
+    ${_buildFilterPanelHtml("my")}
+  `;
+
+  // Show backdrop and panel with animation
+  if (backdrop) backdrop.classList.add("open");
+  panel.classList.add("open");
+  if (fab) fab.classList.remove("visible");
+
+  // Auto-focus the search input after the opening animation
+  setTimeout(() => {
+    const input = g("rec-search-fab-input");
+    if (input) input.focus();
+  }, 250);
+}
+
+/**
+ * closeRecSearchPanel — collapses the floating search panel back to the
+ * magnifying glass button. Preserves any active filters.
+ */
+export function closeRecSearchPanel() {
+  _recSearchPanelOpen = false;
+  const panel = g("rec-search-panel");
+  const backdrop = g("rec-search-backdrop");
+  const fab = g("rec-search-fab");
+
+  if (panel) panel.classList.remove("open");
+  if (backdrop) backdrop.classList.remove("open");
+
+  // Re-show the magnifying glass if still scrolled past threshold
+  const rbody = g("rbody");
+  if (fab && rbody && rbody.scrollTop > 100) {
+    fab.classList.add("visible");
+    fab.classList.toggle("has-filters", _hasActiveRecFilters());
+  }
+}
+
+/**
+ * hideRecSearchFab — completely hides the search FAB and panel.
+ * Called when navigating away from the Recipes tab.
+ */
+export function hideRecSearchFab() {
+  const fab = g("rec-search-fab");
+  const panel = g("rec-search-panel");
+  const backdrop = g("rec-search-backdrop");
+  if (fab) fab.classList.remove("visible");
+  if (panel) panel.classList.remove("open");
+  if (backdrop) backdrop.classList.remove("open");
+  _recSearchPanelOpen = false;
+}
 
 // ── COMMUNITY FILTER FUNCTIONS ─────────────────────────────────────────────
 
@@ -737,8 +905,14 @@ export function renderRecs() {
   const c = g("rbody"); // container div that holds recipe cards
   if (!c) return;
 
-  // Build search bar + sort dropdown above recipe cards
-  const searchSortHtml = `<div style="margin-bottom:12px">
+  // Ensure floating search FAB elements exist and scroll listener is attached
+  _ensureRecSearchFabElements();
+  _attachRecScrollListener();
+
+  // Build inline search bar + sort dropdown + filters (shown at top of list).
+  // This is always rendered in the DOM but only visible when near the top.
+  // When scrolled past 100px, the floating magnifying glass FAB takes over.
+  const searchSortHtml = `<div id="rec-inline-search" style="margin-bottom:12px">
     <input class="fi" id="rec-search" placeholder="Search recipes…" value="${(state.recSearch || "").replace(/"/g, "&quot;")}" oninput="setRecSearch(this.value)" style="margin-bottom:8px"/>
     <div style="display:flex;gap:6px;margin-bottom:8px">
       <select class="fsel" onchange="setRecSort(this.value)" style="font-size:.78rem;padding:7px 10px;flex:1">
