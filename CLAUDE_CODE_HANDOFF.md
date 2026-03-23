@@ -223,7 +223,10 @@ Bottom navigation (left to right):
 
 ## Home Tab
 
-- **Weather-integrated greeting** — uses browser Geolocation API + Open-Meteo (free, no key) for current weather. If geolocation denied, falls back to zip code from Settings (converted to coords via Open-Meteo geocoding). Greeting naturally blends weather condition, actual temperature (°F), weather emoji, and day of week. **Travel detection:** if GPS position is >20 miles from home zip, shows city name in greeting (e.g. "Sunny 78° afternoon in Miami"). Reverse geocoding via BigDataCloud (free). Weather cached in sessionStorage for 30 minutes. Falls back gracefully to plain time-based greeting on any failure.
+- **Three-line hero greeting** — stacked over the hero food background image with scrim overlay:
+  - **Line 1 (Greeting):** Creative, warm, time-aware phrase ending with name in gold accent (`<span>` with `var(--ac)`). Large bold Fraunces display text. Phrases freely invented per time slot — never repetitive.
+  - **Line 2 (Weather):** Format: "☁️ 62° — Overcast". Emoji + temp °F + em dash + condition name. If traveling >20 mi from home zip, appends city: "☀️ 78° — Sunny in Miami". Medium weight, slightly smaller than Line 1. **Hidden entirely if weather fetch fails** — never shows an error. Uses browser Geolocation API + Open-Meteo (free, no key). Falls back to zip code from Settings if geolocation denied. Travel detection via Haversine distance. Reverse geocoding via BigDataCloud. Cached in sessionStorage for 30 minutes.
+  - **Line 3 (Date):** "Sunday, March 22" — current date. Lightest weight, smallest size, muted color with 70% opacity.
 - **Universal Add button** (replaced separate Scan + Add) — opens sheet with text input, barcode scan, voice input, quantity/fraction/unit toolbar, location picker, "Add to Supplies" / "Add to Shopping List" toggle
 - **Tonight's Dinner** card with Find recipes + Ask Claude buttons
 - **This Week** — 7-day calendar, week navigation with < > arrows, tap day to plan/view meal

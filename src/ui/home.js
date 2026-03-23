@@ -24,71 +24,80 @@ function _firstName(name) {
 }
 
 // ── GREETING PHRASE POOLS ────────────────────────────────────────────────────
-// Large pools of warm, positive phrases for each time slot so greetings feel
-// fresh and never repetitive. A random phrase is picked each time the Home tab
-// renders. All phrases are encouraging and never judgmental.
+// Creative, warm, time-aware greeting phrases. A random phrase is picked each
+// time the Home tab renders. All phrases end naturally before the name (which
+// is appended separately in gold). Rules: warm, positive, never judgmental.
+// No hard list — these are freely invented based on time of day and vibe.
 const GREETING_POOLS = {
   lateNight: [                     // midnight – 4:59 AM
     "Burning the midnight oil",
     "Still going strong",
-    "Night owl mode",
-    "Late night vibes",
-    "Quiet hours, big ideas",
-    "The world is sleeping — you're not",
-    "Late night, clear mind",
+    "Night owl mode activated",
+    "The world sleeps, but not you",
+    "Quiet hours, bright mind",
+    "Stars are out for you",
+    "Late night magic",
+    "The night belongs to you",
   ],
   earlyMorning: [                  // 5:00 AM – 7:59 AM
     "Rise and shine",
-    "Good morning, early bird",
-    "Fresh start today",
-    "Morning has broken",
-    "Up with the sun",
-    "Early morning energy",
-    "The day is yours",
+    "The early light is yours",
+    "Fresh start, fresh day",
+    "Morning has broken for you",
+    "Up before the world",
+    "Dawn is your superpower",
+    "A brand new day awaits",
+    "First light, first smile",
   ],
   morning: [                       // 8:00 AM – 10:59 AM
-    "Good morning",
-    "Beautiful morning",
-    "Hope you slept well",
-    "Great day ahead",
-    "Morning sunshine",
-    "What a lovely morning",
-    "Ready for a wonderful day",
+    "Good morning, sunshine",
+    "What a beautiful morning",
+    "Here's to a wonderful day",
+    "The morning is golden",
+    "Bright skies ahead",
+    "Hope you slept like a dream",
+    "A gorgeous morning for you",
+    "Today is going to be great",
   ],
   midday: [                        // 11:00 AM – 12:59 PM
-    "Good afternoon",
-    "Hope your day is going well",
-    "Halfway through the day",
-    "Midday check-in",
-    "Lunch o'clock",
-    "The sun is high and so are the vibes",
+    "Hello, midday",
+    "The day is humming along",
+    "Lunchtime vibes",
+    "Sun's at its peak and so are you",
+    "Halfway there and thriving",
+    "What a day so far",
+    "Noon looks good on you",
+    "The day is wide open",
   ],
   afternoon: [                     // 1:00 PM – 4:59 PM
-    "Good afternoon",
-    "Hope the day is treating you well",
-    "Almost there",
-    "Afternoon vibes",
-    "Keep the momentum going",
-    "Cruising through the afternoon",
-    "The afternoon is looking great",
+    "Good afternoon, superstar",
+    "Cruising through a lovely day",
+    "The afternoon is all yours",
+    "Keep that momentum going",
+    "Smooth sailing this afternoon",
+    "You're making today count",
+    "Afternoon glow",
+    "The day keeps getting better",
   ],
   evening: [                       // 5:00 PM – 8:59 PM
-    "Good evening",
-    "Hope you had a great day",
-    "Evening has arrived",
-    "Wind down time",
-    "Welcome home",
-    "Time to relax",
-    "Evenings are the best",
+    "Welcome to the evening",
+    "Time to wind down and shine",
+    "Golden hour for you",
+    "The evening is yours to enjoy",
+    "Hope today treated you well",
+    "Home sweet home",
+    "Tonight's going to be good",
+    "Relax — you've earned it",
   ],
   lateEvening: [                   // 9:00 PM – 11:59 PM
-    "Good evening",
-    "Winding down",
+    "Cozy evening ahead",
+    "The night is young",
     "Hope today was a good one",
-    "Night is young",
-    "Peaceful evening",
-    "Almost bedtime",
-    "A cozy night ahead",
+    "Peaceful night ahead",
+    "Winding down beautifully",
+    "A quiet night for you",
+    "Sweet dreams loading",
+    "One more peaceful moment",
   ],
 };
 
@@ -253,8 +262,8 @@ async function _fetchWeather() {
   } catch { return null; }
 }
 
-// _weatherLabel(code) — maps WMO weather code to a human-friendly adjective.
-// Covers clear, cloudy, fog, rain, snow, and thunderstorms.
+// _weatherLabel(code) — maps WMO weather code to an internal weather key.
+// Used for emoji lookup. Covers clear, cloudy, fog, rain, snow, thunderstorms.
 function _weatherLabel(code) {
   if (code === 0)                      return "clear";
   if (code <= 3)                       return "cloudy";
@@ -265,11 +274,21 @@ function _weatherLabel(code) {
   if (code >= 80 && code <= 82)        return "rainy";
   if (code >= 85 && code <= 86)        return "snowy";
   if (code >= 95)                      return "stormy";
-  return null; // unknown — skip weather in greeting
+  return null; // unknown — skip weather display
+}
+
+// _weatherDisplayName(label) — maps the internal weather key to a capitalized
+// human-readable condition name for the weather line (e.g. "Overcast", "Sunny").
+function _weatherDisplayName(label) {
+  const map = {
+    clear: "Sunny", cloudy: "Overcast", foggy: "Foggy", drizzly: "Drizzle",
+    rainy: "Rainy", snowy: "Snowy", stormy: "Stormy",
+  };
+  return map[label] || "Unknown";
 }
 
 // _weatherEmoji(label) — returns a weather emoji for the condition label.
-// Used to add a natural visual cue to the greeting text.
+// Used as a leading visual cue on the weather line.
 function _weatherEmoji(label) {
   const map = {
     clear: "☀️", cloudy: "☁️", foggy: "🌫️", drizzly: "🌦️",
@@ -278,121 +297,39 @@ function _weatherEmoji(label) {
   return map[label] || "";
 }
 
-// _tempDescriptor(tempF) — returns a temperature-based adjective.
-// Used as a fallback when no specific weather greeting template matches.
-function _tempDescriptor(tempF) {
-  if (tempF <= 25)  return "freezing";
-  if (tempF <= 40)  return "chilly";
-  if (tempF <= 55)  return "crisp";
-  if (tempF <= 75)  return "gorgeous";
-  if (tempF <= 85)  return "warm";
-  if (tempF <= 95)  return "hot";
-  return "scorching";
-}
-
-// _getDayOfWeek() — returns the current day name (e.g. "Sunday", "Monday").
-// Used to weave the day naturally into weather greetings.
-function _getDayOfWeek() {
-  return new Date().toLocaleDateString("en-US", { weekday: "long" });
-}
-
-// _buildWeatherGreeting(hour, weather) — creates a weather-blended greeting
-// that naturally incorporates the actual temperature, weather emoji, day of
-// week, and optionally the city name if the user is traveling. Falls back to
-// a plain time-based greeting if weather data is unavailable.
-function _buildWeatherGreeting(hour, weather) {
-  if (!weather) return _contextGreeting(hour);
-
+// _buildWeatherLine(weather) — formats the weather data into the Line 2 display
+// string: "☁️ 62° — Overcast" or "☀️ 78° — Sunny in Miami" when traveling.
+// Returns null if weather data is unavailable or the condition is unknown.
+function _buildWeatherLine(weather) {
+  if (!weather) return null;
   const label = _weatherLabel(weather.weatherCode);
+  if (!label) return null;
+
   const emoji = _weatherEmoji(label);
-  const tempF = weather.tempF;
-  const desc = _tempDescriptor(tempF);
-  const day = _getDayOfWeek();
-  const slot = _getTimeSlot(hour);
-
-  // Map time slot to a natural time-of-day word for greeting templates
-  const timeGroup = (slot === "lateNight" || slot === "lateEvening") ? "night"
-    : (slot === "earlyMorning" || slot === "morning") ? "morning"
-    : (slot === "midday" || slot === "afternoon") ? "afternoon"
-    : "evening";
-
-  // Optional city suffix — only shown when user is >20 miles from home zip
+  const name = _weatherDisplayName(label);
+  // Show city name only when user is traveling >20 mi from home zip
   const cityBit = (weather.isTraveling && weather.city) ? ` in ${weather.city}` : "";
-
-  // ── GREETING TEMPLATE POOLS ──────────────────────────────────────────────
-  // Organized by weather condition × time-of-day. Each template naturally
-  // blends temperature, weather, day, and emoji. Templates use ${} for
-  // dynamic values so every greeting feels unique and contextual.
-  const weatherGreetings = {
-    clear: {
-      morning:   [`Gorgeous ${tempF}° ${day} morning${cityBit} ${emoji}`, `Sunny ${tempF}° morning${cityBit} ${emoji}`, `Beautiful clear morning${cityBit} — ${tempF}° ${emoji}`],
-      afternoon: [`${desc.charAt(0).toUpperCase() + desc.slice(1)} ${tempF}° afternoon${cityBit} ${emoji}`, `Sunny ${day} afternoon${cityBit} ${emoji}`, `Clear ${tempF}° ${day}${cityBit} ${emoji}`],
-      evening:   [`Clear ${tempF}° ${day} evening${cityBit} ${emoji}`, `Beautiful ${tempF}° evening${cityBit} ${emoji}`, `Lovely clear evening${cityBit} — ${tempF}°`],
-      night:     [`Clear ${tempF}° night${cityBit} ${emoji}`, `Starry ${day} night${cityBit} ${emoji}`, `Beautiful clear night${cityBit}`],
-    },
-    cloudy: {
-      morning:   [`Overcast ${tempF}° morning${cityBit} ${emoji}`, `Cloudy but cozy ${day} morning${cityBit} ${emoji}`, `Soft cloudy ${tempF}° morning${cityBit} ${emoji}`],
-      afternoon: [`Cloudy ${tempF}° afternoon${cityBit} ${emoji}`, `Overcast ${day}${cityBit} — ${tempF}° ${emoji}`, `Gray skies, warm vibes${cityBit} ${emoji}`],
-      evening:   [`Cloudy ${tempF}° evening${cityBit} ${emoji}`, `Overcast ${day} evening${cityBit} ${emoji}`, `Cozy cloudy evening${cityBit} — ${tempF}°`],
-      night:     [`Cloudy ${tempF}° night${cityBit} ${emoji}`, `Quiet cloudy ${day} night${cityBit}`, `Overcast but peaceful night${cityBit}`],
-    },
-    rainy: {
-      morning:   [`Cozy rainy ${tempF}° morning${cityBit} ${emoji}`, `Rainy ${day} morning${cityBit} — perfect for a warm drink ${emoji}`, `${tempF}° and rainy${cityBit} ${emoji} — stay cozy`],
-      afternoon: [`Rainy ${tempF}° afternoon${cityBit} ${emoji}`, `Rainy ${day}${cityBit} — perfect for cooking something warm ${emoji}`, `${tempF}° and rainy${cityBit} ${emoji}`],
-      evening:   [`Rainy ${tempF}° evening${cityBit} ${emoji} — cozy up`, `Rainy ${day} evening${cityBit} ${emoji}`, `${tempF}° and rainy tonight${cityBit} ${emoji}`],
-      night:     [`Rainy ${tempF}° night${cityBit} ${emoji}`, `Rain on the roof tonight${cityBit} ${emoji}`, `Cozy rainy night${cityBit} — ${tempF}° ${emoji}`],
-    },
-    drizzly: {
-      morning:   [`Drizzly ${tempF}° morning${cityBit} ${emoji}`, `Light rain this ${day} morning${cityBit} ${emoji}`, `A soft drizzle outside${cityBit} — ${tempF}° ${emoji}`],
-      afternoon: [`Drizzly ${tempF}° afternoon${cityBit} ${emoji}`, `Light drizzle outside${cityBit} — ${tempF}° ${emoji}`, `Misty ${day} afternoon${cityBit} ${emoji}`],
-      evening:   [`Drizzly ${tempF}° evening${cityBit} ${emoji}`, `Light rain tonight${cityBit} ${emoji}`, `Gentle ${tempF}° drizzle outside${cityBit} ${emoji}`],
-      night:     [`Drizzly ${tempF}° night${cityBit} ${emoji}`, `Soft rain falling${cityBit} ${emoji}`, `Gentle night drizzle${cityBit} — ${tempF}°`],
-    },
-    snowy: {
-      morning:   [`Snowy ${tempF}° ${day} morning${cityBit} ${emoji} — perfect for a warm meal`, `Snow day${cityBit}! ${tempF}° ${emoji}`, `Magical snowy morning${cityBit} — ${tempF}° ${emoji}`],
-      afternoon: [`Snowy ${tempF}° afternoon${cityBit} ${emoji}`, `Snow is falling${cityBit} — ${tempF}° ${emoji}`, `Snowy ${day}${cityBit} — stay warm ${emoji}`],
-      evening:   [`Snowy ${tempF}° evening${cityBit} ${emoji} — time for something warm`, `Snow falling tonight${cityBit} — ${tempF}° ${emoji}`, `Magical snowy evening${cityBit} ${emoji}`],
-      night:     [`Snowy ${tempF}° night${cityBit} ${emoji}`, `Snow falling quietly${cityBit} — ${tempF}° ${emoji}`, `Winter wonderland tonight${cityBit} ${emoji}`],
-    },
-    foggy: {
-      morning:   [`Foggy ${tempF}° morning${cityBit} ${emoji}`, `Misty ${day} morning${cityBit} — ${tempF}° ${emoji}`, `Mysterious foggy morning${cityBit} ${emoji}`],
-      afternoon: [`Foggy ${tempF}° afternoon${cityBit} ${emoji}`, `Hazy ${day} afternoon${cityBit} — ${tempF}° ${emoji}`, `Misty out there${cityBit} — ${tempF}° ${emoji}`],
-      evening:   [`Foggy ${tempF}° evening${cityBit} ${emoji}`, `Misty ${day} evening${cityBit} — ${tempF}°`, `Hazy night ahead${cityBit} ${emoji}`],
-      night:     [`Foggy ${tempF}° night${cityBit} ${emoji}`, `Misty night${cityBit} — ${tempF}°`, `Quiet foggy night${cityBit} ${emoji}`],
-    },
-    stormy: {
-      morning:   [`Stormy ${tempF}° morning${cityBit} ${emoji} — stay safe`, `Thunder rolling in${cityBit} — ${tempF}° ${emoji}`, `Wild ${day} morning out there${cityBit} ${emoji}`],
-      afternoon: [`Stormy ${tempF}° afternoon${cityBit} ${emoji}`, `Thunder and rain${cityBit} — ${tempF}° ${emoji}`, `Stormy but cozy inside${cityBit} ${emoji}`],
-      evening:   [`Stormy ${tempF}° evening${cityBit} ${emoji} — stay cozy`, `Thunder tonight${cityBit} — ${tempF}° ${emoji}`, `Wild weather tonight${cityBit} ${emoji}`],
-      night:     [`Stormy ${tempF}° night${cityBit} ${emoji}`, `Thunder in the night${cityBit} — ${tempF}° ${emoji}`, `Wild night${cityBit} — stay safe ${emoji}`],
-    },
-  };
-
-  // Try to use a weather-specific greeting with temp and emoji
-  if (label && weatherGreetings[label]?.[timeGroup]) {
-    return _pickRandom(weatherGreetings[label][timeGroup]);
-  }
-
-  // Fallback: blend temperature descriptor + actual temp into a plain greeting
-  // e.g. "Crisp 45° evening" or "Gorgeous 68° afternoon"
-  const timeWord = timeGroup === "night" ? "night" : timeGroup;
-  return `${desc.charAt(0).toUpperCase() + desc.slice(1)} ${tempF}° ${timeWord}${cityBit}`;
+  return `${emoji} ${weather.tempF}° — ${name}${cityBit}`;
 }
 
-// _applyWeatherGreeting(hour) — async helper that fetches weather and
-// upgrades the greeting text in-place. Called during initHome; if weather
-// takes a moment to load, the user sees a plain greeting first, then it
-// smoothly upgrades once weather data arrives.
-async function _applyWeatherGreeting(hour) {
+// _applyWeatherLine() — async helper that fetches weather and populates
+// Line 2 (the weather line) below the greeting. If weather fetch fails or
+// returns null, Line 2 stays hidden entirely — never shows an error.
+// Non-blocking — the greeting and date render immediately while this loads.
+async function _applyWeatherLine() {
   const weather = await _fetchWeather();
-  if (!weather) return; // No weather — keep the plain greeting already shown
+  const weatherEl = g("grt-weather");
+  if (!weatherEl) return;
 
-  const fullName = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
-  const u = _firstName(fullName);
-  const gr = _buildWeatherGreeting(hour, weather);
-
-  const grtEl = g("grt");
-  if (grtEl) grtEl.innerHTML = `${gr}, <span>${u}</span>`;
+  const line = _buildWeatherLine(weather);
+  if (line) {
+    // Show weather line with a smooth fade-in
+    weatherEl.textContent = line;
+    weatherEl.style.display = "";
+  } else {
+    // No weather data — hide the line entirely, never show an error
+    weatherEl.style.display = "none";
+  }
 }
 
 // ── TIME-OF-DAY HERO IMAGES ─────────────────────────────────────────────────
@@ -443,21 +380,25 @@ export function initHome() {
   const fullName = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
   const u = _firstName(fullName);
 
-  // Render initial greeting immediately (plain, no weather yet)
+  // Line 1 — Greeting: creative time-aware phrase with name in gold accent
   const grtEl = g("grt");
   if (grtEl) grtEl.innerHTML = `${gr}, <span>${u}</span>`;
 
-  // Show today's date in a human-friendly format, e.g. "Monday, March 9"
+  // Line 2 — Weather: hidden by default, populated async once weather loads.
+  // Starts hidden so there's no flash of empty space before data arrives.
+  const weatherEl = g("grt-weather");
+  if (weatherEl) weatherEl.style.display = "none";
+
+  // Line 3 — Date: current date in human-friendly format, e.g. "Sunday, March 22"
   const hdtEl = g("hdt");
   if (hdtEl) hdtEl.textContent = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
   // Apply time-of-day hero background image to the home header
   _applyHeroBg(h);
 
-  // Asynchronously fetch weather and upgrade the greeting in-place.
-  // Non-blocking — the plain greeting shows immediately, then gets
-  // replaced with a weather-aware version once the data arrives.
-  _applyWeatherGreeting(h);
+  // Asynchronously fetch weather and populate Line 2 (weather line).
+  // Non-blocking — Lines 1 and 3 render immediately, Line 2 appears once ready.
+  _applyWeatherLine();
 
   renderWeek();
 }
@@ -504,7 +445,8 @@ export function renderHome() {
     const fullName = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
     const u = _firstName(fullName);
 
-    // Only populate greeting once — avoids overwriting on repeated renders
+    // Only populate greeting once — avoids overwriting on repeated renders.
+    // Weather line (Line 2) is managed by _applyWeatherLine() and left alone here.
     const grtEl = g("grt");
     if (grtEl && !grtEl.innerHTML) grtEl.innerHTML = `${gr}, <span>${u}</span>`;
 
