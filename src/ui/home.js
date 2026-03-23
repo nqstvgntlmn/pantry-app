@@ -1121,21 +1121,45 @@ function _extractItemName(entry) {
 
 // activityUndo(actId) — generic undo for "removed" actions.
 // Re-adds the item to the list it was removed from (Shopping List or Supplies).
+// Uses the stored itemData snapshot when available so all original fields
+// (name, quantity, unit, location, notes, category) are fully restored.
+// Falls back to generic defaults for legacy entries that lack a snapshot.
 export async function activityUndo(actId) {
   const entry = _getActivityEntry(actId);
   if (!entry) return showNotif("Activity entry not found");
   const name = _extractItemName(entry);
   if (!name) return;
 
+  // Pull the item snapshot if it was stored at removal time
+  const d = entry.itemData || {};
   const action = (entry.action || "").toLowerCase();
+  // Generate a fresh Firestore-compatible ID for the restored item
+  const newId = Date.now().toString(36) + Math.random().toString(36).slice(2);
   try {
     if (action.includes("shopping")) {
-      // Re-add to shopping list via consolidation-aware helper
-      await consolidateShopItem({ name, qty: 1 });
+      // Re-add to shopping list — restore original qty/unit/note from snapshot
+      await consolidateShopItem({
+        name: d.name || name,
+        qty: d.qty || 1,
+        unit: d.unit || undefined,
+        note: d.note || undefined,
+        prepCategory: d.prepCategory || undefined,
+        barcode: d.barcode || undefined
+      });
       showNotif(`${name} added back to shopping list`);
     } else if (action.includes("supplies")) {
-      // Re-add to inventory with default qty 1
-      await svi({ name, qty: 1, location: "pantry" });
+      // Re-add to inventory — restore all original fields from snapshot.
+      // svi() needs an id to save to Firestore correctly.
+      await svi({
+        id: newId,
+        name: d.name || name,
+        qty: d.qty || 1,
+        unit: d.unit || undefined,
+        location: d.location || "pantry",
+        note: d.note || undefined,
+        prepCategory: d.prepCategory || undefined,
+        barcode: d.barcode || undefined
+      });
       showNotif(`${name} added back to supplies`);
     }
     // Log the undo itself as an activity

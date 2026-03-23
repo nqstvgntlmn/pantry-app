@@ -794,7 +794,12 @@ function _commitPendingDelete() {
   const collection = list === "shop" ? "shopping" : "inventory";
   const label = list === "shop" ? "Shopping List" : "Supplies";
   dbDelete(`households/${state.hid}/${collection}/${id}`);
-  logActivity("removed", toTitleCase(item.name) + ` from ${label}`);
+  // Build item snapshot for persistent Undo — includes all fields needed to restore
+  const snap = { name: item.name, qty: item.quantity || item.qty || 1,
+    unit: item.unit, location: item.location, note: item.note,
+    prepCategory: item.prepCategory, barcode: item.barcode,
+    list: list === "shop" ? "shopping" : "supplies" };
+  logActivity("removed", toTitleCase(item.name) + ` from ${label}`, snap);
 }
 
 /**

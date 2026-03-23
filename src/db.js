@@ -1020,8 +1020,13 @@ export async function dli(id) {
     renderCallbacks.renderAll?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/inventory/${id}`);
-    // Log removal with "Supplies" label and Title Case item name
-    if (removed) logActivity("removed", toTitleCase(removed.name) + " from Supplies");
+    // Log removal with full item snapshot so persistent Undo can restore all original data
+    if (removed) {
+      const snap = { name: removed.name, qty: removed.qty, unit: removed.unit,
+        location: removed.location, note: removed.note, prepCategory: removed.prepCategory,
+        barcode: removed.barcode, list: "supplies" };
+      logActivity("removed", toTitleCase(removed.name) + " from Supplies", snap);
+    }
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
   finally { resumePoll(); }
@@ -1092,14 +1097,19 @@ export async function svShopItem(item) {
 export async function dlShopItem(id) {
   pausePoll();
   try {
-    // Find the item before removing so we can log its name
+    // Find the item before removing so we can log its name and snapshot
     const removed = state.shop.find(s => s.id === id);
     state.shop = state.shop.filter(s => s.id !== id);
     renderCallbacks.renderShop?.();
     renderCallbacks.renderSum?.();
     await dbDelete(`households/${state.hid}/shopping/${id}`);
-    // Log removal from shopping list with Title Case
-    if (removed) logActivity("removed", toTitleCase(removed.name) + " from Shopping List");
+    // Log removal with full item snapshot so persistent Undo can restore all original data
+    if (removed) {
+      const snap = { name: removed.name, qty: removed.quantity || removed.qty || 1,
+        unit: removed.unit, note: removed.note, prepCategory: removed.prepCategory,
+        barcode: removed.barcode, list: "shopping" };
+      logActivity("removed", toTitleCase(removed.name) + " from Shopping List", snap);
+    }
   } catch (e) { console.error(e); }
   finally { resumePoll(); }
 }
@@ -1611,7 +1621,15 @@ export async function getHouseholdMemberUids() {
  * @param {string} action — verb describing the action (e.g. "added", "removed")
  * @param {string} itemName — the name of the item acted upon
  */
-export async function logActivity(action, itemName) {
+/**
+ * logActivity(action, itemName, itemData) — logs a household activity entry.
+ * @param {string} action — verb describing the action (e.g. "added", "removed")
+ * @param {string} itemName — the name of the item acted upon
+ * @param {Object} [itemData] — optional snapshot of the original item for undo.
+ *   Stored on removal so the persistent Undo button can restore all original
+ *   fields (name, qty, unit, location, notes, etc.) instead of generic defaults.
+ */
+export async function logActivity(action, itemName, itemData) {
   if (!state.hid || !itemName) return;
   const memberName = localStorage.getItem("ks-who") || "Someone";
   const id = "act-" + Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -1621,6 +1639,8 @@ export async function logActivity(action, itemName) {
     itemName,
     timestamp: new Date().toISOString()
   };
+  // Attach item snapshot if provided — enables full-fidelity undo from activity feed
+  if (itemData) entry.itemData = itemData;
   try {
     await dbSet(`households/${state.hid}/activity/${id}`, entry);
     // Auto-cleanup: delete entries older than 7 days

@@ -237,6 +237,8 @@ Bottom navigation (left to right):
   - Missing ingredients shown with "Add to Shopping" button
 - **Running Low** — collapsible, **defaults to collapsed**, saves state in localStorage
 - **Recent Activity** — collapsible, **defaults to collapsed**, saves state in localStorage, shows who did what (Bora/Bushra), uses "Supplies" not "inventory", Title Case names
+  - **Persistent Undo buttons:** Every "removed [item] from Shopping List" or "removed [item] from Supplies" entry has a permanent Undo button on the right side. Unlike the 5-second swipe toast, this Undo stays available until the entry is pushed off the 10-entry list by newer actions. Tapping Undo restores the item with all original data (name, quantity, unit, location, notes, category, barcode) — not just generic defaults.
+  - **Activity item snapshots:** When items are removed (via swipe-delete, multi-delete, or direct delete), the full item data is stored as `itemData` on the Firestore activity entry. This enables full-fidelity undo. Legacy entries without `itemData` fall back to `qty: 1, location: "pantry"` defaults.
 - **Your Supplies** — summary cards (items in stock, expiring soon, to buy, saved recipes)
 - **Last cooked** — shows most recently cooked recipe with "X days ago"
 
@@ -302,6 +304,7 @@ Custom categories stored in `households/{hid}/settings/customPrepCategories[]` w
 - **Tap row** to open detail sheet
 - **Select mode:** tap anywhere on row to check, Delete All button
 - **Deals sub-tab:** Email-gated (beta), has two sections: ShopRite Digital Coupons + Weekly Circular Deals (Flipp)
+  - **Sticky coupon/deal filter chips:** Both the ShopRite category chips (`#coupon-cats`) and the Flipp store chips (`#deals-store-chips`) use `position: sticky; top: 0` with frosted-glass backdrop blur so they stay accessible while scrolling through deals. The `.sticky-chips` class handles the visual treatment (blur + shadow + semi-transparent background).
 - **Build from meal plan** button
 - **By category** sort option (uses favourite store aisle order if set)
 
@@ -1506,3 +1509,42 @@ Two quick tweaks to the floating "+" button to make it less intrusive at rest.
 - `src/styles.css` — `.fab.settled`: opacity now .25 (75% transparent), updated block comment to reflect new values
 - `index.html` — Updated FAB HTML comment to reflect current settle behavior (0.5s idle, 25% opacity)
 - `CLAUDE_CODE_HANDOFF.md` — Updated existing FAB section + added this session entry
+
+---
+
+## Sticky Filter Bars & Persistent Undo — Session 8 (March 2026)
+
+### 1. Sticky Filter Bars Across All Tabs
+
+**What:** All tab filter bars now have a frosted-glass visual treatment (backdrop blur + semi-transparent background + subtle shadow) for a polished, modern look. The Deals tab filter chips are now truly sticky — they stay visible at the top while scrolling through deals.
+
+**Details by tab:**
+- **Supplies tab** (`.itabs`): Location filter tabs (All, Fridge, Freezer, Pantry, Household) already lived in the non-scrolling header. Added frosted-glass backdrop (`backdrop-filter: blur(12px)`, `background: rgba(--bg-rgb, .85)`, `box-shadow`) for visual polish.
+- **Recipes tab** (`.rtabs`): Filter chips (All, Favorites, Top Rated, Quick, Kids, Community) — same frosted-glass treatment as Supplies.
+- **Shopping tab** (`.itabs`): My List / Deals tab switcher — same frosted-glass treatment (shares `.itabs` class with Supplies).
+- **Deals tab** (`#coupon-cats`, `#deals-store-chips`): ShopRite category chips and Flipp store chips were previously inside the scrollable `#sh-deals-body` and would scroll away. Now use `.sticky-chips` class with `position: sticky; top: 0` so they stay accessible while scrolling through deals. Frosted-glass backdrop prevents content from bleeding through.
+- **Shopping Prep** (`.prep-hdr`): Overlay header already outside scrollable area. Added frosted-glass backdrop for consistency.
+
+**CSS custom property added:** `--bg-rgb: 10,10,14` on `:root` — the RGB components of `--bg` for use in `rgba()` with backdrop blur backgrounds.
+
+**New CSS class:** `.sticky-chips` — sticky positioning with frosted-glass treatment, negative margin trick to span full container width despite parent padding.
+
+### 2. Persistent Undo Buttons in Recent Activity
+
+**What:** "Removed [item] from Shopping List" and "removed [item] from Supplies" activity entries have persistent Undo buttons that restore the deleted item with all original data (name, quantity, unit, location, notes, category, barcode).
+
+**How it works:**
+1. When an item is deleted (via `dli()`, `dlShopItem()`, or swipe-delete in `swipe.js`), the full item data is captured as a snapshot object and passed as the third argument to `logActivity()`.
+2. `logActivity()` stores this snapshot as `entry.itemData` in the Firestore activity document.
+3. When the user taps Undo in the activity feed, `activityUndo()` reads `entry.itemData` and restores the item with all original fields instead of generic defaults.
+4. Legacy activity entries without `itemData` gracefully fall back to `qty: 1, location: "pantry"`.
+
+**Item snapshot fields stored:** `name`, `qty`, `unit`, `location`, `note`, `prepCategory`, `barcode`, `list` ("shopping" or "supplies").
+
+### Files Changed
+- `src/styles.css` — Added `--bg-rgb` custom property, frosted-glass backdrop to `.itabs`, `.rtabs`, `.prep-hdr`; new `.sticky-chips` class for Deals chip bars
+- `index.html` — Added `.sticky-chips` class to `#coupon-cats` and `#deals-store-chips`
+- `src/db.js` — `logActivity()` now accepts optional `itemData` param; `dli()` and `dlShopItem()` pass full item snapshot on removal
+- `src/ui/swipe.js` — `commitDelete()` passes item snapshot to `logActivity()`
+- `src/ui/home.js` — `activityUndo()` reads `entry.itemData` to restore all original fields; generates fresh ID for re-added items
+- `CLAUDE_CODE_HANDOFF.md` — Updated Recent Activity docs, added Deals sticky chips note, added this session entry

@@ -287,8 +287,8 @@
               </div>
               <button class="btn bp" onclick="searchCoupons()" style="font-size:.8rem">Search</button>
             </div>
-            <!-- Category filter chips for coupons -->
-            <div id="coupon-cats" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
+            <!-- Category filter chips for coupons — sticky so they stay accessible while scrolling -->
+            <div id="coupon-cats" class="sticky-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
             <!-- Coupon status message (loading, errors) -->
             <div id="coupon-status" style="font-size:.8rem;color:var(--mt);padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
             <!-- Coupon cards grid -->
@@ -326,8 +326,8 @@
             </div>
             <!-- "Find deals for my list" button — fuzzy matches against shopping list -->
             <button class="btn bs bsm bf" style="margin-bottom:12px" onclick="dealsFromList()">🛒 Find deals for everything on my list</button>
-            <!-- Store filter chips — Walmart, ALDI, Stop & Shop, Wegmans -->
-            <div id="deals-store-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
+            <!-- Store filter chips — sticky so they stay accessible while scrolling through deals -->
+            <div id="deals-store-chips" class="sticky-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
             <!-- Status message (loading, errors, cache info) -->
             <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:10px;padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
             <!-- Deal cards list (with On My List + All Deals subsections) -->

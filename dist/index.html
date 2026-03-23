@@ -7,8 +7,8 @@
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-BlHO7n1y.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-Cb86Lf18.css">
+  <script type="module" crossorigin src="/assets/index-DgLRdmn5.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DxkbRYku.css">
 </head>
 <body>
 
@@ -103,6 +103,7 @@
       <div class="htop">
         <div>
           <div class="grt" id="grt"></div>
+          <div class="grt-weather" id="grt-weather"></div>
           <div class="hdt" id="hdt"></div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
@@ -288,8 +289,8 @@
               </div>
               <button class="btn bp" onclick="searchCoupons()" style="font-size:.8rem">Search</button>
             </div>
-            <!-- Category filter chips for coupons -->
-            <div id="coupon-cats" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
+            <!-- Category filter chips for coupons — sticky so they stay accessible while scrolling -->
+            <div id="coupon-cats" class="sticky-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
             <!-- Coupon status message (loading, errors) -->
             <div id="coupon-status" style="font-size:.8rem;color:var(--mt);padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
             <!-- Coupon cards grid -->
@@ -327,8 +328,8 @@
             </div>
             <!-- "Find deals for my list" button — fuzzy matches against shopping list -->
             <button class="btn bs bsm bf" style="margin-bottom:12px" onclick="dealsFromList()">🛒 Find deals for everything on my list</button>
-            <!-- Store filter chips — Walmart, ALDI, Stop & Shop, Wegmans -->
-            <div id="deals-store-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
+            <!-- Store filter chips — sticky so they stay accessible while scrolling through deals -->
+            <div id="deals-store-chips" class="sticky-chips" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;-webkit-overflow-scrolling:touch"></div>
             <!-- Status message (loading, errors, cache info) -->
             <div id="dealsstatus" style="font-size:.8rem;color:var(--mt);margin-bottom:10px;padding:10px 14px;background:var(--card);border-radius:10px;display:none"></div>
             <!-- Deal cards list (with On My List + All Deals subsections) -->
