@@ -1457,33 +1457,42 @@ window.doSignOut = async function() {
   await signOut();
 };
 
-// ── STATUS BAR TAP-TO-SCROLL ────────────────────────────────────────────────
-// Mimics the native iOS status-bar-tap-to-scroll-top behavior. PWAs don't get
-// this automatically, so we add an invisible touch target covering the full
-// safe-area-inset-top + 15px extra — this ensures it reaches the absolute
-// topmost edge of the screen including the clock/Dynamic Island area.
-// A single tap smoothly scrolls the active tab's scrollable body to the top.
-(function _initStatusBarTap() {
+// ── TAP-TO-SCROLL-TOP ───────────────────────────────────────────────────────
+// Simple, reliable scroll-to-top: a transparent 60px-tall fixed div spans the
+// full screen width at top:0. Tapping it smooth-scrolls the active tab's
+// scrollable body to the top. This replaces the previous status-bar-tap
+// approach which relied on safe-area-inset-top and didn't receive taps reliably.
+(function _initScrollTopTap() {
+  // Create the transparent tap zone at the very top of the screen
   const tapZone = document.createElement("div");
-  tapZone.className = "status-bar-tap";
+  tapZone.className = "scroll-top-tap";
   tapZone.setAttribute("aria-hidden", "true");
   document.body.appendChild(tapZone);
+
+  // Map of tab names to their scrollable container selectors
+  const scrollSelectors = {
+    home: ".hbody",
+    inventory: ".ibody",
+    recipes: ".rbody",
+    shopping: "#sh-list-body",
+    chat: ".chmsgs"
+  };
 
   tapZone.addEventListener("click", () => {
     // Don't scroll when an overlay/modal is open — let the overlay handle taps
     if (document.querySelector(".ov.active, .modal[style*='flex'], .bsheet.open")) return;
 
-    // Find the currently active screen's scrollable body element
-    const activeTab = _currentTab();
-    if (!activeTab) return;
-    const screen = g("screen-" + activeTab);
+    // Find the active tab and its scrollable container
+    const tab = _currentTab();
+    if (!tab) return;
+
+    const screen = g("screen-" + tab);
     if (!screen) return;
 
-    // Each tab uses a different scrollable container — try known class names
-    // first, then fall back to any child with overflow-y:auto, then the screen itself
-    const scrollable = screen.querySelector(".hbody, .ibody, .rbody, .shbody, .chmsgs")
-      || screen.querySelector("[style*='overflow-y:auto']")
-      || screen;
+    // Use the known selector for this tab, or fall back to the screen itself
+    const sel = scrollSelectors[tab];
+    const scrollable = (sel && screen.querySelector(sel)) || screen;
+
     // Smooth scroll to top
     scrollable.scrollTo({ top: 0, behavior: "smooth" });
   });
