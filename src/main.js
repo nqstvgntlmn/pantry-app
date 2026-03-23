@@ -1458,10 +1458,10 @@ window.doSignOut = async function() {
 };
 
 // ── TAP-TO-SCROLL-TOP ───────────────────────────────────────────────────────
-// Simple, reliable scroll-to-top: a transparent 60px-tall fixed div spans the
-// full screen width at top:0. Tapping it smooth-scrolls the active tab's
-// scrollable body to the top. This replaces the previous status-bar-tap
-// approach which relied on safe-area-inset-top and didn't receive taps reliably.
+// A transparent 44px-tall fixed div positioned at env(safe-area-inset-top) —
+// the highest point a PWA can reliably receive taps on iOS (just below the
+// status bar / Dynamic Island). Tapping it smooth-scrolls the active tab's
+// scrollable body to the top. Full width, z-index 9999.
 (function _initScrollTopTap() {
   // Create the transparent tap zone at the very top of the screen
   const tapZone = document.createElement("div");
