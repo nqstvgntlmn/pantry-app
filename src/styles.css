@@ -1826,22 +1826,32 @@ img[loading="lazy"] { content-visibility: auto }
    panel. Collapses back to the magnifying glass on tap-outside or clear.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* Inline search button — sits at the end of the .rtabs chip row, right of Community.
-   Styled as a compact circle that matches the filter chip aesthetic without being a chip. */
-.rec-search-inline-btn{flex-shrink:0;width:34px;height:34px;border-radius:50%;
-  background:rgba(var(--bg-rgb,13,11,8),.5);
-  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+/* Floating search FAB — small circle pinned top-right of the Recipes screen.
+   Hidden by default; shown via JS when the search bar scrolls out of view.
+   Sits below the "Make now" button area in the top-right corner. */
+.rec-search-fab{position:fixed;
+  top:calc(env(safe-area-inset-top, 0px) + 100px);
+  right:16px;z-index:130;
+  width:38px;height:38px;border-radius:50%;
+  background:rgba(var(--bg-rgb,13,11,8),.7);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
   border:1px solid var(--b2);color:var(--mt);
-  font-size:.9rem;cursor:pointer;
+  font-size:.95rem;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  margin-left:4px;transition:border-color .2s,color .2s,opacity .2s}
-.rec-search-inline-btn:active{opacity:.6;transform:scale(.92)}
-/* Highlight when search/filters are active */
-.rec-search-inline-btn.has-filters{border-color:var(--ac);color:var(--ac)}
+  box-shadow:0 2px 12px rgba(0,0,0,.4);
+  opacity:0;pointer-events:none;
+  transform:scale(.8);
+  transition:opacity .2s ease,transform .2s ease,border-color .2s,color .2s}
+/* Visible state — toggled by scroll listener in recipes.js */
+.rec-search-fab.visible{opacity:1;pointer-events:auto;transform:scale(1)}
+.rec-search-fab:active{opacity:.6;transform:scale(.88)}
+/* Highlight border/text when filters are active */
+.rec-search-fab.has-filters{border-color:var(--ac);color:var(--ac)}
 
-/* Expanded search panel — slides up from bottom-right above the FAB.
-   Positioned above the nav pill with enough room for the FAB button. */
-.rec-search-panel{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 144px);
+/* Expanded search panel — slides DOWN from top, pinned below the filter chips.
+   Appears at the top of the screen so the user sees results immediately. */
+.rec-search-panel{position:fixed;
+  top:calc(env(safe-area-inset-top, 0px) + 110px);
   left:10px;right:10px;z-index:131;
   background:rgba(var(--bg-rgb,13,11,8),.92);
   -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
@@ -1849,7 +1859,7 @@ img[loading="lazy"] { content-visibility: auto }
   padding:14px;max-height:50vh;overflow-y:auto;
   box-shadow:0 8px 32px rgba(0,0,0,.5);
   opacity:0;pointer-events:none;
-  transform:translateY(12px) scale(.97);
+  transform:translateY(-12px) scale(.97);
   transition:opacity .22s ease,transform .22s ease}
 .rec-search-panel.open{opacity:1;pointer-events:auto;
   transform:translateY(0) scale(1)}
@@ -1862,14 +1872,14 @@ img[loading="lazy"] { content-visibility: auto }
 .rec-search-backdrop.open{opacity:1;pointer-events:auto}
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   STATUS BAR TAP-TO-SCROLL — Invisible touch target at the very top 20px of
-   the viewport. Hard-coded to 20px to avoid blocking header buttons on
-   devices where env(safe-area-inset-top) can be 47-59px (notch/Dynamic Island).
-   Only intercepts taps in the thin strip at the absolute top edge.
-   z-index 9999 ensures nothing can sit above this tap zone.
+   STATUS BAR TAP-TO-SCROLL — Invisible touch target covering the absolute top
+   of the viewport including the safe area (notch/Dynamic Island). Uses
+   env(safe-area-inset-top) + 15px extra so the zone extends into the clock/
+   status-bar region on all iPhone models. z-index 9999 ensures nothing sits
+   above this tap zone. Pointer-events only fire in the transparent strip.
    ═══════════════════════════════════════════════════════════════════════════════ */
 .status-bar-tap{position:fixed;top:0;left:0;right:0;
-  height:20px;
+  height:calc(env(safe-area-inset-top, 20px) + 15px);
   z-index:9999;cursor:pointer;
   -webkit-tap-highlight-color:transparent;
   background:transparent}
