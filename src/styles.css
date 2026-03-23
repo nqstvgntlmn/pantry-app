@@ -305,7 +305,7 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 
 /* ── RECIPES ── */
 /* Recipe filter tab bar — frosted glass backdrop matches inventory tab bar styling */
-.rtabs{display:flex;border-bottom:1px solid var(--b1);flex-shrink:0;padding:0 6px;margin-top:14px;
+.rtabs{display:flex;align-items:center;border-bottom:1px solid var(--b1);flex-shrink:0;padding:0 6px;margin-top:14px;
   background:rgba(var(--bg-rgb,13,11,8),.85);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
   box-shadow:0 1px 6px rgba(0,0,0,.15);position:relative;z-index:10}
 .rtab{flex:1;padding:11px 4px;text-align:center;font-size:.72rem;font-weight:600;color:var(--mt);cursor:pointer;border-bottom:2.5px solid transparent;transition:all .18s;letter-spacing:.03em}
@@ -1826,23 +1826,18 @@ img[loading="lazy"] { content-visibility: auto }
    panel. Collapses back to the magnifying glass on tap-outside or clear.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* Magnifying glass button — bottom-right FAB, above the floating nav pill.
-   Positioned low to avoid overlapping the header "Make now" button. */
-.rec-search-fab{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);right:16px;
-  width:38px;height:38px;border-radius:50%;
-  background:rgba(var(--bg-rgb,13,11,8),.7);
-  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+/* Inline search button — sits at the end of the .rtabs chip row, right of Community.
+   Styled as a compact circle that matches the filter chip aesthetic without being a chip. */
+.rec-search-inline-btn{flex-shrink:0;width:34px;height:34px;border-radius:50%;
+  background:rgba(var(--bg-rgb,13,11,8),.5);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
   border:1px solid var(--b2);color:var(--mt);
-  font-size:1rem;cursor:pointer;z-index:130;
+  font-size:.9rem;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
-  opacity:0;pointer-events:none;
-  transform:scale(.6);
-  transition:opacity .25s ease,transform .25s ease}
-/* Visible state when user has scrolled past threshold */
-.rec-search-fab.visible{opacity:.55;pointer-events:auto;transform:scale(1)}
-.rec-search-fab.visible:active{transform:scale(.9);opacity:.7}
+  margin-left:4px;transition:border-color .2s,color .2s,opacity .2s}
+.rec-search-inline-btn:active{opacity:.6;transform:scale(.92)}
 /* Highlight when search/filters are active */
-.rec-search-fab.has-filters{border-color:var(--ac);color:var(--ac);opacity:.75}
+.rec-search-inline-btn.has-filters{border-color:var(--ac);color:var(--ac)}
 
 /* Expanded search panel — slides up from bottom-right above the FAB.
    Positioned above the nav pill with enough room for the FAB button. */
@@ -1867,14 +1862,14 @@ img[loading="lazy"] { content-visibility: auto }
 .rec-search-backdrop.open{opacity:1;pointer-events:auto}
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   STATUS BAR TAP-TO-SCROLL — Invisible touch target hugging the very top edge
-   of the viewport (iOS clock / signal bars area). Height is exactly the safe
-   area inset so it covers only the true status-bar region. On devices without
-   a notch the fallback is 20px — the standard iOS status-bar height.
+   STATUS BAR TAP-TO-SCROLL — Invisible touch target at the very top 20px of
+   the viewport. Hard-coded to 20px to avoid blocking header buttons on
+   devices where env(safe-area-inset-top) can be 47-59px (notch/Dynamic Island).
+   Only intercepts taps in the thin strip at the absolute top edge.
    z-index 9999 ensures nothing can sit above this tap zone.
    ═══════════════════════════════════════════════════════════════════════════════ */
 .status-bar-tap{position:fixed;top:0;left:0;right:0;
-  height:env(safe-area-inset-top,20px);
+  height:20px;
   z-index:9999;cursor:pointer;
   -webkit-tap-highlight-color:transparent;
   background:transparent}

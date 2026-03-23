@@ -40,7 +40,7 @@ let _recipeStaggerPlayed = false;
 // ── RECIPE SEARCH FAB STATE ──────────────────────────────────────────────────
 // Tracks whether the floating search panel is expanded and the scroll listener
 let _recSearchPanelOpen = false; // true when the expanded search panel is visible
-let _recScrollListenerAttached = false; // prevents duplicate scroll listener registration
+// (scroll listener for FAB visibility removed — button is now inline in .rtabs)
 
 /**
  * _applyRecipeStagger(container) — Applies staggered entrance animation to recipe cards.
@@ -579,21 +579,13 @@ function _hasActiveRecFilters() {
 }
 
 /**
- * _ensureRecSearchFabElements — lazily creates the FAB button, panel, and
- * backdrop elements in the DOM if they don't exist yet. Called once on first
- * Recipes tab render.
+ * _ensureRecSearchPanelElements — lazily creates the search panel overlay and
+ * backdrop in the DOM if they don't exist yet. The magnifying glass trigger
+ * button lives inline in the .rtabs chip row (in index.html), so only the
+ * overlay elements need to be created dynamically.
  */
-function _ensureRecSearchFabElements() {
-  if (g("rec-search-fab")) return; // already created
-
-  // Magnifying glass button
-  const fab = document.createElement("button");
-  fab.id = "rec-search-fab";
-  fab.className = "rec-search-fab";
-  fab.innerHTML = "🔍";
-  fab.setAttribute("aria-label", "Search & filter recipes");
-  fab.onclick = () => toggleRecSearchPanel();
-  document.body.appendChild(fab);
+function _ensureRecSearchPanelElements() {
+  if (g("rec-search-panel")) return; // already created
 
   // Backdrop overlay — tapping outside the panel closes it
   const backdrop = document.createElement("div");
@@ -610,24 +602,12 @@ function _ensureRecSearchFabElements() {
 }
 
 /**
- * _attachRecScrollListener — attaches a scroll listener to the .rbody element
- * to show/hide the floating search magnifying glass based on scroll position.
- * Only the first 100px zone toggles between inline search and the FAB.
+ * _updateRecSearchBtnHighlight — updates the inline search button's highlight
+ * state to reflect whether any search/filter criteria are active.
  */
-function _attachRecScrollListener() {
-  const rbody = g("rbody");
-  if (!rbody || _recScrollListenerAttached) return;
-  _recScrollListenerAttached = true;
-
-  rbody.addEventListener("scroll", () => {
-    const fab = g("rec-search-fab");
-    if (!fab) return;
-    // Show the FAB once user scrolls past 100px, hide when back near top
-    const scrolled = rbody.scrollTop > 100;
-    fab.classList.toggle("visible", scrolled && !_recSearchPanelOpen);
-    // Highlight if filters are active
-    fab.classList.toggle("has-filters", _hasActiveRecFilters());
-  }, { passive: true });
+function _updateRecSearchBtnHighlight() {
+  const btn = g("rec-search-fab");
+  if (btn) btn.classList.toggle("has-filters", _hasActiveRecFilters());
 }
 
 /**
@@ -650,9 +630,11 @@ export function toggleRecSearchPanel() {
  */
 export function openRecSearchPanel() {
   _recSearchPanelOpen = true;
+  // Ensure the panel/backdrop elements exist in the DOM
+  _ensureRecSearchPanelElements();
+
   const panel = g("rec-search-panel");
   const backdrop = g("rec-search-backdrop");
-  const fab = g("rec-search-fab");
 
   if (!panel) return;
 
@@ -675,7 +657,6 @@ export function openRecSearchPanel() {
   // Show backdrop and panel with animation
   if (backdrop) backdrop.classList.add("open");
   panel.classList.add("open");
-  if (fab) fab.classList.remove("visible");
 
   // Auto-focus the search input after the opening animation
   setTimeout(() => {
@@ -692,28 +673,22 @@ export function closeRecSearchPanel() {
   _recSearchPanelOpen = false;
   const panel = g("rec-search-panel");
   const backdrop = g("rec-search-backdrop");
-  const fab = g("rec-search-fab");
 
   if (panel) panel.classList.remove("open");
   if (backdrop) backdrop.classList.remove("open");
 
-  // Re-show the magnifying glass if still scrolled past threshold
-  const rbody = g("rbody");
-  if (fab && rbody && rbody.scrollTop > 100) {
-    fab.classList.add("visible");
-    fab.classList.toggle("has-filters", _hasActiveRecFilters());
-  }
+  // Update the inline button highlight to reflect any active filters
+  _updateRecSearchBtnHighlight();
 }
 
 /**
- * hideRecSearchFab — completely hides the search FAB and panel.
- * Called when navigating away from the Recipes tab.
+ * hideRecSearchFab — closes the search panel and backdrop when navigating
+ * away from the Recipes tab. The inline button itself is part of the recipes
+ * screen HTML, so it hides automatically with the screen.
  */
 export function hideRecSearchFab() {
-  const fab = g("rec-search-fab");
   const panel = g("rec-search-panel");
   const backdrop = g("rec-search-backdrop");
-  if (fab) fab.classList.remove("visible");
   if (panel) panel.classList.remove("open");
   if (backdrop) backdrop.classList.remove("open");
   _recSearchPanelOpen = false;
@@ -905,13 +880,12 @@ export function renderRecs() {
   const c = g("rbody"); // container div that holds recipe cards
   if (!c) return;
 
-  // Ensure floating search FAB elements exist and scroll listener is attached
-  _ensureRecSearchFabElements();
-  _attachRecScrollListener();
+  // Ensure the search panel overlay elements exist in the DOM
+  _ensureRecSearchPanelElements();
+  // Update inline search button highlight to reflect active filters
+  _updateRecSearchBtnHighlight();
 
   // Build inline search bar + sort dropdown + filters (shown at top of list).
-  // This is always rendered in the DOM but only visible when near the top.
-  // When scrolled past 100px, the floating magnifying glass FAB takes over.
   const searchSortHtml = `<div id="rec-inline-search" style="margin-bottom:12px">
     <input class="fi" id="rec-search" placeholder="Search recipes…" value="${(state.recSearch || "").replace(/"/g, "&quot;")}" oninput="setRecSearch(this.value)" style="margin-bottom:8px"/>
     <div style="display:flex;gap:6px;margin-bottom:8px">

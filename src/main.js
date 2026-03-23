@@ -1459,9 +1459,10 @@ window.doSignOut = async function() {
 
 // ── STATUS BAR TAP-TO-SCROLL ────────────────────────────────────────────────
 // Mimics the native iOS status-bar-tap-to-scroll-top behavior. PWAs don't get
-// this automatically, so we add an invisible touch target in the top 44px of
-// the screen. A single tap smoothly scrolls the active tab's scrollable
-// content area back to the top.
+// this automatically, so we add an invisible touch target in the top 20px of
+// the screen. Hard-coded to 20px to avoid blocking header buttons on devices
+// where env(safe-area-inset-top) can be 47-59px. A single tap smoothly scrolls
+// the active tab's scrollable content area back to the top.
 (function _initStatusBarTap() {
   const tapZone = document.createElement("div");
   tapZone.className = "status-bar-tap";
