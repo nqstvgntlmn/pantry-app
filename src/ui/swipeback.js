@@ -66,6 +66,9 @@ export function enableSwipeBack(onBack) {
 /**
  * disableSwipeBack — removes all swipe-back listeners and resets state.
  * Call this when the nested page closes to prevent ghost gestures.
+ * Also clears any inline transform/transition styles left on the overlay
+ * from an in-progress or aborted swipe — stale inline styles can override
+ * CSS animations on the next overlay open, causing visual glitches.
  */
 export function disableSwipeBack() {
   if (_boundStart) {
@@ -73,6 +76,12 @@ export function disableSwipeBack() {
     document.removeEventListener('touchmove', _boundMove);
     document.removeEventListener('touchend', _boundEnd);
     document.removeEventListener('touchcancel', _boundEnd);
+  }
+  // Clear any inline styles left on the overlay from a partial/aborted swipe
+  // so they don't persist and interfere with the next overlay open animation
+  if (_overlayEl) {
+    _overlayEl.style.transform = '';
+    _overlayEl.style.transition = '';
   }
   _active = false;
   _tracking = false;
@@ -86,6 +95,8 @@ export function disableSwipeBack() {
 /**
  * _handleTouchStart — checks if the touch begins within the left edge zone.
  * Only starts tracking if the finger is within EDGE_ZONE pixels of the left edge.
+ * Ignores touches on the back button (.bkbtn) — those should fire onclick normally
+ * without swipe interference, since the back button sits right at the edge zone boundary.
  */
 function _handleTouchStart(e) {
   if (!_active) return;
@@ -93,6 +104,12 @@ function _handleTouchStart(e) {
 
   // Only trigger from the left edge of the screen
   if (touch.clientX > EDGE_ZONE) return;
+
+  // Don't intercept touches on the back button — let onclick handle them cleanly.
+  // The back button (.bkbtn) sits right at the edge zone boundary (left padding ~20px),
+  // so a slightly left-of-center tap could land in the edge zone and steal the event.
+  const target = e.target;
+  if (target && (target.classList.contains('bkbtn') || target.closest('.bkbtn'))) return;
 
   // Find the active overlay being displayed — this is what we'll slide
   _overlayEl = document.querySelector('.ov.active');

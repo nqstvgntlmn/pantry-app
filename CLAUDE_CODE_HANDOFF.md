@@ -520,6 +520,8 @@ Bag, Bar, Bottle, Box, Bucket, Bunch, Can, Carton, Clove, Container, Dozen, Gall
 - Swipe right from left edge (within ~20px) → navigates back
 - Applied to: Community recipe → detail, My Recipes → detail, Recipe detail → Edit, Shopping Prep → Category detail
 - To apply to new pages: call `enableSwipeBack(() => goBack())`
+- **Back button guard:** `_handleTouchStart` ignores touches on `.bkbtn` elements so the edge zone doesn't steal taps from the back button
+- **Inline style cleanup:** `disableSwipeBack()` clears stale `transform`/`transition` inline styles from the overlay to prevent visual glitches on the next open
 
 ### Status Bar Tap-to-Scroll-Top
 - **Global behavior** — works on every tab in the app
@@ -632,7 +634,7 @@ Auto-applied on all text inputs in add item sheets (both Shopping and Supplies).
   4. Removed `prepQtyStep` function, `svi` import, `splitQty`/`combineQty` imports, and all qty-save-related session state (`_saveTimers`, `_qtyUpdated`, `_qtyCounted`)
   5. Summary toast now only reports items added (no longer mentions "quantities updated")
 - **Session 15:** Two UX features:
-  1. **Floating Recipe Search FAB:** A compact magnifying glass button (`.rec-search-fab`) at fixed pixel coordinates `top:103px; right:16px` — positioned to clear the filter chips row comfortably. **Hidden by default** — only appears after the user scrolls past 100px in the recipe list (scroll listener on `#rbody`). When the FAB appears, the inline search/sort/filters fade out via opacity transition; when scrolling back within 100px, the inline controls fade back in and the FAB hides. Tapping opens a frosted-glass search panel (`rec-search-panel`) at `top:113px` (just below the FAB) with search bar, sort dropdown, and full filter options. Tapping outside (backdrop) collapses it. FAB highlights in accent color when filters are active. Panel auto-focuses search input. FAB is a body-level fixed element (not inline in `.rtabs`) — prevents squishing filter chips. Hidden on non-recipe tabs via `hideRecSearchFab()`. **Hidden inside individual recipe pages** — `hideRecSearchFab()` called after every `showOv("erec")`, `_restoreRecSearchFab()` restores on overlay close. Scroll listener defensively refuses to show FAB while erec overlay is active. Auto-closes when user scrolls back to top. Exports: `toggleRecSearchPanel`, `openRecSearchPanel`, `closeRecSearchPanel`, `hideRecSearchFab`. **History:** Originally a floating bottom-right FAB (Session 15), moved to inline chip row (Session 17), moved back to floating top-right FAB with scroll-based visibility (Session 18) to fix Community chip squishing. Moved further down to +120px (Session 19) to clear all filter chips. Changed to fixed pixel coordinates (Session 20) to eliminate safe-area-inset dependency. Moved to 128px with 100px scroll threshold (Session 21) for cleaner clearance. Moved up 25px to 103px and hidden inside recipe pages (Session 22) to avoid interfering with back button.
+  1. **Floating Recipe Search FAB:** A compact magnifying glass button (`.rec-search-fab`) at fixed pixel coordinates `top:53px; right:21px` — moved up 50px and 5px to the left from the previous position (103px/16px). **Hidden by default** — only appears after the user scrolls past 100px in the recipe list (scroll listener on `#rbody`). When the FAB appears, the inline search/sort/filters fade out via opacity transition; when scrolling back within 100px, the inline controls fade back in and the FAB hides. Tapping opens a frosted-glass search panel (`rec-search-panel`) at `top:113px` (just below the FAB) with search bar, sort dropdown, and full filter options. Tapping outside (backdrop) collapses it. FAB highlights in accent color when filters are active. Panel auto-focuses search input. FAB is a body-level fixed element (not inline in `.rtabs`) — prevents squishing filter chips. Hidden on non-recipe tabs via `hideRecSearchFab()`. **Hidden inside individual recipe pages** — `hideRecSearchFab()` called after every `showOv("erec")`, `_restoreRecSearchFab()` restores on overlay close. Scroll listener defensively refuses to show FAB while erec overlay is active. Auto-closes when user scrolls back to top. Exports: `toggleRecSearchPanel`, `openRecSearchPanel`, `closeRecSearchPanel`, `hideRecSearchFab`. **History:** Originally a floating bottom-right FAB (Session 15), moved to inline chip row (Session 17), moved back to floating top-right FAB with scroll-based visibility (Session 18) to fix Community chip squishing. Moved further down to +120px (Session 19) to clear all filter chips. Changed to fixed pixel coordinates (Session 20) to eliminate safe-area-inset dependency. Moved to 128px with 100px scroll threshold (Session 21) for cleaner clearance. Moved up 25px to 103px and hidden inside recipe pages (Session 22) to avoid interfering with back button. Moved up 50px to 53px and 5px left to right:21px (Session 23).
   2. **Tap-to-Scroll-Top:** A transparent fixed `.scroll-top-tap` div spans the full screen width starting at `top:env(safe-area-inset-top)` with `height:44px` and `z-index:9999`. This positions the tap zone at the highest point a PWA can reliably receive taps on iOS (just below the status bar / Dynamic Island). Tapping it smooth-scrolls the active tab's content to the top. Uses a `scrollSelectors` map to find each tab's scrollable container by known CSS selector (`.hbody`, `.ibody`, `.rbody`, `#sh-list-body`, `.chmsgs`). Skips scroll when overlays/modals are open. **History:** Originally used `env(safe-area-inset-top)` + 44px (Session 15), reduced to 20px (Session 17), expanded to `env(safe-area-inset-top) + 15px` (Session 18), fully rewritten to simple 60px fixed div at top:0 (Session 19), repositioned to start at env(safe-area-inset-top) with 44px height (Session 20) for precise iOS tap targeting.
 
 ---
@@ -1560,3 +1562,41 @@ Two quick tweaks to the floating "+" button to make it less intrusive at rest.
 - `src/ui/swipe.js` — `commitDelete()` passes item snapshot to `logActivity()`
 - `src/ui/home.js` — `activityUndo()` reads `entry.itemData` to restore all original fields; generates fresh ID for re-added items
 - `CLAUDE_CODE_HANDOFF.md` — Updated Recent Activity docs, added Deals sticky chips note, added this session entry
+
+---
+
+## Session 23 — Recipe Back Button Fix & Magnifying Glass Repositioning (March 2026)
+
+### Overview
+Two targeted fixes: (1) glitchy back button on recipe detail pages, and (2) magnifying glass FAB repositioned on the main Recipes list.
+
+### Changes Made
+
+#### 1. Recipe Back Button Fix
+**Problem:** The back button (← arrow) on individual recipe pages was unreliable — taps sometimes didn't register, and after partial swipe-back gestures, the overlay could have stale inline styles that caused visual glitches on the next open.
+
+**Root causes identified:**
+- **Swipe-back edge zone conflict:** The swipe-back gesture's 20px edge zone directly abutted the back button (`.bkbtn`), which starts at x=20px due to `.ovhdr` padding. Slightly off-center taps could land in the edge zone and be captured by the swipe tracker instead of triggering the button's onclick.
+- **Stale inline styles:** `disableSwipeBack()` removed event listeners and nulled internal state, but did NOT clear inline `transform` and `transition` styles left on the overlay element from in-progress or aborted swipe gestures. These stale styles could override CSS animations when the overlay reopened.
+- **Sub-minimum tap target:** The back button was 38×38px, below the 44px iPhone minimum tap target guideline.
+
+**Fixes applied:**
+1. **`src/ui/swipeback.js` — `_handleTouchStart`:** Added a guard that checks if the touch target is a `.bkbtn` element (or descendant). If so, returns early without starting swipe tracking, letting the onclick fire cleanly.
+2. **`src/ui/swipeback.js` — `disableSwipeBack`:** Now clears `_overlayEl.style.transform` and `_overlayEl.style.transition` before nulling the reference, preventing stale inline styles from persisting.
+3. **`src/ui/recipes.js` — `handleRecipeBack`:** Added a safety clear of inline `transform`/`transition` on `#ov-erec` directly, in case `_overlayEl` was already null when `disableSwipeBack` ran.
+4. **`src/styles.css` — `.bkbtn`:** Increased from 38×38px to 44×44px to meet the mobile-first 44px tap target rule.
+
+#### 2. Magnifying Glass Repositioned
+**What:** On the main Recipes list page only, the floating magnifying glass search FAB moved up 50px and 5px to the left.
+- `top: 103px` → `top: 53px`
+- `right: 16px` → `right: 21px`
+
+**Why:** User requested this exact repositioning for better placement on the Recipes list screen.
+
+**How:** Updated `.rec-search-fab` in `src/styles.css` and updated the position reference comment in `src/ui/recipes.js`.
+
+### Files Changed
+- `src/ui/swipeback.js` — Added `.bkbtn` touch guard in `_handleTouchStart`; added inline style cleanup in `disableSwipeBack`
+- `src/ui/recipes.js` — `handleRecipeBack` now clears stale inline styles on overlay; updated FAB position comment
+- `src/styles.css` — `.bkbtn` enlarged to 44×44px; `.rec-search-fab` repositioned to top:53px right:21px
+- `CLAUDE_CODE_HANDOFF.md` — Updated Swipe Back section, FAB position/history, added this session entry

@@ -582,9 +582,9 @@ function _hasActiveRecFilters() {
 /**
  * _ensureRecSearchFab — lazily creates the floating magnifying glass button
  * that appears when the user scrolls past 100px in the Recipes list. Positioned
- * as a fixed element in the top-right corner at 103px, clearing the filter chips
- * row. Small, semi-transparent, with blur backdrop. Hidden when inside individual
- * recipe pages so it doesn't interfere with the back button or recipe content.
+ * as a fixed element in the top-right corner at 53px top / 21px right. Small,
+ * semi-transparent, with blur backdrop. Hidden when inside individual recipe
+ * pages so it doesn't interfere with the back button or recipe content.
  */
 function _ensureRecSearchFab() {
   if (_recSearchFabCreated) return;
@@ -2084,10 +2084,21 @@ export async function saveHouseholdNotes(recipeId) {
 /**
  * handleRecipeBack — handles the back button in the recipe overlay.
  * If in edit mode, goes back to read-only view. If in read-only, closes the overlay.
+ * Clears stale inline styles from swipe-back gestures to prevent visual glitches
+ * on subsequent overlay opens (swipe leaves transform/transition inline on the element).
  */
 export function handleRecipeBack() {
   // Disable swipe-back on the current page before navigating away
+  // (also clears inline transform/transition styles left by partial swipes)
   disableSwipeBack();
+
+  // Safety: clear any stale inline transform/transition on the overlay element
+  // in case disableSwipeBack didn't catch it (e.g., _overlayEl was already null)
+  const ovEl = g("ov-erec");
+  if (ovEl) {
+    ovEl.style.transform = '';
+    ovEl.style.transition = '';
+  }
 
   // If editing a community recipe, go back to its detail view
   if (_recipeViewMode === "edit" && state._editingComId) {
