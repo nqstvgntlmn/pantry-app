@@ -582,8 +582,9 @@ function _hasActiveRecFilters() {
 /**
  * _ensureRecSearchFab — lazily creates the floating magnifying glass button
  * that appears when the user scrolls past 100px in the Recipes list. Positioned
- * as a fixed element in the top-right corner at 128px, clearing the filter chips
- * row by 5-10px. Small, semi-transparent, with blur backdrop.
+ * as a fixed element in the top-right corner at 103px, clearing the filter chips
+ * row. Small, semi-transparent, with blur backdrop. Hidden when inside individual
+ * recipe pages so it doesn't interfere with the back button or recipe content.
  */
 function _ensureRecSearchFab() {
   if (_recSearchFabCreated) return;
@@ -615,6 +616,12 @@ function _ensureRecScrollListener() {
   rbody.addEventListener("scroll", () => {
     const fab = g("rec-search-fab");
     if (!fab) return;
+
+    // Never show the FAB when inside an individual recipe page — the recipe
+    // overlay (erec) covers the list, so the FAB would overlap the back button
+    const erecOv = g("ov-erec");
+    if (erecOv && erecOv.classList.contains("active")) return;
+
     const inlineSearch = g("rec-inline-search");
     // Show the FAB once the user scrolls past 100px — at this point the
     // inline search/sort/filters have scrolled off-screen naturally
@@ -763,6 +770,19 @@ export function hideRecSearchFab() {
   if (backdrop) backdrop.classList.remove("open");
   if (fab) fab.classList.remove("visible");
   _recSearchPanelOpen = false;
+}
+
+/**
+ * _restoreRecSearchFab — restores the floating magnifying glass FAB visibility
+ * after closing the recipe overlay and returning to the main Recipes list.
+ * Only shows the FAB if the user is scrolled past the 100px threshold.
+ */
+function _restoreRecSearchFab() {
+  const fab = g("rec-search-fab");
+  const rbody = g("rbody");
+  if (fab && rbody && rbody.scrollTop > 100) {
+    fab.classList.add("visible");
+  }
 }
 
 // ── COMMUNITY FILTER FUNCTIONS ─────────────────────────────────────────────
@@ -2015,6 +2035,10 @@ export function openRecipeView(id) {
   `;
 
   showOv("erec");
+
+  // Hide the floating magnifying glass — it must not appear inside individual
+  // recipe pages where it would overlap the back button and recipe content
+  hideRecSearchFab();
 }
 
 /**
@@ -2080,6 +2104,9 @@ export function handleRecipeBack() {
     const titleEl = g("erecTitle");
     if (titleEl) titleEl.textContent = "Recipes";
     hideOv("erec");
+
+    // Restore floating magnifying glass now that we're back on the Recipes list
+    _restoreRecSearchFab();
   }
 }
 
@@ -2335,6 +2362,9 @@ export function openER(id) {
     <button class="btn" style="width:100%;background:transparent;border:1.5px solid var(--rd);color:var(--rd);font-weight:600" onclick="delER()">🗑 Delete Recipe</button>`;
 
   showOv("erec"); // display the Edit Recipe overlay
+
+  // Hide the floating magnifying glass inside individual recipe pages
+  hideRecSearchFab();
 }
 
 // ── UPDATE (SAVE EDITS) ─────────────────────────────────────────────────────
@@ -2444,6 +2474,7 @@ export async function updR() {
   await svr(updatedRecipe);
   showNotif("Recipe updated!");
   hideOv("erec");
+  _restoreRecSearchFab(); // restore magnifying glass after returning to list
 
   // Community sync reminder — if this recipe has a published community version,
   // prompt the user to push changes to it (never auto-sync without confirmation)
@@ -2510,6 +2541,7 @@ export async function delER() {
     await dlr(state.eid);
     showNotif("Recipe deleted");
     hideOv("erec");
+    _restoreRecSearchFab();
     return;
   }
 
@@ -2530,6 +2562,7 @@ export async function delER() {
     await dlr(state.eid);
     showNotif("Local copy deleted — community version kept");
     hideOv("erec");
+    _restoreRecSearchFab();
   } else if (choice.trim() === "2") {
     // Delete everywhere — remove from both household recipes AND public_recipes
     try {
@@ -2540,6 +2573,7 @@ export async function delER() {
     await dlr(state.eid);
     showNotif("Recipe deleted from everywhere");
     hideOv("erec");
+    _restoreRecSearchFab();
   } else {
     // Invalid input — do nothing
     showNotif("Cancelled — type 1 or 2 to delete");
@@ -2645,6 +2679,7 @@ export async function addRecIngToShop(id) {
 
     showNotif(`Added ${toAdd.length} ingredient${toAdd.length !== 1 ? "s" : ""} to shopping list 🛒`);
     hideOv("erec");                  // close the Edit Recipe overlay
+    _restoreRecSearchFab();          // restore magnifying glass for when user returns
     window.showScreen("shopping");   // navigate to the shopping list screen
   } catch { showNotif("Couldn't parse ingredients"); }
 }
@@ -3778,6 +3813,9 @@ export async function openComRecipe(id) {
   }
 
   showOv("erec");
+
+  // Hide the floating magnifying glass inside individual recipe pages
+  hideRecSearchFab();
 }
 
 /**
@@ -3879,6 +3917,7 @@ export async function unpublishComRecipe(id) {
     state.comRecs = state.comRecs.filter(r => r.id !== id);
     showNotif("Recipe unpublished");
     hideOv("erec");
+    _restoreRecSearchFab();
     renderCommunity();
   } catch (e) {
     console.error("unpublishComRecipe:", e);
@@ -3938,6 +3977,7 @@ export async function saveComToKitchen(id) {
     logActivity("saved", toTitleCase(r.title || "a recipe") + " from community");
     showNotif("Recipe saved to your kitchen! 📖");
     hideOv("erec");
+    _restoreRecSearchFab();
   } catch (e) {
     console.error("saveComToKitchen:", e);
     showNotif("Couldn't save recipe");
@@ -4247,11 +4287,14 @@ export async function editComRecipe(id) {
     <div class="frow"><label class="flbl">Ingredients</label><textarea class="fta" id="comEditIngredients" style="min-height:100px">${_esc(r.ingredients || "")}</textarea></div>
     <div class="frow"><label class="flbl">Steps</label><textarea class="fta" id="comEditSteps" style="min-height:100px">${_esc(r.steps || "")}</textarea></div>
     <div class="brow" style="margin-top:14px">
-      <button class="btn bs" style="flex:1" onclick="hideOv('erec')">Cancel</button>
+      <button class="btn bs" style="flex:1" onclick="handleRecipeBack()">Cancel</button>
       <button class="btn bp" style="flex:2" onclick="saveComRecipeEdit()">Save Changes</button>
     </div>`;
 
   showOv("erec");
+
+  // Hide the floating magnifying glass inside individual recipe pages
+  hideRecSearchFab();
 }
 
 /**
@@ -4310,6 +4353,7 @@ export async function saveComRecipeEdit() {
     showNotif("Community recipe updated!");
     disableSwipeBack(); // Clean up swipe gesture before closing overlay
     hideOv("erec");
+    _restoreRecSearchFab();
     renderCommunity();
   } catch (e) {
     console.error("saveComRecipeEdit:", e);
@@ -4445,6 +4489,9 @@ export async function openNotifications() {
 
     body.innerHTML = html;
     showOv("erec");
+
+    // Hide the floating magnifying glass inside individual recipe pages
+    hideRecSearchFab();
   } catch (e) {
     console.error("openNotifications:", e);
     showNotif("Couldn't load notifications");
