@@ -581,9 +581,9 @@ function _hasActiveRecFilters() {
 
 /**
  * _ensureRecSearchFab — lazily creates the floating magnifying glass button
- * that appears when the user scrolls past the Recipes header. Positioned as a
- * fixed element in the top-right corner, below the "Make now" button area.
- * Also attaches a scroll listener on rbody to toggle visibility.
+ * that appears when the user scrolls past 100px in the Recipes list. Positioned
+ * as a fixed element in the top-right corner at 128px, clearing the filter chips
+ * row by 5-10px. Small, semi-transparent, with blur backdrop.
  */
 function _ensureRecSearchFab() {
   if (_recSearchFabCreated) return;
@@ -601,14 +601,10 @@ function _ensureRecSearchFab() {
 
 /**
  * _ensureRecScrollListener — attaches a scroll listener to the rbody container
- * so the floating FAB only appears once the header (search bar, sort, filters)
- * has scrolled off screen. The threshold is the height of the header area above
- * the rbody — once rbody.scrollTop > 0, the header is fully out of view because
- * the header is in a flex-shrink:0 div above rbody.
- *
- * For the Recipes screen, the header (title + filter chips) is in a separate div
- * above rbody, so we detect scroll on rbody. We show the FAB once the user has
- * scrolled down at least 60px (indicating the content has moved up meaningfully).
+ * so the floating FAB only appears once the inline search/sort/filters have
+ * scrolled off screen (past 100px). When within 100px of the top, the inline
+ * controls are visible so the FAB is hidden. Also hides the inline search
+ * section when scrolled past 100px to avoid seeing both at once on scroll-back.
  */
 function _ensureRecScrollListener() {
   if (_recScrollListenerAttached) return;
@@ -619,13 +615,18 @@ function _ensureRecScrollListener() {
   rbody.addEventListener("scroll", () => {
     const fab = g("rec-search-fab");
     if (!fab) return;
-    // Show the FAB only after user scrolls down 60px in the recipe list
-    // (the header with title/chips is in a non-scrolling div above rbody,
-    // so any scroll means the user has moved past visible content)
-    if (rbody.scrollTop > 60) {
+    const inlineSearch = g("rec-inline-search");
+    // Show the FAB once the user scrolls past 100px — at this point the
+    // inline search/sort/filters have scrolled off-screen naturally
+    if (rbody.scrollTop > 100) {
       fab.classList.add("visible");
+      // Hide the inline search section so it doesn't reappear during
+      // partial scroll-back; the FAB panel replaces it functionally
+      if (inlineSearch) inlineSearch.style.opacity = "0";
     } else {
       fab.classList.remove("visible");
+      // Restore the inline search when user scrolls back to the top zone
+      if (inlineSearch) inlineSearch.style.opacity = "1";
       // Also close the search panel if user scrolls back to top
       if (_recSearchPanelOpen) closeRecSearchPanel();
     }
@@ -738,10 +739,10 @@ export function closeRecSearchPanel() {
   if (panel) panel.classList.remove("open");
   if (backdrop) backdrop.classList.remove("open");
 
-  // Restore FAB visibility based on current scroll position
+  // Restore FAB visibility based on current scroll position (100px threshold)
   const fab = g("rec-search-fab");
   const rbody = g("rbody");
-  if (fab && rbody && rbody.scrollTop > 60) {
+  if (fab && rbody && rbody.scrollTop > 100) {
     fab.classList.add("visible");
   }
 
