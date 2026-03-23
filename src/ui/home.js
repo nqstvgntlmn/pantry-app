@@ -119,7 +119,9 @@ function _contextGreeting(hour) {
 // ── WEATHER-AWARE GREETING ──────────────────────────────────────────────────
 // Uses the browser Geolocation API + Open-Meteo (free, no API key) to fetch
 // current weather, then blends it naturally into the greeting text.
+// If geolocation is denied, falls back to the zip code stored in Settings.
 // Result is cached in sessionStorage for 30 minutes to avoid excessive fetches.
+// Also determines if user is traveling (>20 mi from home zip) to show city name.
 
 const WEATHER_CACHE_KEY = "ks-weather-cache";
 const WEATHER_CACHE_TTL = 30 * 60 * 1000; // 30 minutes in ms
@@ -142,16 +144,45 @@ function _setCachedWeather(data) {
   } catch { /* storage full — silently ignore */ }
 }
 
+// _geocodeZip(zip) — converts a US zip code to { lat, lon, city } using the
+// Open-Meteo geocoding API (free, no key needed). Returns null on failure.
+async function _geocodeZip(zip) {
+  try {
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(zip)}&count=1&language=en&format=json`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.results?.length) return null;
+    const r = json.results[0];
+    return { lat: r.latitude, lon: r.longitude, city: r.name };
+  } catch { return null; }
+}
+
+// _haversineDistance(lat1, lon1, lat2, lon2) — calculates the distance in miles
+// between two GPS coordinates using the Haversine formula.
+// Used to determine if the user is traveling (>20 mi from home zip).
+function _haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // Earth's radius in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // _fetchWeather() — gets current weather via Geolocation + Open-Meteo.
-// Returns { tempF, weatherCode } or null on failure. Non-blocking — the
-// greeting renders immediately and upgrades itself once weather arrives.
+// Returns { tempF, weatherCode, city, isTraveling } or null on failure.
+// Falls back to zip code from Settings if geolocation is denied.
+// Non-blocking — the greeting renders immediately and upgrades once data arrives.
 async function _fetchWeather() {
-  // Check cache first
+  // Check cache first — avoids redundant API calls within the 30-min window
   const cached = _getCachedWeather();
   if (cached) return cached;
 
-  // Request user's location (non-blocking — if denied, we just skip weather)
-  let coords;
+  let coords = null;     // { lat, lon } — user's current location
+  let usedGps = false;    // whether we got coordinates from the Geolocation API
+
+  // Step 1: Try browser Geolocation API for precise GPS coordinates
   try {
     const pos = await new Promise((resolve, reject) =>
       navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -159,17 +190,63 @@ async function _fetchWeather() {
       })
     );
     coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-  } catch { return null; } // Location denied or unavailable — degrade gracefully
+    usedGps = true;
+  } catch {
+    // Geolocation denied or unavailable — fall through to zip code fallback
+  }
 
-  // Fetch current weather from Open-Meteo (free, no key needed)
+  // Step 2: If GPS failed, fall back to the zip code stored in Settings.
+  // Convert the zip to coordinates via Open-Meteo geocoding API.
+  if (!coords) {
+    const zip = state.cfg?.zipcode;
+    if (!zip) return null; // No GPS and no zip — can't determine location
+    const geo = await _geocodeZip(zip);
+    if (!geo) return null;
+    coords = { lat: geo.lat, lon: geo.lon };
+    // When using zip fallback, user is definitively "at home" — no city shown
+  }
+
+  // Step 3: Determine if user is traveling by comparing GPS position to home zip.
+  // Only relevant when we have GPS — zip fallback is inherently "at home".
+  let isTraveling = false;
+  let homeGeo = null;
+  if (usedGps && state.cfg?.zipcode) {
+    try {
+      homeGeo = await _geocodeZip(state.cfg.zipcode);
+      if (homeGeo) {
+        const dist = _haversineDistance(coords.lat, coords.lon, homeGeo.lat, homeGeo.lon);
+        if (dist > 20) isTraveling = true;
+      }
+    } catch { /* distance check failed — default to not traveling */ }
+  }
+
+  // Step 4: Fetch current weather from Open-Meteo using our coordinates
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=auto`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const json = await res.json();
+
+    // Step 5: If traveling, resolve a city name via BigDataCloud reverse geocoding
+    // (free, no key needed for limited use). City is a nice-to-have — greeting
+    // works fine without it if this call fails.
+    let city = null;
+    if (isTraveling) {
+      try {
+        const revUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${coords.lat}&longitude=${coords.lon}&localityLanguage=en`;
+        const revRes = await fetch(revUrl);
+        if (revRes.ok) {
+          const revJson = await revRes.json();
+          city = revJson.city || revJson.locality || null;
+        }
+      } catch { /* city name is optional — greeting works without it */ }
+    }
+
     const data = {
       tempF: Math.round(json.current.temperature_2m),
       weatherCode: json.current.weather_code,
+      city: city,           // only set when user is >20 mi from home
+      isTraveling: isTraveling,
     };
     _setCachedWeather(data);
     return data;
@@ -191,95 +268,115 @@ function _weatherLabel(code) {
   return null; // unknown — skip weather in greeting
 }
 
+// _weatherEmoji(label) — returns a weather emoji for the condition label.
+// Used to add a natural visual cue to the greeting text.
+function _weatherEmoji(label) {
+  const map = {
+    clear: "☀️", cloudy: "☁️", foggy: "🌫️", drizzly: "🌦️",
+    rainy: "🌧️", snowy: "❄️", stormy: "⛈️",
+  };
+  return map[label] || "";
+}
+
 // _tempDescriptor(tempF) — returns a temperature-based adjective.
+// Used as a fallback when no specific weather greeting template matches.
 function _tempDescriptor(tempF) {
   if (tempF <= 25)  return "freezing";
   if (tempF <= 40)  return "chilly";
-  if (tempF <= 55)  return "cool";
-  if (tempF <= 75)  return "pleasant";
+  if (tempF <= 55)  return "crisp";
+  if (tempF <= 75)  return "gorgeous";
   if (tempF <= 85)  return "warm";
   if (tempF <= 95)  return "hot";
   return "scorching";
 }
 
-// _buildWeatherGreeting(hour, weather) — creates a weather-blended greeting.
-// Combines weather condition, temperature feel, and time of day into a natural
-// phrase. Falls back to a plain time-based greeting if weather is unavailable.
+// _getDayOfWeek() — returns the current day name (e.g. "Sunday", "Monday").
+// Used to weave the day naturally into weather greetings.
+function _getDayOfWeek() {
+  return new Date().toLocaleDateString("en-US", { weekday: "long" });
+}
+
+// _buildWeatherGreeting(hour, weather) — creates a weather-blended greeting
+// that naturally incorporates the actual temperature, weather emoji, day of
+// week, and optionally the city name if the user is traveling. Falls back to
+// a plain time-based greeting if weather data is unavailable.
 function _buildWeatherGreeting(hour, weather) {
   if (!weather) return _contextGreeting(hour);
 
   const label = _weatherLabel(weather.weatherCode);
-  const temp = _tempDescriptor(weather.tempF);
+  const emoji = _weatherEmoji(label);
+  const tempF = weather.tempF;
+  const desc = _tempDescriptor(tempF);
+  const day = _getDayOfWeek();
   const slot = _getTimeSlot(hour);
 
-  // Weather-blended phrases keyed by weather condition × rough time group.
-  // Each returns a natural-sounding greeting that weaves in the weather.
+  // Map time slot to a natural time-of-day word for greeting templates
   const timeGroup = (slot === "lateNight" || slot === "lateEvening") ? "night"
     : (slot === "earlyMorning" || slot === "morning") ? "morning"
     : (slot === "midday" || slot === "afternoon") ? "afternoon"
     : "evening";
 
-  // Special weather greetings — pick one that fits the mood
+  // Optional city suffix — only shown when user is >20 miles from home zip
+  const cityBit = (weather.isTraveling && weather.city) ? ` in ${weather.city}` : "";
+
+  // ── GREETING TEMPLATE POOLS ──────────────────────────────────────────────
+  // Organized by weather condition × time-of-day. Each template naturally
+  // blends temperature, weather, day, and emoji. Templates use ${} for
+  // dynamic values so every greeting feels unique and contextual.
   const weatherGreetings = {
     clear: {
-      morning:   ["Beautiful clear morning", "Sunny morning", "What a gorgeous morning"],
-      afternoon: ["Beautiful sunny afternoon", "Clear skies this afternoon", "Lovely bright afternoon"],
-      evening:   ["Clear skies tonight", "Beautiful evening", "Lovely clear evening"],
-      night:     ["Clear night skies", "Starry night", "Beautiful clear night"],
+      morning:   [`Gorgeous ${tempF}° ${day} morning${cityBit} ${emoji}`, `Sunny ${tempF}° morning${cityBit} ${emoji}`, `Beautiful clear morning${cityBit} — ${tempF}° ${emoji}`],
+      afternoon: [`${desc.charAt(0).toUpperCase() + desc.slice(1)} ${tempF}° afternoon${cityBit} ${emoji}`, `Sunny ${day} afternoon${cityBit} ${emoji}`, `Clear ${tempF}° ${day}${cityBit} ${emoji}`],
+      evening:   [`Clear ${tempF}° ${day} evening${cityBit} ${emoji}`, `Beautiful ${tempF}° evening${cityBit} ${emoji}`, `Lovely clear evening${cityBit} — ${tempF}°`],
+      night:     [`Clear ${tempF}° night${cityBit} ${emoji}`, `Starry ${day} night${cityBit} ${emoji}`, `Beautiful clear night${cityBit}`],
     },
     cloudy: {
-      morning:   ["Cloudy but cozy morning", "Overcast morning", "Soft cloudy morning"],
-      afternoon: ["Cloudy afternoon", "Overcast but cozy afternoon", "Gray skies, warm vibes"],
-      evening:   ["Cloudy evening", "Overcast evening", "Cozy cloudy evening"],
-      night:     ["Cloudy night", "Overcast but peaceful night", "Quiet cloudy night"],
+      morning:   [`Overcast ${tempF}° morning${cityBit} ${emoji}`, `Cloudy but cozy ${day} morning${cityBit} ${emoji}`, `Soft cloudy ${tempF}° morning${cityBit} ${emoji}`],
+      afternoon: [`Cloudy ${tempF}° afternoon${cityBit} ${emoji}`, `Overcast ${day}${cityBit} — ${tempF}° ${emoji}`, `Gray skies, warm vibes${cityBit} ${emoji}`],
+      evening:   [`Cloudy ${tempF}° evening${cityBit} ${emoji}`, `Overcast ${day} evening${cityBit} ${emoji}`, `Cozy cloudy evening${cityBit} — ${tempF}°`],
+      night:     [`Cloudy ${tempF}° night${cityBit} ${emoji}`, `Quiet cloudy ${day} night${cityBit}`, `Overcast but peaceful night${cityBit}`],
     },
     rainy: {
-      morning:   ["Cozy rainy morning", "Rainy morning — perfect for a warm drink", "Rain is falling — stay cozy"],
-      afternoon: ["Rainy afternoon", "Rainy day — perfect for cooking something warm", "Cozy rainy afternoon"],
-      evening:   ["Rainy evening — cozy up", "Rainy night ahead", "Let the rain set the mood"],
-      night:     ["Rainy night vibes", "Rain on the roof", "Cozy rainy night"],
+      morning:   [`Cozy rainy ${tempF}° morning${cityBit} ${emoji}`, `Rainy ${day} morning${cityBit} — perfect for a warm drink ${emoji}`, `${tempF}° and rainy${cityBit} ${emoji} — stay cozy`],
+      afternoon: [`Rainy ${tempF}° afternoon${cityBit} ${emoji}`, `Rainy ${day}${cityBit} — perfect for cooking something warm ${emoji}`, `${tempF}° and rainy${cityBit} ${emoji}`],
+      evening:   [`Rainy ${tempF}° evening${cityBit} ${emoji} — cozy up`, `Rainy ${day} evening${cityBit} ${emoji}`, `${tempF}° and rainy tonight${cityBit} ${emoji}`],
+      night:     [`Rainy ${tempF}° night${cityBit} ${emoji}`, `Rain on the roof tonight${cityBit} ${emoji}`, `Cozy rainy night${cityBit} — ${tempF}° ${emoji}`],
     },
     drizzly: {
-      morning:   ["Drizzly morning", "Light rain this morning", "A soft drizzle outside"],
-      afternoon: ["Drizzly afternoon", "Light drizzle outside", "Misty afternoon"],
-      evening:   ["Drizzly evening", "Light rain tonight", "Gentle drizzle outside"],
-      night:     ["Drizzly night", "Soft rain falling", "Gentle night drizzle"],
+      morning:   [`Drizzly ${tempF}° morning${cityBit} ${emoji}`, `Light rain this ${day} morning${cityBit} ${emoji}`, `A soft drizzle outside${cityBit} — ${tempF}° ${emoji}`],
+      afternoon: [`Drizzly ${tempF}° afternoon${cityBit} ${emoji}`, `Light drizzle outside${cityBit} — ${tempF}° ${emoji}`, `Misty ${day} afternoon${cityBit} ${emoji}`],
+      evening:   [`Drizzly ${tempF}° evening${cityBit} ${emoji}`, `Light rain tonight${cityBit} ${emoji}`, `Gentle ${tempF}° drizzle outside${cityBit} ${emoji}`],
+      night:     [`Drizzly ${tempF}° night${cityBit} ${emoji}`, `Soft rain falling${cityBit} ${emoji}`, `Gentle night drizzle${cityBit} — ${tempF}°`],
     },
     snowy: {
-      morning:   ["Snowy morning — perfect for a warm meal", "Snow day!", "Magical snowy morning"],
-      afternoon: ["Snowy afternoon", "Snow is falling", "Snowy day — stay warm"],
-      evening:   ["Snowy evening — time for something warm", "Snow is falling tonight", "Magical snowy evening"],
-      night:     ["Snowy night", "Snow falling quietly", "Winter wonderland tonight"],
+      morning:   [`Snowy ${tempF}° ${day} morning${cityBit} ${emoji} — perfect for a warm meal`, `Snow day${cityBit}! ${tempF}° ${emoji}`, `Magical snowy morning${cityBit} — ${tempF}° ${emoji}`],
+      afternoon: [`Snowy ${tempF}° afternoon${cityBit} ${emoji}`, `Snow is falling${cityBit} — ${tempF}° ${emoji}`, `Snowy ${day}${cityBit} — stay warm ${emoji}`],
+      evening:   [`Snowy ${tempF}° evening${cityBit} ${emoji} — time for something warm`, `Snow falling tonight${cityBit} — ${tempF}° ${emoji}`, `Magical snowy evening${cityBit} ${emoji}`],
+      night:     [`Snowy ${tempF}° night${cityBit} ${emoji}`, `Snow falling quietly${cityBit} — ${tempF}° ${emoji}`, `Winter wonderland tonight${cityBit} ${emoji}`],
     },
     foggy: {
-      morning:   ["Foggy morning", "Misty morning", "Mysterious foggy morning"],
-      afternoon: ["Foggy afternoon", "Hazy afternoon", "Misty out there"],
-      evening:   ["Foggy evening", "Misty evening", "Hazy night ahead"],
-      night:     ["Foggy night", "Misty night", "Quiet foggy night"],
+      morning:   [`Foggy ${tempF}° morning${cityBit} ${emoji}`, `Misty ${day} morning${cityBit} — ${tempF}° ${emoji}`, `Mysterious foggy morning${cityBit} ${emoji}`],
+      afternoon: [`Foggy ${tempF}° afternoon${cityBit} ${emoji}`, `Hazy ${day} afternoon${cityBit} — ${tempF}° ${emoji}`, `Misty out there${cityBit} — ${tempF}° ${emoji}`],
+      evening:   [`Foggy ${tempF}° evening${cityBit} ${emoji}`, `Misty ${day} evening${cityBit} — ${tempF}°`, `Hazy night ahead${cityBit} ${emoji}`],
+      night:     [`Foggy ${tempF}° night${cityBit} ${emoji}`, `Misty night${cityBit} — ${tempF}°`, `Quiet foggy night${cityBit} ${emoji}`],
     },
     stormy: {
-      morning:   ["Stormy morning — stay safe", "Thunder rolling in", "Wild morning out there"],
-      afternoon: ["Stormy afternoon", "Thunder and rain", "Stormy but cozy inside"],
-      evening:   ["Stormy evening — stay cozy", "Thunder tonight", "Wild weather tonight"],
-      night:     ["Stormy night", "Thunder in the night", "Wild night — stay safe"],
+      morning:   [`Stormy ${tempF}° morning${cityBit} ${emoji} — stay safe`, `Thunder rolling in${cityBit} — ${tempF}° ${emoji}`, `Wild ${day} morning out there${cityBit} ${emoji}`],
+      afternoon: [`Stormy ${tempF}° afternoon${cityBit} ${emoji}`, `Thunder and rain${cityBit} — ${tempF}° ${emoji}`, `Stormy but cozy inside${cityBit} ${emoji}`],
+      evening:   [`Stormy ${tempF}° evening${cityBit} ${emoji} — stay cozy`, `Thunder tonight${cityBit} — ${tempF}° ${emoji}`, `Wild weather tonight${cityBit} ${emoji}`],
+      night:     [`Stormy ${tempF}° night${cityBit} ${emoji}`, `Thunder in the night${cityBit} — ${tempF}° ${emoji}`, `Wild night${cityBit} — stay safe ${emoji}`],
     },
   };
 
-  // Try to use a weather-specific greeting, otherwise blend temp into a plain one
+  // Try to use a weather-specific greeting with temp and emoji
   if (label && weatherGreetings[label]?.[timeGroup]) {
     return _pickRandom(weatherGreetings[label][timeGroup]);
   }
 
-  // Fallback: blend temperature adjective with a plain time greeting
-  // e.g. "Chilly evening" or "Warm morning"
-  const base = _contextGreeting(hour);
-  if (temp) {
-    // Capitalize temp and append to a simple time word
-    const timeWord = timeGroup === "night" ? "night" : timeGroup;
-    return `${temp.charAt(0).toUpperCase() + temp.slice(1)} ${timeWord}`;
-  }
-
-  return base;
+  // Fallback: blend temperature descriptor + actual temp into a plain greeting
+  // e.g. "Crisp 45° evening" or "Gorgeous 68° afternoon"
+  const timeWord = timeGroup === "night" ? "night" : timeGroup;
+  return `${desc.charAt(0).toUpperCase() + desc.slice(1)} ${tempF}° ${timeWord}${cityBit}`;
 }
 
 // _applyWeatherGreeting(hour) — async helper that fetches weather and
