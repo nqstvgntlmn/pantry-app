@@ -1600,3 +1600,23 @@ Two targeted fixes: (1) glitchy back button on recipe detail pages, and (2) magn
 - `src/ui/recipes.js` — `handleRecipeBack` now clears stale inline styles on overlay; updated FAB position comment
 - `src/styles.css` — `.bkbtn` enlarged to 44×44px; `.rec-search-fab` repositioned to top:53px right:21px
 - `CLAUDE_CODE_HANDOFF.md` — Updated Swipe Back section, FAB position/history, added this session entry
+
+---
+
+## Session — March 23, 2026: Magnifying Glass FAB Repositioned Again
+
+### What Changed
+
+#### Magnifying Glass Moved Down 20px and Left 10px
+**What:** On the main Recipes list page only, the floating magnifying glass search FAB moved down 20px and 10px further to the left from its previous position.
+- `top: 53px` → `top: 73px`
+- `right: 21px` → `right: 31px`
+
+**Why:** User requested this exact repositioning for better visual placement on the Recipes list screen.
+
+**How:** Updated `.rec-search-fab` in `src/styles.css` (coordinates and comment) and updated the position reference comment in `src/ui/recipes.js`.
+
+### Files Changed
+- `src/styles.css` — `.rec-search-fab` repositioned to top:73px right:31px
+- `src/ui/recipes.js` — Updated FAB position comment to reflect new coordinates
+- `CLAUDE_CODE_HANDOFF.md` — Added this session entry
