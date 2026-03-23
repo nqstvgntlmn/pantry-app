@@ -678,7 +678,8 @@ A comprehensive visual polish pass across all tabs. The dark gold identity is fu
 #### 1. Home Tab Greeting — First Name Only
 - **File:** `src/ui/home.js` (`initHome()`, `renderHome()`)
 - **What:** "Good evening, Bora Isguder" → "Good evening, Bora". Parses first name by splitting display name on first space via `_firstName()`.
-- **Context-Aware Greetings:** `_contextGreeting()` function returns warm, positive time-based greetings: "Burning the midnight oil" (12am–5am), "Good morning" (5am–8am), "Beautiful morning" (8am–11am), "Good afternoon" (11am–1pm), "Hope your day is going well" (1pm–5pm), "Good evening" (5pm onward). All phrases are encouraging and never judgmental — removed "Lazy morning", "Late night vibes", and weekend-specific branching.
+- **Context-Aware Greetings:** `_contextGreeting()` picks a random phrase from `GREETING_POOLS` — a large pool of 6–7 warm, positive phrases per time slot (lateNight, earlyMorning, morning, midday, afternoon, evening, lateEvening). All phrases are encouraging and never judgmental.
+- **Weather-Aware Greetings:** `_applyWeatherGreeting()` uses the browser Geolocation API + Open-Meteo (free, no API key) to fetch current weather and blend it naturally into the greeting. Examples: "Cozy rainy morning, Bora", "Beautiful sunny afternoon, Bora", "Snowy evening — time for something warm, Bora". Weather result is cached in sessionStorage for 30 minutes (`ks-weather-cache`). If geolocation is denied or the API fails, the greeting degrades gracefully to a plain time-based phrase. Key helpers: `_fetchWeather()`, `_weatherLabel(code)`, `_tempDescriptor(tempF)`, `_buildWeatherGreeting(hour, weather)`. WMO weather codes mapped to: clear, cloudy, foggy, drizzly, rainy, snowy, stormy.
 
 #### 2. Bento-Style Home Stat Grid
 - **File:** `src/ui/home.js` (`renderSum()`)

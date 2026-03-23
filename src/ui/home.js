@@ -23,17 +23,279 @@ function _firstName(name) {
   return (name || "").split(" ")[0].trim() || name;
 }
 
-// _contextGreeting(hour) — returns a warm, positive time-aware greeting.
-// Slots: after-midnight → early morning → morning → midday → afternoon → evening → late night.
-// All phrases are encouraging and never judgmental.
+// ── GREETING PHRASE POOLS ────────────────────────────────────────────────────
+// Large pools of warm, positive phrases for each time slot so greetings feel
+// fresh and never repetitive. A random phrase is picked each time the Home tab
+// renders. All phrases are encouraging and never judgmental.
+const GREETING_POOLS = {
+  lateNight: [                     // midnight – 4:59 AM
+    "Burning the midnight oil",
+    "Still going strong",
+    "Night owl mode",
+    "Late night vibes",
+    "Quiet hours, big ideas",
+    "The world is sleeping — you're not",
+    "Late night, clear mind",
+  ],
+  earlyMorning: [                  // 5:00 AM – 7:59 AM
+    "Rise and shine",
+    "Good morning, early bird",
+    "Fresh start today",
+    "Morning has broken",
+    "Up with the sun",
+    "Early morning energy",
+    "The day is yours",
+  ],
+  morning: [                       // 8:00 AM – 10:59 AM
+    "Good morning",
+    "Beautiful morning",
+    "Hope you slept well",
+    "Great day ahead",
+    "Morning sunshine",
+    "What a lovely morning",
+    "Ready for a wonderful day",
+  ],
+  midday: [                        // 11:00 AM – 12:59 PM
+    "Good afternoon",
+    "Hope your day is going well",
+    "Halfway through the day",
+    "Midday check-in",
+    "Lunch o'clock",
+    "The sun is high and so are the vibes",
+  ],
+  afternoon: [                     // 1:00 PM – 4:59 PM
+    "Good afternoon",
+    "Hope the day is treating you well",
+    "Almost there",
+    "Afternoon vibes",
+    "Keep the momentum going",
+    "Cruising through the afternoon",
+    "The afternoon is looking great",
+  ],
+  evening: [                       // 5:00 PM – 8:59 PM
+    "Good evening",
+    "Hope you had a great day",
+    "Evening has arrived",
+    "Wind down time",
+    "Welcome home",
+    "Time to relax",
+    "Evenings are the best",
+  ],
+  lateEvening: [                   // 9:00 PM – 11:59 PM
+    "Good evening",
+    "Winding down",
+    "Hope today was a good one",
+    "Night is young",
+    "Peaceful evening",
+    "Almost bedtime",
+    "A cozy night ahead",
+  ],
+};
+
+// _pickRandom(arr) — returns a random element from an array.
+function _pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// _getTimeSlot(hour) — maps current hour to a named time slot key
+// matching one of the GREETING_POOLS entries.
+function _getTimeSlot(hour) {
+  if (hour < 5)  return "lateNight";
+  if (hour < 8)  return "earlyMorning";
+  if (hour < 11) return "morning";
+  if (hour < 13) return "midday";
+  if (hour < 17) return "afternoon";
+  if (hour < 21) return "evening";
+  return "lateEvening";
+}
+
+// _contextGreeting(hour) — picks a random warm greeting from the pool
+// matching the current time slot. Returns a plain string (no name).
 function _contextGreeting(hour) {
-  if (hour < 5)  return "Burning the midnight oil";
-  if (hour < 8)  return "Good morning";
-  if (hour < 11) return "Beautiful morning";
-  if (hour < 13) return "Good afternoon";
-  if (hour < 17) return "Hope your day is going well";
-  if (hour < 21) return "Good evening";
-  return "Good evening";
+  const slot = _getTimeSlot(hour);
+  return _pickRandom(GREETING_POOLS[slot]);
+}
+
+// ── WEATHER-AWARE GREETING ──────────────────────────────────────────────────
+// Uses the browser Geolocation API + Open-Meteo (free, no API key) to fetch
+// current weather, then blends it naturally into the greeting text.
+// Result is cached in sessionStorage for 30 minutes to avoid excessive fetches.
+
+const WEATHER_CACHE_KEY = "ks-weather-cache";
+const WEATHER_CACHE_TTL = 30 * 60 * 1000; // 30 minutes in ms
+
+// _getCachedWeather() — returns cached weather object if still valid, else null.
+function _getCachedWeather() {
+  try {
+    const raw = sessionStorage.getItem(WEATHER_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (Date.now() - cached.ts > WEATHER_CACHE_TTL) return null;
+    return cached.data;
+  } catch { return null; }
+}
+
+// _setCachedWeather(data) — stores weather data with a timestamp for TTL checks.
+function _setCachedWeather(data) {
+  try {
+    sessionStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+  } catch { /* storage full — silently ignore */ }
+}
+
+// _fetchWeather() — gets current weather via Geolocation + Open-Meteo.
+// Returns { tempF, weatherCode } or null on failure. Non-blocking — the
+// greeting renders immediately and upgrades itself once weather arrives.
+async function _fetchWeather() {
+  // Check cache first
+  const cached = _getCachedWeather();
+  if (cached) return cached;
+
+  // Request user's location (non-blocking — if denied, we just skip weather)
+  let coords;
+  try {
+    const pos = await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        timeout: 5000, maximumAge: 30 * 60 * 1000
+      })
+    );
+    coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+  } catch { return null; } // Location denied or unavailable — degrade gracefully
+
+  // Fetch current weather from Open-Meteo (free, no key needed)
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const data = {
+      tempF: Math.round(json.current.temperature_2m),
+      weatherCode: json.current.weather_code,
+    };
+    _setCachedWeather(data);
+    return data;
+  } catch { return null; }
+}
+
+// _weatherLabel(code) — maps WMO weather code to a human-friendly adjective.
+// Covers clear, cloudy, fog, rain, snow, and thunderstorms.
+function _weatherLabel(code) {
+  if (code === 0)                      return "clear";
+  if (code <= 3)                       return "cloudy";
+  if (code >= 45 && code <= 48)        return "foggy";
+  if (code >= 51 && code <= 57)        return "drizzly";
+  if (code >= 61 && code <= 67)        return "rainy";
+  if (code >= 71 && code <= 77)        return "snowy";
+  if (code >= 80 && code <= 82)        return "rainy";
+  if (code >= 85 && code <= 86)        return "snowy";
+  if (code >= 95)                      return "stormy";
+  return null; // unknown — skip weather in greeting
+}
+
+// _tempDescriptor(tempF) — returns a temperature-based adjective.
+function _tempDescriptor(tempF) {
+  if (tempF <= 25)  return "freezing";
+  if (tempF <= 40)  return "chilly";
+  if (tempF <= 55)  return "cool";
+  if (tempF <= 75)  return "pleasant";
+  if (tempF <= 85)  return "warm";
+  if (tempF <= 95)  return "hot";
+  return "scorching";
+}
+
+// _buildWeatherGreeting(hour, weather) — creates a weather-blended greeting.
+// Combines weather condition, temperature feel, and time of day into a natural
+// phrase. Falls back to a plain time-based greeting if weather is unavailable.
+function _buildWeatherGreeting(hour, weather) {
+  if (!weather) return _contextGreeting(hour);
+
+  const label = _weatherLabel(weather.weatherCode);
+  const temp = _tempDescriptor(weather.tempF);
+  const slot = _getTimeSlot(hour);
+
+  // Weather-blended phrases keyed by weather condition × rough time group.
+  // Each returns a natural-sounding greeting that weaves in the weather.
+  const timeGroup = (slot === "lateNight" || slot === "lateEvening") ? "night"
+    : (slot === "earlyMorning" || slot === "morning") ? "morning"
+    : (slot === "midday" || slot === "afternoon") ? "afternoon"
+    : "evening";
+
+  // Special weather greetings — pick one that fits the mood
+  const weatherGreetings = {
+    clear: {
+      morning:   ["Beautiful clear morning", "Sunny morning", "What a gorgeous morning"],
+      afternoon: ["Beautiful sunny afternoon", "Clear skies this afternoon", "Lovely bright afternoon"],
+      evening:   ["Clear skies tonight", "Beautiful evening", "Lovely clear evening"],
+      night:     ["Clear night skies", "Starry night", "Beautiful clear night"],
+    },
+    cloudy: {
+      morning:   ["Cloudy but cozy morning", "Overcast morning", "Soft cloudy morning"],
+      afternoon: ["Cloudy afternoon", "Overcast but cozy afternoon", "Gray skies, warm vibes"],
+      evening:   ["Cloudy evening", "Overcast evening", "Cozy cloudy evening"],
+      night:     ["Cloudy night", "Overcast but peaceful night", "Quiet cloudy night"],
+    },
+    rainy: {
+      morning:   ["Cozy rainy morning", "Rainy morning — perfect for a warm drink", "Rain is falling — stay cozy"],
+      afternoon: ["Rainy afternoon", "Rainy day — perfect for cooking something warm", "Cozy rainy afternoon"],
+      evening:   ["Rainy evening — cozy up", "Rainy night ahead", "Let the rain set the mood"],
+      night:     ["Rainy night vibes", "Rain on the roof", "Cozy rainy night"],
+    },
+    drizzly: {
+      morning:   ["Drizzly morning", "Light rain this morning", "A soft drizzle outside"],
+      afternoon: ["Drizzly afternoon", "Light drizzle outside", "Misty afternoon"],
+      evening:   ["Drizzly evening", "Light rain tonight", "Gentle drizzle outside"],
+      night:     ["Drizzly night", "Soft rain falling", "Gentle night drizzle"],
+    },
+    snowy: {
+      morning:   ["Snowy morning — perfect for a warm meal", "Snow day!", "Magical snowy morning"],
+      afternoon: ["Snowy afternoon", "Snow is falling", "Snowy day — stay warm"],
+      evening:   ["Snowy evening — time for something warm", "Snow is falling tonight", "Magical snowy evening"],
+      night:     ["Snowy night", "Snow falling quietly", "Winter wonderland tonight"],
+    },
+    foggy: {
+      morning:   ["Foggy morning", "Misty morning", "Mysterious foggy morning"],
+      afternoon: ["Foggy afternoon", "Hazy afternoon", "Misty out there"],
+      evening:   ["Foggy evening", "Misty evening", "Hazy night ahead"],
+      night:     ["Foggy night", "Misty night", "Quiet foggy night"],
+    },
+    stormy: {
+      morning:   ["Stormy morning — stay safe", "Thunder rolling in", "Wild morning out there"],
+      afternoon: ["Stormy afternoon", "Thunder and rain", "Stormy but cozy inside"],
+      evening:   ["Stormy evening — stay cozy", "Thunder tonight", "Wild weather tonight"],
+      night:     ["Stormy night", "Thunder in the night", "Wild night — stay safe"],
+    },
+  };
+
+  // Try to use a weather-specific greeting, otherwise blend temp into a plain one
+  if (label && weatherGreetings[label]?.[timeGroup]) {
+    return _pickRandom(weatherGreetings[label][timeGroup]);
+  }
+
+  // Fallback: blend temperature adjective with a plain time greeting
+  // e.g. "Chilly evening" or "Warm morning"
+  const base = _contextGreeting(hour);
+  if (temp) {
+    // Capitalize temp and append to a simple time word
+    const timeWord = timeGroup === "night" ? "night" : timeGroup;
+    return `${temp.charAt(0).toUpperCase() + temp.slice(1)} ${timeWord}`;
+  }
+
+  return base;
+}
+
+// _applyWeatherGreeting(hour) — async helper that fetches weather and
+// upgrades the greeting text in-place. Called during initHome; if weather
+// takes a moment to load, the user sees a plain greeting first, then it
+// smoothly upgrades once weather data arrives.
+async function _applyWeatherGreeting(hour) {
+  const weather = await _fetchWeather();
+  if (!weather) return; // No weather — keep the plain greeting already shown
+
+  const fullName = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
+  const u = _firstName(fullName);
+  const gr = _buildWeatherGreeting(hour, weather);
+
+  const grtEl = g("grt");
+  if (grtEl) grtEl.innerHTML = `${gr}, <span>${u}</span>`;
 }
 
 // ── TIME-OF-DAY HERO IMAGES ─────────────────────────────────────────────────
@@ -70,8 +332,9 @@ function _applyHeroBg(hour) {
 
 // initHome() — called once on app boot.
 // Sets the context-aware greeting with first name only, displays
-// today's full date, applies the hero background, and kicks off
-// the first render of the week grid.
+// today's full date, applies the hero background, kicks off the first
+// render of the week grid, and asynchronously upgrades the greeting
+// with weather data once it arrives.
 export function initHome() {
   // Determine greeting based on current hour + day context
   const h = new Date().getHours();
@@ -83,7 +346,7 @@ export function initHome() {
   const fullName = localStorage.getItem("ks-who") || (state.cfg.adults || "Bora").split(",")[0].trim();
   const u = _firstName(fullName);
 
-  // Render "Good morning, <Name>" into the greeting element
+  // Render initial greeting immediately (plain, no weather yet)
   const grtEl = g("grt");
   if (grtEl) grtEl.innerHTML = `${gr}, <span>${u}</span>`;
 
@@ -93,6 +356,11 @@ export function initHome() {
 
   // Apply time-of-day hero background image to the home header
   _applyHeroBg(h);
+
+  // Asynchronously fetch weather and upgrade the greeting in-place.
+  // Non-blocking — the plain greeting shows immediately, then gets
+  // replaced with a weather-aware version once the data arrives.
+  _applyWeatherGreeting(h);
 
   renderWeek();
 }
