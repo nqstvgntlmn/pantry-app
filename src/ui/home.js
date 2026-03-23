@@ -24,105 +24,95 @@ function _firstName(name) {
 }
 
 // ── GREETING PHRASE POOLS ────────────────────────────────────────────────────
-// Creative, warm, time-aware greeting phrases. A random phrase is picked each
-// time the Home tab renders. All phrases end naturally before the name (which
-// is appended separately in gold). Rules: warm, positive, never judgmental.
-// No hard list — these are freely invented based on time of day and vibe.
+// Curated, timeless greetings organized by four time-of-day slots.
+// Each slot has a base pool of phrases. Day-of-week bonuses are mixed in
+// dynamically by _buildGreetingPool(). A greeting is picked randomly but
+// never repeats the previous one (tracked via _lastGreeting).
+// Rules: warm, natural, never spiritual/farewell-like/clever.
+
+// Day names used for "[Day] morning" style greetings
+const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
 const GREETING_POOLS = {
-  lateNight: [                     // midnight – 4:59 AM
-    "Burning the midnight oil",
-    "Still going strong",
-    "Night owl mode activated",
-    "The world sleeps, but not you",
-    "Quiet hours, bright mind",
-    "Stars are out for you",
-    "Late night magic",
-    "The night belongs to you",
-  ],
-  earlyMorning: [                  // 5:00 AM – 7:59 AM
+  morning: [                       // 5:00 AM – 10:59 AM
+    "Good morning",
+    "Morning",
     "Rise and shine",
-    "The early light is yours",
-    "Fresh start, fresh day",
-    "Morning has broken for you",
-    "Up before the world",
-    "Dawn is your superpower",
-    "A brand new day awaits",
-    "First light, first smile",
   ],
-  morning: [                       // 8:00 AM – 10:59 AM
-    "Good morning, sunshine",
-    "What a beautiful morning",
-    "Here's to a wonderful day",
-    "The morning is golden",
-    "Bright skies ahead",
-    "Hope you slept like a dream",
-    "A gorgeous morning for you",
-    "Today is going to be great",
-  ],
-  midday: [                        // 11:00 AM – 12:59 PM
-    "Hello, midday",
-    "The day is humming along",
-    "Lunchtime vibes",
-    "Sun's at its peak and so are you",
-    "Halfway there and thriving",
-    "What a day so far",
-    "Noon looks good on you",
-    "The day is wide open",
-  ],
-  afternoon: [                     // 1:00 PM – 4:59 PM
-    "Good afternoon, superstar",
-    "Cruising through a lovely day",
-    "The afternoon is all yours",
-    "Keep that momentum going",
-    "Smooth sailing this afternoon",
-    "You're making today count",
-    "Afternoon glow",
-    "The day keeps getting better",
+  afternoon: [                     // 11:00 AM – 4:59 PM
+    "Good afternoon",
+    "Afternoon",
   ],
   evening: [                       // 5:00 PM – 8:59 PM
-    "Welcome to the evening",
-    "Time to wind down and shine",
-    "Golden hour for you",
-    "The evening is yours to enjoy",
-    "Hope today treated you well",
-    "Home sweet home",
-    "Tonight's going to be good",
-    "Relax — you've earned it",
+    "Good evening",
+    "Evening",
+    "Welcome back",
   ],
-  lateEvening: [                   // 9:00 PM – 11:59 PM
-    "Cozy evening ahead",
-    "The night is young",
-    "Hope today was a good one",
-    "Peaceful night ahead",
-    "Winding down beautifully",
-    "A quiet night for you",
-    "Sweet dreams loading",
-    "One more peaceful moment",
+  lateNight: [                     // 9:00 PM – 4:59 AM
+    "Good night",
+    "Night owl",
+    "Burning the midnight oil",
+    "Still going strong",
   ],
 };
+
+// _lastGreeting — tracks the most recent greeting string so we never
+// show the same one twice in a row within the same session.
+let _lastGreeting = null;
 
 // _pickRandom(arr) — returns a random element from an array.
 function _pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// _getTimeSlot(hour) — maps current hour to a named time slot key
-// matching one of the GREETING_POOLS entries.
-function _getTimeSlot(hour) {
-  if (hour < 5)  return "lateNight";
-  if (hour < 8)  return "earlyMorning";
-  if (hour < 11) return "morning";
-  if (hour < 13) return "midday";
-  if (hour < 17) return "afternoon";
-  if (hour < 21) return "evening";
-  return "lateEvening";
+// _buildGreetingPool(hour, dayOfWeek) — assembles the full pool of candidate
+// greetings for the current time slot, then mixes in day-of-week bonuses.
+// dayOfWeek: 0 = Sunday … 6 = Saturday (from Date.getDay()).
+function _buildGreetingPool(hour, dayOfWeek) {
+  const dayName = DAY_NAMES[dayOfWeek];
+  let pool;
+
+  if (hour >= 5 && hour < 11) {
+    // Morning slot: base pool + "Good [Day] morning"
+    pool = [...GREETING_POOLS.morning, `Good ${dayName} morning`];
+  } else if (hour >= 11 && hour < 17) {
+    // Afternoon slot: base pool + "Happy [Day]" + "Good [Day] afternoon"
+    pool = [...GREETING_POOLS.afternoon, `Happy ${dayName}`, `Good ${dayName} afternoon`];
+    // Monday bonus — start-of-week encouragement
+    if (dayOfWeek === 1) pool.push("Hope your week is off to a great start");
+    // Thursday/Friday bonus — weekend anticipation
+    if (dayOfWeek === 4 || dayOfWeek === 5) pool.push("Almost the weekend");
+    // Saturday/Sunday bonus — weekend cheer
+    if (dayOfWeek === 0 || dayOfWeek === 6) pool.push("Happy weekend");
+  } else if (hour >= 17 && hour < 21) {
+    // Evening slot: base pool + "Good [Day] evening"
+    pool = [...GREETING_POOLS.evening, `Good ${dayName} evening`];
+    // Friday evening bonus
+    if (dayOfWeek === 5) pool.push("Happy Friday evening");
+  } else {
+    // Late night slot (9 PM – 4:59 AM): base pool only, no day bonuses
+    pool = [...GREETING_POOLS.lateNight];
+  }
+
+  return pool;
 }
 
-// _contextGreeting(hour) — picks a random warm greeting from the pool
-// matching the current time slot. Returns a plain string (no name).
+// _contextGreeting(hour) — picks a random greeting from the curated pool
+// for the current time-of-day and day-of-week. Never repeats the previous
+// greeting. Returns a plain string (no name appended).
 function _contextGreeting(hour) {
-  const slot = _getTimeSlot(hour);
-  return _pickRandom(GREETING_POOLS[slot]);
+  const dayOfWeek = new Date().getDay();
+  const pool = _buildGreetingPool(hour, dayOfWeek);
+
+  // Filter out the last greeting to avoid back-to-back repeats.
+  // If the pool only has one entry, allow the repeat as a fallback.
+  const candidates = pool.length > 1
+    ? pool.filter(g => g !== _lastGreeting)
+    : pool;
+
+  const picked = _pickRandom(candidates);
+  _lastGreeting = picked;
+  return picked;
 }
 
 // ── WEATHER-AWARE GREETING ──────────────────────────────────────────────────
