@@ -1649,3 +1649,22 @@ Two targeted fixes: (1) glitchy back button on recipe detail pages, and (2) magn
 - `src/ui/recipes.js` — Updated FAB position comment; rewrote `handleRecipeBack` to match working back-button pattern
 - `src/ui/swipeback.js` — Reordered swipe completion: callback fires before style clearing to prevent flash
 - `CLAUDE_CODE_HANDOFF.md` — Added this session entry
+
+---
+
+## Session: Move Magnifying Glass Up 3px (2026-03-24)
+
+### What Changed
+Moved the floating magnifying glass (recipe search FAB) up by exactly 3px — from `top:71px` to `top:68px`. No other changes.
+
+### Why
+Fine-tuning the vertical position of the FAB to better align with surrounding UI elements on the Recipes list page.
+
+### How
+1. **`src/styles.css`** — Changed `.rec-search-fab` `top` value from `71px` to `68px`; updated the comment to reflect the new position and the delta from the previous value.
+2. **`src/ui/recipes.js`** — Updated the JSDoc comment on `_ensureRecSearchFab` to reference the new `68px` position instead of `71px`.
+
+### Files Changed
+- `src/styles.css` — `.rec-search-fab` repositioned to top:68px (was 71px)
+- `src/ui/recipes.js` — Updated FAB position comment to match new 68px value
+- `CLAUDE_CODE_HANDOFF.md` — Added this session entry

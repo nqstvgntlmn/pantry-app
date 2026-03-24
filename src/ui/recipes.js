@@ -582,7 +582,7 @@ function _hasActiveRecFilters() {
 /**
  * _ensureRecSearchFab — lazily creates the floating magnifying glass button
  * that appears when the user scrolls past 100px in the Recipes list. Positioned
- * as a fixed element in the top-right corner at 71px top / 31px right. Small,
+ * as a fixed element in the top-right corner at 68px top / 31px right. Small,
  * semi-transparent, with blur backdrop. Hidden when inside individual recipe
  * pages so it doesn't interfere with the back button or recipe content.
  */
