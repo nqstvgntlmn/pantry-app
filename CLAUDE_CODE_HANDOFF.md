@@ -1108,19 +1108,20 @@ to every function and every major code block — this is non-negotiable.
 **Files changed:**
 - `src/ui/home.js` — Replaced localStorage collapse persistence with in-memory state, added `_resetHomeSectionStates()`
 
-#### 3. Recent Activity: Undo Button Only for Deleted Items
+#### 3. Recent Activity: Persistent Undo Button for Deleted Items
 
-**What changed:** `_actBtnFor(entry)` now only returns an Undo button for items that were "removed" from the Shopping List or Supplies. All other action buttons (Remove, Uncheck, Revert, Clear, Unclip, Undo Cook, Undo Deduct) have been removed from the activity feed.
+**What changed:** `_actBtnFor(entry)` returns a persistent Undo button for items "removed" from Shopping List or Supplies. No time limit — the button stays as long as the activity entry exists in the feed. All other action buttons were removed.
 
-**Why:** The full set of action buttons was too noisy and some were just placeholder messages anyway. The persistent Undo for deleted items is the high-value feature — it lets users recover accidentally deleted items even after the 5-second swipe toast expires.
+**Bug fix (Session 24):** The original `_actBtnFor` checked `e.action` for "shopping"/"supplies", but `e.action` is just `"removed"` — the list name is in `e.itemName` (e.g. "Milk from Supplies"). Fixed to check `e.itemName` instead. Same bug existed in `activityUndo()` which now uses `itemData.list` or parses `itemName`.
 
 **How it works:**
-- `_actBtnFor(e)` checks for "removed" + "shopping" or "removed" + "supplies" in the action string. Returns Undo button for those. Returns empty string for everything else.
-- The existing `activityUndo()` function handles the re-add logic (unchanged).
-- All other activity action functions (`activityUncheck`, `activityRemoveShop`, etc.) and their `window` registrations remain in the code but are no longer triggered by any UI button.
+- `_actBtnFor(e)` checks `e.action` for "removed" and `e.itemName` for "shopping" or "supplies". Returns Undo button for those. Returns empty string for "restored", "added", or any other action.
+- `activityUndo()` restores the item using the `itemData` snapshot, then updates the Firestore activity entry: changes `action` from "removed" to "restored", changes `itemName` to use "to" instead of "from" (e.g. "Milk to Supplies"), and strips `itemData`. This causes the Undo button to disappear on re-render.
+- A separate activity entry "undid removal of [item]" is also logged.
+- All other activity action functions (`activityUncheck`, `activityRemoveShop`, etc.) remain in the code but are no longer triggered by any UI button.
 
 **Files changed:**
-- `src/ui/home.js` — Simplified `_actBtnFor()` to only emit Undo for deleted shopping/supplies items
+- `src/ui/home.js` — Fixed `_actBtnFor()` to check `e.itemName` for list name; fixed `activityUndo()` to use `itemData.list`; added Firestore update to mark entry as "restored" after undo
 
 ---
 
@@ -1551,7 +1552,8 @@ Two quick tweaks to the floating "+" button to make it less intrusive at rest.
 1. When an item is deleted (via `dli()`, `dlShopItem()`, or swipe-delete in `swipe.js`), the full item data is captured as a snapshot object and passed as the third argument to `logActivity()`.
 2. `logActivity()` stores this snapshot as `entry.itemData` in the Firestore activity document.
 3. When the user taps Undo in the activity feed, `activityUndo()` reads `entry.itemData` and restores the item with all original fields instead of generic defaults.
-4. Legacy activity entries without `itemData` gracefully fall back to `qty: 1, location: "pantry"`.
+4. After successful restore, the activity entry in Firestore is updated: `action` changes from "removed" to "restored", `itemName` changes from "from" to "to" (e.g. "Milk to Supplies"), and `itemData` is stripped. This removes the Undo button on re-render.
+5. Legacy activity entries without `itemData` gracefully fall back to `qty: 1, location: "pantry"`.
 
 **Item snapshot fields stored:** `name`, `qty`, `unit`, `location`, `note`, `prepCategory`, `barcode`, `list` ("shopping" or "supplies").
 
