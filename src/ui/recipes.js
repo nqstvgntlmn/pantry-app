@@ -617,6 +617,12 @@ function _ensureRecScrollListener() {
     const fab = g("rec-search-fab");
     if (!fab) return;
 
+    // Guard: only show the FAB when the Recipes tab is actually active.
+    // The scroll listener persists on rbody even when other tabs are visible,
+    // so without this check the FAB can leak onto Supplies or other screens.
+    const recipesScreen = g("screen-recipes");
+    if (!recipesScreen || !recipesScreen.classList.contains("active")) return;
+
     // Never show the FAB when inside an individual recipe page — the recipe
     // overlay (erec) covers the list, so the FAB would overlap the back button
     const erecOv = g("ov-erec");
@@ -746,10 +752,14 @@ export function closeRecSearchPanel() {
   if (panel) panel.classList.remove("open");
   if (backdrop) backdrop.classList.remove("open");
 
-  // Restore FAB visibility based on current scroll position (100px threshold)
+  // Restore FAB visibility based on current scroll position (100px threshold),
+  // but only if the Recipes tab is still the active screen — prevents the FAB
+  // from appearing on other tabs if this function is called during cleanup
+  const recipesScreen = g("screen-recipes");
+  const recipesActive = recipesScreen && recipesScreen.classList.contains("active");
   const fab = g("rec-search-fab");
   const rbody = g("rbody");
-  if (fab && rbody && rbody.scrollTop > 100) {
+  if (fab && rbody && rbody.scrollTop > 100 && recipesActive) {
     fab.classList.add("visible");
   }
 
@@ -775,9 +785,12 @@ export function hideRecSearchFab() {
 /**
  * _restoreRecSearchFab — restores the floating magnifying glass FAB visibility
  * after closing the recipe overlay and returning to the main Recipes list.
- * Only shows the FAB if the user is scrolled past the 100px threshold.
+ * Only shows the FAB if the user is scrolled past the 100px threshold AND the
+ * Recipes tab is the active screen — prevents leaking onto other tabs.
  */
 function _restoreRecSearchFab() {
+  const recipesScreen = g("screen-recipes");
+  if (!recipesScreen || !recipesScreen.classList.contains("active")) return;
   const fab = g("rec-search-fab");
   const rbody = g("rbody");
   if (fab && rbody && rbody.scrollTop > 100) {

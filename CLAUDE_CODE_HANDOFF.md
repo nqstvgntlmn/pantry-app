@@ -1652,6 +1652,27 @@ Two targeted fixes: (1) glitchy back button on recipe detail pages, and (2) magn
 
 ---
 
+## Session: Fix Magnifying Glass Leaking onto Non-Recipes Tabs (2026-03-24)
+
+### What Changed
+Added active-tab guards to all three code paths in `src/ui/recipes.js` that make the floating magnifying glass FAB visible. Previously, the FAB could appear on the Supplies tab (and potentially other tabs) because the scroll listener on `rbody` and the restore functions did not verify that the Recipes screen was actually active before adding the `visible` class.
+
+### Why
+The magnifying glass FAB is a fixed-position element appended to `document.body`. Once created, it persists across all tabs. The `rbody` scroll listener fires even when the Recipes screen is off-screen (since the element still exists in the DOM), which could re-add `visible` after `hideRecSearchFab()` had removed it during a tab switch.
+
+### How
+Three guards were added — each checks `g("screen-recipes").classList.contains("active")` before making the FAB visible:
+
+1. **Scroll listener (line ~616)** — Early-return if Recipes screen is not active. This is the primary fix: prevents the scroll event from re-showing the FAB on other tabs.
+2. **`closeRecSearchPanel()` (line ~755)** — Only restores FAB visibility if Recipes tab is active. Prevents edge cases where panel cleanup runs after a tab switch.
+3. **`_restoreRecSearchFab()` (line ~790)** — Early-return if Recipes screen is not active. Prevents the FAB from reappearing when closing a recipe overlay if the user has already navigated away.
+
+### Files Changed
+- `src/ui/recipes.js` — Added `screen-recipes` active-class guards to scroll listener, `closeRecSearchPanel()`, and `_restoreRecSearchFab()`
+- `CLAUDE_CODE_HANDOFF.md` — Added this session entry
+
+---
+
 ## Session: Move Magnifying Glass Up 3px (2026-03-24)
 
 ### What Changed
