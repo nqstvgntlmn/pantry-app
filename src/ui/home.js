@@ -1115,9 +1115,10 @@ function _extractItemName(entry) {
 // (Shopping List or Supplies) with all original data intact.
 // Determines the target list from itemData.list (set at removal time) or
 // falls back to checking itemName for "Shopping" / "Supplies" keywords.
-// After a successful restore, updates the Firestore activity entry to show
-// "restored" instead of "removed" and removes the itemData snapshot, which
-// causes the Undo button to disappear on re-render.
+// After a successful restore, updates the original Firestore activity entry
+// to "[First name] restored [Item] to [Shopping List / Supplies]".
+// Only ONE activity entry is created — the restore operations are silent
+// (no duplicate "added" entries from svi/svShopItem).
 export async function activityUndo(actId) {
   const entry = _getActivityEntry(actId);
   if (!entry) return showNotif("Activity entry not found");
@@ -1133,6 +1134,8 @@ export async function activityUndo(actId) {
   // Generate a fresh Firestore-compatible ID for the restored item
   const newId = Date.now().toString(36) + Math.random().toString(36).slice(2);
   try {
+    // Use { silent: true } to suppress the automatic "added" activity log
+    // that svi/svShopItem normally create — we write our own "restored" entry instead.
     if (targetList === "shopping") {
       // Re-add to shopping list — restore original qty/unit/note from snapshot
       await consolidateShopItem({
@@ -1142,7 +1145,7 @@ export async function activityUndo(actId) {
         note: d.note || undefined,
         prepCategory: d.prepCategory || undefined,
         barcode: d.barcode || undefined
-      });
+      }, { silent: true });
       showNotif(`${name} added back to shopping list`);
     } else {
       // Re-add to inventory — restore all original fields from snapshot.
@@ -1156,22 +1159,22 @@ export async function activityUndo(actId) {
         note: d.note || undefined,
         prepCategory: d.prepCategory || undefined,
         barcode: d.barcode || undefined
-      });
+      }, { silent: true });
       showNotif(`${name} added back to supplies`);
     }
 
-    // Update the activity entry in Firestore: change "removed" → "restored"
-    // and strip the itemData snapshot so the Undo button disappears on re-render
+    // Update the original activity entry in Firestore: change "removed" → "restored".
+    // Uses first name only (e.g. "Bora" not "Bora Isguder").
+    // Strips the itemData snapshot so the Undo button disappears on re-render.
+    // This is the ONLY activity entry — no separate "undid removal" entry is created.
     const listLabel = targetList === "shopping" ? "Shopping List" : "Supplies";
+    const firstName = (entry.memberName || "Someone").split(" ")[0];
     await dbSet(`households/${state.hid}/activity/${actId}`, {
-      memberName: entry.memberName,
+      memberName: firstName,
       action: "restored",
       itemName: toTitleCase(name) + " to " + listLabel,
       timestamp: entry.timestamp
     });
-
-    // Log the undo itself as a separate activity entry
-    await logActivity("undid removal of", name);
   } catch (err) {
     console.error("[activityUndo]", err);
     showNotif("Couldn't undo — please try manually");

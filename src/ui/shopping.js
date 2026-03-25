@@ -132,7 +132,7 @@ export function _normalizeForMatch(name) {
 }
 
 /**
- * consolidateShopItem(newItem) — Adds an item to the shopping list with quantity consolidation.
+ * consolidateShopItem(newItem, opts) — Adds an item to the shopping list with quantity consolidation.
  *
  * Before creating a new entry, checks if an unchecked item with the same
  * normalized name already exists in the list:
@@ -144,9 +144,10 @@ export function _normalizeForMatch(name) {
  * Already-checked (bought) items are ignored — only active items are consolidated.
  *
  * @param {object} newItem - The shopping item to add (must have at least id, name, qty)
+ * @param {object} [opts] - Options. { silent: true } suppresses activity logging (used by undo restore).
  * @returns {Promise<{action: string, item: object}>} Result with action type and final item
  */
-export async function consolidateShopItem(newItem) {
+export async function consolidateShopItem(newItem, opts = {}) {
   const normName = _normalizeForMatch(newItem.name);
 
   // Find an existing unchecked item with the same normalized name
@@ -172,8 +173,8 @@ export async function consolidateShopItem(newItem) {
       }
     }
 
-    // No match — add as a new item
-    await svShopItem(newItem);
+    // No match — add as a new item (pass opts to suppress logging if silent)
+    await svShopItem(newItem, opts);
     return { action: "new", item: newItem };
   }
 
@@ -188,7 +189,7 @@ export async function consolidateShopItem(newItem) {
     const mergedNote = existing.note || newItem.note || "";
     const updated = { ...existing, qty: updatedQty };
     if (mergedNote) updated.note = mergedNote;
-    await svShopItem(updated);
+    await svShopItem(updated, opts);
     return { action: "consolidated", item: updated, addedQty: newItem.qty || 1 };
   } else {
     // Units don't match — consolidate into one entry with a descriptive note.
@@ -200,7 +201,7 @@ export async function consolidateShopItem(newItem) {
     const consolidatedAmounts = existing.consolidatedAmounts
       ? `${existing.consolidatedAmounts} + ${newDesc}`
       : `${existingDesc} + ${newDesc}`;
-    await svShopItem({ ...existing, consolidatedAmounts });
+    await svShopItem({ ...existing, consolidatedAmounts }, opts);
     return { action: "consolidated-mixed", item: existing };
   }
 }

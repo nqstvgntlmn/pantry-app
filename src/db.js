@@ -989,7 +989,7 @@ export function ss(s) {
  * Replaces any existing item with the same ID in state.inv, then persists.
  * Shows sync status indicator during the operation.
  */
-export async function svi(item) {
+export async function svi(item, opts = {}) {
   ss("syncing");
   pausePoll();
   try {
@@ -999,8 +999,9 @@ export async function svi(item) {
     renderCallbacks.renderAll?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/inventory/${item.id}`, item);
-    // Log activity for new items (not quantity adjustments) — uses "Supplies" label
-    if (isNew) logActivity("added", toTitleCase(item.name) + " to Supplies");
+    // Log activity for new items (not quantity adjustments) — uses "Supplies" label.
+    // opts.silent suppresses logging when restoring via undo to avoid duplicate entries.
+    if (isNew && !opts.silent) logActivity("added", toTitleCase(item.name) + " to Supplies");
     ss("synced");
   } catch (e) { console.error(e); ss("error"); }
   finally { resumePoll(); }
@@ -1077,7 +1078,7 @@ export async function dlr(id) {
  *
  * Replaces any existing item with the same ID, re-renders, and persists.
  */
-export async function svShopItem(item) {
+export async function svShopItem(item, opts = {}) {
   pausePoll();
   try {
     const isNew = !state.shop.find(s => s.id === item.id);
@@ -1085,8 +1086,9 @@ export async function svShopItem(item) {
     renderCallbacks.renderShop?.();
     renderCallbacks.renderSum?.();
     await dbSet(`households/${state.hid}/shopping/${item.id}`, item);
-    // Log new shopping list additions with Title Case item name
-    if (isNew) logActivity("added", toTitleCase(item.name) + " to Shopping List");
+    // Log new shopping list additions with Title Case item name.
+    // opts.silent suppresses logging when restoring via undo to avoid duplicate entries.
+    if (isNew && !opts.silent) logActivity("added", toTitleCase(item.name) + " to Shopping List");
   } catch (e) { console.error(e); }
   finally { resumePoll(); }
 }

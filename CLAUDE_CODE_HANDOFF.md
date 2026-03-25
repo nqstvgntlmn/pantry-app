@@ -237,7 +237,7 @@ Bottom navigation (left to right):
   - Missing ingredients shown with "Add to Shopping" button
 - **Running Low** — collapsible, **defaults to collapsed**, saves state in localStorage
 - **Recent Activity** — collapsible, **defaults to collapsed**, saves state in localStorage, shows who did what (Bora/Bushra), uses "Supplies" not "inventory", Title Case names
-  - **Persistent Undo buttons:** Every "removed [item] from Shopping List" or "removed [item] from Supplies" entry has a permanent Undo button on the right side. Unlike the 5-second swipe toast, this Undo stays available until the entry is pushed off the 10-entry list by newer actions. Tapping Undo restores the item with all original data (name, quantity, unit, location, notes, category, barcode) — not just generic defaults.
+  - **Persistent Undo buttons:** Every "removed [item] from Shopping List" or "removed [item] from Supplies" entry has a permanent Undo button on the right side. Unlike the 5-second swipe toast, this Undo stays available until the entry is pushed off the 10-entry list by newer actions. Tapping Undo restores the item with all original data (name, quantity, unit, location, notes, category, barcode) — not just generic defaults. After undo, only ONE activity entry is created: "[First name] restored [Item] to [Shopping List / Supplies]" (e.g. "Bora restored Paper Towels to Shopping List"). No duplicate "added" or "undid removal" entries.
   - **Activity item snapshots:** When items are removed (via swipe-delete, multi-delete, or direct delete), the full item data is stored as `itemData` on the Firestore activity entry. This enables full-fidelity undo. Legacy entries without `itemData` fall back to `qty: 1, location: "pantry"` defaults.
 - **Your Supplies** — summary cards (items in stock, expiring soon, to buy, saved recipes)
 - **Last cooked** — shows most recently cooked recipe with "X days ago"
@@ -1691,3 +1691,33 @@ Fine-tuning the vertical position of the FAB to better align with surrounding UI
 - `src/styles.css` — `.rec-search-fab` repositioned to top:68px (was 71px)
 - `src/ui/recipes.js` — Updated FAB position comment to match new 68px value
 - `CLAUDE_CODE_HANDOFF.md` — Added this session entry
+
+---
+
+### Session 8 Changes — Undo Activity Entry Cleanup (March 2026)
+
+**Date:** 2026-03-24
+
+### What Changed
+Fixed the undo-deletion activity entries so tapping Undo on a "removed" activity entry produces exactly ONE clean activity entry instead of creating duplicates.
+
+### Problems Fixed
+1. **Duplicate activity entries on undo:** When undoing a removal, the restore operation (`svi`/`svShopItem`) automatically logged an "added [Item] to Shopping List/Supplies" entry as a side effect, AND `activityUndo` logged a second "undid removal of [Item]" entry. This created two extra entries on top of the original being updated — three total.
+2. **Wrong phrasing:** The extra entry said "undid removal of" instead of the desired "restored [Item] to [list]" format.
+3. **Full name used:** The restored entry used the full memberName (e.g. "Bora Isguder") instead of first name only ("Bora").
+
+### How It Works Now
+- Tapping Undo on a "removed" entry updates the original entry in-place to: **"[First name] restored [Item] to [Shopping List / Supplies]"** (e.g. "Bora restored Paper Towels to Shopping List").
+- The restore operation is **silent** — no duplicate "added" entries from `svi`/`svShopItem`.
+- No separate "undid removal" entry is created — the original entry is the only one.
+
+### Implementation Details
+- **`src/db.js`** — Added optional `opts = {}` second parameter to `svi()` and `svShopItem()`. When `opts.silent` is true, the automatic `logActivity("added", ...)` call is skipped. All existing callers are unaffected (default `opts = {}`).
+- **`src/ui/shopping.js`** — Added optional `opts = {}` second parameter to `consolidateShopItem()` and threads it through to all three internal `svShopItem()` calls.
+- **`src/ui/home.js`** — Updated `activityUndo()`: passes `{ silent: true }` to `consolidateShopItem`/`svi` to suppress duplicate logging, uses `firstName` (split on space) for `memberName`, removed the separate `logActivity("undid removal of", ...)` call.
+
+### Files Changed
+- `src/db.js` — `svi()` and `svShopItem()` accept `opts.silent` to suppress activity logging
+- `src/ui/shopping.js` — `consolidateShopItem()` accepts and passes through `opts` to `svShopItem`
+- `src/ui/home.js` — `activityUndo()` rewritten for single clean "restored" entry with first name only
+- `CLAUDE_CODE_HANDOFF.md` — Added this session entry, updated persistent undo description
