@@ -74,7 +74,7 @@ const AZURE_BASE = "https://shop-rite-web-prod.azurewebsites.net";
 // This authenticates our server as a valid coupon client to the /getToken endpoint.
 // Decoded payload: { fullName: "couponWebUsers_SR", iss: "Digital Coupons v3", exp: 1776863263 }
 // IMPORTANT: This JWT expires on 2026-04-23. Must be updated before then.
-const SERVICE_JWT = "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NzY4NjMyNjMsImZ1bGxOYW1lIjoiY291cG9uV2ViVXNlcnNfU1IiLCJpYXQiOjE2MTkxODMyNjMsImlzcyI6IkRpZ2l0YWwgQ291cG9ucyB2MyJ9.TOwM17VHblG-YITQhI7rNHcBKl2Vwf3l1AMwDS3m7Qmiq7AUfK4Cz_ft14AIvok2QFbpJ52A16exN51XrSKyDA";
+const SERVICE_JWT = "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NzEwODE3NTEwOSIsImh0dHBzOi8vd3d3Mi53YWtlZmVybi5jb20vY2xpcF9zb3VyY2UiOiJTUl9XRUIiLCJodHRwczovL3dha2VmZXJuLmljZS5kcG4uY29tL3Rva2VuIjoiTHNMVXVuclpGcUQyRmhDMExEYkJiaU13X2NkZWF6UEd0dERKX2VTM1B4ckFOUVVTN2lwQTFZQjdIYVQ4Q1lYd3FGT09zckN1LUxCUFpYTzVnX0ZrVVEiLCJpYXQiOjE3NzgyOTk1OTMsImV4cCI6MTc3ODM4NTk5MywiaXNzIjoiRGlnaXRhbCBDb3Vwb25zIHYzIn0.LXDmJFUiYAfn17mtoK6EoACwUz-90D3WziFRozmyurDnvXXKmUtqvCX84Mmj8oP40nflET6TwGzdBWL4J5XG8Q";
 
 // Default store ID — ShopRite store 592. Can be overridden per request.
 const DEFAULT_STORE_ID = "592";
