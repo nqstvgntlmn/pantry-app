@@ -1721,3 +1721,122 @@ Fixed the undo-deletion activity entries so tapping Undo on a "removed" activity
 - `src/ui/shopping.js` — `consolidateShopItem()` accepts and passes through `opts` to `svShopItem`
 - `src/ui/home.js` — `activityUndo()` rewritten for single clean "restored" entry with first name only
 - `CLAUDE_CODE_HANDOFF.md` — Added this session entry, updated persistent undo description
+
+---
+
+## Session 7 — Phase 1 UI Rejuvenation (Two-World Shell + Design System)
+
+### Overview
+Major structural rejuvenation of the Kitchen app. Phase 1 ONLY — no feature logic was modified. This lays the foundation for a two-world navigation system (Kitchen + Home) with a new warm cream/green design system, replacing the previous dark luxury gold theme.
+
+### What Changed
+
+#### 1. Design System (CSS)
+**File:** `src/styles.css`
+
+- **New `:root` variables** — Replaced the dark "Refined Dark Luxury" palette with a warm "Cream & Forest Green" system:
+  - `--cream: #F5F0E8` (primary background), `--cream-dark: #EDE6D6` (secondary)
+  - `--ink: #1C1917` (text), `--ink-soft: #44403C`, `--ink-muted: #78716C`
+  - `--green: #2D5A3D` (primary accent), `--green-light: #3D7A52`, `--green-pale: #E8F0EB`
+  - `--amber: #C2692A`, `--amber-pale: #FBF0E6` (secondary accent)
+  - `--red: #C23A2A`, `--red-pale: #FBE9E8` (destructive)
+  - `--blue: #2A4A8A`, `--blue-pale: #E8EEF8` (informational)
+  - `--card-shadow`, `--radius: 16px`, `--radius-sm: 10px`
+  - `--ws-height: 52px` (world switcher height)
+
+- **Legacy variable mappings** — All old variable names (`--bg`, `--ac`, `--tx`, `--card`, etc.) are mapped to new values for backward compatibility. Existing component CSS that uses `var(--bg)` etc. automatically gets the new colors without requiring any rule changes.
+
+- **Screen positioning** — `.screen` now uses `top: calc(env(safe-area-inset-top) + var(--ws-height))` instead of `inset:0` to clear the world switcher bar.
+
+- **Auth screen** — Updated radial glow from gold to green, updated `.lt` title to green.
+
+- **Old nav styles** — Commented out (`#NAV`, `.ni`, etc.) with PHASE 2 marker.
+
+- **New component styles added:**
+  - `#world-switcher` — Fixed position below status bar, `.ws-track` pill container, `.ws-btn` / `.ws-active`
+  - `.world-nav` — Bottom nav bar for each world, `.wn-item` / `.wn-ico` / `.wn-lbl`
+  - `.card` / `.card-sm` — Global card components with white bg, shadow, radius
+  - `.placeholder-screen` / `.placeholder-label` / `.placeholder-hint` — Centered tab name labels
+
+#### 2. Google Fonts Update
+**File:** `index.html` (line 9)
+
+- Updated Fraunces import to include italic axis, optical sizing axis (`opsz 9..144`), and weights 300/500/700.
+- DM Sans unchanged (300/400/500/600).
+
+#### 3. HTML Layout — Two-World Structure
+**File:** `index.html`
+
+- **World Switcher** — Added `#world-switcher` div with `.ws-track` containing two `.ws-btn` buttons ("🍳 Kitchen" and "🏠 Home"). Kitchen is active by default.
+
+- **10 Placeholder Screens** — Added before the existing screens:
+  - Kitchen: `screen-k-overview`, `screen-k-pantry`, `screen-k-shopping`, `screen-k-supplies`, `screen-k-deals`
+  - Home: `screen-h-overview`, `screen-h-todos`, `screen-h-cleaning`, `screen-h-maintain`, `screen-h-game`
+  - Each contains a centered `placeholder-label` with the tab name and a `placeholder-hint` subtitle.
+
+- **Existing Screens Preserved** — All 6 legacy screens (`screen-home`, `screen-inventory`, `screen-recipes`, `screen-shopping`, `screen-insights`, `screen-chat`) remain in the HTML, completely unmodified. They are simply never activated by the new navigation — they stay inert with `visibility:hidden` and `transform:translateX(100%)`.
+
+- **Old Nav Commented Out** — The `#NAV` div is wrapped in an HTML comment with `PHASE 2: re-wire original navigation here`.
+
+- **Two New Bottom Navs:**
+  - `#nav-kitchen` — 5 tabs: Overview 🏠, Pantry 🥫, Shopping 🛒, Supplies 📦, Deals 🏷️
+  - `#nav-home-world` — 5 tabs: Overview 📊, To-Dos ✅, Cleaning 🧹, Maintain 🔧, Game 🎮
+  - Home world nav is `display:none` by default. `switchWorld()` toggles visibility.
+
+- **All overlays, bottom sheets, and modals preserved** — No changes to any overlay, bottom sheet, or modal HTML.
+
+#### 4. Navigation System Rewrite
+**File:** `src/main.js`
+
+- **Two tab order arrays:**
+  - `KITCHEN_TABS = ["k-overview", "k-pantry", "k-shopping", "k-supplies", "k-deals"]`
+  - `HOME_TABS = ["h-overview", "h-todos", "h-cleaning", "h-maintain", "h-game"]`
+
+- **`_activeWorld`** — Tracks current world (`"kitchen"` or `"home"`).
+
+- **`switchWorld(world)`** — Registered on `window`. Toggles world switcher button states, swaps bottom nav bar visibility, navigates to first tab of the target world.
+
+- **`showScreen(n)`** — Rewritten to work with both worlds. Determines which tab order to use based on the tab name prefix (`k-` or `h-`). Slide direction logic is the same. First-load fast path and transition guards preserved.
+
+- **`_highlightNavItem(tabName)`** — New helper that highlights the correct `.wn-item` in the active world's bottom nav.
+
+- **`_navItemId(tabName)`** — Converts tab name to nav item element ID (e.g., `"k-overview"` → `"knav-overview"`).
+
+- **`_currentTab()`** — Updated to search both `KITCHEN_TABS` and `HOME_TABS`.
+
+- **Swipe gesture** — Updated to use `_getTabOrder()` which returns the active world's tab array.
+
+- **FAB** — All FAB configs commented out for Phase 1 (placeholder screens don't need FAB). FAB is hidden on all tabs.
+
+- **Boot sequence** — `_appStart()` now calls `showScreen("k-overview")` instead of `showScreen("home")`.
+
+- **Legacy `TAB_ORDER` constant** — Kept as alias to `KITCHEN_TABS` for backward compat with any code referencing it.
+
+### What Was NOT Changed (Preserved Intact)
+- All Firebase/Firestore logic in `src/db.js`
+- All API endpoints (`api/*`)
+- `api/sync-reminders.js` and `api/completed-items.js` — completely untouched
+- All feature modules: `src/ui/home.js`, `src/ui/inventory.js`, `src/ui/shopping.js`, `src/ui/recipes.js`, `src/ui/chat.js`, `src/ui/insights.js`, `src/ui/settings.js`, etc.
+- All window handler registrations (the massive `window.xxx = xxx` block in main.js)
+- All overlay, bottom sheet, and modal HTML
+- `src/state.js`, `src/auth.js`, `src/helpers.js`, `src/storage.js`
+- Data structures, localStorage keys, Firestore paths
+
+### What Phase 2 Needs To Do
+1. **Wire Kitchen screens to existing features:**
+   - `k-overview` → render home dashboard (from `renderHome()`)
+   - `k-pantry` → new pantry feature or subset of inventory
+   - `k-shopping` → render shopping list (from `renderShop()`)
+   - `k-supplies` → render inventory/supplies (from `renderInv()`)
+   - `k-deals` → render deals tab (from shopping deals)
+2. **Move Recipes and Chat** — Decide where Recipes, Chat (Claude), and Insights fit in the new world structure.
+3. **Re-enable FAB** — Uncomment and update `FAB_CONFIG` entries for the new tab names.
+4. **Re-enable renders in `showScreen()`** — Add `renderHome()`, `renderInv()`, `renderShop()`, etc. calls when navigating to the corresponding new tab names.
+5. **Remove legacy screens** — Once all features are re-wired, delete the old `screen-home`, `screen-inventory`, etc. HTML and uncomment the old nav styles or remove them.
+6. **Build Home world features** — To-Dos, Cleaning, Maintain, Game are all new features to be built.
+
+### Files Changed
+- `index.html` — Google Fonts update, world switcher, 10 placeholder screens, 2 new navs, old nav commented out
+- `src/styles.css` — Full design system replacement, world switcher styles, world nav styles, card components, placeholder styles, old nav commented out, screen positioning updated
+- `src/main.js` — Navigation rewritten for two-world system, boot sequence updated, FAB hidden for Phase 1
+- `CLAUDE_CODE_HANDOFF.md` — This session entry

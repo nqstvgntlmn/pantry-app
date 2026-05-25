@@ -6,9 +6,11 @@
 <title>Kitchen</title>
 <meta name="version" content="v5.0-vite"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@300;400;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script type="module" crossorigin src="/assets/index-DQhCFmhr.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DXuns0ZU.css">
+<!-- Fraunces: display/heading font with optical sizing and italic axis.
+     DM Sans: body/UI font with 300-600 weight range. -->
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;1,9..144,300;1,9..144,500;1,9..144,700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <script type="module" crossorigin src="/assets/index-wR52HUrX.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-D8p5ymkt.css">
 </head>
 <body>
 
@@ -97,7 +99,96 @@
 <!-- MAIN APP -->
 <div id="APP">
 
-  <!-- HOME -->
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       WORLD SWITCHER — segmented pill toggle, always visible below status bar.
+       Two worlds: "Kitchen" (food/grocery management) and "Home" (household tasks).
+       Active button gets --green background with white text.
+       ═══════════════════════════════════════════════════════════════════════════ -->
+  <div id="world-switcher">
+    <div class="ws-track">
+      <button class="ws-btn ws-active" id="ws-kitchen" onclick="switchWorld('kitchen')">🍳 Kitchen</button>
+      <button class="ws-btn" id="ws-home" onclick="switchWorld('home')">🏠 Home</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       KITCHEN WORLD — Placeholder screens for Phase 1.
+       Each shows a centered label. Real content wired in Phase 2.
+       ═══════════════════════════════════════════════════════════════════════════ -->
+  <div class="screen" id="screen-k-overview">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">Overview</div>
+      <div class="placeholder-hint">Kitchen dashboard — coming in Phase 2</div></div>
+    </div>
+  </div>
+  <div class="screen" id="screen-k-pantry">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">Pantry</div>
+      <div class="placeholder-hint">Track what's in your kitchen</div></div>
+    </div>
+  </div>
+  <div class="screen" id="screen-k-shopping">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">Shopping</div>
+      <div class="placeholder-hint">Your grocery list</div></div>
+    </div>
+  </div>
+  <div class="screen" id="screen-k-supplies">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">Supplies</div>
+      <div class="placeholder-hint">Household supplies tracker</div></div>
+    </div>
+  </div>
+  <div class="screen" id="screen-k-deals">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">Deals</div>
+      <div class="placeholder-hint">Local grocery deals & coupons</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       HOME WORLD — Placeholder screens for Phase 1.
+       Each shows a centered label. Real content built in later phases.
+       ═══════════════════════════════════════════════════════════════════════════ -->
+  <div class="screen" id="screen-h-overview">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">Overview</div>
+      <div class="placeholder-hint">Home dashboard</div></div>
+    </div>
+  </div>
+  <div class="screen" id="screen-h-todos">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">To-Dos</div>
+      <div class="placeholder-hint">Household task list</div></div>
+    </div>
+  </div>
+  <div class="screen" id="screen-h-cleaning">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">Cleaning</div>
+      <div class="placeholder-hint">Cleaning schedules & checklists</div></div>
+    </div>
+  </div>
+  <div class="screen" id="screen-h-maintain">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">Maintain</div>
+      <div class="placeholder-hint">Home maintenance reminders</div></div>
+    </div>
+  </div>
+  <div class="screen" id="screen-h-game">
+    <div class="placeholder-screen">
+      <div><div class="placeholder-label">Game</div>
+      <div class="placeholder-hint">Household gamification</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
+       PHASE 2: Re-wire existing screens below. All original Kitchen functionality
+       (Home, Inventory, Recipes, Shopping, Insights, Chat) is preserved intact.
+       These screens are not activated by the new navigation — they remain inert
+       until Phase 2 maps them to the new world/tab structure.
+       ═══════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- LEGACY: HOME -->
   <div class="screen" id="screen-home" style="overflow-y:hidden">
     <div class="hhdr" style="flex-shrink:0">
       <div class="htop">
@@ -434,7 +525,7 @@
     <span class="fab-icon">＋</span>
   </button>
 
-  <!-- NAV -->
+  <!-- PHASE 2: re-wire original navigation here
   <div id="NAV">
     <div class="ni active" id="nav-home" onclick="showScreen('home')"><span class="ico">🏠</span><span class="lbl">Home</span></div>
     <div class="ni" id="nav-inventory" onclick="showScreen('inventory')"><span class="ico">🧺</span><span class="lbl">Supplies</span></div>
@@ -442,6 +533,29 @@
     <div class="ni" id="nav-shopping" onclick="showScreen('shopping')"><span class="ico">🛒</span><span class="lbl">Shop</span></div>
     <div class="ni" id="nav-insights" onclick="showScreen('insights')"><span class="ico">📊</span><span class="lbl">Stats</span></div>
     <div class="ni" id="nav-chat" onclick="showScreen('chat')"><span class="ico">✨</span><span class="lbl">Claude</span></div>
+  </div>
+  -->
+
+  <!-- ═══ KITCHEN WORLD BOTTOM NAV ═══
+       5 tabs: Overview, Pantry, Shopping, Supplies, Deals.
+       Visible when Kitchen world is active (default). -->
+  <div id="nav-kitchen" class="world-nav">
+    <div class="wn-item active" id="knav-overview" onclick="showScreen('k-overview')"><span class="wn-ico">🏠</span><span class="wn-lbl">Overview</span></div>
+    <div class="wn-item" id="knav-pantry" onclick="showScreen('k-pantry')"><span class="wn-ico">🥫</span><span class="wn-lbl">Pantry</span></div>
+    <div class="wn-item" id="knav-shopping" onclick="showScreen('k-shopping')"><span class="wn-ico">🛒</span><span class="wn-lbl">Shopping</span></div>
+    <div class="wn-item" id="knav-supplies" onclick="showScreen('k-supplies')"><span class="wn-ico">📦</span><span class="wn-lbl">Supplies</span></div>
+    <div class="wn-item" id="knav-deals" onclick="showScreen('k-deals')"><span class="wn-ico">🏷️</span><span class="wn-lbl">Deals</span></div>
+  </div>
+
+  <!-- ═══ HOME WORLD BOTTOM NAV ═══
+       5 tabs: Overview, To-Dos, Cleaning, Maintain, Game.
+       Hidden by default — shown when Home world is active. -->
+  <div id="nav-home-world" class="world-nav" style="display:none">
+    <div class="wn-item active" id="hnav-overview" onclick="showScreen('h-overview')"><span class="wn-ico">📊</span><span class="wn-lbl">Overview</span></div>
+    <div class="wn-item" id="hnav-todos" onclick="showScreen('h-todos')"><span class="wn-ico">✅</span><span class="wn-lbl">To-Dos</span></div>
+    <div class="wn-item" id="hnav-cleaning" onclick="showScreen('h-cleaning')"><span class="wn-ico">🧹</span><span class="wn-lbl">Cleaning</span></div>
+    <div class="wn-item" id="hnav-maintain" onclick="showScreen('h-maintain')"><span class="wn-ico">🔧</span><span class="wn-lbl">Maintain</span></div>
+    <div class="wn-item" id="hnav-game" onclick="showScreen('h-game')"><span class="wn-ico">🎮</span><span class="wn-lbl">Game</span></div>
   </div>
 
   <!-- BOTTOM SHEET: VOICE MULTI-ITEM CONFIRMATION -->

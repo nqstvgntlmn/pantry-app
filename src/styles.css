@@ -68,25 +68,51 @@
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 
-/* CSS CUSTOM PROPERTIES (design tokens) — "Refined Dark Luxury" warm palette
-   --bg: deep near-black base, --sf: surface, --card/card2: elevated card layers.
-   Card tokens are intentionally lighter than --bg to create layered depth. */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   DESIGN SYSTEM — "Warm Cream & Forest Green" palette (Phase 1 rejuvenation)
+   Fraunces = headings/display, DM Sans = body/UI.
+   New semantic tokens (--cream, --ink, --green, etc.) are the source of truth.
+   Legacy tokens (--bg, --ac, --tx, etc.) are mapped to new values so existing
+   component CSS continues to work without changes until Phase 2 re-wiring.
+   ═══════════════════════════════════════════════════════════════════════════════ */
 :root{
-  --bg:#0A0A0E;--bg-rgb:10,10,14;--sf:#111115;--card:#1A1A20;--card2:#212128;
-  --b1:#28282F;--b2:#333340;
-  --ac:#D4A853;--ac2:#E8C27A;--acd:rgba(212,168,83,.13);
-  --gn:#5aad6f;--gnd:rgba(90,173,111,.13);
-  --rd:#d96b6b;--rdd:rgba(217,107,107,.13);
-  --am:#c8960a;--amd:rgba(200,150,10,.13);
-  --tx:#F5F0E8;--tx2:#A8A0B0;--mt:#7A7585;
+  /* ── New Design System Tokens ── */
+  --cream:#F5F0E8;          /* primary background */
+  --cream-dark:#EDE6D6;     /* secondary background (surfaces, cards) */
+  --ink:#1C1917;            /* primary text */
+  --ink-soft:#44403C;       /* secondary text */
+  --ink-muted:#78716C;      /* muted/placeholder text */
+  --green:#2D5A3D;          /* primary accent (buttons, active states) */
+  --green-light:#3D7A52;    /* hover/active variant of green */
+  --green-pale:#E8F0EB;     /* green tinted background */
+  --amber:#C2692A;          /* secondary accent (warnings, highlights) */
+  --amber-pale:#FBF0E6;     /* amber tinted background */
+  --red:#C23A2A;            /* destructive actions */
+  --red-pale:#FBE9E8;       /* red tinted background */
+  --blue:#2A4A8A;           /* informational accent */
+  --blue-pale:#E8EEF8;      /* blue tinted background */
+  --card-shadow:0 2px 12px rgba(28,25,23,0.08); /* subtle elevation shadow */
+  --radius:16px;            /* default border radius */
+  --radius-sm:10px;         /* small border radius */
+
+  /* ── World Switcher Layout ── */
+  --ws-height:52px;         /* world switcher bar height (excluding safe area) */
+
+  /* ── Legacy Token Mappings (backward compat for existing component CSS) ── */
+  --bg:var(--cream);--bg-rgb:245,240,232;
+  --sf:var(--cream-dark);
+  --card:#FFFFFF;--card2:#F8F5EF;
+  --b1:#E8E2D8;--b2:#DDD6CA;
+  --ac:var(--green);--ac2:var(--green-light);--acd:rgba(45,90,61,0.10);
+  --gn:var(--green);--gnd:var(--green-pale);
+  --rd:var(--red);--rdd:var(--red-pale);
+  --am:var(--amber);--amd:var(--amber-pale);
+  --tx:var(--ink);--tx2:var(--ink-soft);--mt:var(--ink-muted);
   --nh:72px;--safe:env(safe-area-inset-bottom,0px);
-  /* Card border tokens — simulates ambient top-light on elevated surfaces */
-  --card-border:rgba(255,255,255,0.07);
-  --card-border-top:rgba(255,255,255,0.12);
-  /* Gradient card background — subtly lighter than page to create depth separation */
-  --card-grad:linear-gradient(180deg,#1C1C24 0%,#18181F 100%);
-  /* Page-level deep gradient — near-black top to slightly deeper bottom, subtle blue undertone */
-  --page-grad:linear-gradient(180deg,#0C0C12 0%,#08080C 50%,#060609 100%)
+  --card-border:rgba(0,0,0,0.06);
+  --card-border-top:rgba(0,0,0,0.08);
+  --card-grad:linear-gradient(180deg,#FFFFFF 0%,#FAFAF6 100%);
+  --page-grad:linear-gradient(180deg,var(--cream) 0%,var(--cream-dark) 100%)
 }
 /* Global transitions limited to safe, compositable properties only.
    Avoids the universal * selector which forces Safari to evaluate transitions
@@ -98,12 +124,12 @@
 html,body{height:100%;background:var(--page-grad);background-color:var(--bg);font-family:"DM Sans",sans-serif;color:var(--tx);overflow:hidden}
 
 /* ── AUTH SCREEN ── */
-/* Auth screen background — deep gradient with subtle gold radial glow at top */
+/* Auth screen background — warm cream gradient with subtle green radial glow at top */
 #LS{position:fixed;inset:0;background:var(--page-grad);background-color:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 28px;text-align:center;gap:0;z-index:1000;
-  background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(212,168,83,.18) 0%,transparent 60%)}
-.ll{font-size:4rem;margin-bottom:16px;filter:drop-shadow(0 0 24px rgba(212,168,83,.4))}
-.lt{font-family:"Fraunces",serif;font-size:2.8rem;color:var(--ac);font-weight:300;letter-spacing:-.03em;line-height:1;margin-bottom:10px}
-.ls{font-size:.88rem;color:var(--mt);line-height:1.7;max-width:280px;margin-bottom:28px}
+  background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(45,90,61,.12) 0%,transparent 60%)}
+.ll{font-size:4rem;margin-bottom:16px;filter:drop-shadow(0 0 24px rgba(45,90,61,.25))}
+.lt{font-family:"Fraunces",serif;font-size:2.8rem;color:var(--green);font-weight:300;letter-spacing:-.03em;line-height:1;margin-bottom:10px}
+.ls{font-size:.88rem;color:var(--ink-muted);line-height:1.7;max-width:280px;margin-bottom:28px}
 
 /* Social sign-in buttons */
 .auth-buttons{display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px}
@@ -133,8 +159,10 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 #APP{position:fixed;inset:0;display:none;flex-direction:column}
 /* Screens use transform-based positioning for smooth slide transitions.
    All screens are always display:flex but off-screen right by default.
-   Only the .active screen is at translateX(0) and scrollable. */
-.screen{position:absolute;inset:0;bottom:0;display:flex;flex-direction:column;
+   Only the .active screen is at translateX(0) and scrollable.
+   top offset clears the world switcher bar (safe-area + ws-height). */
+.screen{position:absolute;top:calc(env(safe-area-inset-top,0px) + var(--ws-height));right:0;bottom:0;left:0;
+  display:flex;flex-direction:column;background:var(--cream);
   transform:translateX(100%);visibility:hidden;pointer-events:none;overflow-y:hidden;
   transition:transform 300ms cubic-bezier(0.4,0,0.2,1),visibility 0s 300ms;
   will-change:transform}
@@ -145,12 +173,9 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 /* Skip transition when snapping screens during rapid tab switching */
 .screen.no-transition{transition:none !important}
 
-/* ── NAV ── */
-/* Floating pill-shaped bottom nav — capsule shape hovering well above the screen edge.
-   Generous bottom margin creates visible breathing room underneath the pill.
-   Frosted glass backdrop with subtle border for depth. */
-/* Floating pill-shaped bottom nav — reduced blur from 28px to 14px for Safari stability.
-   Nav is permanently visible so its backdrop-filter layer is always composited. */
+/* ── NAV (legacy — PHASE 2: re-wire original nav here) ── */
+/* Old floating pill nav is commented out. Replaced by world-specific bottom navs. */
+/*
 #NAV{position:fixed;bottom:calc(var(--safe) + 20px);left:20px;right:20px;height:58px;
   border-radius:30px;background:rgba(16,16,22,0.85);
   backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);
@@ -159,13 +184,51 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
   display:flex;align-items:stretch;padding:0 6px;z-index:150}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;color:var(--mt);position:relative;border-radius:24px}
 .ni .ico{font-size:1.5rem;transition:transform .2s,filter .2s;line-height:1}
-.ni .lbl{font-size:.54rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;transition:color .2s,opacity .2s;opacity:.6}
+.ni .lbl{font-size:.54rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;transition:color .2s,opacity:.2s;opacity:.6}
 .ni.active{color:var(--ac)}
 .ni.active .lbl{opacity:1}
 .ni.active .ico{transform:translateY(-2px);filter:drop-shadow(0 2px 8px rgba(212,168,83,.5))}
-/* Active tab indicator — small gold dot below label */
 .ni::after{content:"";position:absolute;bottom:4px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--ac);opacity:0;transition:opacity .2s}
 .ni.active::after{opacity:1}
+*/
+
+/* ── WORLD SWITCHER ──
+   Segmented pill toggle fixed below the status bar. Always visible.
+   Two buttons: "Kitchen" and "Home". Active button gets --green background. */
+#world-switcher{position:fixed;top:0;left:0;right:0;z-index:160;
+  padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 8px;
+  background:var(--cream);display:flex;gap:0;
+  border-bottom:1px solid var(--b1)}
+/* Pill container — the two buttons sit inside a rounded track */
+.ws-track{display:flex;flex:1;background:var(--cream-dark);border-radius:12px;padding:3px;gap:2px}
+/* Individual world switcher button */
+.ws-btn{flex:1;padding:10px 16px;border:none;border-radius:10px;
+  font-family:"DM Sans",sans-serif;font-size:.82rem;font-weight:600;
+  cursor:pointer;transition:all .2s ease;background:transparent;color:var(--ink-muted);
+  letter-spacing:.01em;text-align:center}
+/* Active world button — green background with white text and subtle shadow */
+.ws-btn.ws-active{background:var(--green);color:#FFFFFF;
+  box-shadow:0 2px 8px rgba(45,90,61,0.25)}
+
+/* ── WORLD BOTTOM NAVS ──
+   Each world has its own bottom nav bar. Only one is visible at a time.
+   Clean white bar with subtle top border, no floating pill. */
+.world-nav{position:fixed;bottom:0;left:0;right:0;
+  height:calc(60px + env(safe-area-inset-bottom,0px));
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  background:#FFFFFF;border-top:1px solid var(--b1);
+  display:flex;align-items:stretch;z-index:150}
+/* Individual nav item — icon stacked above label */
+.wn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;cursor:pointer;color:var(--ink-muted);
+  transition:color .2s,transform .15s}
+.wn-item .wn-ico{font-size:1.35rem;line-height:1;transition:transform .2s}
+.wn-item .wn-lbl{font-size:.6rem;font-weight:600;letter-spacing:.04em;
+  text-transform:uppercase;transition:color .2s}
+/* Active nav item — green colored label and slightly scaled-up icon */
+.wn-item.active{color:var(--green)}
+.wn-item.active .wn-ico{transform:scale(1.1)}
+.wn-item.active .wn-lbl{color:var(--green);font-weight:700}
 
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 22px;border-radius:14px;border:none;font-family:"DM Sans",sans-serif;font-size:.92rem;font-weight:600;cursor:pointer;transition:all .18s;letter-spacing:.01em}
@@ -1897,3 +1960,26 @@ img[loading="lazy"] { content-visibility: auto }
   z-index:9999;cursor:pointer;
   -webkit-tap-highlight-color:transparent;
   background:transparent}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   PHASE 1 — New Component Styles (Rejuvenation)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── CARD COMPONENTS ──
+   Global card style for elevated content containers.
+   .card = standard card, .card-sm = compact variant. */
+.card{background:#FFFFFF;border-radius:var(--radius);box-shadow:var(--card-shadow);
+  padding:16px;margin-bottom:12px}
+.card-sm{background:#FFFFFF;border-radius:var(--radius-sm);box-shadow:var(--card-shadow);
+  padding:12px;margin-bottom:12px}
+
+/* ── PLACEHOLDER SCREENS ──
+   Phase 1 placeholder — centered label showing the tab name.
+   Used for all tabs until real content is wired in Phase 2. */
+.placeholder-screen{display:flex;align-items:center;justify-content:center;
+  flex:1;padding:40px;padding-bottom:calc(60px + env(safe-area-inset-bottom,0px) + 40px)}
+.placeholder-label{font-family:"Fraunces",serif;font-size:1.8rem;font-weight:500;
+  color:var(--ink-muted);opacity:.5;letter-spacing:-.02em}
+/* Subtitle hint beneath the label */
+.placeholder-hint{font-family:"DM Sans",sans-serif;font-size:.82rem;
+  color:var(--ink-muted);opacity:.4;margin-top:8px;text-align:center}

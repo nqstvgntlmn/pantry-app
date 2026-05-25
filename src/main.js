@@ -126,14 +126,42 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-// ── SCREEN NAVIGATION ────────────────────────────────────────────────────────
-// The app is a single-page app with 6 main screens (home, inventory, recipes,
-// shopping, insights, chat). Only one screen is visible at a time. Navigation
-// is driven by bottom nav bar taps which call showScreen().
-// Screens slide in/out directionally like a native iOS app using CSS transforms.
+// ── SCREEN NAVIGATION (Phase 1 — Two-World System) ──────────────────────────
+// The app now has two "worlds": Kitchen and Home. Each world has its own set of
+// 5 tabs and its own bottom navigation bar. A world switcher (segmented pill)
+// sits below the status bar and lets the user toggle between worlds.
+//
+// Kitchen world tabs: k-overview, k-pantry, k-shopping, k-supplies, k-deals
+// Home world tabs: h-overview, h-todos, h-cleaning, h-maintain, h-game
+//
+// In Phase 1, all tabs render placeholder screens. The existing feature screens
+// (home, inventory, recipes, shopping, insights, chat) are preserved in the HTML
+// but never activated — they'll be re-wired in Phase 2.
 
-// Ordered tab names for swipe navigation — matches bottom nav layout left-to-right
-const TAB_ORDER = ["home", "inventory", "recipes", "shopping", "insights", "chat"];
+// Tab orders for each world — matches bottom nav layout left-to-right
+const KITCHEN_TABS = ["k-overview", "k-pantry", "k-shopping", "k-supplies", "k-deals"];
+const HOME_TABS    = ["h-overview", "h-todos", "h-cleaning", "h-maintain", "h-game"];
+
+// _activeWorld tracks which world is currently displayed ("kitchen" or "home")
+let _activeWorld = "kitchen";
+
+// _getTabOrder() — returns the tab order array for the currently active world
+function _getTabOrder() {
+  return _activeWorld === "kitchen" ? KITCHEN_TABS : HOME_TABS;
+}
+
+// Legacy TAB_ORDER reference — kept for backward compatibility with any code
+// that references it. Points to the Kitchen tabs by default.
+// PHASE 2: remove this once all references are updated.
+const TAB_ORDER = KITCHEN_TABS;
+
+// Nav item ID prefix for each world — maps tab name to its nav item element ID
+// e.g. "k-overview" → "knav-overview", "h-todos" → "hnav-todos"
+function _navItemId(tabName) {
+  // Strip the world prefix ("k-" or "h-") and prepend the nav prefix
+  const prefix = tabName.startsWith("k-") ? "knav-" : "hnav-";
+  return prefix + tabName.substring(2);
+}
 
 // _showTabError(tabName) — displays a friendly error state inside a tab's screen
 // element when its render function throws. Prevents "A problem repeatedly occurred"
@@ -141,8 +169,7 @@ const TAB_ORDER = ["home", "inventory", "recipes", "shopping", "insights", "chat
 function _showTabError(tabName) {
   const screen = g("screen-" + tabName);
   if (!screen) return;
-  // Find the scrollable body area inside the screen, or use the screen itself
-  const body = screen.querySelector(".hbody, .ibody, .rbody, .shbody") || screen;
+  const body = screen.querySelector(".hbody, .ibody, .rbody, .shbody, .placeholder-screen") || screen;
   body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 32px;text-align:center;gap:16px">
     <div style="font-size:2.5rem;opacity:.5">⚠️</div>
     <div style="font-size:.95rem;font-weight:600;color:var(--tx)">Something went wrong</div>
@@ -158,8 +185,10 @@ let _transitionTimer = null;
 
 // _currentTab() — returns the currently active tab name by checking which screen
 // has the .active class, or null if no screen is active yet (initial boot).
+// Searches both Kitchen and Home world tabs.
 function _currentTab() {
-  for (const t of TAB_ORDER) {
+  const allTabs = [...KITCHEN_TABS, ...HOME_TABS];
+  for (const t of allTabs) {
     if (g("screen-" + t)?.classList.contains("active")) return t;
   }
   return null;
@@ -172,50 +201,39 @@ function _snapAllScreens() {
     s.classList.add("no-transition");
     s.classList.remove("active", "slide-left");
   });
-  // Force reflow so the no-transition takes effect before re-enabling
   void document.body.offsetHeight;
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("no-transition"));
 }
 
 // showScreen(n) — switch to the named screen with a directional slide transition.
-// Determines slide direction from TAB_ORDER index: navigating right = outgoing slides left,
-// navigating left = incoming slides in from the left.
-// On first call (no screen active yet), skip the transition and snap the target visible.
+// Determines slide direction from the active world's tab order index.
+// On first call (no screen active yet), skip the transition and snap visible.
 window.showScreen = function(n) {
   const cur = _currentTab();
 
-  // Avoid re-entering the same tab (only when a tab is actually active)
+  // Avoid re-entering the same tab
   if (cur === n) return;
 
+  // Determine which world this tab belongs to
+  const tabOrder = KITCHEN_TABS.includes(n) ? KITCHEN_TABS : HOME_TABS;
+
   // ── First-load fast path ──
-  // On initial boot, no screen has .active yet (_currentTab() returns null).
-  // Snap the target screen visible instantly — no slide transition needed.
-  // This fixes the blank Home tab bug where the early-exit guard above would
-  // skip activation because _currentTab() used to fall back to "home".
+  // On initial boot, no screen has .active yet. Snap instantly — no transition.
   if (cur === null) {
     console.log("[showScreen] First load — snapping", n, "visible (no transition)");
     const target = g("screen-" + n);
     if (target) {
       target.classList.add("no-transition", "active");
-      void target.offsetHeight; // force reflow so no-transition takes effect
+      void target.offsetHeight;
       target.classList.remove("no-transition");
     }
-    // Highlight the correct nav item
-    document.querySelectorAll(".ni").forEach(v => v.classList.remove("active"));
-    g("nav-" + n)?.classList.add("active");
-    // Trigger initial render for the target screen — wrapped in try/catch so a
-    // crash in one tab's render doesn't take down the entire app (error boundary)
-    try {
-      if (n === "home") { window._shouldAnimateCounters = true; renderHome(); }
-      if (n === "inventory") renderInv();
-      if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
-      if (n === "shopping") renderShop();
-      if (n === "insights") renderInsights();
-    } catch (err) {
-      console.error(`[showScreen] Render error on first load of "${n}":`, err);
-      _showTabError(n);
-    }
-    // Update FAB for the initial tab (shows contextual label on first load)
+    // Highlight the correct nav item in the active world's bottom nav
+    _highlightNavItem(n);
+
+    // PHASE 2: trigger initial render for legacy screens here
+    // For now, placeholder screens don't need rendering.
+
+    // Update FAB for the initial tab
     _updateFAB(n);
     return;
   }
@@ -227,50 +245,45 @@ window.showScreen = function(n) {
     _transitioning = false;
   }
 
-  // Close any open overlays (modals) before switching screens
+  // Close any open overlays before switching
   document.querySelectorAll(".ov.active").forEach(o => o.classList.remove("active"));
 
-  // Stop any active speech recognition from the outgoing tab to prevent orphaned
-  // listeners that accumulate and crash Safari on low-memory devices
+  // Stop any active speech recognition from the outgoing tab
   stopVoice();
   stopInvVoice();
 
   // Determine slide direction from tab order indices
-  const curIdx = TAB_ORDER.indexOf(cur);
-  const nextIdx = TAB_ORDER.indexOf(n);
-  const goingRight = nextIdx > curIdx; // true = new tab is to the right
+  const curIdx = tabOrder.indexOf(cur);
+  const nextIdx = tabOrder.indexOf(n);
+  // If switching worlds, default to sliding right
+  const goingRight = curIdx === -1 ? true : nextIdx > curIdx;
 
   const outgoing = g("screen-" + cur);
   const incoming = g("screen-" + n);
 
-  // Deactivate all nav items, then highlight the target
-  document.querySelectorAll(".ni").forEach(v => v.classList.remove("active"));
-  g("nav-" + n)?.classList.add("active");
+  // Highlight the correct nav item
+  _highlightNavItem(n);
 
   // Mark transition in progress
   _transitioning = true;
 
   if (goingRight) {
-    // Outgoing slides to the left, incoming slides in from the right (default position)
+    // Outgoing slides left, incoming slides in from right
     if (outgoing) {
       outgoing.classList.remove("active");
       outgoing.classList.add("slide-left");
     }
     if (incoming) {
-      // Incoming is already at translateX(100%) by default — just add .active
       incoming.classList.remove("slide-left");
       incoming.classList.add("active");
     }
   } else {
-    // Outgoing slides to the right (remove active, returns to translateX(100%))
-    // Incoming starts from the left and slides to center
+    // Incoming from left, outgoing exits right
     if (incoming) {
-      // Temporarily disable transition, position incoming off-screen left
       incoming.classList.add("no-transition", "slide-left");
       incoming.classList.remove("active");
-      void incoming.offsetHeight; // force reflow
+      void incoming.offsetHeight;
       incoming.classList.remove("no-transition");
-      // Now animate it to center by adding active and removing slide-left
       incoming.classList.remove("slide-left");
       incoming.classList.add("active");
     }
@@ -279,7 +292,7 @@ window.showScreen = function(n) {
     }
   }
 
-  // Clear slide-left from non-active screens after transition completes
+  // Clear slide-left after transition completes
   _transitionTimer = setTimeout(() => {
     _transitioning = false;
     document.querySelectorAll(".screen:not(.active)").forEach(s => s.classList.remove("slide-left"));
@@ -290,73 +303,94 @@ window.showScreen = function(n) {
   resetShopStagger();
   resetRecipeStagger();
 
-  // Hide recipe search FAB when navigating away from Recipes tab
-  if (cur === "recipes" && n !== "recipes") hideRecSearchFab();
+  // PHASE 2: trigger renders for legacy screens here
+  // For now, placeholder screens don't need rendering.
 
-  // Re-render the target screen's content so data is fresh on each visit.
-  // Wrapped in try/catch error boundary — a crash in one tab's render must not
-  // freeze or crash the entire app. Shows a friendly error state instead.
-  try {
-    if (n === "home") { window._shouldAnimateCounters = true; renderHome(); }
-    if (n === "inventory") renderInv();
-    if (n === "recipes") { if (state.rt === "community") loadCommunity(); else renderRecs(); }
-    if (n === "shopping") renderShop();
-    if (n === "insights") renderInsights();
-  } catch (err) {
-    console.error(`[showScreen] Render error on "${n}":`, err);
-    _showTabError(n);
+  // Update FAB for the new tab
+  _updateFAB(n);
+};
+
+// _highlightNavItem(tabName) — deactivates all nav items in the active world's
+// bottom nav, then highlights the item matching tabName.
+function _highlightNavItem(tabName) {
+  // Determine which nav bar to update
+  const navId = tabName.startsWith("k-") ? "nav-kitchen" : "nav-home-world";
+  const navEl = g(navId);
+  if (!navEl) return;
+  // Deactivate all items in this nav bar
+  navEl.querySelectorAll(".wn-item").forEach(item => item.classList.remove("active"));
+  // Activate the matching item
+  const targetId = _navItemId(tabName);
+  g(targetId)?.classList.add("active");
+}
+
+// switchWorld(world) — toggles between "kitchen" and "home" worlds.
+// Updates the world switcher buttons, swaps bottom nav bars, and navigates
+// to the first tab of the target world (or the last-visited tab if tracked).
+window.switchWorld = function(world) {
+  if (world === _activeWorld) return;
+  _activeWorld = world;
+
+  // Update world switcher button states
+  const kitchenBtn = g("ws-kitchen");
+  const homeBtn = g("ws-home");
+  if (world === "kitchen") {
+    kitchenBtn?.classList.add("ws-active");
+    homeBtn?.classList.remove("ws-active");
+  } else {
+    homeBtn?.classList.add("ws-active");
+    kitchenBtn?.classList.remove("ws-active");
   }
 
-  // Update context-aware FAB icon/action for the new tab
-  _updateFAB(n);
+  // Swap bottom nav bars — show the active world's nav, hide the other
+  const kitchenNav = g("nav-kitchen");
+  const homeNav = g("nav-home-world");
+  if (world === "kitchen") {
+    if (kitchenNav) kitchenNav.style.display = "flex";
+    if (homeNav) homeNav.style.display = "none";
+  } else {
+    if (kitchenNav) kitchenNav.style.display = "none";
+    if (homeNav) homeNav.style.display = "flex";
+  }
+
+  // Navigate to the first tab of the target world
+  const firstTab = world === "kitchen" ? KITCHEN_TABS[0] : HOME_TABS[0];
+  window.showScreen(firstTab);
 };
 
 // ── CONTEXT-AWARE FLOATING ACTION BUTTON ─────────────────────────────────────
 // The FAB shows a "+" icon per tab. No text label — just a circle that starts
-// large and fully opaque, then shrinks + fades to 85% transparent after 0.5 seconds.
-// Tapping it at any size/opacity triggers the correct add action for the tab.
+// large and fully opaque, then shrinks + fades to 85% transparent after 0.5s.
+// Phase 1: FAB is hidden on all placeholder tabs. Phase 2 will re-enable it.
 const FAB_CONFIG = {
-  home:      { action: "openHomeFabSheet()",   ariaLabel: "Add item" },
-  inventory: { action: "openInvAddSheet()",    ariaLabel: "Add supply" },
-  recipes:   { action: "showOv('arec')",       ariaLabel: "Add recipe" },
-  shopping:  { action: "openShopAddSheet()",   ariaLabel: "Add to list" },
-  insights:  null, // No FAB on stats tab
-  chat:      null  // No FAB on chat tab
+  // PHASE 2: re-wire FAB actions for new tab structure
+  // "k-overview":  { action: "openHomeFabSheet()",  ariaLabel: "Add item" },
+  // "k-pantry":    { action: "openInvAddSheet()",   ariaLabel: "Add supply" },
+  // "k-shopping":  { action: "openShopAddSheet()",  ariaLabel: "Add to list" },
+  // "k-supplies":  { action: "openInvAddSheet()",   ariaLabel: "Add supply" },
 };
 
-// _fabSettleTimer — tracks the 0.5-second timeout before FAB shrinks + fades.
-// Cleared on each tab switch so the timer resets when navigating.
+// _fabSettleTimer — tracks the 0.5-second timeout before FAB shrinks + fades
 let _fabSettleTimer = null;
 
-// _updateFAB(tab) — shows/hides the FAB and sets its onclick for the given tab.
-// Resets the FAB to full size + full opacity instantly (no grow animation),
-// then adds "settled" class after 0.5 seconds to trigger a 2s scale-down + fade
-// via transform:scale(0.75) and opacity:0.25 with cubic-bezier easing.
+// _updateFAB(tab) — shows/hides the FAB and sets its onclick for the given tab
 function _updateFAB(tab) {
   const fab = g("fab-btn");
   if (!fab) return;
   const cfg = FAB_CONFIG[tab];
   if (!cfg) {
-    // Hide FAB for tabs without a primary action (e.g. Stats, Chat)
+    // Hide FAB for tabs without a configured action (all Phase 1 placeholder tabs)
     fab.classList.add("hidden");
     fab.classList.remove("settled");
     clearTimeout(_fabSettleTimer);
   } else {
-    // Instant reset: disable transition → snap to full size → force reflow → restore CSS.
-    // This prevents any grow-back animation when switching tabs.
     fab.style.transition = "none";
     fab.classList.remove("hidden", "settled");
-    fab.offsetHeight; // force reflow so the browser applies the non-transitioned state
+    fab.offsetHeight;
     fab.style.transition = "";
-
-    // Show only the "+" icon — no label text
     fab.innerHTML = `<span class="fab-icon">＋</span>`;
     fab.setAttribute("onclick", cfg.action);
     fab.setAttribute("aria-label", cfg.ariaLabel);
-
-    // After 0.5 seconds idle, add "settled" class to trigger the 2s shrink + fade.
-    // The transition is defined on .fab.settled in CSS, so it animates on add
-    // and snaps back instantly on remove (no transition on base .fab for these props).
     clearTimeout(_fabSettleTimer);
     _fabSettleTimer = setTimeout(() => {
       fab.classList.add("settled");
@@ -365,22 +399,19 @@ function _updateFAB(tab) {
 }
 
 // ── SWIPE-BETWEEN-TABS GESTURE ───────────────────────────────────────────────
-// Horizontal swipe on the main app area navigates between adjacent tabs.
-// Uses touch events with a 50px threshold and 30deg max angle to prevent
-// false triggers during vertical scrolling or diagonal swipes.
+// Horizontal swipe on the main app area navigates between adjacent tabs
+// within the current world. Uses touch events with 50px threshold and
+// 30deg max angle to prevent false triggers during vertical scrolling.
 function _initTabSwipe() {
   let startX = 0, startY = 0, tracking = false;
-  const THRESHOLD = 50;  // minimum swipe distance in px
-  const MAX_ANGLE = 30;  // max vertical deviation in degrees
+  const THRESHOLD = 50;
+  const MAX_ANGLE = 30;
 
   const appEl = g("APP");
   if (!appEl) return;
 
   appEl.addEventListener("touchstart", (e) => {
-    // Don't intercept swipes inside scrollable sub-containers (deal search, etc.)
     if (e.target.closest(".bsheet, .ov, .modal, .chmsgs")) return;
-    // Don't intercept swipes on list item rows — those need swipe-to-delete.
-    // Only allow tab swipe from safe non-interactive areas (headers, empty space, dividers).
     if (e.target.closest(".swipe-wrap, .shit, .iit, .exi")) return;
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
@@ -395,17 +426,17 @@ function _initTabSwipe() {
     const absDx = Math.abs(dx);
     const absDy = Math.abs(dy);
 
-    // Require horizontal dominance and minimum distance
     if (absDx < THRESHOLD || absDy > absDx * Math.tan(MAX_ANGLE * Math.PI / 180)) return;
 
+    // Swipe within the current world's tab order
+    const tabs = _getTabOrder();
     const cur = _currentTab();
-    const idx = TAB_ORDER.indexOf(cur);
+    const idx = tabs.indexOf(cur);
     if (idx === -1) return;
 
-    // Swipe left → next tab, swipe right → previous tab
     const nextIdx = dx < 0 ? idx + 1 : idx - 1;
-    if (nextIdx >= 0 && nextIdx < TAB_ORDER.length) {
-      window.showScreen(TAB_ORDER[nextIdx]);
+    if (nextIdx >= 0 && nextIdx < tabs.length) {
+      window.showScreen(tabs[nextIdx]);
     }
   }, { passive: true });
 }
@@ -1131,10 +1162,11 @@ window._appStart = async function(code) {
   g("LS").style.display = "none";
   g("APP").style.display = "flex";
 
-  // Navigate to the home screen as the default landing page
-  console.log("[_appStart] Calling showScreen('home'), current active screen:", _currentTab());
-  window.showScreen("home");
-  console.log("[_appStart] After showScreen('home'), active screen:", _currentTab());
+  // Navigate to the Kitchen Overview as the default landing page (Phase 1)
+  // PHASE 2: this will trigger renderHome() or equivalent for the Kitchen Overview tab
+  console.log("[_appStart] Calling showScreen('k-overview'), current active screen:", _currentTab());
+  window.showScreen("k-overview");
+  console.log("[_appStart] After showScreen('k-overview'), active screen:", _currentTab());
 
   // Show the "syncing" indicator in the UI (e.g. a spinner or status dot)
   ss("syncing");
