@@ -121,7 +121,9 @@
 .ov,.modal-inner{transition:opacity .15s}
 /* Page background uses the deep gradient for a premium, non-flat feel.
    Falls back to --bg solid color for any gaps. */
-html,body{height:100%;background:var(--page-grad);background-color:var(--bg);font-family:"DM Sans",sans-serif;color:var(--tx);overflow:hidden}
+/* padding-bottom accounts for the iOS safe area (home indicator) at the body level */
+html,body{height:100%;background:var(--page-grad);background-color:var(--bg);font-family:"DM Sans",sans-serif;color:var(--tx);overflow:hidden;
+  padding-bottom:env(safe-area-inset-bottom,0px)}
 
 /* ── AUTH SCREEN ── */
 /* Auth screen background — warm cream gradient with subtle green radial glow at top */
@@ -213,9 +215,10 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 /* ── WORLD BOTTOM NAVS ──
    Each world has its own bottom nav bar. Only one is visible at a time.
    Clean white bar with subtle top border, no floating pill. */
+/* Increased bottom padding so the nav clears the iPhone home indicator */
 .world-nav{position:fixed;bottom:0;left:0;right:0;
   height:calc(60px + env(safe-area-inset-bottom,0px));
-  padding-bottom:env(safe-area-inset-bottom,0px);
+  padding:10px 8px env(safe-area-inset-bottom,24px);
   background:#FFFFFF;border-top:1px solid var(--b1);
   display:flex;align-items:stretch;z-index:150}
 /* Individual nav item — icon stacked above label */
@@ -1502,11 +1505,12 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
    Nav pill is now 58px tall, 20px from bottom — needs ~50px extra clearance. */
 /* Extra bottom padding so the last item in every scrollable list clears the FAB + nav bar.
    Nav pill = 58px, FAB = 48-64px above it, plus safe area. Total clearance ~140px. */
-.hbody{padding:4px 20px calc(58px + var(--safe) + 80px)}
-.ibody{padding:18px 20px calc(58px + var(--safe) + 80px)}
-/* Shopping body needs extra bottom padding to clear FAB + nav bar so last items aren't clipped */
-.shbody{padding:18px 20px calc(58px + var(--safe) + 80px)}
-.rbody{padding:16px 20px calc(58px + var(--safe) + 80px)}
+/* Bottom padding clears the fixed bottom nav + iOS home indicator */
+.hbody{padding:4px 20px calc(80px + env(safe-area-inset-bottom,0px))}
+.ibody{padding:18px 20px calc(80px + env(safe-area-inset-bottom,0px))}
+/* Shopping body — same bottom clearance for nav + safe area */
+.shbody{padding:18px 20px calc(80px + env(safe-area-inset-bottom,0px))}
+.rbody{padding:16px 20px calc(80px + env(safe-area-inset-bottom,0px))}
 .ilst{gap:9px}
 .expl{gap:9px}
 /* More space between shopping items */

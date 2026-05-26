@@ -1840,3 +1840,24 @@ Major structural rejuvenation of the Kitchen app. Phase 1 ONLY — no feature lo
 - `src/styles.css` — Full design system replacement, world switcher styles, world nav styles, card components, placeholder styles, old nav commented out, screen positioning updated
 - `src/main.js` — Navigation rewritten for two-world system, boot sequence updated, FAB hidden for Phase 1
 - `CLAUDE_CODE_HANDOFF.md` — This session entry
+
+---
+
+## Session — iOS Safe Area Bottom Nav Fix (May 2026)
+
+### Problem
+Bottom nav (`.world-nav`) was being cut off by the iPhone home indicator. Content could also scroll behind the nav.
+
+### What Changed
+
+**File:** `src/styles.css`
+
+1. **`.world-nav` padding** — Replaced `padding-bottom: env(safe-area-inset-bottom,0px)` with `padding: 10px 8px env(safe-area-inset-bottom,24px)`. The 24px fallback ensures clearance even on devices that don't report a safe area.
+
+2. **`html, body` padding** — Added `padding-bottom: env(safe-area-inset-bottom,0px)` so the body itself accounts for the home indicator at the root level.
+
+3. **Content body padding** — Updated `.hbody`, `.ibody`, `.shbody`, `.rbody` bottom padding from `calc(58px + var(--safe) + 80px)` to `calc(80px + env(safe-area-inset-bottom,0px))` so content doesn't hide behind the nav.
+
+### Files Changed
+- `src/styles.css` — Three safe-area fixes (nav padding, body padding, content clearance)
+- `CLAUDE_CODE_HANDOFF.md` — This session entry
