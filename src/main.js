@@ -142,6 +142,20 @@ document.addEventListener("visibilitychange", () => {
 const KITCHEN_TABS = ["k-overview", "k-pantry", "k-shopping", "k-supplies", "k-deals"];
 const HOME_TABS    = ["h-overview", "h-todos", "h-cleaning", "h-maintain", "h-game"];
 
+// ── TAB-TO-SCREEN MAPPING ──
+// Maps new Phase 1 tab names to the legacy screen element IDs. This lets the
+// new bottom nav tabs activate the original, fully-functional screens without
+// moving any HTML. Tabs not listed here use their own screen (screen-{tabName}).
+// k-pantry and k-supplies both show the full Inventory/Supplies screen.
+// k-shopping shows the Shopping list screen (My List sub-tab active).
+// k-deals shows the Shopping screen (Deals sub-tab active).
+const TAB_SCREEN_MAP = {
+  "k-pantry":   "inventory",
+  "k-shopping": "shopping",
+  "k-supplies": "inventory",
+  "k-deals":    "shopping",
+};
+
 // _activeWorld tracks which world is currently displayed ("kitchen" or "home")
 let _activeWorld = "kitchen";
 
@@ -183,15 +197,14 @@ function _showTabError(tabName) {
 let _transitioning = false;
 let _transitionTimer = null;
 
-// _currentTab() — returns the currently active tab name by checking which screen
-// has the .active class, or null if no screen is active yet (initial boot).
-// Searches both Kitchen and Home world tabs.
+// _currentTabName — tracks which tab is currently active. Null on initial boot.
+// We track this in a variable rather than scanning DOM .active classes because
+// mapped tabs (e.g. k-pantry → screen-inventory) don't activate screen-k-pantry.
+let _currentTabName = null;
+
+// _currentTab() — returns the currently active tab name, or null before first show.
 function _currentTab() {
-  const allTabs = [...KITCHEN_TABS, ...HOME_TABS];
-  for (const t of allTabs) {
-    if (g("screen-" + t)?.classList.contains("active")) return t;
-  }
-  return null;
+  return _currentTabName;
 }
 
 // _snapAllScreens() — immediately snap all screens to their resting positions
@@ -205,8 +218,54 @@ function _snapAllScreens() {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("no-transition"));
 }
 
+// _resolveScreenEl(tabName) — returns the actual DOM screen element for a tab.
+// Uses TAB_SCREEN_MAP to redirect mapped tabs (e.g. "k-pantry" → "screen-inventory").
+// Unmapped tabs use their own screen element (e.g. "k-overview" → "screen-k-overview").
+function _resolveScreenEl(tabName) {
+  const mapped = TAB_SCREEN_MAP[tabName];
+  return g(mapped ? "screen-" + mapped : "screen-" + tabName);
+}
+
+// _onTabEnter(tabName) — called after a tab becomes active. Triggers any
+// rendering or sub-tab switching needed for that tab's content.
+// This is what restores the old feature screens to life within the new nav.
+function _onTabEnter(tabName) {
+  try {
+    switch (tabName) {
+      case "k-pantry":
+      case "k-supplies":
+        // Both Pantry and Supplies show the full Inventory/Supplies screen.
+        // Re-render the list so it reflects latest state data.
+        renderInv();
+        renderAll();
+        break;
+      case "k-shopping":
+        // Show the Shopping screen with "My List" sub-tab active.
+        // setSHT switches the internal tab and re-renders the list.
+        setSHT("list");
+        renderShop();
+        break;
+      case "k-deals":
+        // Show the Shopping screen with "Deals" sub-tab active.
+        // setSHT handles the email gate check and loads deals/coupons.
+        setSHT("deals");
+        break;
+      case "k-overview":
+        // Overview placeholder — render home dashboard data if available
+        break;
+      default:
+        // Home world tabs and other placeholders — no special rendering needed
+        break;
+    }
+  } catch (e) {
+    console.error("[_onTabEnter] Error entering tab", tabName, e);
+    _showTabError(tabName);
+  }
+}
+
 // showScreen(n) — switch to the named screen with a directional slide transition.
 // Determines slide direction from the active world's tab order index.
+// Uses TAB_SCREEN_MAP to resolve mapped tabs to their legacy screen elements.
 // On first call (no screen active yet), skip the transition and snap visible.
 window.showScreen = function(n) {
   const cur = _currentTab();
@@ -217,24 +276,34 @@ window.showScreen = function(n) {
   // Determine which world this tab belongs to
   const tabOrder = KITCHEN_TABS.includes(n) ? KITCHEN_TABS : HOME_TABS;
 
+  // Resolve the actual screen DOM elements via mapping
+  const incoming = _resolveScreenEl(n);
+  const outgoing = cur ? _resolveScreenEl(cur) : null;
+
+  // ── Same-screen transition (e.g. k-pantry ↔ k-supplies both → screen-inventory) ──
+  // When two tabs map to the same screen element, skip the slide animation
+  // and just update nav highlighting + trigger the new tab's enter logic.
+  if (cur !== null && incoming && outgoing && incoming === outgoing) {
+    _currentTabName = n;
+    _highlightNavItem(n);
+    _updateFAB(n);
+    _onTabEnter(n);
+    return;
+  }
+
   // ── First-load fast path ──
   // On initial boot, no screen has .active yet. Snap instantly — no transition.
   if (cur === null) {
     console.log("[showScreen] First load — snapping", n, "visible (no transition)");
-    const target = g("screen-" + n);
-    if (target) {
-      target.classList.add("no-transition", "active");
-      void target.offsetHeight;
-      target.classList.remove("no-transition");
+    if (incoming) {
+      incoming.classList.add("no-transition", "active");
+      void incoming.offsetHeight;
+      incoming.classList.remove("no-transition");
     }
-    // Highlight the correct nav item in the active world's bottom nav
+    _currentTabName = n;
     _highlightNavItem(n);
-
-    // PHASE 2: trigger initial render for legacy screens here
-    // For now, placeholder screens don't need rendering.
-
-    // Update FAB for the initial tab
     _updateFAB(n);
+    _onTabEnter(n);
     return;
   }
 
@@ -258,8 +327,8 @@ window.showScreen = function(n) {
   // If switching worlds, default to sliding right
   const goingRight = curIdx === -1 ? true : nextIdx > curIdx;
 
-  const outgoing = g("screen-" + cur);
-  const incoming = g("screen-" + n);
+  // Update current tab name before animation starts
+  _currentTabName = n;
 
   // Highlight the correct nav item
   _highlightNavItem(n);
@@ -303,8 +372,8 @@ window.showScreen = function(n) {
   resetShopStagger();
   resetRecipeStagger();
 
-  // PHASE 2: trigger renders for legacy screens here
-  // For now, placeholder screens don't need rendering.
+  // Trigger tab-specific rendering (loads data into the legacy screen)
+  _onTabEnter(n);
 
   // Update FAB for the new tab
   _updateFAB(n);
@@ -362,12 +431,13 @@ window.switchWorld = function(world) {
 // The FAB shows a "+" icon per tab. No text label — just a circle that starts
 // large and fully opaque, then shrinks + fades to 85% transparent after 0.5s.
 // Phase 1: FAB is hidden on all placeholder tabs. Phase 2 will re-enable it.
+// FAB actions per tab — shows a "+" button with the configured onclick.
+// Tabs without an entry hide the FAB. Deals tab has no FAB (browse-only).
 const FAB_CONFIG = {
-  // PHASE 2: re-wire FAB actions for new tab structure
-  // "k-overview":  { action: "openHomeFabSheet()",  ariaLabel: "Add item" },
-  // "k-pantry":    { action: "openInvAddSheet()",   ariaLabel: "Add supply" },
-  // "k-shopping":  { action: "openShopAddSheet()",  ariaLabel: "Add to list" },
-  // "k-supplies":  { action: "openInvAddSheet()",   ariaLabel: "Add supply" },
+  "k-overview":  { action: "openHomeFabSheet()",  ariaLabel: "Add item" },
+  "k-pantry":    { action: "openInvAddSheet()",   ariaLabel: "Add supply" },
+  "k-shopping":  { action: "openShopAddSheet()",  ariaLabel: "Add to list" },
+  "k-supplies":  { action: "openInvAddSheet()",   ariaLabel: "Add supply" },
 };
 
 // _fabSettleTimer — tracks the 0.5-second timeout before FAB shrinks + fades
@@ -1501,13 +1571,20 @@ window.doSignOut = async function() {
   tapZone.setAttribute("aria-hidden", "true");
   document.body.appendChild(tapZone);
 
-  // Map of tab names to their scrollable container selectors
+  // Map of tab names to their scrollable container selectors.
+  // Includes both legacy names and new Phase 1 tab names so scroll-to-top
+  // works regardless of which navigation system activates the screen.
   const scrollSelectors = {
     home: ".hbody",
     inventory: ".ibody",
     recipes: ".rbody",
     shopping: "#sh-list-body",
-    chat: ".chmsgs"
+    chat: ".chmsgs",
+    // New tab names map to the same selectors via _resolveScreenEl
+    "k-pantry": ".ibody",
+    "k-supplies": ".ibody",
+    "k-shopping": "#sh-list-body",
+    "k-deals": "#sh-deals-body",
   };
 
   tapZone.addEventListener("click", () => {
@@ -1518,7 +1595,9 @@ window.doSignOut = async function() {
     const tab = _currentTab();
     if (!tab) return;
 
-    const screen = g("screen-" + tab);
+    // Resolve mapped screen (e.g. k-pantry → screen-inventory) via the same
+    // mapping used by showScreen, so scroll-to-top works on legacy screens.
+    const screen = _resolveScreenEl(tab);
     if (!screen) return;
 
     // Use the known selector for this tab, or fall back to the screen itself

@@ -208,16 +208,30 @@ npm run dev:full
 
 ## Tabs & Navigation
 
-Bottom navigation (left to right):
+### Two-World System (Phase 1 + Kitchen Restoration)
+World switcher pill at top toggles between Kitchen and Home worlds. Each world has its own 5-tab bottom nav.
 
-| Icon | Tab | Key screens |
+**Kitchen World** (default):
+
+| Icon | Tab | Screen shown | Notes |
+|---|---|---|---|
+| 🏠 | Overview | `screen-k-overview` (placeholder) | Kitchen dashboard — not yet wired |
+| 🥫 | Pantry | `screen-inventory` (via TAB_SCREEN_MAP) | Full Supplies screen with All/Fridge/Freezer/Pantry/Household tabs |
+| 🛒 | Shopping | `screen-shopping` (via TAB_SCREEN_MAP) | Shopping list (My List sub-tab active) |
+| 📦 | Supplies | `screen-inventory` (via TAB_SCREEN_MAP) | Same as Pantry for now — Phase 2 will differentiate |
+| 🏷️ | Deals | `screen-shopping` (via TAB_SCREEN_MAP) | Shopping screen (Deals sub-tab active) |
+
+**Home World** (all placeholders):
+
+| Icon | Tab | Notes |
 |---|---|---|
-| 🏠 | HOME | Greeting, Universal Add, Tonight's Dinner, This Week calendar, What to Cook Tonight, Running Low, Recent Activity, Your Supplies summary |
-| 🧺 | SUPPLIES | Sub-tabs: All / Fridge / Freezer / Pantry / Household + Shopping Prep |
-| 📖 | RECIPES | My Recipes + Community tab |
-| 🛒 | SHOP | Shopping list + Deals tab |
-| 📊 | STATS | Insights and logs |
-| ✨ | CLAUDE | AI chat assistant |
+| 📊 | Overview | Home dashboard — not yet built |
+| ✅ | To-Dos | Household task list |
+| 🧹 | Cleaning | Cleaning schedules |
+| 🔧 | Maintain | Home maintenance |
+| 🎮 | Game | Household gamification |
+
+**Not currently accessible from nav:** Recipes, Chat (Claude), Insights. Legacy screens preserved in HTML.
 
 ---
 
@@ -1822,18 +1836,14 @@ Major structural rejuvenation of the Kitchen app. Phase 1 ONLY — no feature lo
 - `src/state.js`, `src/auth.js`, `src/helpers.js`, `src/storage.js`
 - Data structures, localStorage keys, Firestore paths
 
-### What Phase 2 Needs To Do
-1. **Wire Kitchen screens to existing features:**
-   - `k-overview` → render home dashboard (from `renderHome()`)
-   - `k-pantry` → new pantry feature or subset of inventory
-   - `k-shopping` → render shopping list (from `renderShop()`)
-   - `k-supplies` → render inventory/supplies (from `renderInv()`)
-   - `k-deals` → render deals tab (from shopping deals)
-2. **Move Recipes and Chat** — Decide where Recipes, Chat (Claude), and Insights fit in the new world structure.
-3. **Re-enable FAB** — Uncomment and update `FAB_CONFIG` entries for the new tab names.
-4. **Re-enable renders in `showScreen()`** — Add `renderHome()`, `renderInv()`, `renderShop()`, etc. calls when navigating to the corresponding new tab names.
-5. **Remove legacy screens** — Once all features are re-wired, delete the old `screen-home`, `screen-inventory`, etc. HTML and uncomment the old nav styles or remove them.
-6. **Build Home world features** — To-Dos, Cleaning, Maintain, Game are all new features to be built.
+### What Phase 2 Needs To Do (Updated)
+1. ~~**Wire Kitchen screens to existing features**~~ — **DONE** (Session: Kitchen Feature Restoration). Pantry, Shopping, Supplies, and Deals are now wired via `TAB_SCREEN_MAP` in main.js.
+2. **Wire `k-overview`** — Build a Kitchen Overview dashboard (currently placeholder). Could render home dashboard data or a new dedicated view.
+3. **Move Recipes and Chat** — Decide where Recipes, Chat (Claude), and Insights fit in the new world structure. Currently not accessible from any tab.
+4. ~~**Re-enable FAB**~~ — **DONE**. FAB is active on k-overview, k-pantry, k-shopping, k-supplies.
+5. **Differentiate Pantry vs Supplies** — Currently both k-pantry and k-supplies show the same full Inventory screen. Phase 2 could split them (e.g. Pantry = food items, Supplies = household items).
+6. **Remove legacy placeholder screens** — Once all features are re-wired with dedicated screens, delete the unused `screen-k-pantry`, `screen-k-shopping`, etc. placeholder elements.
+7. **Build Home world features** — To-Dos, Cleaning, Maintain, Game are all new features to be built.
 
 ### Files Changed
 - `index.html` — Google Fonts update, world switcher, 10 placeholder screens, 2 new navs, old nav commented out
@@ -1860,4 +1870,85 @@ Bottom nav (`.world-nav`) was being cut off by the iPhone home indicator. Conten
 
 ### Files Changed
 - `src/styles.css` — Three safe-area fixes (nav padding, body padding, content clearance)
+- `CLAUDE_CODE_HANDOFF.md` — This session entry
+
+---
+
+## Session — Kitchen Feature Restoration + Bottom Nav Safe Area Fix (May 2026)
+
+### Problems
+1. **Bottom nav still cut off on iOS:** The previous safe-area fix wasn't aggressive enough. The home indicator still covered part of the bottom nav on some iPhones.
+2. **Kitchen features missing:** Phase 1 replaced all Kitchen tab screens with placeholders. The existing Pantry (Inventory/Supplies), Shopping, and Deals functionality — including all Firebase CRUD, voice input, barcode scanning, category pickers, swipe gestures, detail sheets, Shopping Prep, deal search, ShopRite coupons — was completely inert because the new navigation never activated the legacy screens.
+
+### What Changed
+
+#### 1. Bottom Nav CSS Fix (`src/styles.css`)
+- **`.world-nav` padding** — Changed from `padding: 10px 8px env(safe-area-inset-bottom,24px)` to `padding: 10px 8px max(20px, env(safe-area-inset-bottom, 0px))`. The `max()` function ensures at least 20px of bottom padding on ALL devices, while still using the full safe-area inset when it's larger (e.g. iPhones with home indicator).
+- **`min-height: 60px`** added so the nav bar has a guaranteed minimum size that keeps icons and labels fully visible above the home indicator.
+- Removed the old `height: calc(60px + env(...))` in favor of `min-height` + padding, which is more robust and lets the nav grow as needed.
+
+#### 2. Kitchen Feature Restoration (`src/main.js`)
+
+**Approach: Tab-to-Screen Mapping**
+Rather than moving HTML or duplicating screens, the restoration uses a mapping layer that redirects the new Phase 1 tab names to the existing legacy screen elements:
+
+```
+TAB_SCREEN_MAP = {
+  "k-pantry"   → "screen-inventory"   (full Supplies screen)
+  "k-shopping" → "screen-shopping"    (Shopping with My List sub-tab)
+  "k-supplies" → "screen-inventory"   (same as Pantry for now)
+  "k-deals"    → "screen-shopping"    (Shopping with Deals sub-tab)
+}
+```
+
+**Key functions added:**
+- **`_resolveScreenEl(tabName)`** — Resolves a tab name to its actual DOM screen element via `TAB_SCREEN_MAP`. Unmapped tabs (like `k-overview`, all Home world tabs) use their own `screen-{tabName}` element.
+- **`_onTabEnter(tabName)`** — Called after a tab becomes active. Triggers rendering and sub-tab switching:
+  - `k-pantry` / `k-supplies`: calls `renderInv()` + `renderAll()` to refresh the inventory list
+  - `k-shopping`: calls `setSHT("list")` + `renderShop()` to show the My List sub-tab
+  - `k-deals`: calls `setSHT("deals")` which handles email gate, loads coupons and weekly deals
+
+**`showScreen()` changes:**
+- Uses `_resolveScreenEl()` to get the actual screen elements for both incoming and outgoing tabs
+- **Same-screen transition handling:** When two tabs map to the same element (k-pantry ↔ k-supplies, k-shopping ↔ k-deals), skips the slide animation and just updates nav highlighting + triggers `_onTabEnter()`
+- Tab tracking switched from DOM scanning to variable-based (`_currentTabName`) since mapped tabs don't activate their own `screen-k-*` elements
+
+**`_currentTab()` rewrite:**
+- Old behavior: scanned all screen elements for `.active` class
+- New behavior: returns `_currentTabName` variable, set by `showScreen()` on every navigation
+- Necessary because mapped tabs activate legacy screen elements (e.g. `screen-inventory`), not their own placeholder elements
+
+**FAB re-enabled:**
+- `k-overview`: opens Home FAB sheet (Add to Supplies / Add to Shopping)
+- `k-pantry` / `k-supplies`: opens Inventory add sheet
+- `k-shopping`: opens Shopping add sheet
+- `k-deals`: no FAB (browse-only)
+
+**Scroll-to-top fix:**
+- Status bar tap scroll-to-top now uses `_resolveScreenEl()` to find the correct scrollable container
+- Added scroll selectors for new tab names: `k-pantry`/`k-supplies` → `.ibody`, `k-shopping` → `#sh-list-body`, `k-deals` → `#sh-deals-body`
+
+### How It Works End-to-End
+1. User taps "Pantry" in the Kitchen bottom nav → `showScreen("k-pantry")` is called
+2. `_resolveScreenEl("k-pantry")` returns `screen-inventory` via `TAB_SCREEN_MAP`
+3. The current screen (e.g. `screen-k-overview`) gets `.active` removed with slide-left animation
+4. `screen-inventory` gets `.active` added — the full Supplies UI appears with all its headers, tabs, search bar, Shopping Prep button, and item list
+5. `_onTabEnter("k-pantry")` calls `renderInv()` + `renderAll()` to refresh with latest data
+6. FAB appears with "+" to open the add-supply sheet
+7. All existing functionality works: swipe gestures, detail sheets, voice input, category pickers, barcode scanning, etc.
+
+### What Still Uses Placeholders
+- `k-overview` — Kitchen overview dashboard (placeholder, no features yet)
+- All Home world tabs (`h-overview`, `h-todos`, `h-cleaning`, `h-maintain`, `h-game`) — placeholder screens
+
+### Architecture Note
+The legacy screen elements (`screen-inventory`, `screen-shopping`, `screen-recipes`, `screen-home`, etc.) remain in `index.html` at their original positions. They are now "shared" screen elements that the new navigation activates when the user navigates to mapped Kitchen tabs. The placeholder `screen-k-*` elements remain in the HTML but are never activated for mapped tabs. This approach:
+- Zero HTML changes required
+- All element IDs stay the same (no JS module updates needed)
+- All existing event handlers, onclick attributes, and DOM lookups work unchanged
+- Phase 2 can replace the mapping with real dedicated screens when ready
+
+### Files Changed
+- `src/styles.css` — Bottom nav safe area fix (min-height + max() padding)
+- `src/main.js` — Tab-to-screen mapping, _resolveScreenEl, _onTabEnter, showScreen rewrite, _currentTab variable, FAB config, scroll-to-top fix
 - `CLAUDE_CODE_HANDOFF.md` — This session entry

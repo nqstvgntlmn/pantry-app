@@ -215,10 +215,11 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 /* ── WORLD BOTTOM NAVS ──
    Each world has its own bottom nav bar. Only one is visible at a time.
    Clean white bar with subtle top border, no floating pill. */
-/* Increased bottom padding so the nav clears the iPhone home indicator */
+/* Bottom nav — fixed to the bottom with generous safe-area padding so the
+   nav clears the iPhone home indicator. min-height keeps it fully visible. */
 .world-nav{position:fixed;bottom:0;left:0;right:0;
-  height:calc(60px + env(safe-area-inset-bottom,0px));
-  padding:10px 8px env(safe-area-inset-bottom,24px);
+  min-height:60px;
+  padding:10px 8px max(20px, env(safe-area-inset-bottom, 0px));
   background:#FFFFFF;border-top:1px solid var(--b1);
   display:flex;align-items:stretch;z-index:150}
 /* Individual nav item — icon stacked above label */
