@@ -2125,3 +2125,16 @@ Added "CSS/JS Fix Protocol" block at top of Absolute Rules section with 5 mandat
 - `src/styles.css` — `.ov` inset fix, `.ws-btn` tap zone properties, legacy `#NAV` shadow cleanup
 - `src/main.js` — `--wsh` CSS custom property measurement in `_bootWithHousehold()`
 - `CLAUDE_CODE_HANDOFF.md` — New fix protocol rules + this changelog entry
+
+---
+
+## Session 7 — Home Overview Header Background Fix (June 2026)
+
+### What changed
+- **`src/styles.css` line 2057:** Changed `.ho-header` background from `var(--sf)` (which resolves to `var(--cream-dark)` / `#EDE6D6`) to `var(--cream)` so the Home Overview greeting/header area matches the page background instead of having a darker surface color.
+
+### Why
+- The Home Overview header section (greeting + date + settings gear) had a visually darker background that looked unintentional against the cream page background.
+
+### Files Changed
+- `src/styles.css` — `.ho-header` background: `var(--sf)` → `var(--cream)`
