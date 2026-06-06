@@ -23,6 +23,13 @@
 
 ## Absolute Rules — NEVER Violate
 
+**CSS/JS Fix Protocol (mandatory for every fix):**
+- **VERIFY BEFORE EDITING:** Before any CSS or JS fix, output the exact current lines you are about to change with line numbers. Do not edit until confirmed.
+- **NEVER fix CSS by adding new rules** — always find and edit the EXISTING rule causing the problem.
+- **NEVER repeat a previously attempted fix** without first reading the file to confirm the old attempt is present or absent.
+- **After every change, grep the modified file** to confirm the old value is gone and the new value is present. Show the grep output.
+- **If a fix was attempted in a prior session and did not work,** treat the file as unknown — read it fresh before doing anything.
+
 1. **NEVER modify `api/sync-reminders.js` or `api/completed-items.js`** under any circumstances, unless a change being made directly impacts these files and Bora has explicitly approved it.
 2. **ALWAYS add clear, utilitarian comments** to every function and every major code block — this is non-negotiable.
 3. **Always double-check with Bora** before making changes that affect both Shopping and Supplies tabs.
@@ -2091,3 +2098,30 @@ Home world data is loaded **lazily** — only fetched from Firestore when the us
 - `src/styles.css` — `.world-nav` border + box-shadow, `.hhdr`/`.shdr` gradient removal, `.ws-btn` tap target sizing, `.ws-track` touch-action
 - `src/main.js` — `switchWorld()` desync-proof toggle logic
 - `CLAUDE_CODE_HANDOFF.md` — This entry
+
+---
+
+## Session: June 6, 2026 — CSS/JS Fix Round 2
+
+### Problems Fixed
+
+1. **Bottom nav shadow (commented-out legacy)** — The old `#NAV` rule (commented out since Phase 1) still had `box-shadow:0 8px 40px ...`. Replaced with `box-shadow: none` inside the comment block to prevent confusion if it's ever uncommented.
+
+2. **World switcher tap zones (CSS refinement)** — `.ws-btn` was missing `display:flex`, `align-items:center`, `justify-content:center`, `user-select:none`, and padding was `10px 20px` instead of `10px 24px`. Updated the existing rule with all required properties.
+
+3. **World switcher touch interception** — `.ov` (overlay screens) used `inset:0` which covered the full viewport including the world switcher area. On iOS, even though `#world-switcher` has `z-index:160` vs `.ov` at `z-index:100`, the overlay's touch target could intercept taps. Fixed by replacing `inset:0` with explicit `top:var(--wsh, 64px);left:0;right:0` so overlays start below the world switcher. `--wsh` is measured from the actual DOM element in `_bootWithHousehold()` after the app becomes visible.
+
+4. **switchWorld function** — Verified correct and complete. No changes needed. Handles button highlighting, nav bar swapping, and tab navigation without silent failures.
+
+### Rules Added
+Added "CSS/JS Fix Protocol" block at top of Absolute Rules section with 5 mandatory rules:
+- Verify before editing (show current lines with line numbers)
+- Never fix CSS by adding new rules — edit existing ones
+- Never repeat a prior fix without reading the file first
+- Grep after every change to confirm old value gone / new value present
+- Treat files as unknown if a prior session's fix didn't work
+
+### Files Changed
+- `src/styles.css` — `.ov` inset fix, `.ws-btn` tap zone properties, legacy `#NAV` shadow cleanup
+- `src/main.js` — `--wsh` CSS custom property measurement in `_bootWithHousehold()`
+- `CLAUDE_CODE_HANDOFF.md` — New fix protocol rules + this changelog entry

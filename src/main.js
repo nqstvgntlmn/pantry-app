@@ -3104,6 +3104,13 @@ function _bootWithHousehold(hid) {
   localStorage.setItem("ks-h", hid);
   g("LS").style.display = "none";
   g("APP").style.display = "flex";
+
+  // Measure the world switcher's rendered height and set --wsh on :root.
+  // Overlays (.ov) use top:var(--wsh) so they don't cover the switcher
+  // and block tap targets on iOS (where z-index alone isn't enough).
+  const wsh = document.getElementById('world-switcher')?.offsetHeight || 64;
+  document.documentElement.style.setProperty('--wsh', wsh + 'px');
+
   window._appStart(hid);
 }
 
