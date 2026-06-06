@@ -1938,17 +1938,131 @@ TAB_SCREEN_MAP = {
 7. All existing functionality works: swipe gestures, detail sheets, voice input, category pickers, barcode scanning, etc.
 
 ### What Still Uses Placeholders
-- `k-overview` — Kitchen overview dashboard (placeholder, no features yet)
-- All Home world tabs (`h-overview`, `h-todos`, `h-cleaning`, `h-maintain`, `h-game`) — placeholder screens
+- NONE — all tabs are now live (see Phase 2 below)
 
 ### Architecture Note
 The legacy screen elements (`screen-inventory`, `screen-shopping`, `screen-recipes`, `screen-home`, etc.) remain in `index.html` at their original positions. They are now "shared" screen elements that the new navigation activates when the user navigates to mapped Kitchen tabs. The placeholder `screen-k-*` elements remain in the HTML but are never activated for mapped tabs. This approach:
 - Zero HTML changes required
 - All element IDs stay the same (no JS module updates needed)
 - All existing event handlers, onclick attributes, and DOM lookups work unchanged
-- Phase 2 can replace the mapping with real dedicated screens when ready
 
 ### Files Changed
 - `src/styles.css` — Bottom nav safe area fix (min-height + max() padding)
 - `src/main.js` — Tab-to-screen mapping, _resolveScreenEl, _onTabEnter, showScreen rewrite, _currentTab variable, FAB config, scroll-to-top fix
+- `CLAUDE_CODE_HANDOFF.md` — This session entry
+
+---
+
+## Session 7 — Phase 2: Kitchen Overview + Home World Build-Out
+
+### What Was Built
+
+#### Kitchen Overview (k-overview) — LIVE
+The Kitchen Overview tab now renders a full dashboard with:
+- **Greeting card**: Time-of-day greeting ("Good morning/afternoon/evening, [Name]") with current date
+- **Quick stats row**: 3 mini cards showing Running Low count, Shopping List count, and Expiring Soon count — each taps through to the relevant tab
+- **Tonight's Dinner card**: Shows the planned meal from `state.mp` for today, or a "What's for dinner?" prompt if none
+- **Recent Activity feed**: Shows last 3 activity entries with relative timestamps, or an empty placeholder
+
+Rendered by `renderKitchenOverview()` in `src/main.js`. Called from `_onTabEnter('k-overview')`.
+
+#### Home Overview (h-overview) — LIVE
+Dashboard for the Home world showing:
+- **Greeting card** with date
+- **Leaderboard card**: This week's points for Bora vs Bushra with leader highlighting and motivational "dodge the wheel" message
+- **Today's Chores snapshot**: Up to 3 chores due today with assignee badges (Bora=blue, Bushra=orange), tap to mark done
+- **Open To-Dos snapshot**: Up to 3 uncompleted to-dos, sorted by priority, tap to mark done
+- **This Week summary**: Total chores done, to-dos done, and points earned this week
+
+#### To-Dos (h-todos) — LIVE
+Full shared to-do list between Bora and Bushra:
+- **Item fields**: title, optional note, assignee (Bora/Bushra/Both), due date (optional), priority (High/Normal/Low), done status
+- **Add via FAB**: Floating "+" button opens a bottom sheet form with all fields
+- **Grouped display**: Overdue, Today, Upcoming, No Date sections — each with count
+- **Completion**: Tap checkbox to complete, awards points: High=10pts, Normal=5pts, Low=2pts
+- **Delete**: Delete button with confirmation dialog
+- **Done section**: Shows completed items (last 10) with ability to uncheck
+- **Firestore**: `households/{hid}/home_todos` collection
+
+#### Cleaning (h-cleaning) — LIVE
+Chore schedule with recurring tasks:
+- **Chore fields**: name, frequency (daily/weekly/biweekly/monthly), assignee (Bora/Bushra/Rotating), room/area tag, lastDone, nextDue
+- **Pre-populated**: 16 default chores (vacuum, mop, bathrooms, laundry, dishes, trash, counters, dusting, bed sheets, etc.)
+- **View toggles**: "Schedule" (sorted by next due date) and "By Room" (grouped by room name)
+- **Mark done**: Records completion timestamp, auto-calculates next due date based on frequency, awards 8 points
+- **Overdue highlighting**: Red left border + red "Overdue" text. Due-today = amber highlighting
+- **Add via FAB**: Bottom sheet form with name, room, frequency, assignee
+- **Firestore**: `households/{hid}/home_chores` collection
+
+#### Maintain (h-maintain) — LIVE
+Home maintenance tracker for 22 Andrew Street:
+- **Task fields**: name, category (HVAC/Plumbing/Electrical/Exterior/Appliance/General), frequency (monthly/quarterly/biannual/annual/one-time), lastDone, nextDue, notes, estimatedCost
+- **Pre-populated**: 22 default maintenance items for a 1950s Cape Cod (HVAC filters, furnace service, gutters, chimney, roof, smoke detectors, dryer vent, water heater, sump pump, basement moisture, caulking, fridge coils, GFCI outlets, attic insulation, lawn, power wash, weather stripping, foundation, garage door, sewer line, electrical panel)
+- **Sorted by due date**: Overdue items shown first with red highlighting
+- **Mark done**: Records timestamp, calculates next due, awards 15 points
+- **Add via FAB**: Bottom sheet form with all fields
+- **Firestore**: `households/{hid}/home_maintenance` collection
+
+#### Game (h-game) — LIVE
+Household gamification tab:
+- **Leaderboard**: Bora vs Bushra with this-week points, all-time points, and win streaks
+- **Season Progress**: Current 30-day season progress bar, days remaining, cumulative season points
+- **Consequence Spin Wheel**: CSS/JS animated wheel with 8 segments:
+  1. Cook dinner for a week
+  2. Breakfast in bed
+  3. Car wash duty
+  4. No phone at dinner for 3 days
+  5. Compliment the winner every day for a week
+  6. Do the grocery run solo
+  7. Handle all bedtime routines for a week
+  8. Winner picks the next 3 movies
+  - Spin button only shows when week is over AND someone lost
+  - 4-second deceleration animation, result saved to Firestore
+- **Power Cards** (display only, interaction in Phase 3):
+  - Shield, Swap, Ghost Week, Double Down — shown with icons for each player
+  - Tooltip descriptions on tap
+- **Weekly History**: Last 4 weeks of scores, winner, and consequence
+- **Firestore**: `households/{hid}/home_config/gameState` document
+
+### Firestore Collections & Documents
+
+| Path | Type | Purpose |
+|------|------|---------|
+| `households/{hid}/home_todos` | Collection | Shared to-do list items |
+| `households/{hid}/home_chores` | Collection | Cleaning schedule chores |
+| `households/{hid}/home_maintenance` | Collection | Home maintenance tasks |
+| `households/{hid}/home_config/gameState` | Document | Game leaderboard, season, history, power cards |
+
+### Game Point Values
+| Action | Points |
+|--------|--------|
+| Complete High-priority to-do | 10 pts |
+| Complete Normal-priority to-do | 5 pts |
+| Complete Low-priority to-do | 2 pts |
+| Complete a chore | 8 pts |
+| Complete a maintenance task | 15 pts |
+
+### Data Loading Strategy
+Home world data is loaded **lazily** — only fetched from Firestore when the user first navigates to any Home world tab. This avoids slowing down the Kitchen world boot. The `state.homeDataLoaded` flag prevents redundant fetches. Default chores/maintenance are seeded on first load if collections are empty.
+
+### Week/Season Reset Logic
+- **Weekly reset**: When the stored `weekStart` differs from the current Monday, the old week is archived into `weeklyHistory` (max 12 entries), streaks updated, and weekly points zeroed
+- **Season reset**: When 30 days have passed since `seasonStart`, season points are zeroed and a new season begins
+
+### What Phase 3 Should Address
+1. **To-Do inline editing**: Open a detail bottom sheet to edit title, note, assignee, priority, due date
+2. **Power Card interactions**: Play shield/swap/ghost/double cards with game logic effects
+3. **Chore rotation logic**: Auto-rotate "Rotating" assignee between Bora and Bushra each period
+4. **Home data real-time sync**: Add onSnapshot listeners for home_todos/chores/maintenance (currently relies on page reload for cross-device sync)
+5. **Cleaning completion history**: Track completion log per chore for streaks and insights
+6. **Maintenance cost tracking**: Sum estimated costs for upcoming season, show annual maintenance budget
+7. **Game achievements/badges**: Unlock badges for streaks, total points milestones, season wins
+8. **Notification integration**: Push notifications for overdue chores/maintenance/to-dos
+9. **Swipe gestures**: Add swipe-to-complete and swipe-to-delete on Home world list items (mirror Shopping/Supplies pattern)
+10. **Community challenges**: Weekly themed challenges for bonus points
+
+### Files Changed
+- `src/state.js` — Added `homeDataLoaded`, `homeTodos`, `homeChores`, `homeMaint`, `homeGame` state properties
+- `src/main.js` — Added `dbDelete` import, Kitchen Overview render, all Home World render/CRUD functions, updated `_onTabEnter`, `FAB_CONFIG`, scroll-to-top selectors, window handler registrations
+- `src/styles.css` — Added Kitchen Overview styles (.ko-*), Home World shared styles (.ho-*), all tab-specific styles (leaderboard, todo items, chore items, maintenance, game scores, wheel, power cards, history)
 - `CLAUDE_CODE_HANDOFF.md` — This session entry

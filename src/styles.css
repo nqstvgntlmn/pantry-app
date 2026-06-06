@@ -1988,3 +1988,211 @@ img[loading="lazy"] { content-visibility: auto }
 /* Subtitle hint beneath the label */
 .placeholder-hint{font-family:"DM Sans",sans-serif;font-size:.82rem;
   color:var(--ink-muted);opacity:.4;margin-top:8px;text-align:center}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   KITCHEN OVERVIEW — Dashboard tab (k-overview)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Header with greeting and settings gear */
+.ko-header{padding:20px 20px 14px;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;background:var(--sf);border-bottom:1px solid var(--b1)}
+/* Greeting text — Fraunces heading with green accent on name */
+.ko-greeting{font-family:"Fraunces",serif;font-size:1.6rem;font-weight:300;letter-spacing:-.02em;line-height:1.2;color:var(--ink)}
+.ko-greeting span{color:var(--green)}
+/* Date line below greeting */
+.ko-date{font-size:.78rem;color:var(--ink-muted);margin-top:4px;font-weight:400}
+/* Scrollable body area with padding for bottom nav */
+.ko-body{padding:16px;padding-bottom:calc(60px + env(safe-area-inset-bottom,0px) + 80px);flex:1;overflow-y:auto}
+
+/* Quick stats row — 3 mini cards in a row */
+.ko-stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+.ko-stat-card{background:var(--card-grad);border:1px solid var(--card-border);border-radius:var(--radius);
+  padding:16px 12px;text-align:center;cursor:pointer;transition:border-color .15s}
+.ko-stat-card:active{border-color:var(--green)}
+.ko-stat-icon{font-size:1.5rem;margin-bottom:6px}
+.ko-stat-val{font-family:"Fraunces",serif;font-size:1.8rem;font-weight:300;color:var(--green);line-height:1}
+.ko-stat-label{font-size:.68rem;color:var(--ink-muted);margin-top:4px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+
+/* Section label — matches existing design system */
+.ko-section-label{font-size:.7rem;font-weight:600;color:var(--ink);letter-spacing:.15em;text-transform:uppercase;
+  margin:18px 0 10px;display:flex;align-items:center;gap:7px;padding-left:10px;border-left:2px solid var(--green)}
+.ko-section-label::after{content:"";flex:1;height:1px;background:var(--b1)}
+
+/* Dinner prompt card */
+.ko-dinner-card{background:var(--card-grad);border:1px solid var(--card-border);border-radius:var(--radius);
+  padding:18px;display:flex;align-items:center;gap:16px;cursor:pointer;transition:border-color .15s;margin-bottom:18px}
+.ko-dinner-card:active{border-color:var(--green)}
+.ko-dinner-icon{font-size:2.2rem;flex-shrink:0}
+.ko-dinner-content{flex:1}
+.ko-dinner-title{font-family:"Fraunces",serif;font-size:1.1rem;font-weight:400;color:var(--ink);line-height:1.3}
+.ko-dinner-sub{font-size:.78rem;color:var(--ink-muted);margin-top:4px;line-height:1.4}
+
+/* Activity feed rows */
+.ko-activity-row{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--b1)}
+.ko-activity-row:last-child{border-bottom:none}
+.ko-activity-icon{font-size:1.2rem;flex-shrink:0;margin-top:2px}
+.ko-activity-desc{font-size:.86rem;color:var(--ink);line-height:1.4}
+.ko-activity-time{font-size:.72rem;color:var(--ink-muted);margin-top:2px}
+/* Empty activity placeholder */
+.ko-empty-activity{text-align:center;padding:24px 16px;color:var(--ink-muted);font-size:.86rem;
+  background:var(--card);border:1px dashed var(--b2);border-radius:var(--radius)}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   HOME WORLD — Shared layout for all Home tabs
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* Home world header — mirrors kitchen overview header */
+.ho-header{padding:20px 20px 14px;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;
+  background:var(--sf);border-bottom:1px solid var(--b1)}
+.ho-tab-title{font-family:"Fraunces",serif;font-size:1.4rem;font-weight:400;letter-spacing:-.02em;color:var(--ink)}
+/* Scrollable body with bottom nav clearance */
+.ho-body{padding:16px;padding-bottom:calc(60px + env(safe-area-inset-bottom,0px) + 80px);flex:1;overflow-y:auto}
+
+/* Card container — used for all card sections in Home tabs */
+.ho-card{background:var(--card-grad);border:1px solid var(--card-border);border-top-color:var(--card-border-top);
+  border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:var(--card-shadow)}
+.ho-card-title{font-size:.7rem;font-weight:600;color:var(--ink);letter-spacing:.12em;text-transform:uppercase;
+  margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--b1)}
+
+/* Section label for Home tabs */
+.ho-section-label{font-size:.7rem;font-weight:600;color:var(--ink);letter-spacing:.12em;text-transform:uppercase;
+  margin:18px 0 10px;padding-left:10px;border-left:2px solid var(--green)}
+.ho-section-label.ho-overdue{border-left-color:var(--red);color:var(--red)}
+
+/* Empty state messages */
+.ho-empty-msg{text-align:center;padding:16px;color:var(--ink-muted);font-size:.82rem;
+  background:var(--sf);border-radius:var(--radius-sm);margin:4px 0}
+.ho-empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:60px 20px;text-align:center;color:var(--ink-muted);font-size:.9rem}
+
+/* ── LEADERBOARD ── */
+.ho-leaderboard{background:linear-gradient(135deg,var(--green-pale) 0%,#FFFFFF 100%)}
+.ho-lb-row{display:flex;align-items:center;justify-content:center;gap:16px;margin:12px 0}
+.ho-lb-player{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1}
+.ho-lb-player.ho-lb-leading .ho-lb-pts{color:var(--green);font-weight:700}
+.ho-lb-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-weight:700;color:#fff;font-size:.9rem}
+.ho-avatar-bora{background:var(--blue)}
+.ho-avatar-bushra{background:var(--amber)}
+.ho-lb-name{font-size:.82rem;font-weight:600;color:var(--ink)}
+.ho-lb-pts{font-family:"Fraunces",serif;font-size:1.2rem;font-weight:300;color:var(--ink-soft)}
+.ho-lb-vs{font-size:.72rem;font-weight:700;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.1em}
+.ho-lb-msg{text-align:center;font-size:.78rem;color:var(--ink-muted);line-height:1.4;margin-top:4px;font-style:italic}
+
+/* ── TASK ROWS (shared by Chores, Todos, Maintenance) ── */
+.ho-task-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--b1)}
+.ho-task-row:last-child{border-bottom:none}
+.ho-task-check{width:36px;height:36px;border-radius:50%;border:2px solid var(--green);background:transparent;
+  color:var(--green);font-size:1rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;font-weight:700}
+.ho-task-check:active{background:var(--green);color:#fff}
+.ho-task-info{flex:1;min-width:0}
+.ho-task-name{font-size:.88rem;font-weight:500;color:var(--ink);line-height:1.3}
+.ho-task-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px}
+
+/* Assignee badge */
+.ho-assignee-badge{font-size:.66rem;padding:2px 8px;border-radius:20px;font-weight:600;
+  background:var(--sf);color:var(--ink-muted);border:1px solid var(--b1)}
+.ho-badge-bora{background:var(--blue-pale);color:var(--blue);border-color:rgba(42,74,138,.2)}
+.ho-badge-bushra{background:var(--amber-pale);color:var(--amber);border-color:rgba(194,105,42,.2)}
+
+/* Priority badges */
+.ho-priority-high{font-size:.66rem;padding:2px 8px;border-radius:20px;font-weight:600;
+  background:var(--red-pale);color:var(--red);border:1px solid rgba(194,58,42,.2)}
+.ho-priority-low{font-size:.66rem;padding:2px 8px;border-radius:20px;font-weight:600;
+  background:var(--sf);color:var(--ink-muted);border:1px solid var(--b1)}
+
+/* Frequency tag */
+.ho-freq-tag{font-size:.64rem;padding:2px 8px;border-radius:20px;background:var(--green-pale);
+  color:var(--green);font-weight:600;border:1px solid rgba(45,90,61,.15)}
+
+/* Due date text */
+.ho-due-date{font-size:.68rem;color:var(--ink-muted)}
+
+/* ── TO-DO ITEMS ── */
+.ho-todo-item{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;margin-bottom:8px;
+  background:var(--card-grad);border:1px solid var(--card-border);border-radius:var(--radius-sm);transition:border-color .15s}
+.ho-todo-item.ho-todo-done{opacity:.5}
+.ho-todo-item.ho-todo-high{border-left:3px solid var(--red)}
+.ho-todo-item.ho-todo-low{border-left:3px solid var(--b2)}
+.ho-todo-check{width:28px;height:28px;border-radius:50%;border:2px solid var(--green);background:transparent;
+  color:transparent;font-size:.8rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;margin-top:2px}
+.ho-todo-check:active,.ho-todo-check:hover{background:var(--green-pale)}
+.ho-todo-checked{background:var(--green);color:#fff;border-color:var(--green)}
+.ho-todo-content{flex:1;min-width:0;cursor:pointer}
+.ho-todo-title{font-size:.88rem;font-weight:500;color:var(--ink);line-height:1.3}
+.ho-todo-title-done{text-decoration:line-through;color:var(--ink-muted)}
+.ho-todo-note{font-size:.75rem;color:var(--ink-muted);margin-top:4px;line-height:1.4}
+.ho-todo-del{background:none;border:none;font-size:1rem;cursor:pointer;opacity:.3;transition:opacity .15s;
+  padding:4px;flex-shrink:0}
+.ho-todo-del:active{opacity:.8}
+
+/* ── CHORE ITEMS ── */
+.ho-chore-item{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;margin-bottom:8px;
+  background:var(--card-grad);border:1px solid var(--card-border);border-radius:var(--radius-sm);transition:border-color .15s}
+.ho-chore-overdue{border-left:3px solid var(--red)}
+.ho-chore-today{border-left:3px solid var(--amber)}
+.ho-chore-due{font-size:.72rem;color:var(--ink-muted);margin-top:4px}
+.ho-chore-overdue .ho-chore-due{color:var(--red);font-weight:600}
+.ho-chore-today .ho-chore-due{color:var(--amber);font-weight:600}
+
+/* ── MAINTENANCE ITEMS ── */
+.ho-maint-item{display:flex;align-items:flex-start;gap:12px;padding:14px;margin-bottom:8px;
+  background:var(--card-grad);border:1px solid var(--card-border);border-radius:var(--radius-sm);transition:border-color .15s}
+.ho-maint-last{font-size:.68rem;color:var(--ink-muted);margin-top:4px;font-style:italic}
+
+/* ── GAME TAB ── */
+/* Game score layout */
+.ho-game-scores{display:flex;align-items:center;justify-content:center;gap:20px;margin:8px 0}
+.ho-game-player{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1}
+.ho-game-vs{font-family:"Fraunces",serif;font-size:1.1rem;font-weight:300;color:var(--ink-muted);opacity:.6}
+.ho-game-name{font-size:.88rem;font-weight:600;color:var(--ink)}
+.ho-game-week-pts{font-family:"Fraunces",serif;font-size:1.4rem;font-weight:300;color:var(--green)}
+.ho-game-week-pts small{font-family:"DM Sans",sans-serif;font-size:.62rem;color:var(--ink-muted);font-weight:400}
+.ho-game-all-pts{font-size:.78rem;color:var(--ink-muted)}
+.ho-game-all-pts small{font-size:.62rem}
+.ho-streak{font-size:.72rem;color:var(--amber);font-weight:600;margin-top:2px}
+
+/* Season progress bar */
+.ho-season-info{display:flex;flex-direction:column;gap:8px}
+.ho-season-row{display:flex;justify-content:space-between;font-size:.82rem;color:var(--ink-soft)}
+.ho-season-row strong{color:var(--green)}
+.ho-season-bar{height:8px;background:var(--b1);border-radius:4px;overflow:hidden}
+.ho-season-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--green-light));border-radius:4px;transition:width .5s ease}
+
+/* Consequence wheel */
+.ho-wheel-container{position:relative;width:260px;height:260px;margin:16px auto;overflow:hidden;border-radius:50%;
+  border:3px solid var(--green);background:var(--cream)}
+.ho-wheel{width:100%;height:100%;position:relative;transition:transform 4s cubic-bezier(.17,.67,.12,.99)}
+.ho-wheel-seg{position:absolute;width:50%;height:50%;left:25%;top:0;transform-origin:50% 100%;
+  display:flex;align-items:flex-start;justify-content:center;padding-top:16px;font-size:.6rem;font-weight:600;
+  color:var(--ink);text-align:center;line-height:1.2;
+  transform:rotate(calc(var(--seg-i) * (360deg / var(--seg-total))))}
+.ho-wheel-pointer{position:absolute;top:-4px;left:50%;transform:translateX(-50%);font-size:1.5rem;
+  color:var(--green);z-index:2;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+
+/* Consequence result display */
+.ho-consequence-result{text-align:center;padding:16px}
+.ho-consequence-label{font-size:.72rem;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.ho-consequence-text{font-family:"Fraunces",serif;font-size:1.1rem;font-weight:400;color:var(--ink);line-height:1.4}
+
+/* Power cards */
+.ho-power-section{display:flex;flex-direction:column;gap:6px}
+.ho-power-label{font-size:.72rem;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.05em}
+.ho-power-row{display:flex;gap:8px;flex-wrap:wrap}
+.ho-power-card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 12px;
+  border-radius:var(--radius-sm);border:1.5px solid var(--b2);background:var(--card);
+  min-width:64px;cursor:default;transition:border-color .15s}
+.ho-power-card:active{border-color:var(--green)}
+.ho-power-bora{border-color:rgba(42,74,138,.2);background:var(--blue-pale)}
+.ho-power-bushra{border-color:rgba(194,105,42,.2);background:var(--amber-pale)}
+.ho-power-icon{font-size:1.5rem}
+.ho-power-name{font-size:.62rem;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.03em}
+
+/* Weekly history rows */
+.ho-history-row{padding:10px 0;border-bottom:1px solid var(--b1)}
+.ho-history-row:last-child{border-bottom:none}
+.ho-history-week{font-size:.72rem;color:var(--ink-muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.ho-history-scores{font-size:.86rem;color:var(--ink);margin-top:2px}
+.ho-history-winner{font-size:.78rem;color:var(--green);font-weight:600;margin-top:2px}
+.ho-history-consequence{font-size:.72rem;color:var(--ink-muted);font-style:italic;margin-top:2px}

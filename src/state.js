@@ -90,6 +90,15 @@ export const state = {
   comMinRating: 0,       // minimum avg rating filter: 0 (any), 3, or 4
   comPage: 0,            // current page index for infinite scroll pagination
   myLikes: new Set(),    // set of public recipe IDs the current user has liked
+
+  // ── Home World state ───────────────────────────────────────────────────
+  // Data for the Home world tabs (To-Dos, Cleaning, Maintain, Game).
+  // Loaded lazily when user first switches to Home world.
+  homeDataLoaded: false,  // flag: true after first Home world data fetch
+  homeTodos: [],          // shared to-do list items
+  homeChores: [],         // cleaning schedule chores
+  homeMaint: [],          // home maintenance tasks
+  homeGame: null,         // game state doc (leaderboard, season, history)
 };
 
 // ── localStorage helpers (device-only keys) ──────────────────────────────────

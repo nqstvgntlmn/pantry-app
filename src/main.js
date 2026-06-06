@@ -18,7 +18,7 @@ import { state, CFG_DEFAULT, J, Js } from './state.js';
 // svi/dli = save/delete inventory item, svr/dlr = save/delete recipe,
 // svShopItem/dlShopItem = save/delete shopping item
 // joinHouseholdByCode: join via invite code, createHousehold/createUserProfile: first-time setup
-import { dbList, dbGet, dbSet, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, pausePoll, resumePoll, stopPoll, checkUsernameAvailable, setUsername, loadUsername, checkMembershipValid } from './db.js';
+import { dbList, dbGet, dbSet, dbDelete, loadFirestoreData, renderCallbacks, ss, svi, dli, svr, dlr, svShopItem, dlShopItem, resolveHousehold, joinHouseholdByCode, createHousehold, createUserProfile, pausePoll, resumePoll, stopPoll, checkUsernameAvailable, setUsername, loadUsername, checkMembershipValid } from './db.js';
 
 // DOM/UI helpers: g = getElementById shorthand, showNotif = toast notifications,
 // showOv/hideOv = overlay open/close, renderStars = star rating HTML, tk = tracking util
@@ -251,10 +251,28 @@ function _onTabEnter(tabName) {
         setSHT("deals");
         break;
       case "k-overview":
-        // Overview placeholder — render home dashboard data if available
+        // Kitchen Overview — render the dashboard with stats, dinner, activity
+        renderKitchenOverview();
+        break;
+      case "h-overview":
+      case "h-todos":
+      case "h-cleaning":
+      case "h-maintain":
+      case "h-game":
+        // Home world tabs — load home data lazily on first entry, then render
+        _loadHomeData().then(() => {
+          _checkWeekReset().then(() => {
+            switch (tabName) {
+              case "h-overview": renderHomeOverview(); break;
+              case "h-todos": renderHomeTodos(); break;
+              case "h-cleaning": renderHomeCleaning(); break;
+              case "h-maintain": renderHomeMaintain(); break;
+              case "h-game": renderHomeGame(); break;
+            }
+          });
+        });
         break;
       default:
-        // Home world tabs and other placeholders — no special rendering needed
         break;
     }
   } catch (e) {
@@ -438,6 +456,9 @@ const FAB_CONFIG = {
   "k-pantry":    { action: "openInvAddSheet()",   ariaLabel: "Add supply" },
   "k-shopping":  { action: "openShopAddSheet()",  ariaLabel: "Add to list" },
   "k-supplies":  { action: "openInvAddSheet()",   ariaLabel: "Add supply" },
+  "h-todos":     { action: "openTodoAddSheet()",  ariaLabel: "Add to-do" },
+  "h-cleaning":  { action: "openChoreAddSheet()", ariaLabel: "Add chore" },
+  "h-maintain":  { action: "openMaintAddSheet()", ariaLabel: "Add task" },
 };
 
 // _fabSettleTimer — tracks the 0.5-second timeout before FAB shrinks + fades
@@ -1001,6 +1022,1446 @@ window.clearSearch = function(inputId, callbackName) {
     window[callbackName]();
   }
 };
+
+// ══════════════════════════════════════════════════════════════════════════════
+// KITCHEN OVERVIEW — Dashboard for the Kitchen world's first tab (k-overview)
+// Shows greeting, quick stats, dinner prompt, and recent activity.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * _getTimeGreeting() — returns a time-of-day greeting string.
+ * Uses the current hour to determine morning/afternoon/evening.
+ */
+function _getTimeGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+/**
+ * _getUserFirstName() — returns the current user's first name from localStorage.
+ * Falls back to "there" if no name is stored.
+ */
+function _getUserFirstName() {
+  const who = localStorage.getItem("ks-who") || "there";
+  return who.split(" ")[0];
+}
+
+/**
+ * _formatDateLong() — returns today's date in a nice long format like "Friday, June 6, 2026"
+ */
+function _formatDateLong() {
+  return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+}
+
+/**
+ * renderKitchenOverview() — renders the Kitchen Overview tab content.
+ * Pulls data from state.inv (low items, expiring), state.shop (list count),
+ * and state.activity (recent actions). Builds the HTML into screen-k-overview.
+ */
+function renderKitchenOverview() {
+  const el = g("screen-k-overview");
+  if (!el) return;
+
+  const name = _getUserFirstName();
+  const greeting = _getTimeGreeting();
+  const dateStr = _formatDateLong();
+
+  // Count low-stock items (qty <= lowThreshold, excluding doNotRestock)
+  const lowItems = (state.inv || []).filter(i =>
+    !i.doNotRestock && i.qty != null && i.lowThreshold != null && i.qty <= i.lowThreshold
+  );
+
+  // Count items on shopping list (unchecked only)
+  const shopCount = (state.shop || []).filter(i => !i.checked).length;
+
+  // Count items expiring within 3 days
+  const now = new Date();
+  const threeDays = new Date(now.getTime() + 3 * 86400000);
+  const expiringItems = (state.inv || []).filter(i => {
+    if (!i.exp) return false;
+    const d = new Date(i.exp);
+    return d <= threeDays && d >= now;
+  });
+
+  // Tonight's dinner from meal plan
+  const todayKey = now.toISOString().split("T")[0];
+  const tonightMeal = state.mp?.[todayKey] || null;
+
+  // Recent activity — last 3 entries
+  const recentActivity = (state.activity || []).slice(0, 3);
+
+  el.innerHTML = `
+    <div class="ko-header">
+      <div>
+        <div class="ko-greeting">${greeting}, <span>${name}</span></div>
+        <div class="ko-date">${dateStr}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="srow" style="margin:0"><span class="sdot" id="sdot-ko"></span></div>
+        <div class="setbtn" onclick="showOv('settings')">⚙️</div>
+      </div>
+    </div>
+    <div class="ko-body">
+      <!-- Quick Stats Row -->
+      <div class="ko-stats-row">
+        <div class="ko-stat-card" onclick="showScreen('k-pantry')">
+          <div class="ko-stat-icon">📦</div>
+          <div class="ko-stat-val">${lowItems.length}</div>
+          <div class="ko-stat-label">Running Low</div>
+        </div>
+        <div class="ko-stat-card" onclick="showScreen('k-shopping')">
+          <div class="ko-stat-icon">🛒</div>
+          <div class="ko-stat-val">${shopCount}</div>
+          <div class="ko-stat-label">On My List</div>
+        </div>
+        <div class="ko-stat-card" onclick="showScreen('k-pantry')">
+          <div class="ko-stat-icon">⏰</div>
+          <div class="ko-stat-val">${expiringItems.length}</div>
+          <div class="ko-stat-label">Expiring Soon</div>
+        </div>
+      </div>
+
+      <!-- What's for dinner card -->
+      <div class="ko-section-label">Tonight's Dinner</div>
+      <div class="ko-dinner-card" onclick="${tonightMeal ? '' : "showScreen('k-pantry')"}">
+        <div class="ko-dinner-icon">${tonightMeal ? '🍽️' : '🤔'}</div>
+        <div class="ko-dinner-content">
+          <div class="ko-dinner-title">${tonightMeal || "What's for dinner?"}</div>
+          <div class="ko-dinner-sub">${tonightMeal ? 'Planned for tonight' : 'No meal planned yet — check your pantry for inspiration!'}</div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="ko-section-label">Recent Activity</div>
+      ${recentActivity.length ? recentActivity.map(a => `
+        <div class="ko-activity-row">
+          <div class="ko-activity-icon">${a.icon || '📝'}</div>
+          <div class="ko-activity-text">
+            <div class="ko-activity-desc">${a.text || a.action || 'Activity'}</div>
+            <div class="ko-activity-time">${_relativeTime(a.ts)}</div>
+          </div>
+        </div>
+      `).join("") : `
+        <div class="ko-empty-activity">
+          <div style="opacity:.5;font-size:1.5rem;margin-bottom:8px">📋</div>
+          <div>No recent activity yet</div>
+          <div style="font-size:.75rem;color:var(--mt);margin-top:4px">Actions you take will appear here</div>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+/**
+ * _relativeTime(ts) — converts a timestamp (ISO string or ms) to a human-readable
+ * relative time string like "2 min ago", "3 hrs ago", "yesterday".
+ */
+function _relativeTime(ts) {
+  if (!ts) return "";
+  const d = typeof ts === "string" ? new Date(ts) : new Date(ts);
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs > 1 ? "s" : ""} ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HOME WORLD — Full implementation of all 5 tabs
+// Data stored in Firestore under households/{hid}/home_*
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── HOME DATA LOADING ────────────────────────────────────────────────────────
+
+/**
+ * _loadHomeData() — lazily loads all Home world data from Firestore.
+ * Called once when user first switches to the Home world. Sets state.homeDataLoaded
+ * to prevent redundant fetches. Loads todos, chores, maintenance, and game state.
+ */
+async function _loadHomeData() {
+  if (state.homeDataLoaded) return;
+  ss("syncing");
+  try {
+    const [todos, chores, maint, game] = await Promise.allSettled([
+      dbList(`households/${state.hid}/home_todos`),
+      dbList(`households/${state.hid}/home_chores`),
+      dbList(`households/${state.hid}/home_maintenance`),
+      dbGet(`households/${state.hid}/home_config/gameState`),
+    ]);
+    state.homeTodos = todos.status === "fulfilled" ? todos.value : [];
+    state.homeChores = chores.status === "fulfilled" ? chores.value : [];
+    state.homeMaint = maint.status === "fulfilled" ? maint.value : [];
+    state.homeGame = game.status === "fulfilled" && game.value ? game.value : _defaultGameState();
+
+    // If chores list is empty, seed default chores
+    if (!state.homeChores.length) await _seedDefaultChores();
+    // If maintenance list is empty, seed default maintenance tasks
+    if (!state.homeMaint.length) await _seedDefaultMaintenance();
+    // Ensure game state doc exists in Firestore
+    if (!game.value) await _saveGameState();
+
+    state.homeDataLoaded = true;
+    ss("synced");
+  } catch (e) {
+    console.error("[_loadHomeData] Error:", e);
+    ss("error");
+    // Still mark as loaded to prevent infinite retry loops
+    state.homeDataLoaded = true;
+  }
+}
+
+/**
+ * _defaultGameState() — returns a fresh game state object with zeroed scores.
+ * Used when no game state document exists in Firestore yet.
+ */
+function _defaultGameState() {
+  return {
+    boraWeekPts: 0,
+    bushraWeekPts: 0,
+    boraAllTimePts: 0,
+    bushraAllTimePts: 0,
+    boraSeasonPts: 0,
+    bushraSeasonPts: 0,
+    seasonStart: new Date().toISOString().split("T")[0],
+    weekStart: _getWeekStart(),
+    lastConsequence: null,
+    weeklyHistory: [],
+    boraStreak: 0,
+    bushraStreak: 0,
+    boraPowerCards: ["shield", "swap", "ghost", "double"],
+    bushraPowerCards: ["shield", "swap", "ghost", "double"],
+  };
+}
+
+/**
+ * _getWeekStart() — returns the ISO date string for the start (Monday) of the current week.
+ */
+function _getWeekStart() {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(d.setDate(diff));
+  return monday.toISOString().split("T")[0];
+}
+
+/**
+ * _checkWeekReset() — checks if the current game week has ended. If the stored
+ * weekStart differs from the actual current week start, archives the old week's
+ * scores into weeklyHistory and resets weekly points to zero.
+ */
+async function _checkWeekReset() {
+  const gs = state.homeGame;
+  if (!gs) return;
+  const currentWeekStart = _getWeekStart();
+  if (gs.weekStart !== currentWeekStart) {
+    // Archive the completed week
+    const weekRecord = {
+      weekStart: gs.weekStart,
+      boraPoints: gs.boraWeekPts,
+      bushraPoints: gs.bushraWeekPts,
+      winner: gs.boraWeekPts > gs.bushraWeekPts ? "Bora" : gs.bushraWeekPts > gs.boraWeekPts ? "Bushra" : "Tie",
+      consequence: gs.lastConsequence || null,
+    };
+    gs.weeklyHistory = [weekRecord, ...(gs.weeklyHistory || [])].slice(0, 12);
+    // Update streaks
+    if (gs.boraWeekPts > gs.bushraWeekPts) { gs.boraStreak = (gs.boraStreak || 0) + 1; gs.bushraStreak = 0; }
+    else if (gs.bushraWeekPts > gs.boraWeekPts) { gs.bushraStreak = (gs.bushraStreak || 0) + 1; gs.boraStreak = 0; }
+    else { gs.boraStreak = 0; gs.bushraStreak = 0; }
+    // Reset weekly points
+    gs.boraWeekPts = 0;
+    gs.bushraWeekPts = 0;
+    gs.weekStart = currentWeekStart;
+    gs.lastConsequence = null;
+    await _saveGameState();
+  }
+  // Check season reset (30 days)
+  if (gs.seasonStart) {
+    const seasonDays = Math.floor((Date.now() - new Date(gs.seasonStart).getTime()) / 86400000);
+    if (seasonDays >= 30) {
+      gs.boraSeasonPts = 0;
+      gs.bushraSeasonPts = 0;
+      gs.seasonStart = new Date().toISOString().split("T")[0];
+      await _saveGameState();
+    }
+  }
+}
+
+/**
+ * _awardPoints(who, pts) — awards points to "Bora" or "Bushra" across all
+ * point buckets (weekly, all-time, season) and persists to Firestore.
+ */
+async function _awardPoints(who, pts) {
+  const gs = state.homeGame;
+  if (!gs) return;
+  await _checkWeekReset();
+  if (who === "Bora") {
+    gs.boraWeekPts = (gs.boraWeekPts || 0) + pts;
+    gs.boraAllTimePts = (gs.boraAllTimePts || 0) + pts;
+    gs.boraSeasonPts = (gs.boraSeasonPts || 0) + pts;
+  } else {
+    gs.bushraWeekPts = (gs.bushraWeekPts || 0) + pts;
+    gs.bushraAllTimePts = (gs.bushraAllTimePts || 0) + pts;
+    gs.bushraSeasonPts = (gs.bushraSeasonPts || 0) + pts;
+  }
+  await _saveGameState();
+}
+
+/**
+ * _saveGameState() — persists the current game state to Firestore.
+ */
+async function _saveGameState() {
+  try {
+    const data = { ...state.homeGame };
+    delete data.id;
+    await dbSet(`households/${state.hid}/home_config/gameState`, data);
+  } catch (e) {
+    console.error("[_saveGameState]", e);
+  }
+}
+
+// ── DEFAULT DATA SEEDING ─────────────────────────────────────────────────────
+
+/**
+ * _seedDefaultChores() — pre-populates the cleaning schedule with sensible
+ * default chores. Only called when home_chores collection is empty.
+ */
+async function _seedDefaultChores() {
+  const defaults = [
+    { name: "Vacuum living room", frequency: "weekly", assignee: "Rotating", room: "Living Room", nextDue: _nextDueFromFreq("weekly") },
+    { name: "Vacuum bedrooms", frequency: "weekly", assignee: "Rotating", room: "Bedrooms", nextDue: _nextDueFromFreq("weekly") },
+    { name: "Mop kitchen floor", frequency: "weekly", assignee: "Rotating", room: "Kitchen", nextDue: _nextDueFromFreq("weekly") },
+    { name: "Clean bathrooms", frequency: "weekly", assignee: "Rotating", room: "Bathroom", nextDue: _nextDueFromFreq("weekly") },
+    { name: "Do laundry", frequency: "weekly", assignee: "Rotating", room: "Laundry", nextDue: _nextDueFromFreq("weekly") },
+    { name: "Take out trash", frequency: "weekly", assignee: "Rotating", room: "Kitchen", nextDue: _nextDueFromFreq("weekly") },
+    { name: "Take out recycling", frequency: "weekly", assignee: "Rotating", room: "Kitchen", nextDue: _nextDueFromFreq("weekly") },
+    { name: "Wipe kitchen counters", frequency: "daily", assignee: "Rotating", room: "Kitchen", nextDue: _nextDueFromFreq("daily") },
+    { name: "Do dishes", frequency: "daily", assignee: "Rotating", room: "Kitchen", nextDue: _nextDueFromFreq("daily") },
+    { name: "Clean stovetop", frequency: "weekly", assignee: "Rotating", room: "Kitchen", nextDue: _nextDueFromFreq("weekly") },
+    { name: "Dust surfaces", frequency: "biweekly", assignee: "Rotating", room: "Living Room", nextDue: _nextDueFromFreq("biweekly") },
+    { name: "Change bed sheets", frequency: "biweekly", assignee: "Rotating", room: "Bedrooms", nextDue: _nextDueFromFreq("biweekly") },
+    { name: "Clean mirrors", frequency: "biweekly", assignee: "Rotating", room: "Bathroom", nextDue: _nextDueFromFreq("biweekly") },
+    { name: "Mop bathroom floor", frequency: "weekly", assignee: "Rotating", room: "Bathroom", nextDue: _nextDueFromFreq("weekly") },
+    { name: "Deep clean fridge", frequency: "monthly", assignee: "Rotating", room: "Kitchen", nextDue: _nextDueFromFreq("monthly") },
+    { name: "Clean oven", frequency: "monthly", assignee: "Rotating", room: "Kitchen", nextDue: _nextDueFromFreq("monthly") },
+  ];
+  for (const chore of defaults) {
+    const id = "chore_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+    chore.id = id;
+    chore.lastDone = null;
+    chore.createdAt = new Date().toISOString();
+    await dbSet(`households/${state.hid}/home_chores/${id}`, chore);
+    state.homeChores.push({ ...chore });
+  }
+}
+
+/**
+ * _seedDefaultMaintenance() — pre-populates home maintenance tasks appropriate
+ * for a 1950s Cape Cod at 22 Andrew Street. Only called when collection is empty.
+ */
+async function _seedDefaultMaintenance() {
+  const defaults = [
+    { name: "Replace HVAC filters", category: "HVAC", frequency: "monthly", notes: "Use MERV-11 or higher. Check monthly, replace when dirty." },
+    { name: "Service furnace", category: "HVAC", frequency: "annual", notes: "Schedule before heating season. Inspect heat exchanger, clean burners." },
+    { name: "Service AC unit", category: "HVAC", frequency: "annual", notes: "Clean condenser coils, check refrigerant levels. Schedule before summer." },
+    { name: "Clean gutters & downspouts", category: "Exterior", frequency: "biannual", notes: "Spring and fall. Check for loose brackets. Flush with hose." },
+    { name: "Chimney inspection & sweep", category: "Exterior", frequency: "annual", notes: "Before fireplace season. Check flue liner, cap, and damper." },
+    { name: "Inspect roof", category: "Exterior", frequency: "annual", notes: "Check shingles, flashing, vents. Cape Cod roofs collect leaves in valleys." },
+    { name: "Test smoke & CO detectors", category: "Electrical", frequency: "monthly", notes: "Replace batteries annually. Replace units every 10 years." },
+    { name: "Inspect & clean dryer vent", category: "Appliance", frequency: "annual", notes: "Prevent fire hazard. Clean full run from dryer to outside vent." },
+    { name: "Water heater flush", category: "Plumbing", frequency: "annual", notes: "Drain sediment to maintain efficiency. Check anode rod every 3 years." },
+    { name: "Check sump pump", category: "Plumbing", frequency: "quarterly", notes: "Pour water to test float switch. Clean pit. Check discharge pipe." },
+    { name: "Inspect basement for moisture", category: "General", frequency: "quarterly", notes: "Check walls, floor, windows for leaks. Monitor dehumidifier." },
+    { name: "Caulk windows & doors", category: "Exterior", frequency: "annual", notes: "Check all exterior caulking. Cape Cod windows are prone to drafts." },
+    { name: "Clean refrigerator coils", category: "Appliance", frequency: "biannual", notes: "Under or behind fridge. Improves efficiency and extends life." },
+    { name: "Test GFCI outlets", category: "Electrical", frequency: "monthly", notes: "Press test button, then reset. Check kitchen, bathroom, outdoor outlets." },
+    { name: "Inspect attic insulation", category: "General", frequency: "annual", notes: "Cape Cod attics need R-49 minimum. Check for moisture, pests." },
+    { name: "Treat lawn / fertilize", category: "Exterior", frequency: "quarterly", notes: "Spring (April), summer (June), fall (Sept), winterize (Nov)." },
+    { name: "Power wash siding & walkways", category: "Exterior", frequency: "annual", notes: "Spring cleaning. Careful with older wood siding." },
+    { name: "Check weather stripping", category: "Exterior", frequency: "annual", notes: "All exterior doors. Replace worn strips before winter." },
+    { name: "Inspect foundation", category: "General", frequency: "annual", notes: "Check for cracks, settling. 1950s Cape Cods may have stone/block foundations." },
+    { name: "Service garage door", category: "General", frequency: "annual", notes: "Lubricate tracks, check springs and cables, test auto-reverse." },
+    { name: "Flush main sewer line", category: "Plumbing", frequency: "annual", notes: "Older homes prone to root intrusion. Snake or hydro-jet preventively." },
+    { name: "Inspect electrical panel", category: "Electrical", frequency: "annual", notes: "Check for corrosion, loose connections. 1950s homes may have older panels." },
+  ];
+  for (const task of defaults) {
+    const id = "maint_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+    task.id = id;
+    task.lastDone = null;
+    task.nextDue = _nextDueFromFreq(task.frequency);
+    task.estimatedCost = null;
+    task.createdAt = new Date().toISOString();
+    await dbSet(`households/${state.hid}/home_maintenance/${id}`, task);
+    state.homeMaint.push({ ...task });
+  }
+}
+
+/**
+ * _nextDueFromFreq(freq) — calculates the next due date ISO string from a frequency.
+ * Returns a date in the near future so items show up as "due soon" after seeding.
+ */
+function _nextDueFromFreq(freq) {
+  const d = new Date();
+  switch (freq) {
+    case "daily": d.setDate(d.getDate() + 1); break;
+    case "weekly": d.setDate(d.getDate() + 7); break;
+    case "biweekly": d.setDate(d.getDate() + 14); break;
+    case "monthly": d.setMonth(d.getMonth() + 1); break;
+    case "quarterly": d.setMonth(d.getMonth() + 3); break;
+    case "biannual": d.setMonth(d.getMonth() + 6); break;
+    case "annual": d.setFullYear(d.getFullYear() + 1); break;
+    default: d.setDate(d.getDate() + 7);
+  }
+  return d.toISOString().split("T")[0];
+}
+
+/**
+ * _calcNextDue(lastDone, freq) — calculates the next due date from a completion date.
+ * Used when marking a chore/task as done to compute when it's due next.
+ */
+function _calcNextDue(lastDone, freq) {
+  const d = new Date(lastDone);
+  switch (freq) {
+    case "daily": d.setDate(d.getDate() + 1); break;
+    case "weekly": d.setDate(d.getDate() + 7); break;
+    case "biweekly": d.setDate(d.getDate() + 14); break;
+    case "monthly": d.setMonth(d.getMonth() + 1); break;
+    case "quarterly": d.setMonth(d.getMonth() + 3); break;
+    case "biannual": d.setMonth(d.getMonth() + 6); break;
+    case "annual": d.setFullYear(d.getFullYear() + 1); break;
+    case "one-time": return null;
+    default: d.setDate(d.getDate() + 7);
+  }
+  return d.toISOString().split("T")[0];
+}
+
+// ── HOME OVERVIEW TAB (h-overview) ───────────────────────────────────────────
+
+/**
+ * renderHomeOverview() — renders the Home Overview dashboard.
+ * Shows greeting, leaderboard, today's chores, open todos, and weekly summary.
+ */
+function renderHomeOverview() {
+  const el = g("screen-h-overview");
+  if (!el) return;
+
+  const name = _getUserFirstName();
+  const greeting = _getTimeGreeting();
+  const dateStr = _formatDateLong();
+  const gs = state.homeGame || _defaultGameState();
+
+  // Leaderboard
+  const boraLead = gs.boraWeekPts > gs.bushraWeekPts;
+  const bushraLead = gs.bushraWeekPts > gs.boraWeekPts;
+  const tied = gs.boraWeekPts === gs.bushraWeekPts;
+  const diff = Math.abs(gs.boraWeekPts - gs.bushraWeekPts);
+  // The loser needs points to "dodge the wheel"
+  const loserNeeds = tied ? 0 : diff + 1;
+  const loserName = boraLead ? "Bushra" : "Bora";
+
+  // Today's chores (due today or overdue, up to 3)
+  const today = new Date().toISOString().split("T")[0];
+  const todayChores = (state.homeChores || [])
+    .filter(c => c.nextDue && c.nextDue <= today)
+    .sort((a, b) => (a.nextDue || "").localeCompare(b.nextDue || ""))
+    .slice(0, 3);
+
+  // Open todos (not done, up to 3)
+  const openTodos = (state.homeTodos || [])
+    .filter(t => !t.done)
+    .sort((a, b) => {
+      const pa = { High: 0, Normal: 1, Low: 2 }; // sort by priority
+      return (pa[a.priority] || 1) - (pa[b.priority] || 1);
+    })
+    .slice(0, 3);
+
+  // This week summary
+  const weekChoresDone = (state.homeChores || []).filter(c => {
+    if (!c.lastDone) return false;
+    return c.lastDone >= gs.weekStart;
+  }).length;
+  const weekTodosDone = (state.homeTodos || []).filter(t => {
+    if (!t.done || !t.doneAt) return false;
+    return t.doneAt >= gs.weekStart;
+  }).length;
+  const weekPts = (gs.boraWeekPts || 0) + (gs.bushraWeekPts || 0);
+
+  el.innerHTML = `
+    <div class="ho-header">
+      <div>
+        <div class="ko-greeting">${greeting}, <span>${name}</span></div>
+        <div class="ko-date">${dateStr}</div>
+      </div>
+      <div class="setbtn" onclick="showOv('settings')">⚙️</div>
+    </div>
+    <div class="ho-body">
+      <!-- Leaderboard Card -->
+      <div class="ho-card ho-leaderboard">
+        <div class="ho-card-title">This Week's Leaderboard</div>
+        <div class="ho-lb-row">
+          <div class="ho-lb-player ${boraLead ? 'ho-lb-leading' : ''}">
+            <div class="ho-lb-avatar ho-avatar-bora">B</div>
+            <div class="ho-lb-name">Bora</div>
+            <div class="ho-lb-pts">${gs.boraWeekPts || 0} pts</div>
+          </div>
+          <div class="ho-lb-vs">vs</div>
+          <div class="ho-lb-player ${bushraLead ? 'ho-lb-leading' : ''}">
+            <div class="ho-lb-avatar ho-avatar-bushra">B</div>
+            <div class="ho-lb-name">Bushra</div>
+            <div class="ho-lb-pts">${gs.bushraWeekPts || 0} pts</div>
+          </div>
+        </div>
+        ${tied
+          ? '<div class="ho-lb-msg">All tied up! Keep going!</div>'
+          : `<div class="ho-lb-msg">${loserName} needs ${loserNeeds} more pts to dodge the wheel</div>`
+        }
+      </div>
+
+      <!-- Today's Chores -->
+      <div class="ho-card">
+        <div class="ho-card-title">Today's Chores</div>
+        ${todayChores.length ? todayChores.map(c => `
+          <div class="ho-task-row">
+            <button class="ho-task-check" onclick="markChoreDone('${c.id}')">&#10003;</button>
+            <div class="ho-task-info">
+              <div class="ho-task-name">${c.name}</div>
+              <div class="ho-task-meta">
+                <span class="ho-assignee-badge ${c.assignee === 'Bushra' ? 'ho-badge-bushra' : 'ho-badge-bora'}">${c.assignee === 'Rotating' ? 'Rotating' : c.assignee}</span>
+                <span>${c.room || ''}</span>
+              </div>
+            </div>
+          </div>
+        `).join("") : '<div class="ho-empty-msg">All caught up! No chores due today.</div>'}
+        <button class="btn bsm bs" style="width:100%;margin-top:10px" onclick="showScreen('h-cleaning')">View All Chores</button>
+      </div>
+
+      <!-- Open To-Dos -->
+      <div class="ho-card">
+        <div class="ho-card-title">Open To-Dos</div>
+        ${openTodos.length ? openTodos.map(t => `
+          <div class="ho-task-row">
+            <button class="ho-task-check" onclick="markTodoDone('${t.id}')">&#10003;</button>
+            <div class="ho-task-info">
+              <div class="ho-task-name">${t.title}</div>
+              <div class="ho-task-meta">
+                <span class="ho-assignee-badge ${t.assignee === 'Bushra' ? 'ho-badge-bushra' : t.assignee === 'Bora' ? 'ho-badge-bora' : ''}">${t.assignee || 'Both'}</span>
+                ${t.priority === 'High' ? '<span class="ho-priority-high">High</span>' : ''}
+              </div>
+            </div>
+          </div>
+        `).join("") : '<div class="ho-empty-msg">No open to-dos!</div>'}
+        <button class="btn bsm bs" style="width:100%;margin-top:10px" onclick="showScreen('h-todos')">View All To-Dos</button>
+      </div>
+
+      <!-- This Week Summary -->
+      <div class="ho-card">
+        <div class="ho-card-title">This Week</div>
+        <div class="ko-stats-row">
+          <div class="ko-stat-card" style="cursor:default">
+            <div class="ko-stat-val">${weekChoresDone}</div>
+            <div class="ko-stat-label">Chores Done</div>
+          </div>
+          <div class="ko-stat-card" style="cursor:default">
+            <div class="ko-stat-val">${weekTodosDone}</div>
+            <div class="ko-stat-label">To-Dos Done</div>
+          </div>
+          <div class="ko-stat-card" style="cursor:default">
+            <div class="ko-stat-val">${weekPts}</div>
+            <div class="ko-stat-label">Points Earned</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ── HOME TO-DOS TAB (h-todos) ────────────────────────────────────────────────
+
+/**
+ * renderHomeTodos() — renders the To-Dos tab with items grouped by
+ * Overdue, Today, Upcoming, and No Date. Each item has a checkbox,
+ * assignee badge, and priority indicator.
+ */
+function renderHomeTodos() {
+  const el = g("screen-h-todos");
+  if (!el) return;
+
+  const today = new Date().toISOString().split("T")[0];
+  const todos = (state.homeTodos || []).filter(t => !t.done);
+  const doneTodos = (state.homeTodos || []).filter(t => t.done);
+
+  // Group by date
+  const overdue = todos.filter(t => t.dueDate && t.dueDate < today).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const todayItems = todos.filter(t => t.dueDate === today);
+  const upcoming = todos.filter(t => t.dueDate && t.dueDate > today).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const noDate = todos.filter(t => !t.dueDate);
+
+  const renderGroup = (label, items, cssClass) => {
+    if (!items.length) return "";
+    return `
+      <div class="ho-section-label ${cssClass || ''}">${label} (${items.length})</div>
+      ${items.map(t => _renderTodoItem(t)).join("")}
+    `;
+  };
+
+  el.innerHTML = `
+    <div class="ho-header">
+      <div>
+        <div class="ho-tab-title">To-Dos</div>
+        <div class="ko-date">${todos.length} open &middot; ${doneTodos.length} done</div>
+      </div>
+    </div>
+    <div class="ho-body">
+      ${renderGroup("Overdue", overdue, "ho-overdue")}
+      ${renderGroup("Today", todayItems)}
+      ${renderGroup("Upcoming", upcoming)}
+      ${renderGroup("No Date", noDate)}
+      ${!todos.length ? '<div class="ho-empty-state"><div style="font-size:2.5rem;margin-bottom:12px">&#9989;</div><div>All done! Add a to-do with the + button.</div></div>' : ''}
+      ${doneTodos.length ? `
+        <div class="ho-section-label" style="margin-top:24px">Done (${doneTodos.length})</div>
+        ${doneTodos.slice(0, 10).map(t => _renderTodoItem(t, true)).join("")}
+        ${doneTodos.length > 10 ? `<div class="ho-empty-msg">${doneTodos.length - 10} more completed items...</div>` : ''}
+      ` : ''}
+    </div>
+  `;
+}
+
+/**
+ * _renderTodoItem(t, isDone) — returns HTML for a single to-do item row.
+ */
+function _renderTodoItem(t, isDone = false) {
+  const priorityClass = t.priority === "High" ? "ho-todo-high" : t.priority === "Low" ? "ho-todo-low" : "";
+  return `
+    <div class="ho-todo-item ${isDone ? 'ho-todo-done' : ''} ${priorityClass}">
+      <button class="ho-todo-check ${isDone ? 'ho-todo-checked' : ''}" onclick="${isDone ? `uncheckTodo('${t.id}')` : `markTodoDone('${t.id}')`}">
+        ${isDone ? '&#10003;' : ''}
+      </button>
+      <div class="ho-todo-content" onclick="openTodoDetail('${t.id}')">
+        <div class="ho-todo-title ${isDone ? 'ho-todo-title-done' : ''}">${t.title}</div>
+        <div class="ho-task-meta">
+          <span class="ho-assignee-badge ${t.assignee === 'Bushra' ? 'ho-badge-bushra' : t.assignee === 'Bora' ? 'ho-badge-bora' : ''}">${t.assignee || 'Both'}</span>
+          ${t.priority && t.priority !== 'Normal' ? `<span class="ho-priority-${t.priority.toLowerCase()}">${t.priority}</span>` : ''}
+          ${t.dueDate ? `<span class="ho-due-date">${_shortDate(t.dueDate)}</span>` : ''}
+        </div>
+        ${t.note ? `<div class="ho-todo-note">${t.note}</div>` : ''}
+      </div>
+      <button class="ho-todo-del" onclick="deleteTodo('${t.id}')">&#128465;</button>
+    </div>
+  `;
+}
+
+/**
+ * _shortDate(iso) — format an ISO date string into a short display like "Jun 6".
+ */
+function _shortDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// ── TO-DO CRUD OPERATIONS ────────────────────────────────────────────────────
+
+/**
+ * openTodoAddSheet() — opens a bottom sheet form for adding a new to-do.
+ * Creates the bottom sheet HTML dynamically if it doesn't exist yet.
+ */
+function openTodoAddSheet() {
+  // Ensure the sheet exists in DOM
+  let backdrop = g("todoAddBackdrop");
+  let sheet = g("todoAddSheet");
+  if (!backdrop) {
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <div class="bsheet-backdrop" id="todoAddBackdrop" onclick="closeTodoAddSheet()"></div>
+      <div class="bsheet" id="todoAddSheet">
+        <div class="bsheet-handle"></div>
+        <div class="bsheet-title">New To-Do</div>
+        <div class="frow"><label class="flbl">Title</label><input class="fi" id="todoTitle" placeholder="What needs to be done?"></div>
+        <div class="frow"><label class="flbl">Note (optional)</label><textarea class="fta" id="todoNote" rows="2" placeholder="Any extra details..."></textarea></div>
+        <div class="frow"><label class="flbl">Assignee</label>
+          <div class="lpick">
+            <button class="lbtn sel" onclick="setTodoField(this,'todoAssignee','Bora')">Bora</button>
+            <button class="lbtn" onclick="setTodoField(this,'todoAssignee','Bushra')">Bushra</button>
+            <button class="lbtn" onclick="setTodoField(this,'todoAssignee','Both')">Both</button>
+          </div>
+          <input type="hidden" id="todoAssignee" value="Bora">
+        </div>
+        <div class="frow"><label class="flbl">Priority</label>
+          <div class="lpick">
+            <button class="lbtn" onclick="setTodoField(this,'todoPriority','High')">High</button>
+            <button class="lbtn sel" onclick="setTodoField(this,'todoPriority','Normal')">Normal</button>
+            <button class="lbtn" onclick="setTodoField(this,'todoPriority','Low')">Low</button>
+          </div>
+          <input type="hidden" id="todoPriority" value="Normal">
+        </div>
+        <div class="frow"><label class="flbl">Due Date (optional)</label><input class="fi" type="date" id="todoDueDate"></div>
+        <button class="btn bp bf" onclick="saveTodo()" style="margin-top:12px">Add To-Do</button>
+      </div>
+    `;
+    document.body.appendChild(div);
+    backdrop = g("todoAddBackdrop");
+    sheet = g("todoAddSheet");
+  }
+  // Reset form
+  g("todoTitle").value = "";
+  g("todoNote").value = "";
+  g("todoAssignee").value = "Bora";
+  g("todoPriority").value = "Normal";
+  g("todoDueDate").value = "";
+  // Reset button states
+  sheet.querySelectorAll(".lpick").forEach(pick => {
+    pick.querySelectorAll(".lbtn").forEach((btn, i) => {
+      if (pick.querySelector("input[type=hidden]")?.id === "todoAssignee") btn.classList.toggle("sel", i === 0);
+      else btn.classList.toggle("sel", i === 1);
+    });
+  });
+  backdrop.classList.add("active");
+  sheet.classList.add("active");
+  setTimeout(() => g("todoTitle")?.focus(), 300);
+}
+
+/** closeTodoAddSheet() — closes the to-do add bottom sheet. */
+function closeTodoAddSheet() {
+  g("todoAddBackdrop")?.classList.remove("active");
+  g("todoAddSheet")?.classList.remove("active");
+}
+
+/**
+ * setTodoField(btn, fieldId, value) — updates a hidden field value and toggles
+ * the active button style within a button group. Used by the add-todo form.
+ */
+function setTodoField(btn, fieldId, value) {
+  g(fieldId).value = value;
+  btn.closest(".lpick").querySelectorAll(".lbtn").forEach(b => b.classList.remove("sel"));
+  btn.classList.add("sel");
+}
+
+/**
+ * saveTodo() — validates the add-todo form and saves a new to-do to Firestore.
+ * Awards no points on creation — points are awarded on completion.
+ */
+async function saveTodo() {
+  const title = g("todoTitle")?.value?.trim();
+  if (!title) { showNotif("Please enter a title"); return; }
+  const todo = {
+    title,
+    note: g("todoNote")?.value?.trim() || "",
+    assignee: g("todoAssignee")?.value || "Both",
+    priority: g("todoPriority")?.value || "Normal",
+    dueDate: g("todoDueDate")?.value || null,
+    done: false,
+    doneAt: null,
+    createdAt: new Date().toISOString(),
+  };
+  const id = "todo_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  todo.id = id;
+  closeTodoAddSheet();
+  ss("syncing");
+  try {
+    await dbSet(`households/${state.hid}/home_todos/${id}`, todo);
+    state.homeTodos.push(todo);
+    renderHomeTodos();
+    renderHomeOverview();
+    ss("synced");
+    showNotif("To-do added");
+  } catch (e) {
+    console.error("[saveTodo]", e);
+    ss("error");
+  }
+}
+
+/**
+ * markTodoDone(id) — marks a to-do as complete. Awards points based on priority:
+ * High = 10pts, Normal = 5pts, Low = 2pts.
+ */
+async function markTodoDone(id) {
+  const todo = state.homeTodos.find(t => t.id === id);
+  if (!todo || todo.done) return;
+  todo.done = true;
+  todo.doneAt = new Date().toISOString();
+  const pts = todo.priority === "High" ? 10 : todo.priority === "Low" ? 2 : 5;
+  const who = todo.assignee === "Bushra" ? "Bushra" : "Bora";
+  ss("syncing");
+  try {
+    await dbSet(`households/${state.hid}/home_todos/${id}`, { ...todo, id: undefined });
+    await _awardPoints(who, pts);
+    renderHomeTodos();
+    renderHomeOverview();
+    renderHomeGame();
+    ss("synced");
+    showNotif(`+${pts} pts for ${who}!`);
+  } catch (e) { console.error("[markTodoDone]", e); ss("error"); }
+}
+
+/**
+ * uncheckTodo(id) — marks a completed to-do as not done (undo).
+ */
+async function uncheckTodo(id) {
+  const todo = state.homeTodos.find(t => t.id === id);
+  if (!todo || !todo.done) return;
+  todo.done = false;
+  todo.doneAt = null;
+  ss("syncing");
+  try {
+    await dbSet(`households/${state.hid}/home_todos/${id}`, { ...todo, id: undefined });
+    renderHomeTodos();
+    renderHomeOverview();
+    ss("synced");
+  } catch (e) { console.error("[uncheckTodo]", e); ss("error"); }
+}
+
+/**
+ * deleteTodo(id) — deletes a to-do after confirmation.
+ */
+async function deleteTodo(id) {
+  if (!confirm("Delete this to-do?")) return;
+  ss("syncing");
+  try {
+    await dbDelete(`households/${state.hid}/home_todos/${id}`);
+    state.homeTodos = state.homeTodos.filter(t => t.id !== id);
+    renderHomeTodos();
+    renderHomeOverview();
+    ss("synced");
+    showNotif("To-do deleted");
+  } catch (e) { console.error("[deleteTodo]", e); ss("error"); }
+}
+
+/**
+ * openTodoDetail(id) — placeholder for opening a detail/edit view for a to-do.
+ * Phase 3 will add an inline edit sheet.
+ */
+function openTodoDetail(id) {
+  // Phase 3: open detail/edit bottom sheet
+}
+
+// ── HOME CLEANING TAB (h-cleaning) ──────────────────────────────────────────
+
+/** _cleaningView tracks whether user is viewing "schedule" (by due date) or "room" */
+let _cleaningView = "schedule";
+
+/**
+ * renderHomeCleaning() — renders the Cleaning tab with chores sorted by next
+ * due date or grouped by room. Overdue items are highlighted.
+ */
+function renderHomeCleaning() {
+  const el = g("screen-h-cleaning");
+  if (!el) return;
+
+  const today = new Date().toISOString().split("T")[0];
+  const chores = [...(state.homeChores || [])];
+
+  // View toggle buttons
+  const schedActive = _cleaningView === "schedule" ? "sel" : "";
+  const roomActive = _cleaningView === "room" ? "sel" : "";
+
+  let listHTML = "";
+
+  if (_cleaningView === "schedule") {
+    // Sort by next due date, overdue first
+    chores.sort((a, b) => (a.nextDue || "9999").localeCompare(b.nextDue || "9999"));
+    listHTML = chores.map(c => _renderChoreItem(c, today)).join("");
+  } else {
+    // Group by room
+    const rooms = {};
+    chores.forEach(c => {
+      const room = c.room || "General";
+      if (!rooms[room]) rooms[room] = [];
+      rooms[room].push(c);
+    });
+    listHTML = Object.keys(rooms).sort().map(room => `
+      <div class="ho-section-label">${room}</div>
+      ${rooms[room].map(c => _renderChoreItem(c, today)).join("")}
+    `).join("");
+  }
+
+  el.innerHTML = `
+    <div class="ho-header">
+      <div>
+        <div class="ho-tab-title">Cleaning Schedule</div>
+        <div class="ko-date">${chores.length} chores</div>
+      </div>
+      <div class="lpick" style="gap:4px">
+        <button class="lbtn bsm ${schedActive}" onclick="setCleaningView('schedule')">Schedule</button>
+        <button class="lbtn bsm ${roomActive}" onclick="setCleaningView('room')">By Room</button>
+      </div>
+    </div>
+    <div class="ho-body">
+      ${listHTML}
+      ${!chores.length ? '<div class="ho-empty-state"><div style="font-size:2.5rem;margin-bottom:12px">&#128167;</div><div>No chores yet. Add one with the + button.</div></div>' : ''}
+    </div>
+  `;
+}
+
+/**
+ * _renderChoreItem(c, today) — returns HTML for a single chore row with
+ * overdue highlighting, assignee badge, frequency tag, and done button.
+ */
+function _renderChoreItem(c, today) {
+  const overdue = c.nextDue && c.nextDue < today;
+  const dueToday = c.nextDue === today;
+  const statusClass = overdue ? "ho-chore-overdue" : dueToday ? "ho-chore-today" : "";
+  return `
+    <div class="ho-chore-item ${statusClass}">
+      <button class="ho-task-check" onclick="markChoreDone('${c.id}')">&#10003;</button>
+      <div class="ho-task-info" style="flex:1">
+        <div class="ho-task-name">${c.name}</div>
+        <div class="ho-task-meta">
+          <span class="ho-assignee-badge ${c.assignee === 'Bushra' ? 'ho-badge-bushra' : c.assignee === 'Bora' ? 'ho-badge-bora' : ''}">${c.assignee}</span>
+          <span class="ho-freq-tag">${c.frequency}</span>
+          ${c.room ? `<span>${c.room}</span>` : ''}
+        </div>
+        <div class="ho-chore-due">${overdue ? 'Overdue' : dueToday ? 'Due today' : c.nextDue ? 'Due ' + _shortDate(c.nextDue) : 'No due date'}</div>
+      </div>
+      <button class="ho-todo-del" onclick="deleteChore('${c.id}')">&#128465;</button>
+    </div>
+  `;
+}
+
+/**
+ * setCleaningView(view) — switches the cleaning tab between "schedule" and "room" views.
+ */
+function setCleaningView(view) {
+  _cleaningView = view;
+  renderHomeCleaning();
+}
+
+/**
+ * markChoreDone(id) — marks a chore as completed. Records timestamp, calculates
+ * next due date, and awards 8 points to the assignee.
+ */
+async function markChoreDone(id) {
+  const chore = state.homeChores.find(c => c.id === id);
+  if (!chore) return;
+  const now = new Date().toISOString();
+  const today = now.split("T")[0];
+  chore.lastDone = today;
+  chore.nextDue = _calcNextDue(today, chore.frequency);
+
+  // Determine assignee for points. "Rotating" defaults to current user.
+  const currentUser = _getUserFirstName();
+  const who = chore.assignee === "Rotating" ? currentUser : chore.assignee;
+  const pts = 8;
+
+  ss("syncing");
+  try {
+    const data = { ...chore }; delete data.id;
+    await dbSet(`households/${state.hid}/home_chores/${id}`, data);
+    await _awardPoints(who === "Bushra" ? "Bushra" : "Bora", pts);
+    renderHomeCleaning();
+    renderHomeOverview();
+    renderHomeGame();
+    ss("synced");
+    showNotif(`+${pts} pts! Next due ${chore.nextDue ? _shortDate(chore.nextDue) : 'N/A'}`);
+  } catch (e) { console.error("[markChoreDone]", e); ss("error"); }
+}
+
+/**
+ * openChoreAddSheet() — opens a bottom sheet form for adding a new chore.
+ */
+function openChoreAddSheet() {
+  let backdrop = g("choreAddBackdrop");
+  let sheet = g("choreAddSheet");
+  if (!backdrop) {
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <div class="bsheet-backdrop" id="choreAddBackdrop" onclick="closeChoreAddSheet()"></div>
+      <div class="bsheet" id="choreAddSheet">
+        <div class="bsheet-handle"></div>
+        <div class="bsheet-title">New Chore</div>
+        <div class="frow"><label class="flbl">Name</label><input class="fi" id="choreName" placeholder="e.g. Vacuum upstairs"></div>
+        <div class="frow"><label class="flbl">Room / Area</label><input class="fi" id="choreRoom" placeholder="e.g. Kitchen, Bedroom"></div>
+        <div class="frow"><label class="flbl">Frequency</label>
+          <select class="fsel" id="choreFreq">
+            <option value="daily">Daily</option>
+            <option value="weekly" selected>Weekly</option>
+            <option value="biweekly">Biweekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        <div class="frow"><label class="flbl">Assignee</label>
+          <div class="lpick">
+            <button class="lbtn sel" onclick="setTodoField(this,'choreAssignee','Bora')">Bora</button>
+            <button class="lbtn" onclick="setTodoField(this,'choreAssignee','Bushra')">Bushra</button>
+            <button class="lbtn" onclick="setTodoField(this,'choreAssignee','Rotating')">Rotating</button>
+          </div>
+          <input type="hidden" id="choreAssignee" value="Bora">
+        </div>
+        <button class="btn bp bf" onclick="saveChore()" style="margin-top:12px">Add Chore</button>
+      </div>
+    `;
+    document.body.appendChild(div);
+  }
+  g("choreName").value = "";
+  g("choreRoom").value = "";
+  g("choreFreq").value = "weekly";
+  g("choreAssignee").value = "Bora";
+  g("choreAddBackdrop").classList.add("active");
+  g("choreAddSheet").classList.add("active");
+  setTimeout(() => g("choreName")?.focus(), 300);
+}
+
+/** closeChoreAddSheet() — closes the chore add bottom sheet. */
+function closeChoreAddSheet() {
+  g("choreAddBackdrop")?.classList.remove("active");
+  g("choreAddSheet")?.classList.remove("active");
+}
+
+/**
+ * saveChore() — validates and saves a new chore to Firestore.
+ */
+async function saveChore() {
+  const name = g("choreName")?.value?.trim();
+  if (!name) { showNotif("Please enter a chore name"); return; }
+  const freq = g("choreFreq")?.value || "weekly";
+  const chore = {
+    name,
+    room: g("choreRoom")?.value?.trim() || "",
+    frequency: freq,
+    assignee: g("choreAssignee")?.value || "Rotating",
+    nextDue: _nextDueFromFreq(freq),
+    lastDone: null,
+    createdAt: new Date().toISOString(),
+  };
+  const id = "chore_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  chore.id = id;
+  closeChoreAddSheet();
+  ss("syncing");
+  try {
+    await dbSet(`households/${state.hid}/home_chores/${id}`, { ...chore, id: undefined });
+    state.homeChores.push(chore);
+    renderHomeCleaning();
+    ss("synced");
+    showNotif("Chore added");
+  } catch (e) { console.error("[saveChore]", e); ss("error"); }
+}
+
+/**
+ * deleteChore(id) — deletes a chore after confirmation.
+ */
+async function deleteChore(id) {
+  if (!confirm("Delete this chore?")) return;
+  ss("syncing");
+  try {
+    await dbDelete(`households/${state.hid}/home_chores/${id}`);
+    state.homeChores = state.homeChores.filter(c => c.id !== id);
+    renderHomeCleaning();
+    renderHomeOverview();
+    ss("synced");
+    showNotif("Chore deleted");
+  } catch (e) { console.error("[deleteChore]", e); ss("error"); }
+}
+
+// ── HOME MAINTENANCE TAB (h-maintain) ────────────────────────────────────────
+
+/**
+ * renderHomeMaintain() — renders the Maintenance tab with tasks sorted by
+ * next due date. Overdue items are highlighted.
+ */
+function renderHomeMaintain() {
+  const el = g("screen-h-maintain");
+  if (!el) return;
+
+  const today = new Date().toISOString().split("T")[0];
+  const tasks = [...(state.homeMaint || [])];
+  tasks.sort((a, b) => (a.nextDue || "9999").localeCompare(b.nextDue || "9999"));
+
+  // Group by overdue vs upcoming
+  const overdue = tasks.filter(t => t.nextDue && t.nextDue < today);
+  const upcoming = tasks.filter(t => !t.nextDue || t.nextDue >= today);
+
+  el.innerHTML = `
+    <div class="ho-header">
+      <div>
+        <div class="ho-tab-title">Home Maintenance</div>
+        <div class="ko-date">22 Andrew Street &middot; ${tasks.length} tasks</div>
+      </div>
+    </div>
+    <div class="ho-body">
+      ${overdue.length ? `
+        <div class="ho-section-label ho-overdue">Overdue (${overdue.length})</div>
+        ${overdue.map(t => _renderMaintItem(t, true)).join("")}
+      ` : ''}
+      ${upcoming.length ? `
+        <div class="ho-section-label">Upcoming</div>
+        ${upcoming.map(t => _renderMaintItem(t, false)).join("")}
+      ` : ''}
+      ${!tasks.length ? '<div class="ho-empty-state"><div style="font-size:2.5rem;margin-bottom:12px">&#128736;</div><div>No maintenance tasks. Add one with the + button.</div></div>' : ''}
+    </div>
+  `;
+}
+
+/**
+ * _renderMaintItem(t, isOverdue) — returns HTML for a single maintenance task row.
+ */
+function _renderMaintItem(t, isOverdue) {
+  const catIcons = { HVAC: "&#9928;", Plumbing: "&#128167;", Electrical: "&#9889;", Exterior: "&#127968;", Appliance: "&#127859;", General: "&#128295;" };
+  const icon = catIcons[t.category] || "&#128295;";
+  return `
+    <div class="ho-maint-item ${isOverdue ? 'ho-chore-overdue' : ''}">
+      <button class="ho-task-check" onclick="markMaintDone('${t.id}')">&#10003;</button>
+      <div class="ho-task-info" style="flex:1">
+        <div class="ho-task-name">${icon} ${t.name}</div>
+        <div class="ho-task-meta">
+          <span class="ho-freq-tag">${t.category}</span>
+          <span class="ho-freq-tag">${t.frequency}</span>
+          ${t.estimatedCost ? `<span class="price-tag">$${t.estimatedCost}</span>` : ''}
+        </div>
+        <div class="ho-chore-due">${isOverdue ? 'Overdue' : t.nextDue ? 'Due ' + _shortDate(t.nextDue) : 'One-time'}</div>
+        ${t.notes ? `<div class="ho-todo-note">${t.notes}</div>` : ''}
+        ${t.lastDone ? `<div class="ho-maint-last">Last done: ${_shortDate(t.lastDone)}</div>` : ''}
+      </div>
+      <button class="ho-todo-del" onclick="deleteMaint('${t.id}')">&#128465;</button>
+    </div>
+  `;
+}
+
+/**
+ * markMaintDone(id) — marks a maintenance task as completed. Records timestamp,
+ * calculates next due date, and awards 15 points.
+ */
+async function markMaintDone(id) {
+  const task = state.homeMaint.find(t => t.id === id);
+  if (!task) return;
+  const today = new Date().toISOString().split("T")[0];
+  task.lastDone = today;
+  task.nextDue = _calcNextDue(today, task.frequency);
+  const currentUser = _getUserFirstName();
+  const pts = 15;
+  ss("syncing");
+  try {
+    const data = { ...task }; delete data.id;
+    await dbSet(`households/${state.hid}/home_maintenance/${id}`, data);
+    await _awardPoints(currentUser === "Bushra" ? "Bushra" : "Bora", pts);
+    renderHomeMaintain();
+    renderHomeOverview();
+    renderHomeGame();
+    ss("synced");
+    showNotif(`+${pts} pts! Maintenance done.`);
+  } catch (e) { console.error("[markMaintDone]", e); ss("error"); }
+}
+
+/**
+ * openMaintAddSheet() — opens a bottom sheet form for adding a maintenance task.
+ */
+function openMaintAddSheet() {
+  let backdrop = g("maintAddBackdrop");
+  let sheet = g("maintAddSheet");
+  if (!backdrop) {
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <div class="bsheet-backdrop" id="maintAddBackdrop" onclick="closeMaintAddSheet()"></div>
+      <div class="bsheet" id="maintAddSheet">
+        <div class="bsheet-handle"></div>
+        <div class="bsheet-title">New Maintenance Task</div>
+        <div class="frow"><label class="flbl">Name</label><input class="fi" id="maintName" placeholder="e.g. Replace HVAC filter"></div>
+        <div class="frow"><label class="flbl">Category</label>
+          <select class="fsel" id="maintCat">
+            <option value="HVAC">HVAC</option>
+            <option value="Plumbing">Plumbing</option>
+            <option value="Electrical">Electrical</option>
+            <option value="Exterior">Exterior</option>
+            <option value="Appliance">Appliance</option>
+            <option value="General" selected>General</option>
+          </select>
+        </div>
+        <div class="frow"><label class="flbl">Frequency</label>
+          <select class="fsel" id="maintFreq">
+            <option value="monthly">Monthly</option>
+            <option value="quarterly" selected>Quarterly</option>
+            <option value="biannual">Biannual</option>
+            <option value="annual">Annual</option>
+            <option value="one-time">One-time</option>
+          </select>
+        </div>
+        <div class="frow"><label class="flbl">Notes (optional)</label><textarea class="fta" id="maintNotes" rows="2" placeholder="Any details or reminders..."></textarea></div>
+        <div class="frow"><label class="flbl">Estimated Cost (optional)</label><input class="fi" id="maintCost" type="number" placeholder="$"></div>
+        <button class="btn bp bf" onclick="saveMaint()" style="margin-top:12px">Add Task</button>
+      </div>
+    `;
+    document.body.appendChild(div);
+  }
+  g("maintName").value = "";
+  g("maintCat").value = "General";
+  g("maintFreq").value = "quarterly";
+  g("maintNotes").value = "";
+  g("maintCost").value = "";
+  g("maintAddBackdrop").classList.add("active");
+  g("maintAddSheet").classList.add("active");
+  setTimeout(() => g("maintName")?.focus(), 300);
+}
+
+/** closeMaintAddSheet() — closes the maintenance add bottom sheet. */
+function closeMaintAddSheet() {
+  g("maintAddBackdrop")?.classList.remove("active");
+  g("maintAddSheet")?.classList.remove("active");
+}
+
+/**
+ * saveMaint() — validates and saves a new maintenance task to Firestore.
+ */
+async function saveMaint() {
+  const name = g("maintName")?.value?.trim();
+  if (!name) { showNotif("Please enter a task name"); return; }
+  const freq = g("maintFreq")?.value || "quarterly";
+  const task = {
+    name,
+    category: g("maintCat")?.value || "General",
+    frequency: freq,
+    notes: g("maintNotes")?.value?.trim() || "",
+    estimatedCost: g("maintCost")?.value ? parseFloat(g("maintCost").value) : null,
+    nextDue: _nextDueFromFreq(freq),
+    lastDone: null,
+    createdAt: new Date().toISOString(),
+  };
+  const id = "maint_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  task.id = id;
+  closeMaintAddSheet();
+  ss("syncing");
+  try {
+    await dbSet(`households/${state.hid}/home_maintenance/${id}`, { ...task, id: undefined });
+    state.homeMaint.push(task);
+    renderHomeMaintain();
+    ss("synced");
+    showNotif("Task added");
+  } catch (e) { console.error("[saveMaint]", e); ss("error"); }
+}
+
+/**
+ * deleteMaint(id) — deletes a maintenance task after confirmation.
+ */
+async function deleteMaint(id) {
+  if (!confirm("Delete this maintenance task?")) return;
+  ss("syncing");
+  try {
+    await dbDelete(`households/${state.hid}/home_maintenance/${id}`);
+    state.homeMaint = state.homeMaint.filter(t => t.id !== id);
+    renderHomeMaintain();
+    ss("synced");
+    showNotif("Task deleted");
+  } catch (e) { console.error("[deleteMaint]", e); ss("error"); }
+}
+
+// ── HOME GAME TAB (h-game) ──────────────────────────────────────────────────
+
+/** Consequence wheel segments — 8 fun consequences for the loser */
+const CONSEQUENCES = [
+  "Cook dinner for a week",
+  "Breakfast in bed",
+  "Car wash duty",
+  "No phone at dinner for 3 days",
+  "Compliment the winner every day for a week",
+  "Do the grocery run solo",
+  "Handle all bedtime routines for a week",
+  "Winner picks the next 3 movies",
+];
+
+/** Power card definitions — display only for now */
+const POWER_CARDS = {
+  shield: { icon: "&#128737;", name: "Shield", desc: "Block one chore from counting this week" },
+  swap: { icon: "&#128260;", name: "Swap", desc: "Swap your weekly score with your partner's" },
+  ghost: { icon: "&#128123;", name: "Ghost Week", desc: "Your opponent's points don't count this week" },
+  double: { icon: "&#11014;", name: "Double Down", desc: "All your points count double this week" },
+};
+
+/**
+ * renderHomeGame() — renders the Game tab with leaderboard, season progress,
+ * consequence spin wheel, power cards, and weekly history.
+ */
+function renderHomeGame() {
+  const el = g("screen-h-game");
+  if (!el) return;
+
+  const gs = state.homeGame || _defaultGameState();
+  const boraLead = gs.boraWeekPts > gs.bushraWeekPts;
+  const bushraLead = gs.bushraWeekPts > gs.boraWeekPts;
+
+  // Season progress
+  const seasonDays = gs.seasonStart ? Math.floor((Date.now() - new Date(gs.seasonStart).getTime()) / 86400000) : 0;
+  const seasonRemaining = Math.max(0, 30 - seasonDays);
+
+  // Week status — is the week over? (current day is Sunday and we're past the week start + 7 days)
+  const weekStartDate = new Date(gs.weekStart);
+  const weekEndDate = new Date(weekStartDate);
+  weekEndDate.setDate(weekEndDate.getDate() + 7);
+  const weekOver = Date.now() >= weekEndDate.getTime();
+  const hasLoser = weekOver && gs.boraWeekPts !== gs.bushraWeekPts;
+  const loserName = gs.boraWeekPts < gs.bushraWeekPts ? "Bora" : "Bushra";
+
+  // Weekly history (last 4)
+  const history = (gs.weeklyHistory || []).slice(0, 4);
+
+  el.innerHTML = `
+    <div class="ho-header">
+      <div>
+        <div class="ho-tab-title">The Game</div>
+        <div class="ko-date">Household Gamification</div>
+      </div>
+    </div>
+    <div class="ho-body">
+      <!-- Leaderboard -->
+      <div class="ho-card ho-leaderboard">
+        <div class="ho-card-title">Leaderboard</div>
+        <div class="ho-game-scores">
+          <div class="ho-game-player">
+            <div class="ho-lb-avatar ho-avatar-bora" style="width:48px;height:48px;font-size:1.2rem">B</div>
+            <div class="ho-game-name">Bora</div>
+            <div class="ho-game-week-pts">${gs.boraWeekPts || 0} <small>this week</small></div>
+            <div class="ho-game-all-pts">${gs.boraAllTimePts || 0} <small>all-time</small></div>
+            ${gs.boraStreak > 1 ? `<div class="ho-streak">&#128293; ${gs.boraStreak} week streak</div>` : ''}
+          </div>
+          <div class="ho-game-vs">VS</div>
+          <div class="ho-game-player">
+            <div class="ho-lb-avatar ho-avatar-bushra" style="width:48px;height:48px;font-size:1.2rem">B</div>
+            <div class="ho-game-name">Bushra</div>
+            <div class="ho-game-week-pts">${gs.bushraWeekPts || 0} <small>this week</small></div>
+            <div class="ho-game-all-pts">${gs.bushraAllTimePts || 0} <small>all-time</small></div>
+            ${gs.bushraStreak > 1 ? `<div class="ho-streak">&#128293; ${gs.bushraStreak} week streak</div>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <!-- Season Progress -->
+      <div class="ho-card">
+        <div class="ho-card-title">Season Progress</div>
+        <div class="ho-season-info">
+          <div class="ho-season-row"><span>Days remaining</span><strong>${seasonRemaining}</strong></div>
+          <div class="ho-season-bar"><div class="ho-season-fill" style="width:${Math.min(100, (seasonDays / 30) * 100)}%"></div></div>
+          <div class="ho-season-row"><span>Bora season pts</span><strong>${gs.boraSeasonPts || 0}</strong></div>
+          <div class="ho-season-row"><span>Bushra season pts</span><strong>${gs.bushraSeasonPts || 0}</strong></div>
+        </div>
+      </div>
+
+      <!-- Consequence Wheel -->
+      <div class="ho-card">
+        <div class="ho-card-title">Consequence Wheel</div>
+        ${hasLoser ? `
+          <div class="ho-wheel-container" id="wheelContainer">
+            <div class="ho-wheel" id="spinWheel">
+              ${CONSEQUENCES.map((c, i) => `<div class="ho-wheel-seg" style="--seg-i:${i};--seg-total:${CONSEQUENCES.length}">${c}</div>`).join("")}
+            </div>
+            <div class="ho-wheel-pointer">&#9660;</div>
+          </div>
+          <button class="btn bp bf" onclick="spinWheel()" id="spinBtn" style="margin-top:12px">Spin the Wheel for ${loserName}!</button>
+        ` : gs.lastConsequence ? `
+          <div class="ho-consequence-result">
+            <div class="ho-consequence-label">Last consequence:</div>
+            <div class="ho-consequence-text">${gs.lastConsequence}</div>
+          </div>
+        ` : `
+          <div class="ho-empty-msg">The wheel spins at the end of the week when there's a loser. Keep earning points!</div>
+        `}
+      </div>
+
+      <!-- Power Cards -->
+      <div class="ho-card">
+        <div class="ho-card-title">Power Cards</div>
+        <div class="ho-power-section">
+          <div class="ho-power-label">Bora's Cards</div>
+          <div class="ho-power-row">
+            ${(gs.boraPowerCards || []).map(c => {
+              const card = POWER_CARDS[c];
+              return card ? `<div class="ho-power-card ho-power-bora" title="${card.desc}"><div class="ho-power-icon">${card.icon}</div><div class="ho-power-name">${card.name}</div></div>` : '';
+            }).join("")}
+          </div>
+          <div class="ho-power-label" style="margin-top:12px">Bushra's Cards</div>
+          <div class="ho-power-row">
+            ${(gs.bushraPowerCards || []).map(c => {
+              const card = POWER_CARDS[c];
+              return card ? `<div class="ho-power-card ho-power-bushra" title="${card.desc}"><div class="ho-power-icon">${card.icon}</div><div class="ho-power-name">${card.name}</div></div>` : '';
+            }).join("")}
+          </div>
+        </div>
+      </div>
+
+      <!-- Weekly History -->
+      <div class="ho-card">
+        <div class="ho-card-title">Weekly History</div>
+        ${history.length ? history.map(h => `
+          <div class="ho-history-row">
+            <div class="ho-history-week">Week of ${_shortDate(h.weekStart)}</div>
+            <div class="ho-history-scores">Bora ${h.boraPoints} — ${h.bushraPoints} Bushra</div>
+            <div class="ho-history-winner">${h.winner === 'Tie' ? 'Tied!' : h.winner + ' won!'}</div>
+            ${h.consequence ? `<div class="ho-history-consequence">${h.consequence}</div>` : ''}
+          </div>
+        `).join("") : '<div class="ho-empty-msg">No weekly history yet. Complete your first week!</div>'}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * spinWheel() — animates the consequence wheel and picks a random segment.
+ * Saves the result to Firestore as lastConsequence.
+ */
+async function spinWheel() {
+  const btn = g("spinBtn");
+  if (btn) btn.disabled = true;
+
+  const wheel = g("spinWheel");
+  if (!wheel) return;
+
+  // Pick a random consequence
+  const idx = Math.floor(Math.random() * CONSEQUENCES.length);
+  const consequence = CONSEQUENCES[idx];
+
+  // Animate: spin 5 full rotations + land on the segment
+  const segAngle = 360 / CONSEQUENCES.length;
+  const targetAngle = 360 * 5 + (360 - idx * segAngle - segAngle / 2);
+  wheel.style.transition = "transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)";
+  wheel.style.transform = `rotate(${targetAngle}deg)`;
+
+  // After animation completes, save result and re-render
+  setTimeout(async () => {
+    state.homeGame.lastConsequence = consequence;
+    await _saveGameState();
+    showNotif(`Result: ${consequence}`);
+    renderHomeGame();
+  }, 4200);
+}
+
+// ── REGISTER ALL HOME WORLD HANDLERS ON WINDOW ──────────────────────────────
+// These must be on window.* so HTML onclick attributes can call them.
+
+window.renderKitchenOverview = renderKitchenOverview;
+window.renderHomeOverview = renderHomeOverview;
+window.renderHomeTodos = renderHomeTodos;
+window.renderHomeCleaning = renderHomeCleaning;
+window.renderHomeMaintain = renderHomeMaintain;
+window.renderHomeGame = renderHomeGame;
+
+// To-Do handlers
+window.openTodoAddSheet = openTodoAddSheet;
+window.closeTodoAddSheet = closeTodoAddSheet;
+window.setTodoField = setTodoField;
+window.saveTodo = saveTodo;
+window.markTodoDone = markTodoDone;
+window.uncheckTodo = uncheckTodo;
+window.deleteTodo = deleteTodo;
+window.openTodoDetail = openTodoDetail;
+
+// Cleaning handlers
+window.setCleaningView = setCleaningView;
+window.markChoreDone = markChoreDone;
+window.openChoreAddSheet = openChoreAddSheet;
+window.closeChoreAddSheet = closeChoreAddSheet;
+window.saveChore = saveChore;
+window.deleteChore = deleteChore;
+
+// Maintenance handlers
+window.markMaintDone = markMaintDone;
+window.openMaintAddSheet = openMaintAddSheet;
+window.closeMaintAddSheet = closeMaintAddSheet;
+window.saveMaint = saveMaint;
+window.deleteMaint = deleteMaint;
+
+// Game handlers
+window.spinWheel = spinWheel;
 
 // manualRefresh(target) — Safety valve to force re-fetch all items from Firestore.
 // Triggered by the subtle ↻ button on Shopping/Inventory screens when real-time
@@ -1585,6 +3046,12 @@ window.doSignOut = async function() {
     "k-supplies": ".ibody",
     "k-shopping": "#sh-list-body",
     "k-deals": "#sh-deals-body",
+    "k-overview": ".ko-body",
+    "h-overview": ".ho-body",
+    "h-todos": ".ho-body",
+    "h-cleaning": ".ho-body",
+    "h-maintain": ".ho-body",
+    "h-game": ".ho-body",
   };
 
   tapZone.addEventListener("click", () => {
