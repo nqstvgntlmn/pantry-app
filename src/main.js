@@ -413,12 +413,17 @@ function _highlightNavItem(tabName) {
 
 // switchWorld(world) — toggles between "kitchen" and "home" worlds.
 // Updates the world switcher buttons, swaps bottom nav bars, and navigates
-// to the first tab of the target world (or the last-visited tab if tracked).
+// to the first tab of the target world. Always applies the full state to
+// prevent desyncs — no early return if already on the same world, so a
+// single tap always produces the correct visual state.
 window.switchWorld = function(world) {
-  if (world === _activeWorld) return;
+  // Skip navigation if already on this world, but still apply visual state
+  // below to prevent desyncs (e.g. stale button highlights).
+  const alreadyActive = (world === _activeWorld);
   _activeWorld = world;
 
-  // Update world switcher button states
+  // Update world switcher pill button states — active gets green bg + white text,
+  // inactive gets transparent bg + muted text
   const kitchenBtn = g("ws-kitchen");
   const homeBtn = g("ws-home");
   if (world === "kitchen") {
@@ -440,9 +445,12 @@ window.switchWorld = function(world) {
     if (homeNav) homeNav.style.display = "flex";
   }
 
-  // Navigate to the first tab of the target world
-  const firstTab = world === "kitchen" ? KITCHEN_TABS[0] : HOME_TABS[0];
-  window.showScreen(firstTab);
+  // Navigate to the first tab of the target world (skip if already there
+  // to avoid re-rendering the same screen unnecessarily)
+  if (!alreadyActive) {
+    const firstTab = world === "kitchen" ? KITCHEN_TABS[0] : HOME_TABS[0];
+    window.showScreen(firstTab);
+  }
 };
 
 // ── CONTEXT-AWARE FLOATING ACTION BUTTON ─────────────────────────────────────

@@ -2066,3 +2066,28 @@ Home world data is loaded **lazily** — only fetched from Firestore when the us
 - `src/main.js` — Added `dbDelete` import, Kitchen Overview render, all Home World render/CRUD functions, updated `_onTabEnter`, `FAB_CONFIG`, scroll-to-top selectors, window handler registrations
 - `src/styles.css` — Added Kitchen Overview styles (.ko-*), Home World shared styles (.ho-*), all tab-specific styles (leaderboard, todo items, chore items, maintenance, game scores, wheel, power cards, history)
 - `CLAUDE_CODE_HANDOFF.md` — This session entry
+
+## Session — Bottom Nav Shadow Fix + World Switcher Tap Fix (June 2026)
+
+### Problems
+1. **Dark shadow/overlay above bottom nav** — leftover dark-theme CSS gradient overrides on `.hhdr` and `.shdr` headers were rendering near-black gradients (`rgba(17,17,21,.6)` and `rgba(12,12,18,.8)`) on the cream-themed app, creating dark visual artifacts. The `.world-nav` bottom bar also used `var(--b1)` for its border which could appear heavier than intended.
+2. **World switcher glitchy taps** — The pill buttons had only 10px vertical padding and no min-height, making the tappable area too small on iOS. Missing `touch-action:manipulation` allowed the browser's double-tap-to-zoom to intercept single taps, requiring a double-tap to register. The `switchWorld()` function's early-return guard (`if (world === _activeWorld) return`) could cause visual desyncs if state drifted.
+
+### What Changed
+
+#### 1. Bottom Nav Shadow Removal (`src/styles.css`)
+- **`.world-nav` border** — Changed `border-top` from `1px solid var(--b1)` (opaque beige `#E8E2D8`) to `1px solid rgba(0,0,0,0.08)` for a subtler separator. Added explicit `box-shadow:none` to prevent any inherited shadow.
+- **`.hhdr` gradient removed** — Replaced `linear-gradient(180deg,var(--sf) 0%,rgba(17,17,21,.6) 100%)` (dark-theme leftover that faded to 60% near-black) with flat `var(--sf)` (cream-dark). This was the main dark visual artifact.
+- **`.shdr` gradient removed** — Replaced `linear-gradient(180deg,rgba(12,12,18,.8) 0%,transparent 100%)` (dark-theme leftover starting at 80% near-black) with flat `var(--sf)`.
+
+#### 2. World Switcher Tap Zone Fix (`src/styles.css`)
+- **`.ws-btn`** — Added `min-height:44px` (iOS minimum tap target), increased padding from `10px 16px` to `10px 20px`, added `touch-action:manipulation` (disables double-tap-to-zoom so single taps register immediately), added `-webkit-tap-highlight-color:transparent`.
+- **`.ws-track`** — Added `touch-action:manipulation` on the pill container to ensure no tap delay anywhere in the switcher.
+
+#### 3. World Switcher Toggle Logic Fix (`src/main.js`)
+- **`switchWorld()`** — Removed the early-return guard that skipped everything when tapping the already-active world. Now always applies the full visual state (button highlights, nav bar visibility) to prevent desyncs. Only the `showScreen()` navigation call is skipped when the world is already active, avoiding unnecessary re-renders.
+
+### Files Changed
+- `src/styles.css` — `.world-nav` border + box-shadow, `.hhdr`/`.shdr` gradient removal, `.ws-btn` tap target sizing, `.ws-track` touch-action
+- `src/main.js` — `switchWorld()` desync-proof toggle logic
+- `CLAUDE_CODE_HANDOFF.md` — This entry

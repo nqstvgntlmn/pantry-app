@@ -201,13 +201,17 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
   padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 8px;
   background:var(--cream);display:flex;gap:0;
   border-bottom:1px solid var(--b1)}
-/* Pill container — the two buttons sit inside a rounded track */
-.ws-track{display:flex;flex:1;background:var(--cream-dark);border-radius:12px;padding:3px;gap:2px}
-/* Individual world switcher button */
-.ws-btn{flex:1;padding:10px 16px;border:none;border-radius:10px;
+/* Pill container — the two buttons sit inside a rounded track.
+   touch-action:manipulation prevents double-tap-to-zoom delay on iOS. */
+.ws-track{display:flex;flex:1;background:var(--cream-dark);border-radius:12px;padding:3px;gap:2px;
+  touch-action:manipulation}
+/* Individual world switcher button — min-height 44px for reliable iOS tap targets,
+   generous padding so the full pill area is tappable, not just the text */
+.ws-btn{flex:1;min-height:44px;padding:10px 20px;border:none;border-radius:10px;
   font-family:"DM Sans",sans-serif;font-size:.82rem;font-weight:600;
   cursor:pointer;transition:all .2s ease;background:transparent;color:var(--ink-muted);
-  letter-spacing:.01em;text-align:center}
+  letter-spacing:.01em;text-align:center;-webkit-tap-highlight-color:transparent;
+  touch-action:manipulation}
 /* Active world button — green background with white text and subtle shadow */
 .ws-btn.ws-active{background:var(--green);color:#FFFFFF;
   box-shadow:0 2px 8px rgba(45,90,61,0.25)}
@@ -216,11 +220,13 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
    Each world has its own bottom nav bar. Only one is visible at a time.
    Clean white bar with subtle top border, no floating pill. */
 /* Bottom nav — fixed to the bottom with generous safe-area padding so the
-   nav clears the iPhone home indicator. min-height keeps it fully visible. */
+   nav clears the iPhone home indicator. min-height keeps it fully visible.
+   No box-shadow — only a subtle 1px top border for separation. */
 .world-nav{position:fixed;bottom:0;left:0;right:0;
   min-height:60px;
   padding:10px 8px max(20px, env(safe-area-inset-bottom, 0px));
-  background:#FFFFFF;border-top:1px solid var(--b1);
+  background:#FFFFFF;border-top:1px solid rgba(0,0,0,0.08);
+  box-shadow:none;
   display:flex;align-items:stretch;z-index:150}
 /* Individual nav item — icon stacked above label */
 .wn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -1065,10 +1071,10 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .screen{background:var(--page-grad);background-color:var(--bg)}
 
 /* ── HEADER AREA GRADIENT ──
-   Clean, minimal header background. Subtle gradient fades into the page so
-   the header doesn't create a hard visual break — just the title and actions. */
-.hhdr{background:linear-gradient(180deg,var(--sf) 0%,rgba(17,17,21,.6) 100%)}
-.shdr{background:linear-gradient(180deg,rgba(12,12,18,.8) 0%,transparent 100%)}
+   Clean, minimal header background using the cream palette.
+   Subtle gradient fades from cream-dark surface to transparent — no dark overlays. */
+.hhdr{background:var(--sf)}
+.shdr{background:var(--sf)}
 
 /* ── BUTTON MICRO-ANIMATIONS ──
    Tactile press effect: scale down on press, smooth ease-out on release.
