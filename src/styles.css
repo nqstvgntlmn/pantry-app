@@ -1098,7 +1098,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
    Active tab keeps the subtle lift and gold glow. */
 .ni .ico{transition:opacity .12s,transform .2s cubic-bezier(.4,0,.2,1),filter .2s}
 .ni:active .ico{opacity:.6}
-.ni.active .ico{transform:translateY(-3px);filter:drop-shadow(0 2px 8px rgba(212,168,83,.5))}
+/* Active tab icon — no shadow/lift, just inherit the active color */
+.ni.active .ico{transform:none;filter:none;box-shadow:none}
 
 /* ── SCREEN ENTRANCE ANIMATION ──
    Replaced by transform-based slide transitions in the .screen rules above.
@@ -2006,7 +2007,8 @@ img[loading="lazy"] { content-visibility: auto }
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* Header with greeting and settings gear */
-.ko-header{padding:20px 20px 14px;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;background:var(--sf);border-bottom:1px solid var(--b1)}
+/* Kitchen overview header — cream background (not --sf/cream-dark which looked too dark) */
+.ko-header{padding:20px 20px 14px;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;background:var(--cream);border-bottom:1px solid var(--b1)}
 /* Greeting text — Fraunces heading with green accent on name */
 .ko-greeting{font-family:"Fraunces",serif;font-size:1.6rem;font-weight:300;letter-spacing:-.02em;line-height:1.2;color:var(--ink)}
 .ko-greeting span{color:var(--green)}
@@ -2036,7 +2038,14 @@ img[loading="lazy"] { content-visibility: auto }
 .ko-dinner-icon{font-size:2.2rem;flex-shrink:0}
 .ko-dinner-content{flex:1}
 .ko-dinner-title{font-family:"Fraunces",serif;font-size:1.1rem;font-weight:400;color:var(--ink);line-height:1.3}
+/* Subtitle text below dinner title */
 .ko-dinner-sub{font-size:.78rem;color:var(--ink-muted);margin-top:4px;line-height:1.4}
+/* Find Recipes button — green pill inside the dinner card */
+.ko-recipes-btn{margin-top:10px;padding:8px 18px;border:none;border-radius:20px;
+  background:var(--green);color:#fff;font-family:"DM Sans",sans-serif;
+  font-size:.78rem;font-weight:600;cursor:pointer;transition:background .15s;
+  -webkit-tap-highlight-color:transparent}
+.ko-recipes-btn:active{background:var(--green-light)}
 
 /* Activity feed rows */
 .ko-activity-row{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--b1)}

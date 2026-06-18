@@ -222,7 +222,7 @@ World switcher pill at top toggles between Kitchen and Home worlds. Each world h
 
 | Icon | Tab | Screen shown | Notes |
 |---|---|---|---|
-| 🏠 | Overview | `screen-k-overview` (placeholder) | Kitchen dashboard — not yet wired |
+| 🏠 | Overview | `screen-k-overview` | Kitchen dashboard — LIVE: greeting, date, stats (low items, shopping count, expiring), dinner card with Find Recipes button, recent activity feed |
 | 🥫 | Pantry | `screen-inventory` (via TAB_SCREEN_MAP) | Full Supplies screen with All/Fridge/Freezer/Pantry/Household tabs |
 | 🛒 | Shopping | `screen-shopping` (via TAB_SCREEN_MAP) | Shopping list (My List sub-tab active) |
 | 📦 | Supplies | `screen-inventory` (via TAB_SCREEN_MAP) | Same as Pantry for now — Phase 2 will differentiate |
@@ -2138,3 +2138,40 @@ Added "CSS/JS Fix Protocol" block at top of Absolute Rules section with 5 mandat
 
 ### Files Changed
 - `src/styles.css` — `.ho-header` background: `var(--sf)` → `var(--cream)`
+
+---
+
+## Session 8 — Nav Shadow Cleanup, Kitchen Overview Dinner Card, Header Background (June 2026)
+
+### What changed
+
+**FIX 1 — Active nav icon shadow removed:**
+- `src/styles.css` line ~1101: Changed `.ni.active .ico` from `transform:translateY(-3px);filter:drop-shadow(0 2px 8px rgba(212,168,83,.5))` to `transform:none;filter:none;box-shadow:none`. The gold drop-shadow and upward lift on the active bottom nav icon are now removed. Active icon sits flush with no visual shadow artifacts.
+
+**FIX 2 — World switcher tap zones verified:**
+- `.ov` rule: Already uses explicit `top:var(--wsh, 64px);left:0;right:0;bottom:var(--nh)` — no `inset:0` present (fixed in Session 6).
+- `--wsh` CSS variable: Set once at boot in `_bootWithHousehold()`, used by `.ov` for `top` positioning. World switcher z-index (160) is above overlays (100). No changes needed.
+- `.ws-btn`: Already has `min-height:44px`, `padding:10px 24px`, `cursor:pointer`, `-webkit-tap-highlight-color:transparent`, `user-select:none`. No changes needed.
+
+**FIX 3 — Kitchen Overview tab polished:**
+- `src/main.js` `renderKitchenOverview()`: Updated the "What's for dinner tonight?" card to include a green "Find Recipes" button (`ko-recipes-btn`). Button shows a notification toast ("Recipes coming to Kitchen tab soon!") since the recipes screen is a legacy screen not yet integrated into the Kitchen tab nav.
+- `src/styles.css`: Added `.ko-recipes-btn` and `.ko-recipes-btn:active` styles — green pill button matching the design system.
+- `src/styles.css`: Changed `.ko-header` background from `var(--sf)` to `var(--cream)` to match the Home Overview header fix from Session 7.
+
+### Why
+- The gold `drop-shadow` on active nav icons was the only remaining shadow effect on the bottom nav and created visual noise on the white nav bar.
+- Kitchen Overview dinner card needed a "Find Recipes" button per design spec.
+- Kitchen Overview header had the same `--sf` (cream-dark) background issue previously fixed for Home Overview.
+
+### Architecture notes
+- `renderKitchenOverview()` at ~line 1071 in `main.js` renders: time-of-day greeting, date, 3 stats cards (Running Low / On My List / Expiring Soon), dinner prompt card with Find Recipes button, and recent activity feed.
+- The function runs on first boot before Firestore data loads — all stats show 0 initially, then update when data arrives and re-renders trigger.
+- The recipes screen (`screen-recipes`) is a legacy screen not in KITCHEN_TABS — the Find Recipes button currently shows a toast. Phase 2 should integrate recipes into the kitchen nav or make it accessible as an overlay.
+
+### HANDOFF doc updates
+- Updated Kitchen Overview row in the Kitchen World table from "placeholder / not yet wired" to "LIVE" with feature list.
+
+### Files Changed
+- `src/styles.css` — `.ni.active .ico` shadow removed, `.ko-header` background fixed, `.ko-recipes-btn` styles added
+- `src/main.js` — Kitchen Overview dinner card updated with Find Recipes button
+- `CLAUDE_CODE_HANDOFF.md` — Kitchen Overview table entry + this session changelog

@@ -1131,13 +1131,14 @@ function renderKitchenOverview() {
         </div>
       </div>
 
-      <!-- What's for dinner card -->
+      <!-- What's for dinner tonight card — static prompt with Find Recipes button -->
       <div class="ko-section-label">Tonight's Dinner</div>
-      <div class="ko-dinner-card" onclick="${tonightMeal ? '' : "showScreen('k-pantry')"}">
+      <div class="ko-dinner-card">
         <div class="ko-dinner-icon">${tonightMeal ? '🍽️' : '🤔'}</div>
         <div class="ko-dinner-content">
-          <div class="ko-dinner-title">${tonightMeal || "What's for dinner?"}</div>
-          <div class="ko-dinner-sub">${tonightMeal ? 'Planned for tonight' : 'No meal planned yet — check your pantry for inspiration!'}</div>
+          <div class="ko-dinner-title">${tonightMeal || "What's for dinner tonight?"}</div>
+          <div class="ko-dinner-sub">${tonightMeal ? 'Planned for tonight' : 'Browse your saved recipes for inspiration'}</div>
+          <button class="ko-recipes-btn" onclick="showNotif('Recipes coming to Kitchen tab soon!')">Find Recipes</button>
         </div>
       </div>
 
