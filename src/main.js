@@ -3305,3 +3305,20 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+
+// Fix iOS Safari tap zone offset on world switcher
+// Attaches touchend listeners directly to buttons instead of relying on onclick
+(function() {
+  function attachSwitcher() {
+    var k = document.getElementById('ws-kitchen');
+    var h = document.getElementById('ws-home');
+    if (!k || !h) return;
+    k.addEventListener('touchend', function(e) { e.preventDefault(); window.switchWorld('kitchen'); }, {passive: false});
+    h.addEventListener('touchend', function(e) { e.preventDefault(); window.switchWorld('home'); }, {passive: false});
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachSwitcher);
+  } else {
+    attachSwitcher();
+  }
+})();
