@@ -3286,3 +3286,22 @@ onAuth(async (user) => {
     showAuthScreen("signin");
   }
 });
+
+// iOS Safari fix — attach touchend listeners to world switcher buttons
+// instead of relying on onclick attributes which misfire on fixed elements
+document.addEventListener('DOMContentLoaded', function() {
+  const kitchenBtn = document.getElementById('ws-kitchen');
+  const homeBtn = document.getElementById('ws-home');
+  if (kitchenBtn) {
+    kitchenBtn.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      window.switchWorld('kitchen');
+    });
+  }
+  if (homeBtn) {
+    homeBtn.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      window.switchWorld('home');
+    });
+  }
+});
