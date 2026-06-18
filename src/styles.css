@@ -200,7 +200,7 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 /* z-index:1000 ensures no overlay (.ov z:100, .world-nav z:150) can sit on top
    and intercept taps. position:fixed already creates a stacking context for children. */
 #world-switcher{position:fixed;top:0;left:0;right:0;z-index:1000;
-  padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 8px;
+  padding:8px 16px 8px;margin-top:env(safe-area-inset-top,0px);
   background:var(--cream);display:flex;gap:0;
   border-bottom:1px solid var(--b1)}
 /* Pill container — the two buttons sit inside a rounded track.
