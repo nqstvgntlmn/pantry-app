@@ -1,6 +1,18 @@
 # Kitchen App — Claude Code Handoff Document (Session 6)
 > Give this entire document to Claude Code at the start of every session.
-> Last updated: March 2026
+> Last updated: June 2026
+
+## Latest Changes (June 18, 2026)
+
+### Fix: bottom nav shadow + world switcher tap zones (src/styles.css)
+
+**FIX 1 — Shadow above bottom nav:**
+- `.multi-bar` (line 579): changed `box-shadow:0 -4px 24px rgba(0,0,0,.35)` → `box-shadow:none` — the upward shadow was bleeding visually above the bottom nav bar.
+- `.undo-toast` (line 586): same fix — removed identical upward shadow that bled above the nav.
+
+**FIX 2 — World switcher tap zones blocked by overlays:**
+- `.ov` (line 612): added `pointer-events:none` — inactive (hidden) overlays with `display:none` were still intercepting touch events on the world switcher pill sitting above them in the stacking order. `pointer-events:none` ensures taps pass through.
+- `.ov.active` (line 613): added `pointer-events:auto` — when an overlay is actually visible, re-enable interaction so its content is tappable.
 
 ---
 

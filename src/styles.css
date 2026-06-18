@@ -576,14 +576,14 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .selbtn{font-size:.75rem}
 .selbtn.active{background:var(--ac);color:var(--bg);border-color:var(--ac)}
-.multi-bar{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(120px);visibility:hidden;width:calc(100% - 32px);max-width:460px;background:var(--card2);border:1.5px solid var(--b1);border-radius:16px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:150;transition:transform .3s cubic-bezier(.4,0,.2,1), visibility 0s .3s;box-shadow:0 -4px 24px rgba(0,0,0,.35)}
+.multi-bar{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(120px);visibility:hidden;width:calc(100% - 32px);max-width:460px;background:var(--card2);border:1.5px solid var(--b1);border-radius:16px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:150;transition:transform .3s cubic-bezier(.4,0,.2,1), visibility 0s .3s;box-shadow:none /* removed upward shadow bleeding above bottom nav */}
 .multi-bar.visible{transform:translateX(-50%) translateY(0);visibility:visible;transition:transform .3s cubic-bezier(.4,0,.2,1), visibility 0s 0s}
 .multi-bar-count{font-size:.88rem;color:var(--tx2)}
 .multi-bar-count strong{color:var(--tx);font-weight:600}
 
 /* ── UNDO TOAST ── */
 /* Bottom toast shown after item deletion with a shrinking progress bar and Undo button */
-.undo-toast{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom) + 8px);left:50%;transform:translateX(-50%) translateY(120px);visibility:hidden;width:calc(100% - 32px);max-width:460px;background:var(--card2);border:1.5px solid var(--b1);border-radius:16px;padding:12px 16px 16px;z-index:160;transition:transform .3s cubic-bezier(.4,0,.2,1),visibility 0s .3s;box-shadow:0 -4px 24px rgba(0,0,0,.35);overflow:hidden}
+.undo-toast{position:fixed;bottom:calc(72px + env(safe-area-inset-bottom) + 8px);left:50%;transform:translateX(-50%) translateY(120px);visibility:hidden;width:calc(100% - 32px);max-width:460px;background:var(--card2);border:1.5px solid var(--b1);border-radius:16px;padding:12px 16px 16px;z-index:160;transition:transform .3s cubic-bezier(.4,0,.2,1),visibility 0s .3s;box-shadow:none /* removed upward shadow bleeding above bottom nav */;overflow:hidden}
 .undo-toast.visible{transform:translateX(-50%) translateY(0);visibility:visible;transition:transform .3s cubic-bezier(.4,0,.2,1),visibility 0s 0s}
 .undo-toast-body{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .undo-toast-text{font-size:.88rem;color:var(--tx)}
@@ -609,8 +609,8 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 /* Overlay screens — match page deep gradient background for consistency.
    top uses --wsh (world switcher height, set by JS) so the overlay doesn't
    cover the world switcher and block its tap targets on iOS. */
-.ov{position:fixed;top:var(--wsh, 64px);left:0;right:0;bottom:var(--nh);background:var(--page-grad);background-color:var(--bg);display:none;flex-direction:column;overflow-y:auto;z-index:100}
-.ov.active{display:flex}
+.ov{position:fixed;top:var(--wsh, 64px);left:0;right:0;bottom:var(--nh);background:var(--page-grad);background-color:var(--bg);display:none;flex-direction:column;overflow-y:auto;z-index:100;pointer-events:none /* prevent inactive overlays from intercepting world switcher taps */}
+.ov.active{display:flex;pointer-events:auto /* re-enable interaction for visible overlays */}
 .ovhdr{padding:22px 20px 0;display:flex;align-items:center;gap:13px;flex-shrink:0}
 /* Back button — 44px minimum tap target per mobile-first rules. Previously 38px
    which was below the 44px iPhone guideline and caused unreliable taps near the
