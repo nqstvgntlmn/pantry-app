@@ -841,7 +841,7 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 /* Smooth ease-out on open (no spring overshoot), ease-in on close */
 /* Bottom sheet — reduced blur from 20px to 10px for Safari GPU stability.
    Sheets stack on top of other content and each blur layer is a separate compositing pass. */
-.bsheet{position:fixed;bottom:0;left:0;right:0;z-index:190;background:var(--card);border-radius:20px 20px 0 0;border-top:1px solid var(--card-border-top);padding:16px 20px calc(20px + env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .3s cubic-bezier(0.4,0,0.2,1);max-height:80vh;overflow-y:auto;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 -8px 40px rgba(0,0,0,.4)}
+.bsheet{position:fixed;bottom:0;left:0;right:0;z-index:190;background:var(--card);border-radius:20px 20px 0 0;border-top:1px solid var(--card-border-top);padding:16px 20px calc(20px + env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .3s cubic-bezier(0.4,0,0.2,1);max-height:80vh;overflow-y:auto;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:none}
 .bsheet.active{transform:translateY(0)}
 .bsheet:not(.active){transition:transform .25s cubic-bezier(.4,0,.2,1)}
 /* Drag handle at the top of the sheet */
