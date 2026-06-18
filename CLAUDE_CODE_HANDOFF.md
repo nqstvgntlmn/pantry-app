@@ -2175,3 +2175,60 @@ Added "CSS/JS Fix Protocol" block at top of Absolute Rules section with 5 mandat
 - `src/styles.css` — `.ni.active .ico` shadow removed, `.ko-header` background fixed, `.ko-recipes-btn` styles added
 - `src/main.js` — Kitchen Overview dinner card updated with Find Recipes button
 - `CLAUDE_CODE_HANDOFF.md` — Kitchen Overview table entry + this session changelog
+
+## Session 9 — Bottom Nav Dark Shadow Fix + World Switcher z-index Elevation (June 2026)
+
+### Problems
+1. **Dark shadow at the bottom of the screen** — multiple old dark-theme CSS values were still active, including dark glassmorphism overrides on `.minner` and `.bsheet`, a dead `#NAV` rule with `rgba(12,12,18,.85)` background, and a dark `rgba(0,0,0,.3)` shadow component on the FAB.
+2. **World switcher tap zones too low** — tapping the Kitchen/Home buttons required hitting below the visible pill. The world switcher `z-index:160` was not high enough to guarantee it sat above all other positioned elements.
+
+### What Changed
+
+#### FIX 1 — Dark shadow removal (`src/styles.css`)
+
+**1a. `.world-nav` border-top (line ~232):**
+- Old: `border-top:1px solid rgba(0,0,0,0.08)` — dark rgba border could render as shadow line
+- New: `border-top:1px solid var(--b1)` — uses the cream-dark design system border token
+
+**1b. Dead `#NAV` rule removed (was line ~1449):**
+- Old: `#NAV{background:rgba(12,12,18,.85);backdrop-filter:blur(14px) saturate(1.4);...}` — uncommented CSS for a commented-out HTML element
+- New: Replaced with a comment explaining the removal. The `#NAV` element is commented out in `index.html` (line 527), so this rule was dead CSS.
+
+**1c. `.minner` and `.bsheet` dark glassmorphism overrides cleaned (was lines ~1445-1446):**
+- Old: `.minner{background:rgba(16,16,22,.92)...}` and `.bsheet{background:rgba(22,22,30,.95)...}` — old dark theme overrides that were overriding the cream-themed rules defined earlier in the file
+- New: `.minner{background:rgba(255,255,255,.92)...}` and `.bsheet{background:rgba(255,255,255,.95)...}` — frosted white glass matching the cream design system. Border changed from `rgba(255,255,255,.08)` to `var(--b1)`.
+
+**1d. FAB dark shadow removed (was line ~1606):**
+- Old: `box-shadow:0 4px 20px rgba(212,168,83,.35),0 2px 8px rgba(0,0,0,.3)` — second shadow was dark black
+- New: `box-shadow:0 4px 20px rgba(212,168,83,.35)` — only warm gold glow remains
+
+#### FIX 2 — World switcher tap zone elevation (`src/styles.css`)
+
+**2a. `#world-switcher` z-index raised (line ~202):**
+- Old: `z-index:160`
+- New: `z-index:1000` — ensures world switcher sits above all overlays (`.ov` z:100, `.world-nav` z:150, `.swipe-tab-indicator` z:999)
+
+**2b. `.ws-btn` stacking context added (line ~217-218):**
+- Added: `position:relative;z-index:1001` — buttons sit 1 level above parent container, ensuring they're the topmost tappable element in their area. All other required properties (display:flex, align-items:center, justify-content:center, min-height:44px, -webkit-tap-highlight-color:transparent, user-select:none, cursor:pointer) were already present.
+
+**2c. Overlap audit — no blocking elements found:**
+- `.ov` (z:100, top:var(--wsh)) — already starts below world switcher, z-index well below 1000
+- `.screen` (no z-index, position:absolute) — inside `#APP`, stacking context below world switcher
+- `#LS` (z:1000) — login screen, hidden after boot (`display:none`)
+- `.swipe-tab-indicator` (z:999) — below 1000, only appears during swipe gestures
+- No elements with `inset:0` and z-index >= 1000 that could intercept (except `#LS` which is hidden)
+
+### Known remaining dark-theme artifacts (not bottom-of-screen, not fixed this session)
+- `.coupon-card` (line ~1438): `background:rgba(22,22,30,.85)` — old dark card background
+- `.coupon-card.clipped` (line ~1440): `background:rgba(22,22,30,.4)` — old dark clipped state
+- `.deal-card` (line ~1445): `background:rgba(22,22,30,.85)` — old dark card background
+- These affect the Deals tab card appearance but are NOT bottom-of-screen elements. They should be cleaned up in a future session.
+
+### Architecture notes
+- The world switcher z-index hierarchy is now: `#world-switcher` (1000) > `.ws-btn` (1001 within parent context) > `.world-nav` (150) > `.ov` (100)
+- The `.bsheet` and `.minner` dark overrides at ~line 1446 were a cascade issue: the cream-themed rules defined earlier in the file were being overridden by later dark-theme rules that were never cleaned up during the Phase 1 rejuvenation.
+- The `#NAV` dark rule was harmless (element commented out in HTML) but was dead CSS adding confusion.
+
+### Files Changed
+- `src/styles.css` — 6 edits: world-nav border, #NAV removal, .minner/.bsheet cleaned, FAB shadow, #world-switcher z-index, .ws-btn z-index
+- `CLAUDE_CODE_HANDOFF.md` — this session changelog

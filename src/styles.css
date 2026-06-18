@@ -197,7 +197,9 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 /* ── WORLD SWITCHER ──
    Segmented pill toggle fixed below the status bar. Always visible.
    Two buttons: "Kitchen" and "Home". Active button gets --green background. */
-#world-switcher{position:fixed;top:0;left:0;right:0;z-index:160;
+/* z-index:1000 ensures no overlay (.ov z:100, .world-nav z:150) can sit on top
+   and intercept taps. position:fixed already creates a stacking context for children. */
+#world-switcher{position:fixed;top:0;left:0;right:0;z-index:1000;
   padding:calc(env(safe-area-inset-top,0px) + 8px) 16px 8px;
   background:var(--cream);display:flex;gap:0;
   border-bottom:1px solid var(--b1)}
@@ -210,7 +212,10 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 /* display:flex centers the label text both vertically and horizontally.
    min-height:44px ensures reliable iOS tap targets. padding:10px 24px gives
    generous tap area. user-select:none prevents text selection on long-press. */
+/* position:relative + z-index:1001 ensures buttons sit above any overlay that might
+   intercept taps. z-index is 1 above the parent #world-switcher (z:1000). */
 .ws-btn{flex:1;display:flex;align-items:center;justify-content:center;
+  position:relative;z-index:1001;
   min-height:44px;padding:10px 24px;border:none;border-radius:10px;
   font-family:"DM Sans",sans-serif;font-size:.82rem;font-weight:600;
   cursor:pointer;transition:all .2s ease;background:transparent;color:var(--ink-muted);
@@ -229,7 +234,8 @@ html,body{height:100%;background:var(--page-grad);background-color:var(--bg);fon
 .world-nav{position:fixed;bottom:0;left:0;right:0;
   min-height:60px;
   padding:10px 8px max(20px, env(safe-area-inset-bottom, 0px));
-  background:#FFFFFF;border-top:1px solid rgba(0,0,0,0.08);
+  /* border uses cream-dark instead of dark rgba to avoid any dark shadow appearance */
+  background:#FFFFFF;border-top:1px solid var(--b1);
   box-shadow:none;
   display:flex;align-items:stretch;z-index:150}
 /* Individual nav item — icon stacked above label */
@@ -1440,13 +1446,14 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
 .deal-card:hover,.deal-card:active{border-color:rgba(212,168,83,.3);box-shadow:0 0 20px rgba(212,168,83,.06)}
 .deal-card.deal-match{background:rgba(90,173,111,.06);border-color:rgba(90,173,111,.3)}
 
-/* Glassmorphism for modals and bottom sheets — frosted glass with blue-neutral tint.
-   Blur reduced from 24px to 12px to halve GPU compositing cost on mobile Safari. */
-.minner{background:rgba(16,16,22,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid rgba(255,255,255,.08)}
-.bsheet{background:rgba(22,22,30,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid rgba(255,255,255,.08)}
-/* Nav pill glassmorphism — reduced blur from 28px to 14px. Nav is always visible
-   so its blur layer is permanent GPU overhead; lower value cuts compositing cost. */
-#NAV{background:rgba(12,12,18,.85);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4)}
+/* Glassmorphism for modals and bottom sheets — CLEANED: old dark theme overrides
+   (rgba(16,16,22,.92) and rgba(22,22,30,.95)) removed. These were overriding the
+   cream-themed .minner and .bsheet rules above with dark backgrounds, creating
+   dark shadow artifacts. Now uses cream-appropriate frosted glass. */
+.minner{background:rgba(255,255,255,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--b1)}
+.bsheet{background:rgba(255,255,255,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--b1)}
+/* Nav pill glassmorphism — REMOVED: #NAV is commented out in HTML (replaced by .world-nav).
+   Dark background rgba(12,12,18,.85) was dead CSS that could cause rendering artifacts. */
 
 /* ── CARD HOVER/FOCUS GLOW ────────────────────────────────────────────────────
    Subtle gold border glow on hover/focus for all interactive cards.
@@ -1603,7 +1610,8 @@ body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;opa
   border-radius:50%;background:var(--ac);color:#0D0B08;border:none;
   font-size:1.6rem;font-weight:700;cursor:pointer;z-index:140;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 4px 20px rgba(212,168,83,.35),0 2px 8px rgba(0,0,0,.3);
+  /* Removed dark rgba(0,0,0,.3) shadow — only warm gold glow remains */
+  box-shadow:0 4px 20px rgba(212,168,83,.35);
   /* Quick transform transition for :active press bounce only.
      The 2s settle transition lives on .fab.settled so removing the class = instant reset. */
   transition:transform .2s cubic-bezier(.34,1.56,.64,1)}
